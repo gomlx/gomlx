@@ -17,7 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
 	"k8s.io/klog/v2"
 
@@ -113,7 +113,7 @@ func Reports(checkpointPaths []string) {
 	for _, checkpointPath := range checkpointPaths {
 		store := model.NewStore()
 		if *flagSummary || *flagParams || *flagVars {
-			_ = must.M1(checkpoints.Build(store).
+			_ = must.M1(checkpoint.Build(store).
 				Dir(checkpointPath).Immediate().Done())
 		}
 		scope := store.RootScope()
@@ -150,9 +150,9 @@ func Reports(checkpointPaths []string) {
 
 func Backup(checkpointPath string) {
 	store := model.NewStore()
-	checkpoint := must.M1(checkpoints.Build(store).
+	checkpointHandler := must.M1(checkpoint.Build(store).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
-	must.M(checkpoint.Backup())
+	must.M(checkpointHandler.Backup())
 	globalStep := optimizers.GetGlobalStep(store)
-	fmt.Printf("Backup of latest checkpoint (global step %d) successful, see %q.\n", globalStep, path.Join(checkpoint.Dir(), checkpoints.BackupDir))
+	fmt.Printf("Backup of latest checkpoint (global step %d) successful, see %q.\n", globalStep, path.Join(checkpointHandler.Dir(), checkpoint.BackupDir))
 }

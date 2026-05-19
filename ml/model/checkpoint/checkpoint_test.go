@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package checkpoints
+package checkpoint
 
 // TODO:
 // * Test that previously loaded variables -- not used by the Context -- are also saved.
@@ -42,24 +42,24 @@ func TestCheckpoints(t *testing.T) {
 		store.SetParam(regularizers.ParamL1, 1.0e7)
 		rootScope := store.RootScope()
 		rootScope.In("layer_1").SetParam(regularizers.ParamL2, 0.004)
-		checkpoint := Build(store).TempDir("", "test_checkpoints_").
+		checkpointHandler := Build(store).TempDir("", "test_checkpoints_").
 			Keep(3).MustDone()
-		assert.Equal(t, 0, checkpoint.checkpointsCount)
-		dir = checkpoint.Dir()
+		assert.Equal(t, 0, checkpointHandler.checkpointsCount)
+		dir = checkpointHandler.Dir()
 		fmt.Printf("Checkpoint directory: %s\n", dir)
 		e := model.MustNewExec(backend, store, testGraphFn)
 		for ii := range 10 {
 			results := e.MustExec()
 			globalStep := tensors.ToScalar[float64](results[0])
 			assert.Equal(t, float64(ii)+1, globalStep, "LoopStep")
-			assert.NoError(t, checkpoint.Save(), "Saving checkpoint")
+			assert.NoError(t, checkpointHandler.Save(), "Saving checkpoint")
 		}
 
 		// Check the correct number of checkpoints (3) remain.
-		list, err := checkpoint.ListCheckpoints()
+		list, err := checkpointHandler.ListCheckpoints()
 		assert.NoError(t, err)
 		assert.Len(t, list, 3, "Number of remaining checkpoints")
-		assert.Equal(t, 10, checkpoint.checkpointsCount)
+		assert.Equal(t, 10, checkpointHandler.checkpointsCount)
 		assert.Equal(t, 9, maxCheckPointCountFromCheckpoints(list))
 	}
 
@@ -71,7 +71,7 @@ func TestCheckpoints(t *testing.T) {
 		store.SetParam(regularizers.ParamL1, 17.0) // Value should NOT be overwritten when loading.
 		root := store.RootScope()
 		root.In("layer_1").SetParam(regularizers.ParamL2, 0.004)
-		checkpoint := Build(store).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).MustDone()
+		checkpointHandler := Build(store).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).MustDone()
 
 		lr, found := store.GetParam("learning_rate")
 		assert.True(t, found, "learning_rate should be set")
@@ -101,10 +101,10 @@ func TestCheckpoints(t *testing.T) {
 		results := e.MustExec()
 		globalStep := tensors.ToScalar[float64](results[0])
 		assert.Equal(t, 11.0, globalStep, "Re-loaded global step")
-		assert.NoError(t, checkpoint.Save(), "Saving checkpoint")
+		assert.NoError(t, checkpointHandler.Save(), "Saving checkpoint")
 
 		// Check the correct number of checkpoints (3) remain.
-		list, err := checkpoint.ListCheckpoints()
+		list, err := checkpointHandler.ListCheckpoints()
 		assert.NoError(t, err)
 		assert.Len(t, list, 3, "Number of remaining checkpoints")
 	}
@@ -178,14 +178,14 @@ func TestMergedCheckpoints(t *testing.T) {
 	var dir string
 	{
 		store := model.NewStore()
-		checkpoint := Build(store).TempDir("", "test_checkpoints_").Keep(2).MustDone()
-		dir = checkpoint.Dir()
+		checkpointHandler := Build(store).TempDir("", "test_checkpoints_").Keep(2).MustDone()
+		dir = checkpointHandler.Dir()
 		globalStepV := optimizers.GetGlobalStepVar(store)
 		err := globalStepV.SetValue(tensors.FromValue(int64(1)))
 		require.NoError(t, err)
 		xV := store.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
 		yV := store.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
-		require.NoError(t, checkpoint.Save())
+		require.NoError(t, checkpointHandler.Save())
 
 		err = globalStepV.SetValue(tensors.FromValue(int64(10)))
 		require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestMergedCheckpoints(t *testing.T) {
 		require.NoError(t, err)
 		err = yV.SetValue(tensors.FromValue([][]float32{{6.0}, {6.0}}))
 		require.NoError(t, err)
-		require.NoError(t, checkpoint.Save())
+		require.NoError(t, checkpointHandler.Save())
 	}
 	{
 		// Check that the values were averaged:
@@ -234,9 +234,9 @@ func TestParams(t *testing.T) {
 		fooScope.SetParam("xStr", xStr)
 		fooScope.SetParam("xStrs", xStrs)
 
-		checkpoint := Build(store).TempDir("", "test_checkpoints_").Keep(3).MustDone()
-		dir = checkpoint.Dir()
-		require.NoError(t, checkpoint.Save())
+		checkpointHandler := Build(store).TempDir("", "test_checkpoints_").Keep(3).MustDone()
+		dir = checkpointHandler.Dir()
+		require.NoError(t, checkpointHandler.Save())
 	}
 
 	// Test loading of values

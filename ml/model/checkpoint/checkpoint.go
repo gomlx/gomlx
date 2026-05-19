@@ -1,7 +1,7 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 // Package checkpoints implements checkpoint management: saving and loading of checkpoints to file,
-// or loading a checkpoint from an embedded checkpoint.
+// or loading a checkpoint from an embedded checkpointHandler.
 //
 // The main object is the Handler, that should be created by calling Build, followed by the
 // various options setting and finally calling Config.Done.
@@ -15,32 +15,32 @@
 // `*flagCheckpointKeep` steps.
 //
 //	…
-//	ctx := model.New()
-//	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
+//	store := model.NewStore()
+//	store.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 //
-//	var checkpoint *checkpoints.Handler
+//	var checkpointHandler *checkpoints.Handler
 //	if *flagCheckpoint != "" {
 //		var err error
-//		checkpoint, err = checkpoints.Build(ctx).Dir(*flagCheckpoint).Keep(*flagCheckpointKeep).Done()
+//		checkpointHandler, err = checkpoint.Build(store).Dir(*flagCheckpoint).Keep(*flagCheckpointKeep).Done()
 //		Must(err)  // Panics if err != nil.
 //	}
 //	…
 //	// Build training loop.
 //	loop := train.NewLoop(trainer)
 //	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
-//	if checkpoint != nil {
+//	if checkpointHandler != nil {
 //		const priority = 100  // Large number here, means it runs last.
-//		train.EveryNSteps(loop, 100, "checkpointing", priority, checkpoint.OnStepFn)
+//		train.EveryNSteps(loop, 100, "checkpointing", priority, checkpointHandler.SaveOnStepFn)
 //	}
 //	…
 //
 // Example 2: To load a checkpoint from an embedded checkpoint, something usually used to distribute a model for
 // inference:
 //
-//	//go:embed "my_model/checkpoint.json"
+//	//go:embed "my_model/checkpointHandler.json"
 //	var myModelJson string
 //
-//	//go:embed "my_model/checkpoint.bin"
+//	//go:embed "my_model/checkpointHandler.bin"
 //	var myModelBin []byte
 //
 //	...
@@ -51,7 +51,7 @@
 // TODO:
 //  1. Allow to specify parts of the model to load / scope where they should be loaded to, for
 //     transfer learning.
-package checkpoints
+package checkpoint
 
 import (
 	"bytes"
@@ -106,17 +106,17 @@ const (
 
 const variableParameterPrefix = "var:"
 
-// variableToKey returns the unique id for a variable in a checkpoint.
+// variableToKey returns the unique id for a variable in a checkpointHandler.
 func variableToKey(v *model.Variable) string {
 	return variableParameterPrefix + v.Path()
 }
 
-// pathToKey returns the unique id for a variable path in a checkpoint.
+// pathToKey returns the unique id for a variable path in a checkpointHandler.
 func pathToKey(path string) string {
 	return variableParameterPrefix + path
 }
 
-// keyToScopeAndName extracts the scope and name from a variable's unique id in a checkpoint.
+// keyToScopeAndName extracts the scope and name from a variable's unique id in a checkpointHandler.
 func keyToScopeAndName(key string) (scope, name string) {
 	if !strings.HasPrefix(key, variableParameterPrefix) {
 		return scope, name
@@ -163,7 +163,7 @@ type Config struct {
 // When a checkpoint is "lazily loaded", its variables are not listed by default (if one uses Context.EnumerateVariables
 // or Context.IterVariables). But if they are directly accessed, they are on-the-fly loaded. This is convenient
 // when loading only part of the variables for inference (if one doesn't care about the training/optimizer variables),
-// or for transfer learning part of a model. It also works to continue training a model loaded from a checkpoint.
+// or for transfer learning part of a model. It also works to continue training a model loaded from a checkpointHandler.
 // But if you need to variables to be loaded immediately, use Config.Immediate() -- an inspecting tool, like
 // gomlx_checkpoints, will want to do that.
 //
@@ -180,10 +180,10 @@ func Build(store *model.Store) *Config {
 	return c
 }
 
-// Load creates the configuration to load a checkpoint.
+// Load creates the configuration to load a checkpointHandler.
 // It's identical to Build, except it will fail if the checkpoint does not already exist.
 //
-// Use Dir or DirWithBase to configure the location of the checkpoint.
+// Use Dir or DirWithBase to configure the location of the checkpointHandler.
 // Once configured, call Config.Done to actually load it.
 func Load(store *model.Store) *Config {
 	c := Build(store)
@@ -250,10 +250,10 @@ func (c *Config) DirFromBase(dir, baseDir string) *Config {
 //
 // Example:
 //
-//	//go:embed "my_model/checkpoint.json"
+//	//go:embed "my_model/checkpointHandler.json"
 //	var myModelJson []byte
 //
-//	//go:embed "my_model/checkpoint.bin"
+//	//go:embed "my_model/checkpointHandler.bin"
 //	var myModelBin []byte
 //
 //	...
@@ -356,7 +356,7 @@ func (c *Config) Keep(n int) *Config {
 // Variables that have integer values or are not marked as trainable (e.g., the global step)
 // are taken from the most recent checkpoint instead.
 //
-// The default is 1, so only load the most recent checkpoint.
+// The default is 1, so only load the most recent checkpointHandler.
 //
 // If n != 1, it requires a backend that will be used to calculate the mean.
 // If n == 1, the backend argument is ignored and can be nil.
@@ -425,7 +425,7 @@ func (c *Config) Done() (*Handler, error) {
 				takeMean = len(checkpoints)
 			}
 			if c.takeMean == 1 {
-				// Just load most recent checkpoint.
+				// Just load most recent checkpointHandler.
 				err = handler.loadCheckpointFromFile(checkpoints[len(checkpoints)-1], false, 0)
 			} else {
 				err = handler.takeMean(checkpoints[len(checkpoints)-takeMean:])
@@ -435,7 +435,7 @@ func (c *Config) Done() (*Handler, error) {
 			}
 		}
 	} else {
-		// Load from an embedded checkpoint.
+		// Load from an embedded checkpointHandler.
 		err := handler.loadCheckpoint(c.jsonReader, c.binReader, false, 0)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to load checkpoint from embedded checkpoint (json+bin blobs) given")
@@ -490,7 +490,7 @@ func (c *Config) MustDone() *Handler {
 // It is created and configured using Build(), followed by options setting and then calling
 // Config.Done().
 //
-// Loading data into Handler happens at its creation time: it loads from the latest checkpoint.
+// Loading data into Handler happens at its creation time: it loads from the latest checkpointHandler.
 // (Hyper-)Parameters are immediately loaded into the context then (if not Config.ExcludeAllParams)
 // but the loaded variable values are only "consumed" (used) one at a time, as the variables are
 // created during the graph building (e.g., when building the model).
@@ -697,8 +697,8 @@ func maxCheckPointCountFromCheckpoints(checkpoints []string) int {
 // since otherwise it may not have any effect.
 //
 // Usually this does not need to be called: when the Handler is created (when calling `Build()....Done()`)
-// it will automatically load the latest checkpoint. But it can be used to load some specific
-// checkpoint.
+// it will automatically load the latest checkpointHandler. But it can be used to load some specific
+// checkpointHandler.
 //
 // If `merge` is set to false, loading a different checkpoint discards the previous checkpoint read.
 // If `merge` is set to true, only trainable weights are merged into the current values, using
@@ -826,12 +826,12 @@ func (h *Handler) loadCheckpoint(jsonReader, binReader io.Reader, merge bool, me
 
 // takeMean will load the checkpoints pointed by baseNames and take the mean of those.
 // It takes the mean only for trainable float variables, everything else it just takes
-// the value from the last checkpoint.
+// the value from the last checkpointHandler.
 //
 // Notice the mean is taken one tensor at a time, so at any time there is only one copy
 // of the model weights in memory, plus the tensor being merged.
 func (h *Handler) takeMean(baseNames []string) error {
-	// First load the last checkpoint.
+	// First load the last checkpointHandler.
 	err := h.loadCheckpointFromFile(xslices.Last(baseNames), false, 0)
 	if err != nil {
 		return err
@@ -880,7 +880,7 @@ func (bf BinFormat) String() string {
 // Params is (de-) serialized with package json.
 //
 // If the handler is nil, this is a no-op: so it's safe to simply be called, even if the user hasn't configured a
-// checkpoint.
+// checkpointHandler.
 //
 // By default, the binary file is compressed.  The option WithCompression overrides the default behavior.  This
 // information is reported in the JSON file.
@@ -1038,9 +1038,9 @@ func (h *Handler) Backup() error {
 	return nil
 }
 
-// OnStepFn implements `train.OnStepFn`, and make it convenient to attach to a training loop.
-// It simply calls save.
-func (h *Handler) OnStepFn(_ *train.Loop, _ []*tensors.Tensor) error {
+// SaveOnStepFn implements `train.OnStepFn`, and make it convenient to attach to a training loop.
+// It simply calls Save.
+func (h *Handler) SaveOnStepFn(_ *train.Loop, _ []*tensors.Tensor) error {
 	return h.Save()
 }
 
@@ -1123,7 +1123,7 @@ func (h *Handler) LoadVariable(store *model.Store, fullPath string) (value *tens
 		}
 	}
 
-	// Try to find variable in our currently loaded checkpoint.
+	// Try to find variable in our currently loaded checkpointHandler.
 	// varParamName is variableParameterPrefix + fullPath
 	varParamName := pathToKey(fullPath)
 	value, found = h.variableValues[varParamName]

@@ -16,7 +16,7 @@ import (
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
@@ -147,12 +147,12 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 			UploadOgbnMagVariables(backend, scope)
 
 		} else {
-			// Load from pre-trained checkpoint.
+			// Load from pre-trained checkpointHandler.
 			_, fileName, _, ok := runtime.Caller(0)
 			require.True(t, ok, "Failed to get caller information to find out test source directory.")
 			baseDir := filepath.Dir(fileName)
-			checkpoint, err := checkpoints.Build(scope).DirFromBase("test_checkpoint", baseDir).Done()
-			fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
+			checkpointHandler, err := checkpoint.Build(scope).DirFromBase("test_checkpoint", baseDir).Done()
+			fmt.Printf("\nLoaded trained context: %s\n", checkpointHandler.Dir())
 			require.NoError(t, err, "Checkpoint loading.")
 			UploadOgbnMagVariables(backend, scope)
 		}
@@ -204,15 +204,15 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	ds = strategy.NewDataset("lwinference_test")
 	ds = mldata.Map(ds, ExtractLabelsFromInput)
 
-	// Create context and load from pre-trained checkpoint.
+	// Create context and load from pre-trained checkpointHandler.
 	backend := testutil.BuildTestBackend()
 	scope := model.NewStore().RootScope()
 	_, fileName, _, ok := runtime.Caller(0)
 	require.True(t, ok, "Failed to get caller information to find out test source directory.")
 	baseDir := filepath.Dir(fileName)
-	checkpoint, err := checkpoints.Build(scope).DirFromBase("test_checkpoint", baseDir).Done()
+	checkpointHandler, err := checkpoint.Build(scope).DirFromBase("test_checkpoint", baseDir).Done()
 	require.NoError(t, err, "Checkpoint loading.")
-	fmt.Printf("\nLoaded trained context: %s\n", checkpoint.Dir())
+	fmt.Printf("\nLoaded trained context: %s\n", checkpointHandler.Dir())
 	fmt.Printf("\t%s=%q\n", ParamDType, model.GetParamOr(scope, ParamDType, ""))
 	UploadOgbnMagVariables(backend, scope)
 

@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
@@ -176,15 +176,15 @@ func TrainWithStore(
 	testEvalDS = datasets.Parallel(testEvalDS)
 
 	// Checkpoints saving.
-	var checkpoint *checkpoints.Handler
+	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
 		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 3)
-		checkpoint = check1(checkpoints.Build(scope).
+		checkpoint = check1(checkpoint.Build(scope).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, ParamsExcludedFromLoading...)...).
 			Done())
-		fmt.Printf("Checkpoint: %q\n", checkpoint.Dir())
+		fmt.Printf("Checkpoint: %q\n", checkpointHandler.Dir())
 	}
 	if verbosity >= 2 {
 		fmt.Println(commandline.SprintSettings(scope))
@@ -222,11 +222,11 @@ func TrainWithStore(
 	}
 
 	// Checkpoint saving: every 3 minutes of training.
-	if checkpoint != nil {
+	if checkpointHandler != nil {
 		period := time.Minute * 3
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				return checkpoint.Save()
+				return checkpointHandler.Save()
 			})
 	}
 
@@ -234,7 +234,7 @@ func TrainWithStore(
 	// The points generated are saved along the checkpoint directory (if one is given).
 	if model.GetParamOr(scope, plotly.ParamPlots, false) {
 		_ = plotly.New().
-			WithCheckpoint(checkpoint).
+			WithCheckpoint(checkpointHandler).
 			Dynamic().
 			WithDatasets(trainEvalDS, testEvalDS).
 			ScheduleExponential(loop, 200, 1.2).
@@ -257,8 +257,8 @@ func TrainWithStore(
 		// Update batch normalization averages, if they are used.
 		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
-			if checkpoint != nil {
-				check(checkpoint.Save())
+			if checkpointHandler != nil {
+				check(checkpointHandler.Save())
 			}
 		}
 

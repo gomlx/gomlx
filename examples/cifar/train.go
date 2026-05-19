@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -74,15 +74,15 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 	trainDS, trainEvalDS, testEvalDS := CreateDatasets(Backend, dataDir, batchSize, evalBatchSize)
 
 	// Checkpoints saving.
-	var checkpoint *checkpoints.Handler
+	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
 		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 3)
-		checkpoint = check1(checkpoints.Build(scope).
+		checkpoint = check1(checkpoint.Build(scope).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, ParamsExcludedFromSaving...)...).
 			Done())
-		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
+		fmt.Printf("Checkpointing model to %q\n", checkpointHandler.Dir())
 	}
 	if verbosity >= 2 {
 		fmt.Println(commandline.SprintSettings(scope))
@@ -114,11 +114,11 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 	}
 
 	// Checkpoint saving: every 3 minutes of training.
-	if checkpoint != nil {
+	if checkpointHandler != nil {
 		period := time.Minute * 3
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				return checkpoint.Save()
+				return checkpointHandler.Save()
 			})
 	}
 
@@ -126,7 +126,7 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 	// The points generated are saved along the checkpoint directory (if one is given).
 	if model.GetParamOr(scope, plotly.ParamPlots, false) {
 		_ = plotly.New().
-			WithCheckpoint(checkpoint).
+			WithCheckpoint(checkpointHandler).
 			Dynamic().
 			WithDatasets(trainEvalDS, testEvalDS).
 			ScheduleExponential(loop, 200, 1.2).
@@ -151,8 +151,8 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 			if verbosity >= 1 {
 				fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			}
-			if checkpoint != nil {
-				check(checkpoint.Save())
+			if checkpointHandler != nil {
+				check(checkpointHandler.Save())
 			}
 		}
 

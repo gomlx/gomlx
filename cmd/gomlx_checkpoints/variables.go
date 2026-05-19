@@ -15,7 +15,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 )
 
 var (
@@ -84,7 +84,7 @@ func ListVariables(scope *model.Scope) {
 // DeleteVars on the given scopes.
 func DeleteVars(checkpointPath string, scopes ...string) {
 	store := model.NewStore()
-	checkpoint := must.M1(checkpoints.Build(store).
+	checkpointHandler := must.M1(checkpoint.Build(store).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
 	var varsToDelete []*model.Variable
 	for _, scopePath := range scopes {
@@ -103,14 +103,14 @@ func DeleteVars(checkpointPath string, scopes ...string) {
 	for _, v := range varsToDelete {
 		store.DeleteVariable(v.Path())
 	}
-	must.M(checkpoint.Save())
+	must.M(checkpointHandler.Save())
 	fmt.Printf("%d deleted vars under scopes %v, new checkpoint saved.\n", len(varsToDelete), scopes)
 }
 
 func PerturbVars(checkpointPath string, x float64) {
 	backend := must.M1(gobackend.New(""))
 	scope := model.NewStore()
-	checkpoint := must.M1(checkpoints.Build(scope).
+	checkpointHandler := must.M1(checkpoint.Build(scope).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
 	var numUpdates int
 	for v := range scope.IterVariables() {
@@ -128,6 +128,6 @@ func PerturbVars(checkpointPath string, x float64) {
 		v.SetValue(newValue)
 		numUpdates++
 	}
-	must.M(checkpoint.Save())
+	must.M(checkpointHandler.Save())
 	fmt.Printf("%d variables updated new checkpoint saved.\n", numUpdates)
 }

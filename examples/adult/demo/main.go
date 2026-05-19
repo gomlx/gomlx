@@ -13,10 +13,9 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/pkg/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
@@ -170,11 +169,11 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 	}
 
 	// Checkpoints loading (and saving)
-	var checkpoint *checkpoints.Handler
+	var checkpointHandler *checkpoint.Handler
 	const keepCheckpoints = 3
 	if checkpointPath != "" {
 		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", keepCheckpoints)
-		checkpoint = check1(checkpoints.Build(scope).
+		checkpoint = check1(checkpoint.Build(scope).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, "train_steps", "plots", "num_checkpoints")...).
@@ -281,19 +280,16 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Attach a checkpoint saver at every minute of training.
-	if checkpoint != nil {
+	if checkpointHandler != nil {
 		period := time.Minute * 1
-		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
-			func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				return checkpoint.Save()
-			})
+		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100, checkpointHandler.SaveOnStepFn)
 	}
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
 	if model.GetParamOr(scope, margaid.ParamPlots, false) {
 		_ = plotly.New().
-			WithCheckpoint(checkpoint).
+			WithCheckpoint(checkpointHandler).
 			Dynamic().
 			WithDatasets(trainEvalDS, testEvalDS).
 			ScheduleExponential(loop, 200, 1.2).

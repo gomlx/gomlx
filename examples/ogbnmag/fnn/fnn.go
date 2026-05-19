@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
@@ -106,7 +106,7 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 	// Checkpoint: it loads if already exists, and it will save as we train.
 	checkpointPath := model.GetParamOr(scope, "checkpoint", "")
 	numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 10)
-	var checkpoint *checkpoints.Handler
+	var checkpointHandler *checkpoint.Handler
 	var globalStep int64
 	if checkpointPath != "" {
 		checkpointPath = fsutil.MustReplaceTildeInDir(checkpointPath) // If the path starts with "~", it is replaced.
@@ -116,9 +116,9 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 			numCheckpointsToKeep = -1
 		}
 		if numCheckpointsToKeep > 0 {
-			checkpoint, err = checkpoints.Build(scope).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3, backend).Done()
+			checkpoint, err = checkpoint.Build(scope).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3, backend).Done()
 		} else {
-			checkpoint, err = checkpoints.Build(scope).Dir(checkpointPath).Done()
+			checkpoint, err = checkpoint.Build(scope).Dir(checkpointPath).Done()
 		}
 		if err != nil {
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
@@ -152,11 +152,11 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.
-	if checkpoint != nil && numCheckpointsToKeep > 1 {
+	if checkpointHandler != nil && numCheckpointsToKeep > 1 {
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				return checkpoint.Save()
+				return checkpointHandler.Save()
 			})
 	}
 
@@ -165,7 +165,7 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 	usePlots := model.GetParamOr(scope, "plots", false)
 	if usePlots {
 		_ = plotly.New().
-			WithCheckpoint(checkpoint).
+			WithCheckpoint(checkpointHandler).
 			Dynamic().
 			WithDatasets(validDS, testDS, trainEvalDS).
 			ScheduleExponential(loop, 200, 1.2).
@@ -180,9 +180,9 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 		}
 		fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 			loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
-		if checkpoint != nil && numCheckpointsToKeep <= 1 {
+		if checkpointHandler != nil && numCheckpointsToKeep <= 1 {
 			// Save checkpoint at end of training.
-			err = checkpoint.Save()
+			err = checkpointHandler.Save()
 			if err != nil {
 				klog.Errorf("Failed to save final checkpoint in %q: %+v", checkpointPath, err)
 			}

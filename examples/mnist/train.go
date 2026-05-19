@@ -31,7 +31,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
@@ -179,10 +179,10 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Checkpoints saving.
-	var checkpoint *checkpoints.Handler
+	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
 		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 3)
-		checkpoint, err = checkpoints.Build(scope).
+		checkpoint, err = checkpoint.Build(scope).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, excludeParams...)...).
@@ -191,12 +191,12 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 			return errors.WithMessagef(err, "failed to create/load checkpoint %s, from data directory %s",
 				checkpointPath, dataDir)
 		}
-		fmt.Printf("\t- checkpoint in %s\n", checkpoint.Dir())
+		fmt.Printf("\t- checkpoint in %s\n", checkpointHandler.Dir())
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				fmt.Printf("\n\t- saving checkpoint@%d\n", loop.LoopStep)
-				return checkpoint.Save()
+				return checkpointHandler.Save()
 			})
 	}
 
@@ -204,7 +204,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	// The points generated are saved along the checkpoint directory (if one is given).
 	if model.GetParamOr(scope, plotly.ParamPlots, false) {
 		_ = plotly.New().
-			WithCheckpoint(checkpoint).
+			WithCheckpoint(checkpointHandler).
 			Dynamic().
 			WithDatasets(trainEvalDS, validationEvalDS).
 			ScheduleExponential(loop, 10, 1.2).
@@ -228,8 +228,8 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 		// Update batch normalization averages, if they are used.
 		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
-			if checkpoint != nil {
-				if err := checkpoint.Save(); err != nil {
+			if checkpointHandler != nil {
+				if err := checkpointHandler.Save(); err != nil {
 					return errors.WithMessage(err, "save checkpoint")
 				}
 			}

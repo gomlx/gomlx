@@ -30,9 +30,9 @@ func main() {
 			"github.com/gomlx/gomlx/pkg/core/graph/bucketing":    "github.com/gomlx/gomlx/core/graph/bucketing",
 			"github.com/gomlx/gomlx/pkg/ml/nn":                   "github.com/gomlx/gomlx/ml/nn",
 			"github.com/gomlx/gomlx/pkg/ml/context":              "github.com/gomlx/gomlx/ml/model",
-			"github.com/gomlx/gomlx/pkg/ml/context/checkpoints":  "github.com/gomlx/gomlx/ml/model/checkpoints",
+			"github.com/gomlx/gomlx/pkg/ml/context/checkpoints":  "github.com/gomlx/gomlx/ml/model/checkpoint",
 			"github.com/gomlx/gomlx/pkg/ml/context/ctxtest":      "github.com/gomlx/gomlx/ml/model/modeltest",
-			"github.com/gomlx/gomlx/pkg/ml/context/initializers": "github.com/gomlx/gomlx/ml/model/initializers",
+			"github.com/gomlx/gomlx/pkg/ml/context/initializers": "github.com/gomlx/gomlx/ml/model/initializer",
 		},
 		PackageNameMap: map[string]string{
 			"backends": "compute",

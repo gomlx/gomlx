@@ -24,7 +24,7 @@ import (
 	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/support/sets"
@@ -91,7 +91,7 @@ type PlotConfig struct {
 //	...
 //	if usePlots {
 //		_ = plotly.New().
-//			WithCheckpoint(checkpoint).
+//			WithCheckpoint(checkpointHandler).
 //			Dynamic().
 //			WithDatasets(evalOnTrainDS, evalOnTestDS).
 //			ScheduleExponential(loop, 200, 1.2).
@@ -227,11 +227,11 @@ func (pc *PlotConfig) attachOnEnd(loop *train.Loop) {
 // but with the downside of potentially having I/O issues reported asynchronously.
 //
 // It returns itself to allow cascading configuration method calls.
-func (pc *PlotConfig) WithCheckpoint(checkpoint *checkpoints.Handler) *PlotConfig {
-	if checkpoint == nil {
+func (pc *PlotConfig) WithCheckpoint(checkpointHandler *checkpoint.Handler) *PlotConfig {
+	if checkpointHandler == nil {
 		return pc
 	}
-	checkpointDir := checkpoint.Dir()
+	checkpointDir := checkpointHandler.Dir()
 
 	// Ignore errors while loading: maybe nothing was written yet.
 	_ = pc.LoadCheckpointData(checkpointDir)

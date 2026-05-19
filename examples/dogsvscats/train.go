@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/pkg/ml/layers"
 	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
@@ -46,7 +46,7 @@ var (
 	// ModelsPrep maps models to a preparation function called in TrainModel before training start.
 	//
 	// This can be extended for new models.
-	ModelsPrep = map[string]func(scope *model.Scope, dataDir string, checkpoint *checkpoints.Handler){
+	ModelsPrep = map[string]func(scope *model.Scope, dataDir string, checkpointHandler *checkpoint.Handler){
 		"inception": InceptionV3ModelPrep,
 	}
 )
@@ -149,10 +149,10 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	}
 
 	// Checkpoint: it loads if already exists, and it will save as we train.
-	var checkpoint *checkpoints.Handler
+	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
 		numCheckpoints := model.GetParamOr(scope, "num_checkpoints", 3)
-		checkpoint = check1(checkpoints.Build(scope).
+		checkpoint = check1(checkpoint.Build(scope).
 			DirFromBase(checkpointPath, dataDir).
 			ExcludeParams(append(
 				paramsSet,
@@ -189,7 +189,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	}
 	// BYOL may require pretraining.
 	preTraining := modelType == "byol" && model.GetParamOr(scope, "byol_pretrain", false)
-	if preTraining && checkpoint == nil {
+	if preTraining && checkpointHandler == nil {
 		klog.Warning(
 			"*** pre-training model but not saving (--checkpoint) the pretrained weights -- is only useful for debugging ***",
 		)
@@ -225,11 +225,11 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.
-	if checkpoint != nil {
+	if checkpointHandler != nil {
 		period := time.Minute * 3
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				return checkpoint.Save()
+				return checkpointHandler.Save()
 			})
 	}
 
@@ -239,12 +239,12 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 		if preTraining {
 			// Pre-training: no evaluation.
 			_ = plotly.New().
-				WithCheckpoint(checkpoint).
+				WithCheckpoint(checkpointHandler).
 				ScheduleExponential(loop, 200, 1.2).
 				Dynamic()
 		} else {
 			_ = plotly.New().
-				WithCheckpoint(checkpoint).
+				WithCheckpoint(checkpointHandler).
 				Dynamic().
 				WithDatasets(trainEvalDS, validationEvalDS).
 				ScheduleExponential(loop, 200, 1.2).
@@ -267,7 +267,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 		)
 		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
-			check(checkpoint.Save())
+			check(checkpointHandler.Save())
 		}
 	} else {
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
@@ -280,7 +280,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 		fmt.Println("Pre-training only, no evaluation.")
 		check(optimizer.Clear(scope))
 		check(optimizers.DeleteGlobalStep(scope))
-		check(checkpoint.Save())
+		check(checkpointHandler.Save())
 		return
 	}
 

@@ -7,12 +7,12 @@ import (
 	timage "github.com/gomlx/gomlx/core/tensors/images"
 	"github.com/gomlx/gomlx/examples/inceptionv3"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
 )
 
 // InceptionV3ModelPrep is executed before training: it downloads the inceptionv3 weights.
-func InceptionV3ModelPrep(scope *model.Scope, dataDir string, checkpoint *checkpoints.Handler) {
+func InceptionV3ModelPrep(scope *model.Scope, dataDir string, checkpointHandler *checkpoint.Handler) {
 	scope.SetParam("data_dir", dataDir)
 	if model.GetParamOr(scope, "inception_pretrained", true) {
 		check(inceptionv3.DownloadAndUnpackWeights(dataDir))

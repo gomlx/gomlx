@@ -204,7 +204,7 @@ func ImagesToHtml(images []image.Image) string {
 
 var generateSamplesRegex = regexp.MustCompile(`generated_samples_(\d+).tensor`)
 
-// PlotModelEvolution plots the saved sampled generated images of a model in the current configured checkpoint.
+// PlotModelEvolution plots the saved sampled generated images of a model in the current configured checkpointHandler.
 //
 // If animate is true it will do an animation from first to last image, staying a few seconds on the last image.
 //

@@ -13,7 +13,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 
@@ -47,7 +47,7 @@ type Config struct {
 	ImageSize, BatchSize, EvalBatchSize int
 
 	// Checkpoint if one has been attached. See Config.AttachCheckpoint.
-	Checkpoint *checkpoints.Handler
+	Checkpoint *checkpoint.Handler
 
 	// NanLogger is enabled by setting the hyperparameter "nan_logger=true".
 	NanLogger *nanlogger.NanLogger

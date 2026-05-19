@@ -15,7 +15,7 @@ import (
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -109,12 +109,12 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	}
 
 	// Checkpoint saving: every 3 minutes of training.
-	if checkpoint != nil {
+	if checkpointHandler != nil {
 		period := check1(
 			time.ParseDuration(model.GetParamOr(scope, "checkpoint_frequency", "3m")))
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				return checkpoint.Save()
+				return checkpointHandler.Save()
 			})
 	}
 
@@ -123,7 +123,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	var plotter *plotly.PlotConfig
 	if model.GetParamOr(scope, plotly.ParamPlots, false) {
 		plotter = plotly.New().
-			WithCheckpoint(checkpoint).
+			WithCheckpoint(checkpointHandler).
 			Dynamic().
 			WithDatasets(trainEvalDS, validationDS).
 			WithBatchNormalizationAveragesUpdate(trainEvalDS)
@@ -146,7 +146,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	if plotter != nil {
 		train.ExponentialCallback(loop, samplesFrequency, samplesFrequencyGrowth, true,
 			"Monitor", 0, func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				return TrainingMonitor(checkpoint, loop, metrics, plotter, plotter.EvalDatasets, generator, kid)
+				return TrainingMonitor(checkpointHandler, loop, metrics, plotter, plotter.EvalDatasets, generator, kid)
 			})
 	}
 
@@ -166,7 +166,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		if err != nil {
 			if loop.LoopStep > loop.StartStep {
 				klog.Infof("Debug checkpoint save before crashing at loop step %d", loop.LoopStep)
-				errSave := checkpoint.Save()
+				errSave := checkpointHandler.Save()
 				if errSave != nil {
 					klog.Errorf("Error while saving checkpoint before crashing: %+v", errSave)
 				}
@@ -181,8 +181,8 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		}
 		if bnUpdated {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
-			if checkpoint != nil {
-				check(checkpoint.Save())
+			if checkpointHandler != nil {
+				check(checkpointHandler.Save())
 			}
 		}
 
@@ -280,17 +280,17 @@ func BuildTrainComputation(config *diffusion.Config) train.ModelFn {
 
 // TrainingMonitor is periodically called during training, and is used to report metrics and generate sample images at
 // the current training step.
-func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics []*tensors.Tensor,
+func TrainingMonitor(checkpointHandler *checkpoint.Handler, loop *train.Loop, metrics []*tensors.Tensor,
 	plotter stdplots.Plotter, evalDatasets []train.Dataset, generator *ImagesGenerator, kid *KidGenerator) error {
 	//fmt.Printf("\n[... evaluating@%d ...] [median train step (ms): %d]\n", loop.LoopStep, loop.MedianTrainStepDuration().Milliseconds())
 
 	// Save checkpoint, just in case.
-	if checkpoint == nil {
+	if checkpointHandler == nil {
 		// Only works if there is a model directory.
 		return nil
 	}
-	check(checkpoint.Save())
-	check(checkpoint.Backup()) // Save backup, so these checkpoint doesn't get automatically collected.
+	check(checkpointHandler.Save())
+	check(checkpointHandler.Backup()) // Save backup, so these checkpoint doesn't get automatically collected.
 
 	// Update plotter with metrics.
 	check(stdplots.AddTrainAndEvalMetrics(plotter, loop, metrics, evalDatasets, evalDatasets[0]))
@@ -313,7 +313,7 @@ func TrainingMonitor(checkpoint *checkpoints.Handler, loop *train.Loop, metrics 
 	// Generate intermediary images.
 	sampledImages := generator.Generate()
 	imagesPath := fmt.Sprintf("%s%07d.tensor", diffusion.GeneratedSamplesPrefix, loop.LoopStep)
-	imagesPath = path.Join(checkpoint.Dir(), imagesPath)
+	imagesPath = path.Join(checkpointHandler.Dir(), imagesPath)
 	check(sampledImages.Save(imagesPath))
 
 	return nil

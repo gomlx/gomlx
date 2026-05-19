@@ -15,8 +15,8 @@
 // and take points at an exponential rate (starting at 100 time steps, and increasing steps at 1.1x rate).
 //
 //	plots = margaid.New(1024, 400, trainEvalDS, validationDS)
-//	if checkpoint != nil {
-//		_, err := plots.WithFile(path.Join(checkpoint.Dir(), TrainingPlotFileName))
+//	if checkpointHandler != nil {
+//		_, err := plots.WithFile(path.Join(checkpointHandler.Dir(), TrainingPlotFileName))
 //		AssertNoError(err)
 //	}
 //	plots.DynamicUpdates()

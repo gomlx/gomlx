@@ -1,6 +1,7 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-// Package initializers include several weight initializers, to be used with a model.Context.
+// Package initializer include several weight initializers, that can be used to initialize varariables,
+// or used in [model.Scope] objects as default initializer for new variables.
 //
 // They construct computation.VariableInitializer closures.
 package initializer
@@ -145,14 +146,13 @@ func computeFanInFanOut(shape shapes.Shape) (fanIn, fanOut int) {
 // XavierUniformFn returns an initializer that generates random values with a uniform distribution with a range
 // defined by +/- sqrt(6 / (fanIn+fanOut)). See description in https://paperswithcode.com/method/xavier-initialization
 //
-// It uses the context's ParamInitialSeed hyperparameter to initialize the random number generator --
-// only the first time it is used for a graph.
-// If it is set to 0 (NoSeed, the default), a random seed is instead generated (from the nanosecond clock).
+// It uses the store's random state.
 //
 // It initializes biases (anything with rank <= 1) to zeros.
 //
 // Non-float and non-complex variables are initialized with zero instead.
-func XavierUniformFn(scope *model.Scope) VariableInitializer {
+func XavierUniformFn(storeOrScope model.StoreProvider) VariableInitializer {
+	store := storeOrScope.Store()
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -164,7 +164,7 @@ func XavierUniformFn(scope *model.Scope) VariableInitializer {
 		fanIn, fanOut := computeFanInFanOut(shape)
 		scale := max(1.0, float64(fanIn+fanOut))
 		limit := math.Sqrt(6.0 / scale)
-		values := scope.RandomUniform(g, shape)
+		values := store.RandomUniform(g, shape)
 		values = MulScalar(values, 2*limit)
 		values = AddScalar(values, -limit)
 		return values
@@ -174,14 +174,13 @@ func XavierUniformFn(scope *model.Scope) VariableInitializer {
 // XavierNormalFn returns an initializer that generates random values with a normal distribution with mean in 0
 // and stddev of sqrt(2 / (fanIn+fanOut)). See description in https://paperswithcode.com/method/xavier-initialization
 //
-// It uses the context's ParamInitialSeed hyperparameter to initialize the random number generator --
-// only the first time it is used for a graph.
-// If it is set to 0 (NoSeed, the default), a random seed is instead generated (from the nanosecond clock).
+// It uses the store's random state.
 //
 // It initializes biases (anything with rank <= 1) to zeros.
 //
 // Non-float and non-complex variables are initialized with zero instead.
-func XavierNormalFn(scope *model.Scope) VariableInitializer {
+func XavierNormalFn(storeOrScope model.StoreProvider) VariableInitializer {
+	store := storeOrScope.Store()
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -193,7 +192,7 @@ func XavierNormalFn(scope *model.Scope) VariableInitializer {
 		fanIn, fanOut := computeFanInFanOut(shape)
 		scale := max(1.0, float64(fanIn+fanOut))
 		stddev := math.Sqrt(2.0 / scale)
-		values := scope.RandomNormal(g, shape)
+		values := store.RandomNormal(g, shape)
 		return MulScalar(values, stddev)
 	}
 }
@@ -202,13 +201,12 @@ func XavierNormalFn(scope *model.Scope) VariableInitializer {
 //
 // It initializes biases (anything with rank <= 1) to zeros.
 //
-// It uses the context's ParamInitialSeed hyperparameter to initialize the random number generator --
-// only the first time it is used for a graph.
-// If it is set to 0 (NoSeed, the default), a random seed is instead generated (from the nanosecond clock).
+// It uses the store's random state.
 //
 // [1] https://medium.com/@tylernisonoff/weight-initialization-for-cnns-a-deep-dive-into-he-initialization-50b03f37f53d
 // [2] https://arxiv.org/pdf/1502.01852
-func HeFn(scope *model.Scope) VariableInitializer {
+func HeFn(storeOrScope model.StoreProvider) VariableInitializer {
+	store := storeOrScope.Store()
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
 			return Zeros(g, shape)
@@ -220,7 +218,7 @@ func HeFn(scope *model.Scope) VariableInitializer {
 		fanIn, _ := computeFanInFanOut(shape)
 		scale := max(1.0, float64(fanIn))
 		stddev := math.Sqrt(2.0 / scale)
-		values := scope.RandomNormal(g, shape)
+		values := store.RandomNormal(g, shape)
 		return MulScalar(values, stddev)
 	}
 }

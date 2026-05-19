@@ -16,7 +16,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/pkg/ml/train/losses"
@@ -136,11 +136,11 @@ func TrainWithStore(
 	UploadOgbnMagVariables(backend, scope)
 
 	// Checkpoint: it loads if already exists, and it will save as we train.
-	var checkpoint *checkpoints.Handler
+	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
 		numCheckpointsToKeep := model.GetParamOr(scope, ParamNumCheckpoints, 5)
 		var err error
-		checkpoint, err = checkpoints.Build(store).
+		checkpointHandler, err = checkpoint.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(paramsSet...).
@@ -149,7 +149,7 @@ func TrainWithStore(
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
 		}
-		ExcludeOgbnMagVariablesFromSave(scope, checkpoint)
+		ExcludeOgbnMagVariablesFromSave(scope, checkpointHandler)
 	}
 
 	// Create trainer and loop.
@@ -159,11 +159,11 @@ func TrainWithStore(
 	commandline.AttachProgressBar(loop)
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.
-	if checkpoint != nil {
+	if checkpointHandler != nil {
 		period := time.Minute * 3
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				return checkpoint.Save()
+				return checkpointHandler.Save()
 			})
 	}
 
@@ -173,7 +173,7 @@ func TrainWithStore(
 	usePlots := model.GetParamOr(scope, margaid.ParamPlots, false)
 	if usePlots {
 		stepsPerEpoch := TrainSplit.Shape().Size()/BatchSize + 1
-		plots = plotly.New().WithCheckpoint(checkpoint).Dynamic().
+		plots = plotly.New().WithCheckpoint(checkpointHandler).Dynamic().
 			ScheduleExponential(loop, 200, 1.2).
 			ScheduleEveryNSteps(loop, stepsPerEpoch)
 		if layerWiseEval {
@@ -211,8 +211,8 @@ func TrainWithStore(
 	fmt.Println("Compiling graph... (once it's done, training immediately starts)")
 	_, err = loop.RunSteps(trainDS, trainSteps-globalStep)
 	// Save checkpoint at end of training (even if training failed)
-	if checkpoint != nil {
-		err2 := checkpoint.Save()
+	if checkpointHandler != nil {
+		err2 := checkpointHandler.Save()
 		if err2 != nil {
 			klog.Errorf("Failed to save final checkpoint in %q: %+v", checkpointPath, err2)
 		}
@@ -265,7 +265,7 @@ func EvalWithStore(
 	dataDir, checkpointPath string,
 	layerWise, skipTrain bool,
 ) error {
-	_, err := checkpoints.Build(store).DirFromBase(checkpointPath, dataDir).Done()
+	_, err := checkpoint.Build(store).DirFromBase(checkpointPath, dataDir).Done()
 	if err != nil {
 		return errors.WithMessagef(err, "while loading checkpoint from %q", checkpointPath)
 	}

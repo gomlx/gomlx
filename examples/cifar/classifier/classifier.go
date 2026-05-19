@@ -19,7 +19,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors/images"
 	"github.com/gomlx/gomlx/examples/cifar"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/model/checkpoints"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -47,7 +47,7 @@ func New(checkpointDir string) (*Classifier, error) {
 	// Notice all hyperparameters are read from the checkpoint as well, so it will be build the
 	// same model.
 	// We don't need to keep the checkpoint handler around, since we are not going to use it to save.
-	_, err := checkpoints.Load(c.scope).
+	_, err := checkpoint.Load(c.scope).
 		Dir(checkpointDir).
 		Done()
 	if err != nil {

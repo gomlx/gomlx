@@ -943,7 +943,7 @@ Other improvements:
 
 * Immediately free accelerator (GPU) memory, where possible -- as opposed to waiting for the garbage collector.
   * This impacts the train.Loop and train.Trainer: they both immediately finalize the inputs and labels after use.
-* Fixed nil point exception, where initializer was not properly set if value of a variable was loaded from a checkpoint.
+* Fixed nil point exception, where initializer was not properly set if value of a variable was loaded from a checkpointHandler.
   * This impacted when restarting training with batch normalization.
 * Fixes to the notebooks: some small things were broken on the v0.11.0 transition; large speed-up with v0.11.1 fixes.
 
@@ -1214,7 +1214,7 @@ Other improvements:
 * Diffusion example: Added conditioning on flower type; Improved documentation; several other small improvements.
 * NanLogger: added tool to report back (with stack trace and scope) on the occurrences of NaN/Inf in the computation
   graph.
-* Checkpoints: added `Handler.LoadedVariables()` method for inspection of loaded checkpoint.
+* Checkpoints: added `Handler.LoadedVariables()` method for inspection of loaded checkpointHandler.
 * Bug fixes:
   * RandomNormal: fixed rare numerical issues in RandomNormal, that would generate -Inf.
   * Context: some rare condition on feeding variable values to executor.

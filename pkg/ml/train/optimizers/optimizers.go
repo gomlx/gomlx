@@ -85,7 +85,7 @@ var (
 	ParamClipNaN = "clip_nan"
 
 	// ParamNanLogger configures a nanlogger to use to report NaNs in gradients updates for example. See TraceNaNInGradients.
-	// This value is not saved in a checkpoint.
+	// This value is not saved in a checkpointHandler.
 	// It should be set to a Tracer (which a *nanlogger.NanLogger is).
 	//
 	// Typical use:
