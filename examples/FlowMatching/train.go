@@ -270,11 +270,11 @@ func BuildTrainComputation(config *diffusion.Config) train.ModelFn {
 			predictedVelocity = ConvertDType(predictedVelocity, dtypes.Float32)
 		}
 
-		loss := lossFn([]*Node{targetVelocity}, []*Node{predictedVelocity})
-		if !loss.IsScalar() {
-			loss = ReduceAllMean(loss)
+		theLoss := lossFn([]*Node{targetVelocity}, []*Node{predictedVelocity})
+		if !theLoss.IsScalar() {
+			theLoss = ReduceAllMean(theLoss)
 		}
-		return []*Node{predictedVelocity, loss}
+		return []*Node{predictedVelocity, theLoss}
 	}
 }
 

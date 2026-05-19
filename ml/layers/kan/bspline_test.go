@@ -16,7 +16,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/stretchr/testify/assert"
@@ -88,8 +88,8 @@ func TestBSplineKAN(t *testing.T) {
 	store.SetParam(model.ParamInitialSeed, int64(42))
 	ds := &kanTestDataset{batchSize: 128}
 
-	opt := optimizers.Adam().LearningRate(0.001).Done()
-	trainer := train.NewTrainer(backend, store.RootScope(), kanGraphModel,
+	opt := optimizer.Adam().LearningRate(0.001).Done()
+	trainer := train.NewTrainer(backend, store, kanGraphModel,
 		lossGraphFn, // a simple wrapper around losses.MeanSquaredError,
 		opt,
 		nil, // trainMetrics
@@ -137,8 +137,8 @@ func TestBSplineKANRegularized(t *testing.T) {
 	store.SetParam(kan.ParamBSplineMagnitudeL1, 0.01)
 	ds := &kanTestDataset{batchSize: 128}
 
-	opt := optimizers.Adam().LearningRate(0.001).Done()
-	trainer := train.NewTrainer(backend, store.RootScope(), kanLargeGraphModel,
+	opt := optimizer.Adam().LearningRate(0.001).Done()
+	trainer := train.NewTrainer(backend, store, kanLargeGraphModel,
 		lossGraphFn, // a simple wrapper around losses.MeanSquaredError,
 		opt,
 		nil, // trainMetrics

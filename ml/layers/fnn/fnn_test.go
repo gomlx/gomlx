@@ -122,7 +122,7 @@ func TestFNN(t *testing.T) {
 		store.RootScope().Store().ResetRNGState()
 		store.SetParam(model.ParamInitialSeed, int64(42))
 		opt := optimizer.Adam().LearningRate(0.001).Done()
-		trainer := train.NewTrainer(backend, store.RootScope(), fnnGraphModelBuilder(coreFn),
+		trainer := train.NewTrainer(backend, store, fnnGraphModelBuilder(coreFn),
 			lossGraphFn, // a simple wrapper around losses.MeanSquaredError,
 			opt,
 			nil, // trainMetrics
@@ -131,8 +131,8 @@ func TestFNN(t *testing.T) {
 		commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 		metrics, err := loop.RunSteps(ds, fnnVariationsSteps[ii])
 		require.NoErrorf(t, err, "Failed building the model / training")
-		loss := metrics[1].Value().(float64)
-		assert.Truef(t, loss < 0.1, "Expected a loss < 0.1, got %g instead", loss)
+		theLoss := metrics[1].Value().(float64)
+		assert.Truef(t, theLoss < 0.1, "Expected a loss < 0.1, got %g instead", theLoss)
 		fmt.Printf("\tMetrics:\n")
 		for ii, m := range metrics {
 			fmt.Printf("\t\t%s: %s\n", trainer.TrainMetrics()[ii].Name(), m)
@@ -161,7 +161,7 @@ func TestFNNRegularized(t *testing.T) {
 			Done()
 	}
 	opt := optimizer.Adam().LearningRate(0.001).Done()
-	trainer := train.NewTrainer(backend, store.RootScope(), fnnGraphModelBuilder(regularizedFn),
+	trainer := train.NewTrainer(backend, store, fnnGraphModelBuilder(regularizedFn),
 		lossGraphFn, // a simple wrapper around losses.MeanSquaredError,
 		opt,
 		nil, // trainMetrics

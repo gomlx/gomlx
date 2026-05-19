@@ -122,8 +122,8 @@ const TrainLastStepVarName = "train_last_global_step"
 // It is stored in the TrainerAbsoluteScope.
 //
 // This is a graph building function and so it may panic if the variable cannot be created.
-func GetTrainLastStepVar(scope *model.Scope) *model.Variable {
-	return scope.Store().Scope(TrainerAbsoluteScope).
+func GetTrainLastStepVar(storeOrScope model.StoreProvider) *model.Variable {
+	return storeOrScope.Store().Scope(TrainerAbsoluteScope).
 		VariableWithValue(TrainLastStepVarName, int64(-1)).
 		SetTrainable(false)
 }

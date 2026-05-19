@@ -555,7 +555,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 	store := model.NewStore()
 	theOptimizer := optimizer.Adam().LearningRate(0.001).Done()
 
-	trainer := train.NewTrainer(backend, store.RootScope(), buildSyntheticAttentionModelFn(false),
+	trainer := train.NewTrainer(backend, store, buildSyntheticAttentionModelFn(false),
 		losses.MeanSquaredError,
 		theOptimizer,
 		nil, // trainMetrics

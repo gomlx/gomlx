@@ -205,13 +205,13 @@ func TrainWithStore(
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	scope = scope.In("model") // Convention scope used for model creation.
-	var loss train.LossFn
+	var theLoss train.LossFn
 	if !imdbUseUnsupervised {
-		loss = losses.BinaryCrossentropyLogits
+		theLoss = losses.BinaryCrossentropyLogits
 	}
 	trainer := train.NewTrainer(backend, scope, modelFn,
-		loss,
-		optimizers.FromContext(scope),
+		theLoss,
+		optimizers.FromScope(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 

@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"k8s.io/klog/v2"
 )
@@ -193,7 +193,7 @@ func (c *Config) pwlLayer(scope *model.Scope, x *Node, numOutputNodes int) *Node
 		train.AddPerStepUpdateGraphFn(scope.In("kan_pwl_split_points_projection"), g, func(scope *model.Scope, g *Graph) {
 			splitPoints := splitPointsVar.NodeValue(g)
 			margin := Scalar(g, splitPoints.DType(), c.pwl.splitPointsMargin)
-			splitPoints = optimizers.MonotonicProjection(splitPoints, margin, -1)
+			splitPoints = optimizer.MonotonicProjection(splitPoints, margin, -1)
 			splitPointsVar.SetNodeValue(splitPoints)
 		})
 

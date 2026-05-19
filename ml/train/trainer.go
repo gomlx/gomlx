@@ -53,7 +53,7 @@ const (
 // See Loop for a flexible and extensible (different UIs) way to run this in a training loop.
 type Trainer struct {
 	backend   compute.Backend
-	context   *model.Scope
+	store     *model.Store
 	deviceNum compute.DeviceNum
 	modelFn   ModelFn
 	lossFn    LossFn
@@ -157,13 +157,13 @@ const (
 //   - evalMetrics are output by trainer.EvalStep and trainer.Eval. Here it's recommend to use mean metrics, since the model
 //     is presumably frozen, and it sees each example exactly once. The mean of the loss of the dataset is always provided
 //     as the first metric. It's ok to be empty (nil).
-func NewTrainer(backend compute.Backend, scope *model.Scope,
+func NewTrainer(backend compute.Backend, store *model.Store,
 	modelFn ModelFn, lossFn LossFn, theOptimizer optimizer.Interface,
 	trainMetrics, evalMetrics []metrics.Interface) *Trainer {
 
 	r := &Trainer{
 		backend:   backend,
-		context:   scope,
+		store:     store,
 		deviceNum: 0,
 		modelFn:   modelFn,
 		lossFn:    lossFn,
@@ -180,8 +180,8 @@ func NewTrainer(backend compute.Backend, scope *model.Scope,
 	}
 
 	// Delete variables that should forcefully be reinitialized every time the model is retrained.
-	optScope := scope.In(optimizer.Scope).Scope()
-	err := scope.Store().Scope(optScope).DeleteVariable(optimizer.ParamLearningRate)
+	optScope := store.Scope(optimizer.Scope)
+	err := optScope.DeleteVariable(optimizer.ParamLearningRate)
 	if err != nil {
 		panic(err)
 	}
@@ -192,20 +192,20 @@ func NewTrainer(backend compute.Backend, scope *model.Scope,
 	batchLossFn := func(_ *model.Scope, labels, predictions []*graph.Node) *graph.Node {
 		// Assume lossVar has already been set.
 		g := predictions[0].Graph()
-		loss := GetLosses(scope, g)
-		if loss == nil {
+		theLoss := GetLosses(store, g)
+		if theLoss == nil {
 
 			return graph.ScalarZero(g, predictions[0].DType())
 		}
-		return loss
+		return theLoss
 	}
 	lossNoRegularizationFn := func(scope *model.Scope, labels, predictions []*graph.Node) *graph.Node {
 		g := predictions[0].Graph()
-		loss := GetLossNoRegularization(scope, g)
-		if loss == nil {
+		theLoss := GetLossNoRegularization(scope, g)
+		if theLoss == nil {
 			return graph.ScalarZero(g, predictions[0].DType())
 		}
-		return loss
+		return theLoss
 	}
 	lossAndMetrics = append(
 		lossAndMetrics,
@@ -294,17 +294,24 @@ func (r *Trainer) iterateExecs() iter.Seq[*model.Exec] {
 	}
 }
 
-// Context returns the current Context. See SetContext to change it.
-func (r *Trainer) Context() *model.Scope {
-	return r.context
+// Backend returns the current Backend.
+func (r *Trainer) Backend() compute.Backend {
+	return r.backend
 }
 
-// SetContext associates the given Context to the trainer. Should
-// be called before any calls to Train or Evaluate.
-func (r *Trainer) SetContext(scope *model.Scope) *Trainer {
-	r.context = scope
+// Context returns the current Context. See SetContext to change it.
+func (r *Trainer) Context() *model.Store {
+	return r.store
+}
+
+// SetContext associates the given [model.Store] to the trainer.
+//
+// Should be called before any calls to Train or Evaluate, otherwise
+// the results are undefined.
+func (r *Trainer) SetContext(store *model.Store) *Trainer {
+	r.store = store
 	for exec := range r.iterateExecs() {
-		exec.SetStore(scope.Store())
+		exec.SetStore(store)
 	}
 	return r
 }
@@ -349,7 +356,7 @@ func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 	if _, found := spec.(fmt.Stringer); found {
 		trainerName = fmt.Sprintf("Trainer: spec=%s", spec)
 	}
-	exec, err := model.NewExec(r.backend, r.context.Store(),
+	exec, err := model.NewExec(r.backend, r.store.Store(),
 		func(scope *model.Scope, inputsAndLabels []*graph.Node) (metrics []*graph.Node) {
 			inputs := inputsAndLabels[:inputsLen]
 			labels := inputsAndLabels[inputsLen:]
@@ -656,10 +663,10 @@ func (r *Trainer) evalStepGraph(spec any, scope *model.Scope, inputs, labels []*
 
 // ResetTrainMetrics call Metrics.Reset on all train metrics. Usually called before a training session.
 func (r *Trainer) ResetTrainMetrics() error {
-	for _, metric := range r.trainMetrics {
-		err := exceptions.TryCatch[error](func() { metric.Reset(r.context) })
+	for _, m := range r.trainMetrics {
+		err := exceptions.TryCatch[error](func() { m.Reset(r.store.RootScope()) })
 		if err != nil {
-			panic(errors.WithMessagef(err, "Eval() failed to reset metric %q", metric.Name()))
+			panic(errors.WithMessagef(err, "Eval() failed to reset metric %q", m.Name()))
 		}
 	}
 	return nil
@@ -679,7 +686,7 @@ func (r *Trainer) DistributedEvalStep(strategy distributed.Strategy, deviceAssig
 // resetEvalMetrics call Metrics.Reset on all eval metrics.
 func (r *Trainer) resetEvalMetrics() error {
 	for _, metric := range r.evalMetrics {
-		err := exceptions.TryCatch[error](func() { metric.Reset(r.context) })
+		err := exceptions.TryCatch[error](func() { metric.Reset(r.store.RootScope()) })
 		if err != nil {
 			return errors.WithMessagef(err, "Eval() failed to reset metric %q", metric.Name())
 		}
@@ -849,7 +856,7 @@ func (r *Trainer) Metrics() []metrics.Interface {
 
 // GlobalStep is an alias for optimizers.GetGlobalStep using Trainer.Context().
 func (r *Trainer) GlobalStep() int64 {
-	return optimizer.GetGlobalStep(r.context)
+	return optimizer.GetGlobalStep(r.store)
 }
 
 // OnExecFn is a handler that can be called when executors are created.
@@ -860,52 +867,61 @@ func (r *Trainer) OnExecCreation(handler OnExecFn) {
 	r.onExecCreationHandlers = append(r.onExecCreationHandlers, handler)
 }
 
-// AddLoss adds the given scalar loss to the context's Params.
-func AddLoss(scope *model.Scope, loss *graph.Node) {
-	g := loss.Graph()
-	ctxTrainer := scope.Store().Scope(TrainerAbsoluteScope)
-	if !loss.Shape().IsScalar() {
-		loss = graph.ReduceAllMean(loss)
+// AddLoss adds the given scalar loss to the trainer's Store for the current graph.
+//
+// This is a global value for the Store, not scoped.
+func AddLoss(storeOrScope model.StoreProvider, theLoss *graph.Node) {
+	g := theLoss.Graph()
+	trainerScope := storeOrScope.Store().Scope(TrainerAbsoluteScope)
+	if !theLoss.Shape().IsScalar() {
+		theLoss = graph.ReduceAllMean(theLoss)
 	}
 
-	currentLoss, found := ctxTrainer.GetGraphParam(g, TrainerLossGraphParamKey)
+	currentLoss, found := trainerScope.GetGraphParam(g, TrainerLossGraphParamKey)
 	if found {
-		loss = graph.Add(loss, currentLoss.(*graph.Node))
+		theLoss = graph.Add(theLoss, currentLoss.(*graph.Node))
 	}
-	ctxTrainer.SetGraphParam(g, TrainerLossGraphParamKey, loss)
+	trainerScope.SetGraphParam(g, TrainerLossGraphParamKey, theLoss)
 }
 
 // GetLosses returns the sum of all loss terms added with AddLoss(), or nil if none was set.
-func GetLosses(scope *model.Scope, g *graph.Graph) (loss *graph.Node) {
-	ctxTrainer := scope.Store().Scope(TrainerAbsoluteScope)
-	lossAny, found := ctxTrainer.GetGraphParam(g, TrainerLossGraphParamKey)
+//
+// This is a global value for the Store, not scoped.
+func GetLosses(storeOrScope model.StoreProvider, g *graph.Graph) (loss *graph.Node) {
+	trainerScope := storeOrScope.Store().Scope(TrainerAbsoluteScope)
+	lossAny, found := trainerScope.GetGraphParam(g, TrainerLossGraphParamKey)
 	if !found {
 		return nil
 	}
 	return lossAny.(*graph.Node)
 }
 
-// SetLossNoRegularization saves a reference to model loss calculated by the lossFn used in training.
-func SetLossNoRegularization(scope *model.Scope, loss *graph.Node) {
-	ctxTrainer := scope.Store().Scope(TrainerAbsoluteScope)
-	ctxTrainer.SetGraphParam(loss.Graph(), TrainerLossNoRegularizationGraphParamKey, loss)
+// SetLossNoRegularization saves the given loss value as the current loss for this graph.
+// Consider using AddLoss instead, since this will discard any previously set losses.
+//
+// This is a global value for the Store, not scoped.
+func SetLossNoRegularization(storeOrScope model.StoreProvider, theLoss *graph.Node) {
+	trainerScope := storeOrScope.Store().Scope(TrainerAbsoluteScope)
+	trainerScope.SetGraphParam(theLoss.Graph(), TrainerLossNoRegularizationGraphParamKey, theLoss)
 }
 
 // GetLossNoRegularization returns the loss of the model not including regularization.
+//
+// This is a global value for the Store, not scoped.
 func GetLossNoRegularization(scope *model.Scope, g *graph.Graph) (loss *graph.Node) {
-	ctxTrainer := scope.Store().Scope(TrainerAbsoluteScope)
-	lossAny, found := ctxTrainer.GetGraphParam(g, TrainerLossNoRegularizationGraphParamKey)
+	trainerScope := scope.Store().Scope(TrainerAbsoluteScope)
+	lossAny, found := trainerScope.GetGraphParam(g, TrainerLossNoRegularizationGraphParamKey)
 	if !found {
 		return nil
 	}
 	return lossAny.(*graph.Node)
 }
 
-// ContextGraphFn is a generic graph building function.
-type ContextGraphFn func(scope *model.Scope, g *graph.Graph)
+// ModelGraphFn is a generic graph building function that takes a model scope (which points to its [model.Store]).
+type ModelGraphFn func(scope *model.Scope, g *graph.Graph)
 
 // AddPerStepUpdateGraphFn registers the given function fn to be executed at every training step.
-func AddPerStepUpdateGraphFn(scope *model.Scope, g *graph.Graph, fn ContextGraphFn) {
+func AddPerStepUpdateGraphFn(scope *model.Scope, g *graph.Graph, fn ModelGraphFn) {
 	scope.SetGraphParam(g, TrainerPerStepUpdateGraphFnParamKey, fn)
 }
 
@@ -915,7 +931,7 @@ func ExecPerStepUpdateGraphFn(scope *model.Scope, g *graph.Graph) {
 		if p.Key != TrainerPerStepUpdateGraphFnParamKey {
 			continue
 		}
-		if fn, ok := p.Value.(ContextGraphFn); ok {
+		if fn, ok := p.Value.(ModelGraphFn); ok {
 			fn(scope.Store().Scope(p.Scope), g)
 		}
 	}

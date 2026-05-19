@@ -3,6 +3,7 @@
 package graph_test
 
 import (
+	"fmt"
 	"math"
 	"runtime"
 	"testing"
@@ -13,7 +14,16 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/datasets"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializer"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/testutil"
+	"github.com/gomlx/gomlx/ui/commandline"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFFT(t *testing.T) {
@@ -141,48 +151,44 @@ func realFftExample(backend compute.Backend, realDType dtypes.DType, numPoints i
 	return
 }
 
-/*
-TODO: Renable once context package is fixed.
-
 // TestGradientRealFFT tests it by checking that by gradient-descent we can
 // invert RealFFT.
 //
 // See plots of this in `examples/fft/fft.ipynb`.
 func TestGradientRealFFT(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	// trueX is real, and trueY is the fft, a complex tensor.
 	trueX, trueY := realFftExample(backend, dtypes.Float32, 100, 2)
-	ctx := model.NewContext(backend)
-	ctx.SetParam(optimizers.ParamLearningRate, 0.01)
-	ctx.RNGStateFromSeed(42) // Make it deterministic.
-	ctx = ctx.WithInitializer(initializers.Zero)
-	modelFn := func(ctx *model.Context, spec any, inputs []*Node) []*Node {
+	store := model.NewStore()
+	store.SetParam(optimizer.ParamLearningRate, 0.01)
+	store.SetRNGStateFromSeed(42) // Make it deterministic.
+	modelFn := func(scope *model.Scope, spec any, inputs []*Node) []*Node {
+		scope = scope.WithInitializer(initializer.Zero)
 		g := inputs[0].Graph()
-		learnedXVar := ctx.VariableWithShape("learnedX", trueX.Shape())
+		learnedXVar := scope.VariableWithShape("learnedX", trueX.Shape())
 		y := RealFFT(learnedXVar.NodeValue(g))
 		return []*Node{y}
 	}
 
-	dataset, err := data.InMemoryFromData(backend, "dataset", []any{trueX}, []any{trueY})
+	theDataset, err := datasets.InMemoryFromData(backend, "dataset", []any{trueX}, []any{trueY})
 	require.NoError(t, err)
-	dataset.BatchSize(1, false).Infinite(true)
+	theDataset.BatchSize(1, false).Infinite(true)
 	trainer := train.NewTrainer(
-		backend, ctx, modelFn,
+		backend, store, modelFn,
 		losses.MeanAbsoluteError,
-		optimizers.Adam().Done(),
+		optimizer.Adam().Done(),
 		nil, nil) // trainMetrics, evalMetrics
 	loop := train.NewLoop(trainer)
-	commandline.AttachProgressBar(loop)         // Attaches a progress bar to the loop.
-	metrics, err := loop.RunSteps(dataset, 800) // Typically we get a loss of ~0.01
+	commandline.AttachProgressBar(loop)            // Attaches a progress bar to the loop.
+	metrics, err := loop.RunSteps(theDataset, 800) // Typically we get a loss of ~0.01
 	require.NoError(t, err)
 	require.Greater(t, len(metrics), 0)
-	loss := metrics[0].Value().(float32)
-	fmt.Println(loss)
-	assert.Lessf(t, loss, float32(0.1),
+	theLoss := metrics[0].Value().(float32)
+	fmt.Println(theLoss)
+	assert.Lessf(t, theLoss, float32(0.1),
 		"Optimizing using gradient descent on RealFFT should have approached an inverse to "+
-			"an mean absolute error < 0.1, got %f instead", loss)
+			"an mean absolute error < 0.1, got %f instead", theLoss)
 }
-
 
 // TestGradientInverseRealFFT tests it by checking that by gradient-descent we can
 // invert InverseRealFFT (so effectively we do a RealFFT).
@@ -190,36 +196,35 @@ func TestGradientRealFFT(t *testing.T) {
 // This works similar to TestGradientRealFFT, but inverts what we are predicting:
 // we are trying to learn the FFT value that generates the sinusoidal curve.
 func TestGradientInverseRealFFT(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
+	backend := testutil.BuildTestBackend()
 	// We revert the x/y of realFftExample: trueX is the fft, a complex tensor, and trueY is the real sinusoidal curve.
 	trueY, trueX := realFftExample(backend, dtypes.Float64, 10, 2)
-	ctx := model.NewContext(backend)
-	ctx.SetParam(optimizers.ParamLearningRate, 10.0)
-	ctx.RNGStateFromSeed(42) // Make it deterministic.
-	ctx = ctx.WithInitializer(initializers.Zero)
-	modelFn := func(ctx *model.Context, spec any, inputs []*Node) []*Node {
+	store := model.NewStore()
+	store.SetParam(optimizer.ParamLearningRate, 10.0)
+	store.SetRNGStateFromSeed(42) // Make it deterministic.
+	modelFn := func(scope *model.Scope, spec any, inputs []*Node) []*Node {
 		g := inputs[0].Graph()
-		learnedXVar := ctx.VariableWithShape("learnedX", trueX.Shape())
+		scope = scope.WithInitializer(initializer.Zero)
+		learnedXVar := scope.VariableWithShape("learnedX", trueX.Shape())
 		y := InverseRealFFT(learnedXVar.NodeValue(g))
 		return []*Node{y}
 	}
 
-	dataset, err := data.InMemoryFromData(backend, "dataset", []any{trueX}, []any{trueY})
+	theDataset, err := datasets.InMemoryFromData(backend, "dataset", []any{trueX}, []any{trueY})
 	require.NoError(t, err)
-	dataset.BatchSize(1, false).Infinite(true)
+	theDataset.BatchSize(1, false).Infinite(true)
 	trainer := train.NewTrainer(
-		backend, ctx, modelFn,
+		backend, store, modelFn,
 		losses.MeanAbsoluteError,
-		optimizers.StochasticGradientDescent(),
+		optimizer.StochasticGradientDescent(),
 		nil, nil) // trainMetrics, evalMetrics
 	loop := train.NewLoop(trainer)
-	commandline.AttachProgressBar(loop)         // Attaches a progress bar to the loop.
-	metrics, err := loop.RunSteps(dataset, 100) // Typically we get a loss of ~0.01
+	commandline.AttachProgressBar(loop)            // Attaches a progress bar to the loop.
+	metrics, err := loop.RunSteps(theDataset, 100) // Typically we get a loss of ~0.01
 	require.NoError(t, err)
-	loss := metrics[0].Value().(float64)
-	fmt.Println("\tLoss:", loss)
-	assert.Lessf(t, loss, 0.1,
+	theLoss := metrics[0].Value().(float64)
+	fmt.Println("\tLoss:", theLoss)
+	assert.Lessf(t, theLoss, 0.1,
 		"Optimizing using gradient descent on InverseRealFFT should have approached the original curve to "+
-			"an mean absolute error < 0.1, got %f instead", loss)
+			"an mean absolute error < 0.1, got %f instead", theLoss)
 }
-*/

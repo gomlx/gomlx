@@ -31,7 +31,7 @@ func TestTrainer_AccumulateGradients(t *testing.T) {
 	learningRate := 0.1
 	opt := optimizer.StochasticGradientDescent().
 		WithDecay(false).WithLearningRate(learningRate).Done()
-	trainer := NewTrainer(backend, store.RootScope(), modelFn, lossFn, opt, nil, nil)
+	trainer := NewTrainer(backend, store, modelFn, lossFn, opt, nil, nil)
 	input := tensors.FromScalar(float32(0))
 	label := tensors.FromScalar(float32(10))
 

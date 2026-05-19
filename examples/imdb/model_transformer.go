@@ -231,9 +231,9 @@ func MaskedWordTaskGraph(scope *model.Scope, tokens, embed, mask *Node,
 	}
 
 	// Calculate loss associated to prediction of masked word.
-	loss := losses.SparseCategoricalCrossEntropyLogits([]*Node{wordToken}, []*Node{logits})
-	loss = ReduceAllMean(loss)
-	loss = MulScalar(loss, *flagMaskWordTask)
-	train.AddLoss(ctx, loss)
+	theLoss := losses.SparseCategoricalCrossEntropyLogits([]*Node{wordToken}, []*Node{logits})
+	theLoss = ReduceAllMean(theLoss)
+	theLoss = MulScalar(theLoss, *flagMaskWordTask)
+	train.AddLoss(ctx, theLoss)
 }
 */

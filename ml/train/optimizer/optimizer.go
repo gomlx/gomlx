@@ -396,7 +396,6 @@ func addGradientsToVariablesGraph(scope *model.Scope, grads []*Node, learningRat
 			ii,
 		)
 	}
-	return
 }
 
 // MonotonicProjection transforms the input into a monotonic sequence on the given axis that respects the

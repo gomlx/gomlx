@@ -18,7 +18,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 
@@ -258,8 +258,8 @@ func TestVNNTrain(t *testing.T) {
 	ds.BatchSize(batchSize, true).Infinite(true)
 
 	trainer := train.NewTrainer(
-		backend, store.RootScope(), modelFn, losses.BinaryCrossentropyLogits,
-		optimizers.Adam().LearningRate(3e-5).Done(),
+		backend, store, modelFn, losses.BinaryCrossentropyLogits,
+		optimizer.Adam().LearningRate(3e-5).Done(),
 		[]metrics.Interface{metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Accuracy", "~acc", 0.01)},
 		[]metrics.Interface{metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")})
 

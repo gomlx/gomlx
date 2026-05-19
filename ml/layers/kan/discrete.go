@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"k8s.io/klog/v2"
 )
@@ -338,7 +338,7 @@ func (c *Config) discreteLayer(scope *model.Scope, x *Node, numOutputNodes int) 
 		train.AddPerStepUpdateGraphFn(scope.In("kan_discrete_split_points_projection"), g, func(scope *model.Scope, g *Graph) {
 			splitPoints := splitPointsVar.NodeValue(g)
 			margin := Scalar(g, splitPoints.DType(), model.GetParamOr(scope, ParamDiscreteSplitsMargin, 0.01))
-			splitPoints = optimizers.MonotonicProjection(splitPoints, margin, -1)
+			splitPoints = optimizer.MonotonicProjection(splitPoints, margin, -1)
 			splitPointsVar.SetNodeValue(splitPoints)
 		})
 
@@ -384,7 +384,7 @@ func (c *Config) scheduledSoftness(scope *model.Scope, base *Node) *Node {
 	rootCtx := scope.Store().Scope(model.RootScopePath)
 
 	// Calculate scheduleTime: from 0.0 to 1.0 depending on training progress.
-	globalStep := ConvertDType(optimizers.GetGlobalStepVar(rootCtx).NodeValue(g), dtypes.Float32)
+	globalStep := ConvertDType(optimizer.GetGlobalStepVar(rootCtx).NodeValue(g), dtypes.Float32)
 	lastStep := ConvertDType(train.GetTrainLastStepVar(rootCtx).NodeValue(g), dtypes.Float32)
 	// scheduleTime will be at most 1.0, if for some reason globalStep >
 	scheduleTime := MinScalar(Div(globalStep, MaxScalar(lastStep, 1.0)), 1.0)

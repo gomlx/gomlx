@@ -230,7 +230,8 @@ func CreateSettingsFlag(store *model.Store, flagName string) *string {
 }
 
 // SprintSettings pretty-print values for the current hyperparameters settings into a string.
-func SprintSettings(store *model.Store) string {
+func SprintSettings(storeOrScope model.StoreProvider) string {
+	store := storeOrScope.Store()
 	var parts []string
 	for paramPath, value := range store.IterParams() {
 		parts = append(parts, fmt.Sprintf("\t%q: (%T) %v", paramPath, value, value))
@@ -239,7 +240,8 @@ func SprintSettings(store *model.Store) string {
 }
 
 // SprintModifiedSettings pretty-print values of the modified settings into a string.
-func SprintModifiedSettings(store *model.Store, modifiedParams []string) string {
+func SprintModifiedSettings(storeOrScope model.StoreProvider, modifiedParams []string) string {
+	store := storeOrScope.Store()
 	var parts []string
 	paramsSet := sets.MakeWith(modifiedParams...)
 	for _, paramPath := range xslices.SortedKeys(paramsSet) {

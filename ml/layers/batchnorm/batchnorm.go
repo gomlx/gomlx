@@ -12,6 +12,7 @@ package batchnorm
 import (
 	"strings"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
@@ -356,15 +357,21 @@ func (builder *Config) updateMeanAndVariance(
 // ResetWeights reset the weights of the moving averages, forcing them to be reinitialized to 0.
 // It searches for all variables under scope named "batch_normalization"
 //
+// This is not a graph building function, it sets the materialized values to zero.
+//
 // It is a no-op if no batch-normalization was used.
 //
 // Usually this method is not used directly, instead use UpdateAverages.
-func ResetWeights(scope *model.Scope) error {
+func ResetWeights(backend compute.Backend, store *model.Store) error {
 	suffix := "/" + BatchNormalizationScopeName
-	for v := range scope.IterVariables() {
-		if strings.HasSuffix(v.Scope(), suffix) && v.Name() == "avg_weight" {
-			zeros := tensors.FromShape(v.Shape())
-			err := v.SetValue(zeros)
+	for v := range store.IterVariables() {
+		scope, name := model.SplitPath(v.Path())
+		if strings.HasSuffix(scope, suffix) && name == "avg_weight" {
+			zeros, err := tensors.FromShapeForBackend(backend, 0, v.Shape())
+			if err != nil {
+				return err
+			}
+			err = v.SetValue(zeros)
 			if err != nil {
 				return err
 			}
@@ -397,13 +404,13 @@ const (
 // - https://www.mindee.com/blog/batch-normalization
 // - https://discuss.pytorch.org/t/batch-norm-instability/32159/14
 func UpdateAverages(trainer *train.Trainer, oneEpochDS train.Dataset) (bool, error) {
-	scope := trainer.Context()
-	if !model.GetParamOr(scope, AveragesUpdatesTriggerParam, false) {
+	rootScope := trainer.Context().RootScope()
+	if !model.GetParamOr(rootScope, AveragesUpdatesTriggerParam, false) {
 		// No-op.
 		return false, nil
 	}
 
-	err := ResetWeights(scope)
+	err := ResetWeights(trainer.Backend(), trainer.Context())
 	if err != nil {
 		return true, err
 	}

@@ -171,10 +171,10 @@ func trainModel(backend compute.Backend, scope *model.Scope) {
 		if err != nil {
 			log.Fatalf("Training step %d failed: %v", step, err)
 		}
-		loss := metrics[0].Value().(float32)
+		theLoss := metrics[0].Value().(float32)
 
 		if step%50 == 0 || step == steps-1 {
-			fmt.Printf("Step %4d/%d  Loss: %.4f\n", step, steps, loss)
+			fmt.Printf("Step %4d/%d  Loss: %.4f\n", step, steps, theLoss)
 		}
 	}
 	fmt.Printf("\nTraining complete!\n")
