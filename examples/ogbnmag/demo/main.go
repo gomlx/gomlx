@@ -16,8 +16,8 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
@@ -154,7 +154,7 @@ func main() {
 	mag.BatchSize = model.GetParamOr(scope, "batch_size", 128)
 
 	//Early sanity checks.
-	if *flagCheckpoint == "" && *flagEval {
+	if *flagcheckpointHandler == "" && *flagEval {
 		klog.Fatal("To run eval (--eval) you need to specify a checkpoint (--checkpoint).")
 	}
 

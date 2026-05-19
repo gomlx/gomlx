@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 )
 
 // Model outputs the logits (not the probabilities). The parameter inputs should contain 3 tensors:

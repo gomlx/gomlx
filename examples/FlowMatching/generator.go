@@ -214,7 +214,7 @@ var generateSamplesRegex = regexp.MustCompile(`generated_samples_(\d+).tensor`)
 //
 // It outputs at most imagesPerSample per checkpoint sampled.
 func PlotModelEvolution(cfg *diffusion.Config, imagesPerSample int, animate bool, globalStepLimits ...int) {
-	if cfg.Checkpoint == nil {
+	if cfg.checkpointHandler == nil {
 		exceptions.Panicf("PlotModelEvolution requires a model loaded from a checkpoint, see Config.AttachCheckpoint.")
 	}
 	if !gonbui.IsNotebook {
@@ -367,7 +367,7 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 	if !gonbui.IsNotebook {
 		exceptions.Panicf("DisplayImagesAcrossTime requires a Jupyter notebook.")
 	}
-	if cfg.Checkpoint == nil {
+	if cfg.checkpointHandler == nil {
 		exceptions.Panicf("DisplayImagesAcrossDiffusionSteps requires a model loaded from a checkpoint, see " +
 			"Config.AttachCheckpoint.")
 	}

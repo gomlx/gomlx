@@ -13,8 +13,8 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,7 +37,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 				LearningRate(baseLearningRate).
 				MinLearningRate(minLearningRate).
 				Done()
-			return optimizers.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).NodeValue(graph)
+			return optimizer.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).NodeValue(graph)
 		})
 		require.NoError(t, err)
 
@@ -46,7 +46,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 			require.NoErrorf(t, err, "failed for step %d", ii)
 
 			// Checks the correct step number is set.
-			stepVar := store.GetVariable(path.Join(optimizers.Scope, cosineschedule.Scope, "step"))
+			stepVar := store.GetVariable(path.Join(optimizer.Scope, cosineschedule.Scope, "step"))
 			if stepVar == nil {
 				fmt.Println("Current variables:")
 				for v := range store.IterVariables() {
@@ -55,7 +55,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 				t.Fatalf(
 					"Learning rate variable not created in scope %q, name %q",
 					"/optimizers/cosine",
-					optimizers.GlobalStepVariableName,
+					optimizer.GlobalStepVariableName,
 				)
 			}
 			step := stepVar.MustValue().Value().(float32)
@@ -81,7 +81,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 				MinLearningRate(minLearningRate).
 				WarmUpSteps(warmUpSteps).
 				Done()
-			return optimizers.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).NodeValue(graph)
+			return optimizer.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).NodeValue(graph)
 		})
 		require.NoError(t, err)
 		for ii := range 2*periodInSteps + warmUpSteps {
@@ -108,7 +108,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		const numCycles = 2
 		const stepsPerCycle = 100
 		const numSteps = numCycles*stepsPerCycle + warmUpSteps
-		store.SetParam(optimizers.ParamLearningRate, baseLearningRate)
+		store.SetParam(optimizer.ParamLearningRate, baseLearningRate)
 		store.SetParam(cosineschedule.ParamCycles, numCycles)
 		store.SetParam(cosineschedule.ParamWarmUpSteps, warmUpSteps)
 		store.SetParam(cosineschedule.ParamMinLearningRate, minLearningRate)
@@ -118,7 +118,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		cosineExec, err := model.NewExec(backend, store, func(scope *model.Scope, graph *Graph) *Node {
 			scope.Store().SetTraining(graph, true)
 			cosineschedule.New(scope, graph, dtypes.Float32).FromScope().Done()
-			return optimizers.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).NodeValue(graph)
+			return optimizer.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).NodeValue(graph)
 		})
 
 		require.NoError(t, err)

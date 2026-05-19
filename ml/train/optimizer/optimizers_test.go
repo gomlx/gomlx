@@ -1,11 +1,12 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package optimizers
+package optimizer
 
 import (
+	"testing"
+
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
-	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )

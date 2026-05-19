@@ -2,7 +2,7 @@
 
 // Package optimizers implements a collection of ML optimizers that can be used by train.Trainer,
 // or by themselves. They all implement optimizers.Interface.
-package optimizers
+package optimizer
 
 import (
 	"github.com/gomlx/compute/dtypes"
@@ -110,9 +110,9 @@ const (
 	Scope = "optimizers"
 )
 
-// FromContext creates an optimizer from context hyperparameters.
+// FromScope creates an optimizer from the scope (and its [model.Store]) hyperparameters.
 // See [ParamOptimizer]. The default is "adamw".
-func FromContext(scope *model.Scope) Interface {
+func FromScope(scope *model.Scope) Interface {
 	optName := model.GetParamOr(scope, ParamOptimizer, "adamw")
 	return ByName(scope, optName)
 }

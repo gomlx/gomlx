@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 )
 
 func Summary(stores []*model.Store, scopes []*model.Scope, names []string) {
@@ -34,7 +34,7 @@ func Summary(stores []*model.Store, scopes []*model.Scope, names []string) {
 	globalStepRow[0] = "global_step"
 	haveGlobalStep := false
 	for ii, store := range stores {
-		globalStepVar := store.GetVariable(optimizers.GlobalStepVariableName)
+		globalStepVar := store.GetVariable(optimizer.GlobalStepVariableName)
 		if globalStepVar != nil {
 			haveGlobalStep = true
 			globalStepT := must.M1(globalStepVar.Value())

@@ -20,7 +20,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -140,10 +140,10 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	optimizer := optimizers.ByName(scope, model.GetParamOr(scope, "optimizer", "adamw"))
+	theOptimizer := optimizers.ByName(scope, model.GetParamOr(scope, "optimizer", "adamw"))
 	trainer := train.NewTrainer(backend, scope, ModelFn,
 		lossFn,
-		optimizer,
+		theOptimizer,
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 

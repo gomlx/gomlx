@@ -79,7 +79,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/support/sets"
@@ -893,7 +893,7 @@ func (h *Handler) Save() error {
 	}
 
 	// Read globalStep if one is set.
-	globalStep := optimizers.GetGlobalStep(h.store)
+	globalStep := optimizer.GetGlobalStep(h.store)
 	// Update the binary format in JSON.
 	h.serialized.BinFormat = h.config.binFormat.String()
 

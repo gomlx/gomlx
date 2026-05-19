@@ -389,6 +389,14 @@ func (s *Store) SetParam(fullPath string, value any) {
 	s.params.Set(scopePath, baseName, value)
 }
 
+// SetParams sets a collection of parameters in the store.
+// The key is the full path, value is the value.
+func (s *Store) SetParams(keyValues map[string]any) {
+	for fullPath, value := range keyValues {
+		s.SetParam(fullPath, value)
+	}
+}
+
 // GetGraphParam returns the value for the given param key for the given graph,
 // searching successively from the current scope back to the root scope ("/").
 func (s *Store) GetGraphParam(g *Graph, fullPath string) (value any, found bool) {

@@ -25,8 +25,8 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
@@ -110,7 +110,7 @@ func createModelStore() *model.Store {
 var (
 	flagDataDir = flag.String("data", "~/work/uci-adult",
 		"Directory to save and load downloaded and generated dataset files.")
-	flagCheckpoint = flag.String("checkpoint", "", "Checkpoint subdirectory under the --data directory. "+
+	flagcheckpointHandler = flag.String("checkpoint", "", "Checkpoint subdirectory under the --data directory. "+
 		"If empty does not use checkpoints. If absolute path, use that instead.")
 	flagForceDownload = flag.Bool("force_download", false, "Force re-download of Adult dataset files.")
 
@@ -173,7 +173,7 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 	const keepCheckpoints = 3
 	if checkpointPath != "" {
 		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", keepCheckpoints)
-		checkpoint = check1(checkpoint.Build(scope).
+		checkpointHandler = check1(checkpoint.Build(scope).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, "train_steps", "plots", "num_checkpoints")...).

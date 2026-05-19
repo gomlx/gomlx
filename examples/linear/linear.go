@@ -18,7 +18,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
 

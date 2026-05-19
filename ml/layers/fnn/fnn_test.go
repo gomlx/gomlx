@@ -18,7 +18,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/stretchr/testify/assert"
@@ -121,7 +121,7 @@ func TestFNN(t *testing.T) {
 		store := model.NewStore()
 		store.RootScope().Store().ResetRNGState()
 		store.SetParam(model.ParamInitialSeed, int64(42))
-		opt := optimizers.Adam().LearningRate(0.001).Done()
+		opt := optimizer.Adam().LearningRate(0.001).Done()
 		trainer := train.NewTrainer(backend, store.RootScope(), fnnGraphModelBuilder(coreFn),
 			lossGraphFn, // a simple wrapper around losses.MeanSquaredError,
 			opt,
@@ -160,7 +160,7 @@ func TestFNNRegularized(t *testing.T) {
 			Dropout(0).
 			Done()
 	}
-	opt := optimizers.Adam().LearningRate(0.001).Done()
+	opt := optimizer.Adam().LearningRate(0.001).Done()
 	trainer := train.NewTrainer(backend, store.RootScope(), fnnGraphModelBuilder(regularizedFn),
 		lossGraphFn, // a simple wrapper around losses.MeanSquaredError,
 		opt,

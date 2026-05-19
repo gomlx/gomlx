@@ -10,7 +10,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train/losses"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 
@@ -29,9 +29,9 @@ func TestTrainer_AccumulateGradients(t *testing.T) {
 	}
 	lossFn := losses.MeanAbsoluteError
 	learningRate := 0.1
-	optimizer := optimizers.StochasticGradientDescent().
+	opt := optimizer.StochasticGradientDescent().
 		WithDecay(false).WithLearningRate(learningRate).Done()
-	trainer := NewTrainer(backend, store.RootScope(), modelFn, lossFn, optimizer, nil, nil)
+	trainer := NewTrainer(backend, store.RootScope(), modelFn, lossFn, opt, nil, nil)
 	input := tensors.FromScalar(float32(0))
 	label := tensors.FromScalar(float32(10))
 

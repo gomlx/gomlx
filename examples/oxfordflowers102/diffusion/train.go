@@ -22,7 +22,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
@@ -57,13 +57,13 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 	excludeParams := make([]string, 0, len(c.ParamsSet)+len(ParamsExcludedFromLoading))
 	excludeParams = append(excludeParams, c.ParamsSet...)
 	excludeParams = append(excludeParams, ParamsExcludedFromLoading...)
-	checkpoint = check1(checkpoint.Build(c.Context).
+	checkpointHandler = check1(checkpoint.Build(c.Context).
 		DirFromBase(checkpointPath, c.DataDir).
 		Keep(numCheckpointsToKeep).
 		ExcludeParams(excludeParams...).
 		Immediate().
 		Done())
-	c.Checkpoint = checkpoint // Save in config.
+	c.checkpointHandler = checkpoint // Save in config.
 
 	// In case the loaded checkpoint has different values, we need to update the config accordingly.
 	c.DType = check1(dtypes.DTypeString(

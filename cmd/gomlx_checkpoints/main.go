@@ -18,7 +18,7 @@ import (
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -153,6 +153,6 @@ func Backup(checkpointPath string) {
 	checkpointHandler := must.M1(checkpoint.Build(store).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
 	must.M(checkpointHandler.Backup())
-	globalStep := optimizers.GetGlobalStep(store)
+	globalStep := optimizer.GetGlobalStep(store)
 	fmt.Printf("Backup of latest checkpoint (global step %d) successful, see %q.\n", globalStep, path.Join(checkpointHandler.Dir(), checkpoint.BackupDir))
 }

@@ -23,8 +23,8 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -179,7 +179,7 @@ func TrainWithStore(
 	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
 		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 3)
-		checkpoint = check1(checkpoint.Build(scope).
+		checkpointHandler = check1(checkpoint.Build(scope).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, ParamsExcludedFromLoading...)...).

@@ -13,7 +13,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -117,11 +117,11 @@ func New(scope *model.Scope, graph *Graph, dtype dtypes.DType) *Config {
 }
 
 // FromScope configures the cosine annealing from the scope (and the model.Store), using the keys
-// [ParamPeriodSteps], [ParamMinLearningRate], [ParamCycles], [optimizers.ParamLearningRate], and [ParamWarmUpSteps]
+// [ParamPeriodSteps], [ParamMinLearningRate], [ParamCycles], [optimizer.ParamLearningRate], and [ParamWarmUpSteps]
 func (opt *Config) FromScope() *Config {
 	opt.PeriodSteps(model.GetParamOr(opt.scope, ParamPeriodSteps, 0))
 	opt.NumCycles(model.GetParamOr(opt.scope, ParamCycles, 0))
-	opt.LearningRate(model.GetParamOr(opt.scope, optimizers.ParamLearningRate, 0.0))
+	opt.LearningRate(model.GetParamOr(opt.scope, optimizer.ParamLearningRate, 0.0))
 	opt.MinLearningRate(model.GetParamOr(opt.scope, ParamMinLearningRate, 0.0))
 	opt.WarmUpSteps(model.GetParamOr(opt.scope, ParamWarmUpSteps, 0))
 	return opt
@@ -225,10 +225,10 @@ func (opt *Config) Done() {
 
 	lrValue := opt.learningRate
 	if lrValue <= 0 {
-		lrValue = model.GetParamOr(opt.scope, optimizers.ParamLearningRate, 0.0)
+		lrValue = model.GetParamOr(opt.scope, optimizer.ParamLearningRate, 0.0)
 		if lrValue == 0 {
 			exceptions.Panicf("learning rate not configured for New and also "+
-				"not set in the context as parameter %q", optimizers.ParamLearningRate)
+				"not set in the context as parameter %q", optimizer.ParamLearningRate)
 			return
 		}
 	}
@@ -236,8 +236,8 @@ func (opt *Config) Done() {
 
 	// Current training step: cosine schedule keeps its own step counter,
 	// stored in an absolute scope.
-	cosineScope := scope.Store().Scope(model.JoinPath(optimizers.Scope, Scope))
-	cosineStep := optimizers.IncrementCounter(cosineScope, graph, "step", opt.dtype)
+	cosineScope := scope.Store().Scope(model.JoinPath(optimizer.Scope, Scope))
+	cosineStep := optimizer.IncrementCounter(cosineScope, graph, "step", opt.dtype)
 	cosineStep = MinusOne(cosineStep) // The value before the increment.
 	adjustedCosineStep := cosineStep
 	if opt.warmUpSteps > 0 {
@@ -278,6 +278,6 @@ func (opt *Config) Done() {
 	}
 
 	// Update learning rate.
-	lrVar := optimizers.LearningRateVarWithValue(scope.Store().Scope(scope.Scope()), opt.dtype, lrValue)
+	lrVar := optimizer.LearningRateVarWithValue(scope.Store().Scope(scope.Scope()), opt.dtype, lrValue)
 	lrVar.SetNodeValue(lr)
 }

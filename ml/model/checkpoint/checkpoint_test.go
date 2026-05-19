@@ -22,7 +22,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/testutil"
 )
 
@@ -31,7 +31,7 @@ func TestCheckpoints(t *testing.T) {
 
 	// Graph function to test: it simply creates, increments and returns the global step.
 	testGraphFn := func(scope *model.Scope, g *Graph) *Node {
-		return optimizers.IncrementGlobalStep(scope, g, dtypes.Float64)
+		return optimizer.IncrementGlobalStep(scope, g, dtypes.Float64)
 	}
 	var dir string
 	{
@@ -93,7 +93,7 @@ func TestCheckpoints(t *testing.T) {
 		}
 
 		// Check that the variable (global_step) is listed, if we look for it.
-		v := root.GetVariable(optimizers.GlobalStepVariableName)
+		v := root.GetVariable(optimizer.GlobalStepVariableName)
 		require.NoError(t, v.Shape().Check(dtypes.Int64))
 
 		// Re-execute testGraphFn: it should load global step at 10, increment and return it at 11.
@@ -124,7 +124,7 @@ func TestCheckpoints(t *testing.T) {
 		}
 		require.Equal(t, 1, count, "Number of variables should have been one: global_step")
 
-		v := root.GetVariable(optimizers.GlobalStepVariableName)
+		v := root.GetVariable(optimizer.GlobalStepVariableName)
 		require.NoError(t, v.Shape().Check(dtypes.Int64))
 		e := model.MustNewExec(backend, store, testGraphFn)
 		results := e.MustExec()
@@ -180,7 +180,7 @@ func TestMergedCheckpoints(t *testing.T) {
 		store := model.NewStore()
 		checkpointHandler := Build(store).TempDir("", "test_checkpoints_").Keep(2).MustDone()
 		dir = checkpointHandler.Dir()
-		globalStepV := optimizers.GetGlobalStepVar(store)
+		globalStepV := optimizer.GetGlobalStepVar(store)
 		err := globalStepV.SetValue(tensors.FromValue(int64(1)))
 		require.NoError(t, err)
 		xV := store.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
@@ -199,7 +199,7 @@ func TestMergedCheckpoints(t *testing.T) {
 		// Check that the values were averaged:
 		store := model.NewStore()
 		_ = Build(store).Dir(dir).Keep(2).TakeMean(-1, backend).MustDone()
-		globalStep := optimizers.GetGlobalStep(store)
+		globalStep := optimizer.GetGlobalStep(store)
 		assert.Equal(t, int64(10), globalStep, "GlobalStep")
 		xV := store.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
 		// Assume X will be loaded with the mean of the previous 2 checkpoints:

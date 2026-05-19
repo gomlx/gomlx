@@ -22,8 +22,8 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -152,7 +152,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
 		numCheckpoints := model.GetParamOr(scope, "num_checkpoints", 3)
-		checkpoint = check1(checkpoint.Build(scope).
+		checkpointHandler = check1(checkpoint.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			ExcludeParams(append(
 				paramsSet,
@@ -185,7 +185,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	}
 	fmt.Printf("Model: %q\n", modelType)
 	if modelPrep, found := ModelsPrep[modelType]; found {
-		modelPrep(scope, dataDir, checkpoint)
+		modelPrep(scope, dataDir, checkpointHandler)
 	}
 	// BYOL may require pretraining.
 	preTraining := modelType == "byol" && model.GetParamOr(scope, "byol_pretrain", false)
@@ -199,18 +199,18 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	backend := compute.MustNew()
 	var trainer *train.Trainer
-	optimizer := optimizers.FromContext(scope)
+	theOptimizer := optimizers.FromScope(scope)
 	if !preTraining {
 		trainer = train.NewTrainer(backend, scope, modelFn,
 			losses.BinaryCrossentropyLogits,
-			optimizer,
+			theOptimizer,
 			[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 			[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 	} else {
 		// Pre-training: no loss, no metrics.
 		trainer = train.NewTrainer(backend, scope, modelFn,
 			nil,
-			optimizer,
+			theOptimizer,
 			nil, // trainMetrics
 			nil) // evalMetrics
 	}
@@ -278,7 +278,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	if preTraining {
 		// If pre-training (unsupervised), skip evaluation, and clear optimizer variables and global step.
 		fmt.Println("Pre-training only, no evaluation.")
-		check(optimizer.Clear(scope))
+		check(theOptimizer.Clear(scope))
 		check(optimizers.DeleteGlobalStep(scope))
 		check(checkpointHandler.Save())
 		return

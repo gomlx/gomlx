@@ -24,9 +24,9 @@ import (
 )
 
 var (
-	flagDataDir    = flag.String("data", "~/tmp/dogs_vs_cats", "Directory to cache downloaded dataset and save checkpoints.")
-	flagCheckpoint = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
-	flagEval       = flag.Bool("eval", true, "Whether to evaluate trained model on test data in the end.")
+	flagDataDir           = flag.String("data", "~/tmp/dogs_vs_cats", "Directory to cache downloaded dataset and save checkpoints.")
+	flagcheckpointHandler = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
+	flagEval              = flag.Bool("eval", true, "Whether to evaluate trained model on test data in the end.")
 
 	// Pre-Generation parameters:
 	flagPreGenerate  = flag.Bool("pre", false, "Pre-generate preprocessed image data to speed up training.")

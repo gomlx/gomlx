@@ -16,7 +16,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -341,7 +341,7 @@ func (loop *Loop) RunToGlobalStep(ds Dataset, targetGlobalStep int) (metrics []*
 	scope := loop.Trainer.Context()
 	var globalStep int
 	err = exceptions.TryCatch[error](func() {
-		globalStep = int(optimizers.GetGlobalStep(scope))
+		globalStep = int(optimizer.GetGlobalStep(scope))
 	})
 	if err != nil {
 		return nil, err

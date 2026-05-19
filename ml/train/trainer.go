@@ -22,7 +22,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 )
@@ -57,7 +57,7 @@ type Trainer struct {
 	deviceNum compute.DeviceNum
 	modelFn   ModelFn
 	lossFn    LossFn
-	optimizer optimizers.Interface
+	optimizer optimizer.Interface
 
 	// Distribute execution:
 	deviceAssignment []compute.DeviceNum // Optional.
@@ -158,7 +158,7 @@ const (
 //     is presumably frozen, and it sees each example exactly once. The mean of the loss of the dataset is always provided
 //     as the first metric. It's ok to be empty (nil).
 func NewTrainer(backend compute.Backend, scope *model.Scope,
-	modelFn ModelFn, lossFn LossFn, optimizer optimizers.Interface,
+	modelFn ModelFn, lossFn LossFn, theOptimizer optimizer.Interface,
 	trainMetrics, evalMetrics []metrics.Interface) *Trainer {
 
 	r := &Trainer{
@@ -167,7 +167,7 @@ func NewTrainer(backend compute.Backend, scope *model.Scope,
 		deviceNum: 0,
 		modelFn:   modelFn,
 		lossFn:    lossFn,
-		optimizer: optimizer,
+		optimizer: theOptimizer,
 
 		maxExecutors:              DefaultMaxExecutors,
 		inputsAndLabelsLenPerSpec: make(map[any][2]int),
@@ -180,8 +180,8 @@ func NewTrainer(backend compute.Backend, scope *model.Scope,
 	}
 
 	// Delete variables that should forcefully be reinitialized every time the model is retrained.
-	optScope := scope.In(optimizers.Scope).Scope()
-	err := scope.Store().Scope(optScope).DeleteVariable(optimizers.ParamLearningRate)
+	optScope := scope.In(optimizer.Scope).Scope()
+	err := scope.Store().Scope(optScope).DeleteVariable(optimizer.ParamLearningRate)
 	if err != nil {
 		panic(err)
 	}
@@ -849,7 +849,7 @@ func (r *Trainer) Metrics() []metrics.Interface {
 
 // GlobalStep is an alias for optimizers.GetGlobalStep using Trainer.Context().
 func (r *Trainer) GlobalStep() int64 {
-	return optimizers.GetGlobalStep(r.context)
+	return optimizer.GetGlobalStep(r.context)
 }
 
 // OnExecFn is a handler that can be called when executors are created.

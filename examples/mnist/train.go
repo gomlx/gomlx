@@ -39,8 +39,8 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	"github.com/gomlx/gomlx/ml/train/optimizers"
-	"github.com/gomlx/gomlx/ml/train/optimizers/cosineschedule"
+	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
@@ -161,11 +161,10 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	// Create a train.Trainer: this object will orchestrate running the modelType, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	var trainer *train.Trainer
-	optimizer := optimizers.FromContext(scope)
 	trainer = train.NewTrainer(backend, scope,
 		modelFn,
 		lossFn,
-		optimizer,
+		optimizers.FromScope(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
@@ -182,7 +181,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
 		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 3)
-		checkpoint, err = checkpoint.Build(scope).
+		checkpointHandler, err = checkpoint.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, excludeParams...)...).
