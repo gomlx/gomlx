@@ -40,13 +40,13 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	}
 
 	// Checkpoints saving.
-	checkpoint, samplesNoise, samplesFlowerIds := config.AttachCheckpoint(checkpointPath)
+	checkpointHandler, samplesNoise, samplesFlowerIds := config.AttachCheckpoint(checkpointPath)
 	_ = samplesFlowerIds
 	if samplesNoise == nil {
 		klog.Exitf("A checkpoint directory name with --checkpoint is required for storing evolution of some samples, none given")
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintSettings(scope))
+		fmt.Println(commandline.SprintSettings(scope.Store()))
 	}
 	if model.GetParamOr(scope, "rng_reset", true) {
 		// Reset RNG with some pseudo-random value.
@@ -92,8 +92,8 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(
-		backend, scope, BuildTrainComputation(config), customLoss,
-		optimizers.FromContext(scope),
+		backend, scope.Store(), BuildTrainComputation(config), customLoss,
+		optimizers.FromScope(scope),
 		[]metrics.Interface{}, // trainMetrics
 		[]metrics.Interface{}) // evalMetrics
 	if config.NanLogger != nil {
@@ -152,10 +152,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 
 	// Loop for given number of steps.
 	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(scope))
-	if globalStep > 0 {
-		trainer.SetContext(scope)
-	}
+	globalStep := int(optimizers.GetGlobalStep(scope.Store()))
 	if globalStep < numTrainSteps {
 		fmt.Println("Starting training stage:")
 		_, err := loop.RunSteps(trainDS, numTrainSteps-globalStep)
@@ -233,7 +230,7 @@ func BuildTrainComputation(config *diffusion.Config) train.ModelFn {
 		config.NanLogger.TraceFirstNaN(noises, "noises")
 
 		// Cosine schedule, if enabled.
-		cosineschedule.New(scope, g, dtype).FromContext().Done()
+		cosineschedule.New(scope, g, dtype).FromScope().Done()
 
 		// Sample noise at different schedules.
 		t := scope.RandomUniform(g, shapes.Make(dtype, batchSize, 1, 1, 1))

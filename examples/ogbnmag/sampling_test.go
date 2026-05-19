@@ -25,7 +25,7 @@ func TestDatasets(t *testing.T) {
 	scope := model.NewStore().RootScope()
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")
-	UploadOgbnMagVariables(backend, scope) // Uploads the Papers frozen embedding table.
+	UploadOgbnMagVariables(backend, scope.Store()) // Uploads the Papers frozen embedding table.
 
 	_, trainDS, validDS, testDS, err := MakeDatasets(*flagDataDir)
 	require.NoError(t, err, "failed to make datasets")

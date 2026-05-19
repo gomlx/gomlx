@@ -153,7 +153,7 @@ func main() {
 		fmt.Printf("Using KV cache: %d layers, %d heads, dim=%d\n\n", kv.numLayers, kv.kvHeads, kv.headDim)
 		cacheSize := int(math.Log2(float64(maxSeqLen))) + 2
 
-		prefillExec := model.MustNewExec(backend, scope,
+		prefillExec := model.MustNewExec(backend, scope.Store(),
 			func(scope *model.Scope, idNode, maskNode, posNode, seqLenNode *Node) []*Node {
 				return prefillKVCacheGraph(scope, onnxModel, kv, hasAttentionMask, hasPositionIDs,
 					idNode, maskNode, posNode, seqLenNode)
@@ -162,7 +162,7 @@ func main() {
 		prefillExec.SetMaxCache(cacheSize)
 		defer prefillExec.Finalize()
 
-		decodeExec := model.MustNewExec(backend, scope,
+		decodeExec := model.MustNewExec(backend, scope.Store(),
 			func(scope *model.Scope, idNode, maskNode, posNode, concatKeysNode, concatValuesNode, kvInsertPosNode *Node) []*Node {
 				return decodeWithKVCacheGraph(scope, onnxModel, kv, hasAttentionMask, hasPositionIDs,
 					idNode, maskNode, posNode, concatKeysNode, concatValuesNode, kvInsertPosNode)
@@ -684,7 +684,7 @@ func generateWithoutKVCache(
 	// Create the Exec outside the loop. The seqLen parameter is passed dynamically
 	// so the same compiled graph works for different sequence lengths within the
 	// same power-of-2 padded shape.
-	genExec := model.MustNewExec(backend, scope,
+	genExec := model.MustNewExec(backend, scope.Store(),
 		func(scope *model.Scope, idNode, maskNode, posNode, seqLenNode *Node) *Node {
 			g := idNode.Graph()
 			inputs := map[string]*Node{"input_ids": idNode}

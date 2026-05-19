@@ -89,7 +89,7 @@ func TrainingSchedule(scope *model.Scope, fromStep, toStep int) train.OnStepFn {
 				} else if slices.Index([]string{"kan_discrete_control_points", "embeddings", "weights", "biases"}, v.Name()) != -1 {
 					v.Trainable = true
 				} else if v.Trainable {
-					fmt.Printf("\t\t%q trainable\n", v.ScopeAndName())
+					fmt.Printf("\t\t%q trainable\n", v.Path())
 				}
 			}
 			progressBarSpacing()
@@ -133,7 +133,7 @@ func TrainWithStore(
 	if err != nil {
 		return err
 	}
-	UploadOgbnMagVariables(backend, scope)
+	UploadOgbnMagVariables(backend, store)
 
 	// Checkpoint: it loads if already exists, and it will save as we train.
 	var checkpointHandler *checkpoint.Handler
@@ -149,11 +149,11 @@ func TrainWithStore(
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
 		}
-		ExcludeOgbnMagVariablesFromSave(scope, checkpointHandler)
+		ExcludeOgbnMagVariablesFromSave(store, checkpointHandler)
 	}
 
 	// Create trainer and loop.
-	trainer := newTrainer(backend, scope)
+	trainer := newTrainer(backend, store)
 	loop := train.NewLoop(trainer)
 	commandline.ProgressbarStyle = progressbar.ThemeUnicode
 	commandline.AttachProgressBar(loop)
@@ -227,7 +227,7 @@ func TrainWithStore(
 	// Finally, print an evaluation on train and test datasets.
 	if report {
 		fmt.Println()
-		err = evalWithModelStore(backend, scope, dataDir, layerWiseEval, false)
+		err = evalWithModelStore(backend, store, dataDir, layerWiseEval, false)
 		if err != nil {
 			return errors.WithMessage(err, "while reporting eval")
 		}
@@ -237,7 +237,7 @@ func TrainWithStore(
 
 var NanLogger *nanlogger.NanLogger
 
-func newTrainer(backend compute.Backend, scope *model.Scope) *train.Trainer {
+func newTrainer(backend compute.Backend, store *model.Store) *train.Trainer {
 	// Loss: multi-class classification problem.
 	lossFn := losses.SparseCategoricalCrossEntropyLogits
 
@@ -248,9 +248,10 @@ func newTrainer(backend compute.Backend, scope *model.Scope) *train.Trainer {
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	//NanLogger = nanlogger.New()
-	trainer := train.NewTrainer(backend, scope, MagModelGraph,
+	scope := store.RootScope()
+	trainer := train.NewTrainer(backend, store, MagModelGraph,
 		lossFn,
-		optimizers.FromContext(scope), // Based on `ctx.GetParam("optimizer")`.
+		optimizers.FromScope(scope), // Based on `ctx.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 	if NanLogger != nil {
@@ -299,9 +300,9 @@ func evalWithModelStore(backend compute.Backend, store *model.Store, baseDir str
 }
 
 // evalSampled evaluates GNN model based on configuration in `ctx` using sampled sub-graphs.
-func evalSampled(backend compute.Backend, scope *model.Scope, datasets ...train.Dataset) error {
+func evalSampled(backend compute.Backend, store *model.Store, datasets ...train.Dataset) error {
 	// Evaluation on the various eval datasets.
-	trainer := newTrainer(backend, scope)
+	trainer := newTrainer(backend, store)
 	for _, ds := range datasets {
 		start := time.Now()
 		err := commandline.ReportEval(trainer, ds)
@@ -315,7 +316,8 @@ func evalSampled(backend compute.Backend, scope *model.Scope, datasets ...train.
 }
 
 // evalLayerWise evaluates GNN model based on configuration in `ctx` using layer-wise inference.
-func evalLayerWise(backend compute.Backend, scope *model.Scope, baseDir string) error {
+func evalLayerWise(backend compute.Backend, store *model.Store, baseDir string) error {
+	scope := store.RootScope()
 	// Create the OGBN-MAG strategy, used by the layer-wise inference: batch-size is irrelevant.
 	magSampler, err := NewSampler(baseDir)
 	if err != nil {
@@ -353,7 +355,8 @@ func getDType(scope *model.Scope) dtypes.DType {
 // convertPaperEmbeddings converts the "PapersEmbeddings" variable to the selected dtype, if needed.
 //
 // One should be careful not to save the converted values -- ideally, the values are saved in the original Float32.
-func convertPapersEmbeddings(backend compute.Backend, scope *model.Scope) {
+func convertPapersEmbeddings(backend compute.Backend, store *model.Store) {
+	scope := store.RootScope()
 	dtype := getDType(scope)
 	dtypeEmbed := dtype
 	if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {

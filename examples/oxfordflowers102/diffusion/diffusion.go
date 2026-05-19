@@ -443,7 +443,7 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 		nanLogger.TraceFirstNaN(noises, "noises")
 
 		dtype := images.DType()
-		cosineschedule.New(scope, g, dtype).FromContext().Done()
+		cosineschedule.New(scope, g, dtype).FromScope().Done()
 
 		// Sample noise at different schedules.
 		diffusionTimes := scope.RandomUniform(g, shapes.Make(dtype, batchSize, 1, 1, 1))

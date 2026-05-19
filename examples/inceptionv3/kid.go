@@ -131,12 +131,7 @@ func (builder *KidBuilder) BuildGraph(scope *model.Scope, labels, predictions []
 	// Apply InceptionV3 model to each image.
 	var features [2]*Node
 	for imgIdx := range imagesPair {
-		s := scope.Store().Scope(scope.Scope())
-		if imgIdx == 0 {
-			s = s.In("kid_metric")
-		} else {
-			s = s.Shared("kid_metric")
-		}
+		s := scope.At("kid_metric")
 		features[imgIdx] = BuildGraph(s, imagesPair[imgIdx]).
 			SetPooling(MeanPooling).ClassificationTop(false).PreTrained(builder.dataDir).
 			ChannelsAxis(builder.channelsConfig).Trainable(false).Done()

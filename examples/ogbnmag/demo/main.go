@@ -135,7 +135,7 @@ func main() {
 	scope := store.RootScope()
 
 	// Flags with context settings.
-	settings := commandline.CreateSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
 
@@ -146,15 +146,15 @@ func main() {
 	}
 
 	// Parse hyperparameter settings.
-	paramsSet := check1(commandline.ParseSettings(scope, *settings))
+	paramsSet := check1(commandline.ParseSettings(store, *settings))
 	if *flagVerbose {
 		fmt.Println("Hyperparameters set:")
-		fmt.Println(commandline.SprintModifiedSettings(scope, paramsSet))
+		fmt.Println(commandline.SprintModifiedSettings(store, paramsSet))
 	}
 	mag.BatchSize = model.GetParamOr(scope, "batch_size", 128)
 
 	//Early sanity checks.
-	if *flagcheckpointHandler == "" && *flagEval {
+	if *flagCheckpoint == "" && *flagEval {
 		klog.Fatal("To run eval (--eval) you need to specify a checkpoint (--checkpoint).")
 	}
 

@@ -201,14 +201,14 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	var trainer *train.Trainer
 	theOptimizer := optimizers.FromScope(scope)
 	if !preTraining {
-		trainer = train.NewTrainer(backend, scope, modelFn,
+		trainer = train.NewTrainer(backend, store, modelFn,
 			losses.BinaryCrossentropyLogits,
 			theOptimizer,
 			[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 			[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 	} else {
 		// Pre-training: no loss, no metrics.
-		trainer = train.NewTrainer(backend, scope, modelFn,
+		trainer = train.NewTrainer(backend, store, modelFn,
 			nil,
 			theOptimizer,
 			nil, // trainMetrics
@@ -254,10 +254,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 
 	// Loop for given number of steps.
 	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(scope))
-	if globalStep > 0 {
-		trainer.SetContext(scope)
-	}
+	globalStep := int(optimizers.GetGlobalStep(store))
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, int(numTrainSteps-globalStep)))
 		fmt.Printf(

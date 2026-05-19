@@ -231,7 +231,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	}
 
 	// Normal GNN executor.
-	execGnn := model.MustNewExec(manager, scope, func(scope *model.Scope, g *Graph) *Node {
+	execGnn := model.MustNewExec(manager, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
 		graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
 		NodePrediction(scope.In("model"), strategy, graphStates)
 		return graphStates["seeds"].Value
@@ -255,7 +255,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	// Layer-Wise Inference: should return the same values.
 	lw, err := LayerWiseGNN(scope, strategy)
 	require.NoError(t, err)
-	execLayerWise := model.MustNewExec(manager, scope, func(scope *model.Scope, g *Graph) *Node {
+	execLayerWise := model.MustNewExec(manager, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
 		graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
 		lw.NodePrediction(scope.In("model"), graphStates, edges)
 		return graphStates["seeds"]
@@ -277,7 +277,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		setCommonTestParams(scope)
 
 		// Normal GNN executor.
-		execGnn := model.MustNewExec(manager, scope, func(scope *model.Scope, g *Graph) *Node {
+		execGnn := model.MustNewExec(manager, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
 			graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
 			NodePrediction(scope, strategy, graphStates)
 			return graphStates["seeds"].Value
@@ -296,7 +296,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		// Layer-Wise Inference: should return the same values.
 		lw, err := LayerWiseGNN(scope, strategy)
 		require.NoError(t, err)
-		execLayerWise := model.MustNewExec(manager, scope, func(scope *model.Scope, g *Graph) *Node {
+		execLayerWise := model.MustNewExec(manager, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
 			graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
 			lw.NodePrediction(scope, graphStates, edges)
 			return graphStates["seeds"]

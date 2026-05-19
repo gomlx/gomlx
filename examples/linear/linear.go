@@ -123,7 +123,7 @@ func main() {
 	store.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
 
 	// train.Trainer executes a training step.
-	trainer := train.NewTrainer(backend, store.RootScope(), modelGraph,
+	trainer := train.NewTrainer(backend, store, modelGraph,
 		losses.MeanSquaredError,
 		optimizers.StochasticGradientDescent().Done(),
 		nil, nil) // trainMetrics, evalMetrics

@@ -43,7 +43,7 @@ func TestModel(t *testing.T) {
 	scope := model.NewStore().RootScope()
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")
-	UploadOgbnMagVariables(backend, scope) // Uploads the Papers frozen embedding table.
+	UploadOgbnMagVariables(backend, scope.Store()) // Uploads the Papers frozen embedding table.
 
 	trainDS, _, _, _, err := MakeDatasets(*flagDataDir)
 	require.NoError(t, err, "failed to make datasets")
@@ -53,7 +53,7 @@ func TestModel(t *testing.T) {
 	testGraphFn := func(scope *model.Scope, inputs []*Node) []*Node {
 		return MagModelGraph(scope, spec, inputs)
 	}
-	testGraphExec := model.MustNewExec(backend, scope, testGraphFn)
+	testGraphExec := model.MustNewExec(backend, scope.Store(), testGraphFn)
 
 	var inputs []*tensors.Tensor
 	spec, inputs, _, err = trainDS.Yield()

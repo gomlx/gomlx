@@ -179,7 +179,7 @@ func TrainWithStore(
 	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
 		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 3)
-		checkpointHandler = check1(checkpoint.Build(scope).
+		checkpointHandler = check1(checkpoint.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, ParamsExcludedFromLoading...)...).
@@ -187,7 +187,7 @@ func TrainWithStore(
 		fmt.Printf("Checkpoint: %q\n", checkpointHandler.Dir())
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintSettings(scope))
+		fmt.Println(commandline.SprintSettings(store))
 	}
 
 	// Select model graph building function.
@@ -209,7 +209,7 @@ func TrainWithStore(
 	if !imdbUseUnsupervised {
 		theLoss = losses.BinaryCrossentropyLogits
 	}
-	trainer := train.NewTrainer(backend, scope, modelFn,
+	trainer := train.NewTrainer(backend, store, modelFn,
 		theLoss,
 		optimizers.FromScope(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
@@ -243,10 +243,7 @@ func TrainWithStore(
 
 	// Loop for given number of steps.
 	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(scope))
-	if globalStep > 0 {
-		trainer.SetContext(scope)
-	}
+	globalStep := int(optimizers.GetGlobalStep(store))
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if verbosity >= 1 {

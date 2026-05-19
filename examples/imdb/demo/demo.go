@@ -22,16 +22,15 @@ var (
 	flagDataDir           = flag.String("data", "~/tmp/imdb", "Directory to cache downloaded and generated dataset files.")
 	flagEval              = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
 	flagVerbosity         = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
-	flagcheckpointHandler = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
+	flagCheckpoint        = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 )
 
 func main() {
 	store := imdb.CreateModelStore()
-	scope := store.RootScope()
-	settings := commandline.CreateSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseSettings(scope, *settings))
+	paramsSet := check1(commandline.ParseSettings(store, *settings))
 	err := exceptions.TryCatch[error](func() {
 		imdb.TrainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
 	})

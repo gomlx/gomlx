@@ -121,9 +121,18 @@ func NodePrediction(scope *model.Scope, strategy *sampler.Strategy, graphStates 
 		}
 	}
 	ctxReadout := scope.In("readout")
+	visited := make(map[string]bool)
 	for _, rule := range strategy.Seeds {
 		seedState := graphStates[rule.Name]
-		seedState.Value = updateState(ctxReadout.In("%s", rule.ConvKernelScopeName), seedState.Value, seedState.Value, seedState.Mask)
+		kernelScopeName := fmt.Sprintf("%s", rule.ConvKernelScopeName)
+		var ruleCtx *model.Scope
+		if visited[kernelScopeName] {
+			ruleCtx = ctxReadout.Shared("%s", kernelScopeName)
+		} else {
+			visited[kernelScopeName] = true
+			ruleCtx = ctxReadout.In("%s", kernelScopeName)
+		}
+		seedState.Value = updateState(ruleCtx, seedState.Value, seedState.Value, seedState.Mask)
 	}
 }
 
@@ -145,9 +154,10 @@ func ctxForGraphUpdateRound(scope *model.Scope, n int) *model.Scope {
 //
 // It updates all states in `graphStates` except the leaves. The masks are left unchanged.
 func TreeGraphStateUpdate(scope *model.Scope, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
+	visited := make(map[string]bool)
 	// Starting from the seed node sets, do updates recursively.
 	for _, rule := range strategy.Seeds {
-		recursivelyApplyGraphConvolution(scope, rule, nil, graphStates, true)
+		recursivelyApplyGraphConvolution(scope, rule, nil, graphStates, true, visited)
 	}
 }
 
@@ -155,16 +165,16 @@ func TreeGraphStateUpdate(scope *model.Scope, strategy *sampler.Strategy, graphS
 // If the graph has a tree like structure, one needs to call this function at least `N` times, where `N` is the depth
 // of the tree, until the signal arrives from the leaf node to the root.
 func SimultaneousGraphStateUpdate(scope *model.Scope, strategy *sampler.Strategy, graphStates map[string]*sampler.ValueMask[*Node]) {
+	visited := make(map[string]bool)
 	// Starting from the seed node sets, do updates recursively.
 	for _, rule := range strategy.Seeds {
-		recursivelyApplyGraphConvolution(scope, rule, nil, graphStates, false)
+		recursivelyApplyGraphConvolution(scope, rule, nil, graphStates, false, visited)
 	}
 }
 
 func recursivelyApplyGraphConvolution(scope *model.Scope, rule *sampler.Rule,
 	pathToRootStates []*Node,
-	graphStates map[string]*sampler.ValueMask[*Node],
-	dependentsUpdateFirst bool) {
+	graphStates map[string]*sampler.ValueMask[*Node], dependentsUpdateFirst bool, visited map[string]bool) {
 	if rule.Name == "" || rule.ConvKernelScopeName == "" {
 		Panicf("strategy's rule name=%q or kernel scope name=%q are empty, they both must be defined",
 			rule.Name, rule.ConvKernelScopeName)
@@ -222,7 +232,7 @@ func recursivelyApplyGraphConvolution(scope *model.Scope, rule *sampler.Rule,
 	// Update dependents and calculate their convolved messages: it's a depth-first-search on dependents.
 	for _, dependent := range rule.Dependents {
 		if dependentsUpdateFirst {
-			recursivelyApplyGraphConvolution(scope, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst)
+			recursivelyApplyGraphConvolution(scope, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst, visited)
 		}
 		dependentState, found := graphStates[dependent.Name]
 		if !found {
@@ -233,19 +243,33 @@ func recursivelyApplyGraphConvolution(scope *model.Scope, rule *sampler.Rule,
 		if dependentDegreePair != nil {
 			dependentDegree = dependentDegreePair.Value
 		}
-		convolveCtx := scope.In("%s", dependent.ConvKernelScopeName).In("conv")
+		dependentConvKernelScopeName := fmt.Sprintf("%s", dependent.ConvKernelScopeName)
+		var convolveCtx *model.Scope
+		if visited[dependentConvKernelScopeName] {
+			convolveCtx = scope.Shared("%s", dependentConvKernelScopeName).In("conv")
+		} else {
+			visited[dependentConvKernelScopeName] = true
+			convolveCtx = scope.In("%s", dependentConvKernelScopeName).In("conv")
+		}
 		if dependentState.Value != nil {
 			updateInputs = append(updateInputs, sampledConvolveEdgeSet(convolveCtx, dependentState.Value, dependentState.Mask, dependentDegree))
 			hasNewUpdateInputs = true
 		}
 		if !dependentsUpdateFirst {
-			recursivelyApplyGraphConvolution(scope, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst)
+			recursivelyApplyGraphConvolution(scope, dependent, subPathToRootStates, graphStates, dependentsUpdateFirst, visited)
 		}
 	}
 
 	// Update state of current rule: only update state if there was any new incoming input.
 	if hasNewUpdateInputs {
-		updateCtx := scope.In("%s", rule.UpdateKernelScopeName).In("update")
+		ruleUpdateKernelScopeName := fmt.Sprintf("%s", rule.UpdateKernelScopeName)
+		var updateCtx *model.Scope
+		if visited[ruleUpdateKernelScopeName] {
+			updateCtx = scope.Shared("%s", ruleUpdateKernelScopeName).In("update")
+		} else {
+			visited[ruleUpdateKernelScopeName] = true
+			updateCtx = scope.In("%s", ruleUpdateKernelScopeName).In("update")
+		}
 		state.Value = updateState(updateCtx, state.Value, Concatenate(updateInputs, -1), state.Mask)
 	}
 }
@@ -478,7 +502,7 @@ func updateState(scope *model.Scope, prevState, input, mask *Node) *Node {
 	for ii := range numHiddenLayers {
 		ctxHiddenLayer := scope.In("hidden_%d", ii)
 		state = layers.DenseWithBias(ctxHiddenLayer, state, stateDim)
-		state = activations.ApplyFromContext(scope.In("hidden_%d", ii), state)
+		state = activations.ApplyFromContext(ctxHiddenLayer, state)
 	}
 	state = layers.DenseWithBias(scope, state, stateDim)
 	state = activations.ApplyFromContext(scope, state)

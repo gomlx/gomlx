@@ -157,7 +157,7 @@ func trainModel(backend compute.Backend, scope *model.Scope) {
 		return []*graph.Node{transformerModel.Logits(scope, tokens, nil)}
 	}
 
-	trainer := train.NewTrainer(backend, scope, modelFn,
+	trainer := train.NewTrainer(backend, scope.Store(), modelFn,
 		losses.SparseCategoricalCrossEntropyLogits,
 		optimizers.Adam().Done(),
 		nil, nil) // no metrics for this simple example
@@ -233,14 +233,14 @@ func extractTokens(generated *tensors.Tensor) []int {
 func main() {
 	store := createModelStore()
 	scope := store.RootScope()
-	settings := commandline.CreateSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(store, "")
 	flag.Parse()
-	_, err := commandline.ParseSettings(scope, *settings)
+	_, err := commandline.ParseSettings(store, *settings)
 	if err != nil {
 		log.Fatalf("Failed to parse context settings: %v", err)
 	}
 
-	fmt.Println(commandline.SprintSettings(scope))
+	fmt.Println(commandline.SprintSettings(store))
 
 	backend, err := compute.New()
 	if err != nil {

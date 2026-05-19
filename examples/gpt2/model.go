@@ -158,7 +158,7 @@ func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenize
 
 	// Create the generation exec once during loading (saves JIT compilation on first Generate call)
 	var err error
-	gpt2Model.tokenExec, err = model.NewExec(backend, scope,
+	gpt2Model.tokenExec, err = model.NewExec(backend, scope.Store(),
 		func(scope *model.Scope, tokens *Node, position *Node) *Node {
 			logits := gpt2Model.forwardGPT2(scope, tokens, position)
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())

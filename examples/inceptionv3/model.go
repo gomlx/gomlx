@@ -467,7 +467,7 @@ func (cfg *Config) readNextConv2D(scope *model.Scope, graph *Graph) (ctxInScope 
 // readPredictionsWeights enters a new scope and initializes it with the pre-trained dense weights.
 func (cfg *Config) readPredictionsWeights(scope *model.Scope, graph *Graph) (ctxInScope *model.Scope) {
 	ctxInScope = scope.In("predictions")
-	ctxTmp := ctxInScope.In("dense") // layers.Dense will create a sub-scope, which we need to match.
+	ctxTmp := ctxInScope.At("dense") // layers.Dense will create a sub-scope, which we need to match.
 	cfg.loadTensorToVariable(ctxTmp, graph, "predictions/predictions/kernel:0", "weights")
 	cfg.loadTensorToVariable(ctxTmp, graph, "predictions/predictions/bias:0", "biases")
 	return

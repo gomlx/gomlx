@@ -161,7 +161,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	// Create a train.Trainer: this object will orchestrate running the modelType, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	var trainer *train.Trainer
-	trainer = train.NewTrainer(backend, scope,
+	trainer = train.NewTrainer(backend, store,
 		modelFn,
 		lossFn,
 		optimizers.FromScope(scope),

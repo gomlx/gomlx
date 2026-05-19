@@ -24,7 +24,7 @@ func Model(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	scope = scope.In("model")
 
 	// Use Cosine schedule of the learning rate, if hyperparameter is set to a value > 0.
-	cosineschedule.New(scope, g, dtype).FromContext().Done()
+	cosineschedule.New(scope, g, dtype).FromScope().Done()
 
 	categorical, continuous := inputs[0], inputs[1]
 	batchSize := categorical.Shape().Dimensions[0]

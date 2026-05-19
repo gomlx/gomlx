@@ -77,7 +77,7 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
 		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 3)
-		checkpointHandler = check1(checkpoint.Build(scope).
+		checkpointHandler = check1(checkpoint.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, ParamsExcludedFromSaving...)...).
@@ -85,7 +85,7 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 		fmt.Printf("Checkpointing model to %q\n", checkpointHandler.Dir())
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintSettings(scope))
+		fmt.Println(commandline.SprintSettings(store))
 	}
 
 	// Select model graph building function.
@@ -101,9 +101,9 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	scope = scope.In("model") // Convention scope used for model creation.
-	trainer := train.NewTrainer(Backend, scope, modelFn,
+	trainer := train.NewTrainer(Backend, store, modelFn,
 		losses.SparseCategoricalCrossEntropyLogits,
-		optimizers.FromContext(scope),
+		optimizers.FromScope(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
@@ -135,10 +135,7 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 
 	// Loop for given number of steps.
 	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(scope))
-	if globalStep > 0 {
-		trainer.SetContext(scope)
-	}
+	globalStep := int(optimizers.GetGlobalStep(store))
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if verbosity >= 1 {

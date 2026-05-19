@@ -110,7 +110,7 @@ func createModelStore() *model.Store {
 var (
 	flagDataDir = flag.String("data", "~/work/uci-adult",
 		"Directory to save and load downloaded and generated dataset files.")
-	flagcheckpointHandler = flag.String("checkpoint", "", "Checkpoint subdirectory under the --data directory. "+
+	flagCheckpoint = flag.String("checkpoint", "", "Checkpoint subdirectory under the --data directory. "+
 		"If empty does not use checkpoints. If absolute path, use that instead.")
 	flagForceDownload = flag.Bool("force_download", false, "Force re-download of Adult dataset files.")
 
@@ -138,11 +138,10 @@ var (
 func main() {
 	// Flags with context settings.
 	store := createModelStore()
-	scope := store.RootScope()
-	settings := commandline.CreateSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseSettings(scope, *settings))
+	paramsSet := check1(commandline.ParseSettings(store, *settings))
 	err := mainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet)
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
@@ -165,7 +164,7 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if *flagVerbosity >= 1 {
 		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
-		fmt.Println(commandline.SprintSettings(scope))
+		fmt.Println(commandline.SprintSettings(store))
 	}
 
 	// Checkpoints loading (and saving)
@@ -173,7 +172,7 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 	const keepCheckpoints = 3
 	if checkpointPath != "" {
 		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", keepCheckpoints)
-		checkpointHandler = check1(checkpoint.Build(scope).
+		checkpointHandler = check1(checkpoint.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, "train_steps", "plots", "num_checkpoints")...).
@@ -269,8 +268,8 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	trainer := train.NewTrainer(backend, scope, Model, losses.BinaryCrossentropyLogits,
-		optimizers.FromContext(scope),
+	trainer := train.NewTrainer(backend, store, Model, losses.BinaryCrossentropyLogits,
+		optimizers.FromScope(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 

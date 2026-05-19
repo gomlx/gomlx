@@ -27,7 +27,7 @@ var (
 	flagDataDir           = flag.String("data", "~/work/cifar", "Directory to cache downloaded and generated dataset files.")
 	flagEval              = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
 	flagVerbosity         = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
-	flagcheckpointHandler = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
+	flagCheckpoint        = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 )
 
 // createModelStore sets the store with default hyperparameters
@@ -106,11 +106,10 @@ func createModelStore() *model.Store {
 func main() {
 	// Flags with context settings.
 	store := createModelStore()
-	scope := store.RootScope()
-	settings := commandline.CreateSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseSettings(scope, *settings))
+	paramsSet := check1(commandline.ParseSettings(store, *settings))
 
 	// Train.
 	cifar.TrainCifar10WithStore(store, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)

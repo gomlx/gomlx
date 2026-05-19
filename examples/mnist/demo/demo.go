@@ -38,17 +38,16 @@ var (
 	flagTrain             = flag.Bool("train", true, "Flag to train")
 	flagDownload          = flag.Bool("download", false, "Flag to download")
 	flagDataDir           = flag.String("data", "~/work/mnist", "Directory to cache downloaded dataset.")
-	flagcheckpointHandler = flag.String("checkpoint", "",
+	flagCheckpoint        = flag.String("checkpoint", "",
 		"Checkpoint directory from/to where to load/save the trained model. Path is relative to --data.")
 )
 
 func main() {
 	store := mnist.CreateModelStore()
-	scope := store.RootScope()
-	settings := commandline.CreateSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet, err := commandline.ParseSettings(scope, *settings)
+	paramsSet, err := commandline.ParseSettings(store, *settings)
 	if err != nil {
 		klog.Fatal(err)
 	}

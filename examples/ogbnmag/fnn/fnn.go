@@ -81,7 +81,7 @@ var ModelFn = FnnModelGraph
 // Train FNN model based on configuration in `ctx`.
 func Train(backend compute.Backend, scope *model.Scope) error {
 	trainDS, validDS, testDS, err := mag.PapersSeedDatasets(backend)
-	mag.UploadOgbnMagVariables(backend, scope)
+	mag.UploadOgbnMagVariables(backend, scope.Store())
 	//ctx.EnumerateVariables(func(v *model.Variable) {
 	//	fmt.Printf("%s :: %s:\t%s\n", v.Scope(), v.Name(), v.Value().Shape())
 	//})
@@ -116,15 +116,15 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 			numCheckpointsToKeep = -1
 		}
 		if numCheckpointsToKeep > 0 {
-			checkpoint, err = checkpoint.Build(scope).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3, backend).Done()
+			checkpointHandler, err = checkpoint.Build(scope.Store()).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3, backend).Done()
 		} else {
-			checkpoint, err = checkpoint.Build(scope).Dir(checkpointPath).Done()
+			checkpointHandler, err = checkpoint.Build(scope.Store()).Dir(checkpointPath).Done()
 		}
 		if err != nil {
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
 		}
-		globalStep = optimizers.GetGlobalStep(scope)
+		globalStep = optimizers.GetGlobalStep(scope.Store())
 		if globalStep != 0 {
 			fmt.Printf("> restarting training from global_step=%d\n", globalStep)
 		}
@@ -141,7 +141,7 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	theOptimizer := optimizers.ByName(scope, model.GetParamOr(scope, "optimizer", "adamw"))
-	trainer := train.NewTrainer(backend, scope, ModelFn,
+	trainer := train.NewTrainer(backend, scope.Store(), ModelFn,
 		lossFn,
 		theOptimizer,
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics

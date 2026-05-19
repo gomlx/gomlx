@@ -25,7 +25,7 @@ import (
 
 var (
 	flagDataDir           = flag.String("data", "~/tmp/dogs_vs_cats", "Directory to cache downloaded dataset and save checkpoints.")
-	flagcheckpointHandler = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
+	flagCheckpoint        = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 	flagEval              = flag.Bool("eval", true, "Whether to evaluate trained model on test data in the end.")
 
 	// Pre-Generation parameters:
@@ -35,16 +35,15 @@ var (
 
 func main() {
 	store := dogsvscats.CreateModelStore()
-	scope := store.RootScope()
-	settings := commandline.CreateSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseSettings(scope, *settings))
+	paramsSet := check1(commandline.ParseSettings(store, *settings))
 
 	// --force_original better set by
 	err := exceptions.TryCatch[error](func() {
 		if *flagPreGenerate {
-			preGenerate(scope, *flagDataDir)
+			preGenerate(store.RootScope(), *flagDataDir)
 		} else {
 			dogsvscats.TrainWithStore(store, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet)
 		}

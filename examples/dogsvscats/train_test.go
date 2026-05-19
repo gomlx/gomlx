@@ -22,8 +22,7 @@ var (
 
 func init() {
 	store := CreateModelStore()
-	scope := store.RootScope()
-	flagSettings = commandline.CreateSettingsFlag(scope, "")
+	flagSettings = commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
@@ -41,6 +40,6 @@ func TestTrain(t *testing.T) {
 	store.SetParam("train_steps", 10)
 	store.SetParam("plots", false)
 	store.SetParam(layers.ParamNormalization, "layer")
-	paramsSet := check1(commandline.ParseSettings(store.RootScope(), *flagSettings))
+	paramsSet := check1(commandline.ParseSettings(store, *flagSettings))
 	TrainWithStore(store, *flagDataDir, "", false, paramsSet)
 }

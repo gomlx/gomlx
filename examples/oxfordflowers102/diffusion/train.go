@@ -51,19 +51,19 @@ const (
 func (c *Config) AttachCheckpoint(checkpointPath string) (
 	checkpointHandler *checkpoint.Handler, noise, flowerIDs *tensors.Tensor) {
 	if checkpointPath == "" {
-		return checkpoint, noise, flowerIDs
+		return nil, noise, flowerIDs
 	}
 	numCheckpointsToKeep := model.GetParamOr(c.Context, "num_checkpoints", 5)
 	excludeParams := make([]string, 0, len(c.ParamsSet)+len(ParamsExcludedFromLoading))
 	excludeParams = append(excludeParams, c.ParamsSet...)
 	excludeParams = append(excludeParams, ParamsExcludedFromLoading...)
-	checkpointHandler = check1(checkpoint.Build(c.Context).
+	checkpointHandler = check1(checkpoint.Build(c.Context.Store()).
 		DirFromBase(checkpointPath, c.DataDir).
 		Keep(numCheckpointsToKeep).
 		ExcludeParams(excludeParams...).
 		Immediate().
 		Done())
-	c.checkpointHandler = checkpoint // Save in config.
+	c.Checkpoint = checkpointHandler // Save in config.
 
 	// In case the loaded checkpoint has different values, we need to update the config accordingly.
 	c.DType = check1(dtypes.DTypeString(
@@ -78,7 +78,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 	if err == nil {
 		flowerIDs, err = tensors.Load(flowerIdsPath)
 		if err == nil {
-			return checkpoint, noise, flowerIDs
+			return checkpointHandler, noise, flowerIDs
 		}
 	}
 	if !os.IsNotExist(err) {
@@ -91,7 +91,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 	flowerIDs = c.GenerateFlowerIds(numSamples)
 	check(noise.Save(noisePath))
 	check(flowerIDs.Save(flowerIdsPath))
-	return checkpoint, noise, flowerIDs
+	return checkpointHandler, noise, flowerIDs
 }
 
 // TrainWithStore with hyperparameters given in Store.
@@ -188,8 +188,8 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(
-		backend, scope, config.BuildTrainingModelGraph(), customLoss,
-		optimizers.FromContext(scope),
+		backend, scope.Store(), config.BuildTrainingModelGraph(), customLoss,
+		optimizers.FromScope(scope),
 		[]metrics.Interface{movingImagesLoss, movingNoiseLoss, movingMAE}, // trainMetrics
 		[]metrics.Interface{meanImagesLoss, meanMAE})                      // evalMetrics
 	if nanLogger != nil {
@@ -244,10 +244,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 
 	// Loop for given number of steps.
 	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(scope))
-	if globalStep > 0 {
-		trainer.SetContext(scope)
-	}
+	globalStep := int(optimizers.GetGlobalStep(store))
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if verbosity >= 1 {
@@ -323,7 +320,7 @@ func TrainingMonitor(checkpointHandler *checkpoint.Handler, loop *train.Loop, me
 func DisplayTrainingPlots(scope *model.Scope, dataDir, checkpointPath string, paramsSet []string) {
 	backend := compute.MustNew()
 	config := NewConfig(backend, scope, dataDir, paramsSet)
-	checkpoint, _, _ := config.AttachCheckpoint(checkpointPath)
+	checkpointHandler, _, _ := config.AttachCheckpoint(checkpointPath)
 	if checkpointHandler == nil {
 		fmt.Printf("You must set --checkpoint='model_sub_dir'!")
 		return

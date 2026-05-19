@@ -74,7 +74,7 @@ var generateSamplesRegex = regexp.MustCompile(`generated_samples_(\d+).tensor`)
 //
 // It outputs at most imagesPerSample per checkpoint sampled.
 func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
-	if c.checkpointHandler == nil {
+	if c.Checkpoint == nil {
 		exceptions.Panicf("PlotModelEvolution requires a model loaded from a checkpoint, see Config.AttachCheckpoint.")
 	}
 	if !gonbui.IsNotebook {
@@ -210,7 +210,7 @@ func DenoiseStepGraph(scope *model.Scope, noisyImages, diffusionTime, nextDiffus
 //
 // Plotting results only work if in a Jupyter (with GoNB kernel) notebook.
 func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSteps int, displayEveryNSteps int) {
-	if c.checkpointHandler == nil {
+	if c.Checkpoint == nil {
 		exceptions.Panicf(
 			"DisplayImagesAcrossDiffusionSteps requires a model loaded from a checkpoint, see Config.AttachCheckpoint.",
 		)

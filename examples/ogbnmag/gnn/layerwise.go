@@ -3,6 +3,7 @@
 package gnn
 
 import (
+	"fmt"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
@@ -81,20 +82,30 @@ func (lw *LayerWiseConfig) FreeAcceleratorMemory(free bool) *LayerWiseConfig {
 // Subsequent calls will by-step the JIT-compilation of the models.
 func (lw *LayerWiseConfig) NodePrediction(scope *model.Scope, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
 	for round := range lw.numGraphUpdates {
+		visited := make(map[string]bool)
 		for _, rule := range lw.strategy.Seeds {
-			lw.recursivelyApplyGraphConvolution(ctxForGraphUpdateRound(scope, round), rule, graphStates, edges)
+			lw.recursivelyApplyGraphConvolution(ctxForGraphUpdateRound(scope, round), rule, graphStates, edges, visited)
 		}
 	}
 	ctxReadout := scope.In("readout")
+	visited := make(map[string]bool)
 	for _, rule := range lw.strategy.Seeds {
 		seedState := graphStates[rule.Name]
-		seedState = updateState(ctxReadout.In("%s", rule.ConvKernelScopeName), seedState, seedState, nil)
+		kernelScopeName := fmt.Sprintf("%s", rule.ConvKernelScopeName)
+		var ruleCtx *model.Scope
+		if visited[kernelScopeName] {
+			ruleCtx = ctxReadout.Shared("%s", kernelScopeName)
+		} else {
+			visited[kernelScopeName] = true
+			ruleCtx = ctxReadout.In("%s", kernelScopeName)
+		}
+		seedState = updateState(ruleCtx, seedState, seedState, nil)
 		graphStates[rule.Name] = seedState
 	}
 }
 
 func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
-	scope *model.Scope, rule *sampler.Rule, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node]) {
+	scope *model.Scope, rule *sampler.Rule, graphStates map[string]*Node, edges map[string]sampler.EdgePair[*Node], visited map[string]bool) {
 	if rule.Name == "" || rule.ConvKernelScopeName == "" {
 		Panicf("strategy's rule name=%q or kernel scope name=%q are empty, they both must be defined",
 			rule.Name, rule.ConvKernelScopeName)
@@ -125,10 +136,17 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 		}
 
 		if lw.dependentsUpdateFirst {
-			lw.recursivelyApplyGraphConvolution(scope, dependent, graphStates, edges)
+			lw.recursivelyApplyGraphConvolution(scope, dependent, graphStates, edges, visited)
 		}
 		dependentState := graphStates[dependent.Name]
-		convolveCtx := scope.In("%s", dependent.ConvKernelScopeName).In("conv")
+		dependentConvKernelScopeName := fmt.Sprintf("%s", dependent.ConvKernelScopeName)
+		var convolveCtx *model.Scope
+		if visited[dependentConvKernelScopeName] {
+			convolveCtx = scope.Shared("%s", dependentConvKernelScopeName).In("conv")
+		} else {
+			visited[dependentConvKernelScopeName] = true
+			convolveCtx = scope.In("%s", dependentConvKernelScopeName).In("conv")
+		}
 		if dependentState != nil {
 			// Notice that we are sending messages on the reverse order of the sampling.
 			// E.g.: If paper->"HasTopic"->topic, the sampling direction is "paper is source, topic is target".
@@ -137,12 +155,19 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 			updateInputs = append(updateInputs, update)
 		}
 		if !lw.dependentsUpdateFirst {
-			lw.recursivelyApplyGraphConvolution(scope, dependent, graphStates, edges)
+			lw.recursivelyApplyGraphConvolution(scope, dependent, graphStates, edges, visited)
 		}
 	}
 
 	// Update state of current rule: only update state if there was any new incoming input.
-	updateCtx := scope.In("%s", rule.UpdateKernelScopeName).In("update")
+	ruleUpdateKernelScopeName := fmt.Sprintf("%s", rule.UpdateKernelScopeName)
+	var updateCtx *model.Scope
+	if visited[ruleUpdateKernelScopeName] {
+		updateCtx = scope.Shared("%s", ruleUpdateKernelScopeName).In("update")
+	} else {
+		visited[ruleUpdateKernelScopeName] = true
+		updateCtx = scope.In("%s", ruleUpdateKernelScopeName).In("update")
+	}
 	state = updateState(updateCtx, state, Concatenate(updateInputs, -1), nil)
 	graphStates[rule.Name] = state
 }

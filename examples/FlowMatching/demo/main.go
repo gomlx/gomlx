@@ -19,7 +19,7 @@ var (
 	flagDataDir           = flag.String("data", "~/work/oxfordflowers102", "Directory to cache downloaded and generated dataset files.")
 	flagEval              = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
 	flagVerbosity         = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
-	flagcheckpointHandler = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
+	flagCheckpoint        = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 )
 
 var (
@@ -28,10 +28,10 @@ var (
 
 func main() {
 	scope := fm.CreateDefaultContext()
-	settings := commandline.CreateSettingsFlag(scope, "")
+	settings := commandline.CreateSettingsFlag(scope.Store(), "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseSettings(scope, *settings))
+	paramsSet := check1(commandline.ParseSettings(scope.Store(), *settings))
 	config := diffusion.NewConfig(backend, scope, *flagDataDir, paramsSet)
 	err := exceptions.TryCatch[error](func() {
 		fm.TrainModel(config, *flagCheckpoint, *flagEval, *flagVerbosity)

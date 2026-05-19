@@ -75,7 +75,7 @@ func MagModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 			Panicf("Cannot parse hyperparameter %s=%q: %v", optimizers.ParamAdamDType, adamDType, err)
 		}
 	}
-	cosineschedule.New(scope, g, lrDType).FromContext().Done()
+	cosineschedule.New(scope, g, lrDType).FromScope().Done()
 
 	// We disable checking for re-use of scopes because we deliberately reuse
 	// kernels in our GNN.
@@ -155,13 +155,22 @@ func FeaturePreprocessing(scope *model.Scope, strategy *sampler.Strategy, inputs
 	}
 
 	// Preprocess institutions to its embeddings.
+	visitedScopes := make(map[string]bool)
+	getSubScope := func(s *model.Scope, name string) *model.Scope {
+		if visitedScopes[name] {
+			return s.Shared("%s", name)
+		}
+		visitedScopes[name] = true
+		return s.In("%s", name)
+	}
+
 	institutionsEmbedSize := model.GetParamOr(scope, "InstitutionsEmbedSize", 16)
 	splitEmbedTables := model.GetParamOr(scope, ParamSplitEmbedTablesSize, 2)
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "institutions" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
-			embedded := layers.Embedding(ctxEmbed.In("institutions"), indices,
+			embedded := layers.Embedding(getSubScope(ctxEmbed, "institutions"), indices,
 				dtypeEmbed, (NumInstitutions+splitEmbedTables-1)/splitEmbedTables, institutionsEmbedSize, false)
 			if graphInputs[name].Mask != nil {
 				embedMask := layers.DropoutStatic(scope, graphInputs[name].Mask, embedDropoutRate)
@@ -180,7 +189,7 @@ func FeaturePreprocessing(scope *model.Scope, strategy *sampler.Strategy, inputs
 		if rule.NodeTypeName == "fields_of_study" {
 			// Gather values from frozen paperEmbeddings. Mask remains unchanged.
 			indices := DivScalar(graphInputs[name].Value, float64(splitEmbedTables))
-			embedded := layers.Embedding(ctxEmbed.In("fields_of_study"),
+			embedded := layers.Embedding(getSubScope(ctxEmbed, "fields_of_study"),
 				indices, dtypeEmbed, (NumFieldsOfStudy+splitEmbedTables-1)/splitEmbedTables,
 				fieldsOfStudyEmbedSize, false)
 

@@ -149,7 +149,7 @@ func rerank(backend compute.Backend, scope *model.Scope, onnxModel onnx.Model, t
 	var output *tensors.Tensor
 	if hasTokenTypeIDs {
 		output = model.MustExecOnce(
-			backend, scope,
+			backend, scope.Store(),
 			func(scope *model.Scope, inputIDs, attentionMask, tokenTypeIDs *Node) *Node {
 				g := inputIDs.Graph()
 				outputs := onnxModel.CallGraph(scope, g, map[string]*Node{
@@ -163,7 +163,7 @@ func rerank(backend compute.Backend, scope *model.Scope, onnxModel onnx.Model, t
 		)
 	} else {
 		output = model.MustExecOnce(
-			backend, scope,
+			backend, scope.Store(),
 			func(scope *model.Scope, inputIDs, attentionMask *Node) *Node {
 				g := inputIDs.Graph()
 				outputs := onnxModel.CallGraph(scope, g, map[string]*Node{

@@ -144,21 +144,21 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 		if ctxSourceIdx == 0 {
 			fmt.Printf("\nRandomly initialized context:\n")
 			configureLayerWiseTestContext(scope)
-			UploadOgbnMagVariables(backend, scope)
+			UploadOgbnMagVariables(backend, scope.Store())
 
 		} else {
 			// Load from pre-trained checkpointHandler.
 			_, fileName, _, ok := runtime.Caller(0)
 			require.True(t, ok, "Failed to get caller information to find out test source directory.")
 			baseDir := filepath.Dir(fileName)
-			checkpointHandler, err := checkpoint.Build(scope).DirFromBase("test_checkpoint", baseDir).Done()
+			checkpointHandler, err := checkpoint.Build(scope.Store()).DirFromBase("test_checkpoint", baseDir).Done()
 			fmt.Printf("\nLoaded trained context: %s\n", checkpointHandler.Dir())
 			require.NoError(t, err, "Checkpoint loading.")
-			UploadOgbnMagVariables(backend, scope)
+			UploadOgbnMagVariables(backend, scope.Store())
 		}
 
 		// Execute normal inference model for the inputs.
-		executor := model.MustNewExec(backend, scope, func(scope *model.Scope, inputs []*Node) *Node {
+		executor := model.MustNewExec(backend, scope.Store(), func(scope *model.Scope, inputs []*Node) *Node {
 			predictionsAndMask := MagModelGraph(scope, strategy, inputs)
 			return ConvertDType(predictionsAndMask[0], dtypes.Float32)
 		})
@@ -169,7 +169,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 
 		// Layer-Wise inference
 		modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
-		executor = model.MustNewExec(backend, scope, func(scope *model.Scope, g *Graph) *Node {
+		executor = model.MustNewExec(backend, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
 			allPredictions := modelFn(scope, g)
 			return ConvertDType(
 				Slice(allPredictions, AxisElem(seedId), AxisRange()),
@@ -210,14 +210,14 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	_, fileName, _, ok := runtime.Caller(0)
 	require.True(t, ok, "Failed to get caller information to find out test source directory.")
 	baseDir := filepath.Dir(fileName)
-	checkpointHandler, err := checkpoint.Build(scope).DirFromBase("test_checkpoint", baseDir).Done()
+	checkpointHandler, err := checkpoint.Build(scope.Store()).DirFromBase("test_checkpoint", baseDir).Done()
 	require.NoError(t, err, "Checkpoint loading.")
 	fmt.Printf("\nLoaded trained context: %s\n", checkpointHandler.Dir())
 	fmt.Printf("\t%s=%q\n", ParamDType, model.GetParamOr(scope, ParamDType, ""))
-	UploadOgbnMagVariables(backend, scope)
+	UploadOgbnMagVariables(backend, scope.Store())
 
 	// Execute normal inference model for the inputs.
-	executor := model.MustNewExec(backend, scope, func(scope *model.Scope, inputs []*Node) []*Node {
+	executor := model.MustNewExec(backend, scope.Store(), func(scope *model.Scope, inputs []*Node) []*Node {
 		labels := inputs[len(inputs)-1]
 		inputs = inputs[:len(inputs)-1]
 		predictionsAndMask := MagModelGraph(scope, strategy, inputs)
@@ -260,7 +260,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	// Layer-Wise inference
 	modelFn := BuildLayerWiseInferenceModel(strategy, false) // Function that builds the LW inference model.
 	numToCompare := len(predictionsGNN)
-	executor = model.MustNewExec(backend, scope, func(scope *model.Scope, g *Graph) *Node {
+	executor = model.MustNewExec(backend, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
 		logits := modelFn(scope, g)
 		predictions := ArgMax(logits, -1, dtypes.Int32)
 		predictions = Slice(predictions, AxisRange(0, numToCompare))
