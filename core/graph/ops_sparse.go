@@ -396,7 +396,7 @@ func IndicesForShape(g *Graph, shape shapes.Shape) *Node {
 func Scatter(indices, updates *Node, shape shapes.Shape, sorted, unique bool) *Node {
 	g := validateBuildingGraphFromInputs(indices, updates)
 	zeros := Zeros(g, shape)
-	return ScatterSum(zeros, indices, updates, sorted, true)
+	return ScatterSum(zeros, indices, updates, sorted, unique)
 }
 
 // ScatterUpdate replaces values in the operand with values from updates, at the locations pointed by indices.
