@@ -31,6 +31,7 @@ func main() {
 			"github.com/gomlx/gomlx/pkg/ml/datasets":             "github.com/gomlx/gomlx/ml/datasets",
 			"github.com/gomlx/gomlx/pkg/ml/decode":               "github.com/gomlx/gomlx/ml/decode",
 			"github.com/gomlx/gomlx/pkg/ml/ggml":                 "github.com/gomlx/gomlx/ml/ggml",
+			"github.com/gomlx/gomlx/pkg/ml/model/transformer":    "github.com/gomlx/gomlx/ml/zoo/transformer",
 			"github.com/gomlx/gomlx/pkg/ml/nn":                   "github.com/gomlx/gomlx/ml/nn",
 			"github.com/gomlx/gomlx/pkg/ml/context":              "github.com/gomlx/gomlx/ml/model",
 			"github.com/gomlx/gomlx/pkg/ml/context/checkpoints":  "github.com/gomlx/gomlx/ml/model/checkpoint",
