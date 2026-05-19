@@ -299,16 +299,16 @@ func (r *Trainer) Backend() compute.Backend {
 	return r.backend
 }
 
-// Context returns the current Context. See SetContext to change it.
-func (r *Trainer) Context() *model.Store {
+// Store returns the current Store. See SetContext to change it.
+func (r *Trainer) Store() *model.Store {
 	return r.store
 }
 
-// SetContext associates the given [model.Store] to the trainer.
+// SetStore associates the given [model.Store] to the trainer.
 //
 // Should be called before any calls to Train or Evaluate, otherwise
 // the results are undefined.
-func (r *Trainer) SetContext(store *model.Store) *Trainer {
+func (r *Trainer) SetStore(store *model.Store) *Trainer {
 	r.store = store
 	for exec := range r.iterateExecs() {
 		exec.SetStore(store)

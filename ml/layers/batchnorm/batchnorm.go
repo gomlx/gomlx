@@ -404,13 +404,13 @@ const (
 // - https://www.mindee.com/blog/batch-normalization
 // - https://discuss.pytorch.org/t/batch-norm-instability/32159/14
 func UpdateAverages(trainer *train.Trainer, oneEpochDS train.Dataset) (bool, error) {
-	rootScope := trainer.Context().RootScope()
+	rootScope := trainer.Store().RootScope()
 	if !model.GetParamOr(rootScope, AveragesUpdatesTriggerParam, false) {
 		// No-op.
 		return false, nil
 	}
 
-	err := ResetWeights(trainer.Backend(), trainer.Context())
+	err := ResetWeights(trainer.Backend(), trainer.Store())
 	if err != nil {
 		return true, err
 	}

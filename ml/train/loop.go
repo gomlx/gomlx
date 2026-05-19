@@ -251,7 +251,7 @@ func (loop *Loop) setLastStep(lastStep int) error {
 	loop.EndStep = lastStep
 	var endStepVar *model.Variable
 	err := exceptions.TryCatch[error](func() {
-		endStepVar = GetTrainLastStepVar(loop.Trainer.Context())
+		endStepVar = GetTrainLastStepVar(loop.Trainer.Store())
 	})
 	if err != nil {
 		return err
@@ -338,7 +338,7 @@ func freeMetrics(metricsInterfaces []metrics.Interface, metrics []*tensors.Tenso
 // RunToGlobalStep runs the loop until the target global step is reached.
 // If targetGlobalStep is smaller than the current global step, it does nothing and returns nil metrics.
 func (loop *Loop) RunToGlobalStep(ds Dataset, targetGlobalStep int) (metrics []*tensors.Tensor, err error) {
-	scope := loop.Trainer.Context()
+	scope := loop.Trainer.Store()
 	var globalStep int
 	err = exceptions.TryCatch[error](func() {
 		globalStep = int(optimizer.GetGlobalStep(scope))
