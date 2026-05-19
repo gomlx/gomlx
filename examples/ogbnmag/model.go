@@ -36,7 +36,7 @@ func getMagVar(scope *model.Scope, g *Graph, name string) *Node {
 		Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
 		panic(nil) // Quiet linter.
 	}
-	return magVar.ValueGraph(g)
+	return magVar.NodeValue(g)
 }
 
 // logitsGraph converts the readout state of the seed nodes to its logits.

@@ -414,9 +414,9 @@ func Denoise(scope *model.Scope, noisyImages, signalRatios, noiseRatios, flowerI
 			newScope := newPrefixScope + suffix
 			emaVar := emaScope.Store().Scope(newScope).VariableWithShape(v.Name(), v.Shape())
 			emaValue := Add(
-				MulScalar(emaVar.ValueGraph(g), emaCoef),
-				MulScalar(v.ValueGraph(g), 1.0-emaCoef))
-			emaVar.SetValueGraph(emaValue)
+				MulScalar(emaVar.NodeValue(g), emaCoef),
+				MulScalar(v.NodeValue(g), 1.0-emaCoef))
+			emaVar.SetNodeValue(emaValue)
 		}
 	}
 	return
@@ -504,7 +504,7 @@ func TransformerBlock(scope *model.Scope, nanLogger *nanlogger.NanLogger, x *Nod
 	// Shape: [1, maxLen, embedDim]
 	posEmbedShape := shapes.Make(dtype, 1, spatialDim, posEmbedDim)
 	posEmbedVar := scope.VariableWithShape("positional", posEmbedShape)
-	posEmbed := posEmbedVar.ValueGraph(g)
+	posEmbed := posEmbedVar.NodeValue(g)
 	posEmbed = BroadcastToDims(posEmbed, batchDim, spatialDim, posEmbedDim) // Broadcast batch axis so we can concatenate it later.
 
 	// Add the requested number of attention layers.

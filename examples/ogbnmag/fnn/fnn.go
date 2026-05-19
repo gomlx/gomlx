@@ -38,7 +38,7 @@ func FnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 		if magVar == nil {
 			exceptions.Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
 		}
-		return magVar.ValueGraph(g)
+		return magVar.NodeValue(g)
 	}
 	log1pMagVar := func(name string) *Node {
 		return Log1p(ConvertDType(getMagVar(name), dtypes.Float32))

@@ -372,7 +372,7 @@ func convertPapersEmbeddings(backend compute.Backend, scope *model.Scope) {
 	}
 
 	e := model.MustNewExec(backend, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
-		return ConvertDType(papersVar.ValueGraph(g), dtype)
+		return ConvertDType(papersVar.NodeValue(g), dtype)
 	})
 	converted := e.MustExec()[0]
 	// We don't want to destroy the unconverted values in case we need them again (it happens in tests).
