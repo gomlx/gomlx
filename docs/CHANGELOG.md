@@ -38,6 +38,11 @@ directory, and move the packages to the root:
 - `github.com/gomlx/gomlx/pkg/ml/...` -> `github.com/gomlx/gomlx/ml/...
 - `github.com/gomlx/gomlx/pkg/support/...` -> `github.com/gomlx/gomlx/support/...
 
+And a few small renaming:
+
+- `ml/model/initializers` -> `ml/model/initializer`
+- `ml/model/checkpoints` -> `ml/model/checkpoint`
+
 ## **Context Redesign** now in package `model`
 - Package `context` -> `model`
 - `Context` -> `Store` and `Scope`
