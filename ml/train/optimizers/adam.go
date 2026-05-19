@@ -260,8 +260,9 @@ func (o *adam) UpdateGraphWithGradients(scope *model.Scope, grads []*Node, lossD
 
 	// Increment the global step, but keep a separate step count for the Adam optimizer -- it can be
 	// reset separately.
-	_ = IncrementGlobalStepGraph(scope, g, dtype) // LoopStep, not used by this optimizer, but updated.
-	adamStep := IncrementGlobalStepGraph(scope.In("%s", o.config.scopeName), g, dtype)
+	_ = IncrementGlobalStep(scope, g, dtype) // LoopStep, not used by this optimizer, but updated.
+	adamScope := scope.At("%s", o.config.scopeName)
+	adamStep := IncrementCounter(adamScope, g, "step", dtype)
 
 	// Back-off steps to allow a better estimate of momentum and variance, before actually taking
 	// a gradient step.

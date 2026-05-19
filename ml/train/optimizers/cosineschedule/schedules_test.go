@@ -3,6 +3,7 @@
 package cosineschedule_test
 
 import (
+	"fmt"
 	"math"
 	"path"
 	"testing"
@@ -45,18 +46,20 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 			require.NoErrorf(t, err, "failed for step %d", ii)
 
 			// Checks the correct step number is set.
-			stepVar := store.GetVariable(
-				path.Join("/", optimizers.Scope, cosineschedule.Scope, optimizers.GlobalStepVariableName),
-			)
+			stepVar := store.GetVariable(path.Join(optimizers.Scope, cosineschedule.Scope, "step"))
 			if stepVar == nil {
+				fmt.Println("Current variables:")
+				for v := range store.IterVariables() {
+					fmt.Printf("- %s: %s\n", v.Path(), v.Shape())
+				}
 				t.Fatalf(
 					"Learning rate variable not created in scope %q, name %q",
 					"/optimizers/cosine",
 					optimizers.GlobalStepVariableName,
 				)
 			}
-			step := stepVar.MustValue().Value().(int64)
-			assert.Equal(t, int64(ii+1), step)
+			step := stepVar.MustValue().Value().(float32)
+			assert.InDeltaf(t, float32(ii+1), step, 1e-4, "step=%d", ii)
 
 			// Check learning rate is following cosine formulation.
 			lr := tensors.ToScalar[float32](lrT)
@@ -114,7 +117,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		require.NoError(t, err)
 		cosineExec, err := model.NewExec(backend, store, func(scope *model.Scope, graph *Graph) *Node {
 			scope.Store().SetTraining(graph, true)
-			cosineschedule.New(scope, graph, dtypes.Float32).FromContext().Done()
+			cosineschedule.New(scope, graph, dtypes.Float32).FromScope().Done()
 			return optimizers.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).NodeValue(graph)
 		})
 

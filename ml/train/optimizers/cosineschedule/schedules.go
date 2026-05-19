@@ -116,9 +116,9 @@ func New(scope *model.Scope, graph *Graph, dtype dtypes.DType) *Config {
 	}
 }
 
-// FromContext configures the cosine annealing from the context, using the keys
-// [ParamPeriodSteps] and [ParamMinLearningRate].
-func (opt *Config) FromContext() *Config {
+// FromScope configures the cosine annealing from the scope (and the model.Store), using the keys
+// [ParamPeriodSteps], [ParamMinLearningRate], [ParamCycles], [optimizers.ParamLearningRate], and [ParamWarmUpSteps]
+func (opt *Config) FromScope() *Config {
 	opt.PeriodSteps(model.GetParamOr(opt.scope, ParamPeriodSteps, 0))
 	opt.NumCycles(model.GetParamOr(opt.scope, ParamCycles, 0))
 	opt.LearningRate(model.GetParamOr(opt.scope, optimizers.ParamLearningRate, 0.0))
@@ -234,8 +234,10 @@ func (opt *Config) Done() {
 	}
 	lrMinValue := max(opt.minLearningRate, 0.0)
 
-	// Current training step: cosine schedule keeps its own "global step" counter.
-	cosineStep := optimizers.IncrementGlobalStepGraph(scope.Store().Scope(scope.Scope()).In(optimizers.Scope).In(Scope), graph, opt.dtype)
+	// Current training step: cosine schedule keeps its own step counter,
+	// stored in an absolute scope.
+	cosineScope := scope.Store().Scope(model.JoinPath(optimizers.Scope, Scope))
+	cosineStep := optimizers.IncrementCounter(cosineScope, graph, "step", opt.dtype)
 	cosineStep = MinusOne(cosineStep) // The value before the increment.
 	adjustedCosineStep := cosineStep
 	if opt.warmUpSteps > 0 {

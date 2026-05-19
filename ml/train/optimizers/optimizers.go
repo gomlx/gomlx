@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/initializer"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -164,12 +165,13 @@ func GetGlobalStep(scopeOrStore model.StoreProvider) int64 {
 }
 
 // DeleteGlobalStep in case one wants to reset the model state, or hide how many steps were taken.
-func DeleteGlobalStep(scope *model.Scope) error {
+func DeleteGlobalStep(scopeOrStore model.StoreProvider) error {
+	scope := scopeOrStore.Store().RootScope()
 	return scope.DeleteVariable(GlobalStepVariableName)
 }
 
-// IncrementGlobalStepGraph creates (if not there yet) a global step counter, and
-// returns it incremented -- its first returned value will be 1.
+// IncrementGlobalStep creates (if not there yet) a global step counter (stored at the root scope
+// of the [model.Store]), and returns it incremented -- its first returned value will be 1.
 //
 // It only builds the computation graph, no actual values are generated.
 //
@@ -177,8 +179,8 @@ func DeleteGlobalStep(scope *model.Scope) error {
 //
 // GlobalStep is always stored as dtypes.Int64, but it is converted to the given DType
 // before being returned.
-func IncrementGlobalStepGraph(scope *model.Scope, g *Graph, dtype dtypes.DType) *Node {
-	globalStepVar := GetGlobalStepVar(scope)
+func IncrementGlobalStep(scopeOrStore model.StoreProvider, g *Graph, dtype dtypes.DType) *Node {
+	globalStepVar := GetGlobalStepVar(scopeOrStore)
 	globalStep := globalStepVar.NodeValue(g)
 	globalStep = Add(globalStep, OnesLike(globalStep))
 	globalStepVar.SetNodeValue(globalStep)
@@ -186,6 +188,16 @@ func IncrementGlobalStepGraph(scope *model.Scope, g *Graph, dtype dtypes.DType) 
 		globalStep = ConvertDType(globalStep, dtype)
 	}
 	return globalStep
+}
+
+// IncrementCounter creates a counter in the given scope if not there yet,
+// and increments it. Its first returned value will be 1.
+func IncrementCounter(scope *model.Scope, g *Graph, counterName string, dtype dtypes.DType) *Node {
+	counterVar := scope.WithInitializer(initializer.Zero).VariableWithShape(counterName, shapes.Make(dtype))
+	counterVar.SetTrainable(false)
+	counter := AddScalar(counterVar.NodeValue(g), 1)
+	counterVar.SetNodeValue(counter)
+	return counter
 }
 
 // LearningRateVar returns the learning rate variable -- a scalar value of the given dtype.
@@ -327,7 +339,7 @@ func (sgd *SGDConfig) UpdateGraphWithGradients(scope *model.Scope, grads []*Node
 
 	lrVar := LearningRateVar(scope, dtype, initialLearningRate)
 	learningRate := lrVar.NodeValue(g)
-	globalStep := IncrementGlobalStepGraph(scope, g, dtype)
+	globalStep := IncrementGlobalStep(scope, g, dtype)
 	if sgd.useDecay {
 		learningRate = Div(learningRate, Sqrt(globalStep)) // Factor global_step into the learning rate.
 	}
