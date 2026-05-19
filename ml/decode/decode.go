@@ -9,8 +9,8 @@ import (
 	"github.com/gomlx/compute/gobackend"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/decode/sample"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/pkg/ml/decode/sample"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )

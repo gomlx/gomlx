@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/compute/support/humanize"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/ml/datasets"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"

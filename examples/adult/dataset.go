@@ -22,7 +22,7 @@ import (
 	"log"
 
 	"github.com/gomlx/compute"
-	"github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/ml/datasets"
 	"github.com/pkg/errors"
 )
 

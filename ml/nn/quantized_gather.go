@@ -5,7 +5,7 @@ package nn
 import (
 	"github.com/gomlx/compute"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/ggml"
+	"github.com/gomlx/gomlx/ml/ggml"
 )
 
 // QuantizedGather performs a quantized embedding lookup: gathers rows from a quantized

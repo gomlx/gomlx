@@ -35,7 +35,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/ml/datasets"
 	"github.com/gomlx/gomlx/pkg/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
 

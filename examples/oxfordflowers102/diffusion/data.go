@@ -17,8 +17,8 @@ import (
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 
+	"github.com/gomlx/gomlx/ml/datasets"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/pkg/ml/datasets"
 
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 )
