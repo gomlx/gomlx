@@ -120,12 +120,12 @@ func main() {
 
 	// Creates Context with learned weights and bias.
 	store := model.NewStore()
-	store.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
+	store.SetParam(optimizer.ParamLearningRate, *flagLearningRate)
 
 	// train.Trainer executes a training step.
 	trainer := train.NewTrainer(backend, store, modelGraph,
 		losses.MeanSquaredError,
-		optimizers.StochasticGradientDescent().Done(),
+		optimizer.StochasticGradientDescent().Done(),
 		nil, nil) // trainMetrics, evalMetrics
 
 	loop := train.NewLoop(trainer)

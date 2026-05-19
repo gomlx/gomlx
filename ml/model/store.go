@@ -36,7 +36,7 @@ type Store struct {
 	// graphParams hold models parameters for a particular graph.
 	graphParams map[graph.GraphId]*scoped.Params
 
-	// variablesMap for this context organized per absolute path.
+	// variablesMap for this store organized per absolute path.
 	// The key is the full path of the variable.
 	variablesMap map[string]*Variable
 

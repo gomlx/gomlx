@@ -57,7 +57,7 @@ func BasePath(p string) string {
 // scopes by using Scope.In("new_scope"): it returns a new Scope with the new scope set, but still pointing
 // (sharing) all the data with the previous Scope.
 //
-// Finally, Scope also allows one to checkpoint the variable values (save and load). See the checkpoints package.
+// Finally, Scope also allows one to checkpoint the variable values (save and load). See the checkpoint package.
 type Scope struct {
 	// scope for currently created variables and registration.
 	// It is always an absolute path starting with "/".

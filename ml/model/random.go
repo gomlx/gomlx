@@ -19,7 +19,7 @@ var (
 	// ParamInitialSeed is the key for the hyperparameter to use for initial seed (int64). The default is 0,
 	// which makes it non-deterministic. Set it to a value different from 0 for a deterministic (as long
 	// as the model doesn't change) initialization.
-	ParamInitialSeed = "initializers_seed"
+	ParamInitialSeed = "initializer_seed"
 )
 
 // getRNGStateVar panics if it fails to create the random state.

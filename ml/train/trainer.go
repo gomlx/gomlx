@@ -147,7 +147,7 @@ const (
 //     They can simply be used as is, or called by arbitrary custom losses.
 //     It can also be set to nil, if one is providing loss terms with `AddLoss` -- e.g.: for unsupervised training.
 //
-//   - optimizer (e.g: optimizers.StochasticGradientDescent) is the methodology to improve the model variables (aka.
+//   - optimizer (e.g: optimizer.StochasticGradientDescent) is the methodology to improve the model variables (aka.
 //     parameters or weights) to minimize the loss (the output of lossFn), typically using gradient descent.
 //
 //   - trainMetrics are output by trainer.TrainStep after each step. Here it's recommended to use moving average
@@ -854,7 +854,7 @@ func (r *Trainer) Metrics() []metrics.Interface {
 	return r.evalMetrics
 }
 
-// GlobalStep is an alias for optimizers.GetGlobalStep using Trainer.Context().
+// GlobalStep is an alias for optimizer.GetGlobalStep using Trainer.Context().
 func (r *Trainer) GlobalStep() int64 {
 	return optimizer.GetGlobalStep(r.store)
 }

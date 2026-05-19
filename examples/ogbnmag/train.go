@@ -187,7 +187,7 @@ func TrainWithStore(
 
 	// Loop for given number of steps
 	trainSteps := model.GetParamOr(scope, "train_steps", 100)
-	globalStep := int(optimizers.GetGlobalStep(scope))
+	globalStep := int(optimizer.GetGlobalStep(scope))
 	if trainSteps <= globalStep {
 		fmt.Printf("> training already reached target train_steps=%d. To train further, set a number additional "+
 			"to current global step. Use Eval to get reading on current performance.\n", trainSteps)
@@ -251,7 +251,7 @@ func newTrainer(backend compute.Backend, store *model.Store) *train.Trainer {
 	scope := store.RootScope()
 	trainer := train.NewTrainer(backend, store, MagModelGraph,
 		lossFn,
-		optimizers.FromScope(scope), // Based on `ctx.GetParam("optimizer")`.
+		optimizer.FromScope(scope), // Based on `ctx.GetParam("optimizer")`.
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 	if NanLogger != nil {
@@ -272,7 +272,7 @@ func EvalWithStore(
 	}
 
 	// Model stats:
-	globalStep := optimizers.GetGlobalStep(store)
+	globalStep := optimizer.GetGlobalStep(store)
 	fmt.Printf("Model in %q trained for %d steps.\n", checkpointPath, globalStep)
 
 	// Upload OGBN-MAG variables -- and possibly convert them.

@@ -40,7 +40,7 @@ type Config struct {
 	// DataDir is where the data is downloaded, and models are saved.
 	DataDir string
 
-	// ParamsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+	// ParamsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseSettings).
 	ParamsSet []string
 
 	DType                               dtypes.DType
@@ -59,7 +59,7 @@ type Config struct {
 
 // NewConfig creates a configuration for most of the diffusion methods.
 //
-// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseSettings).
 func NewConfig(backend compute.Backend, scope *model.Scope, dataDir string, paramsSet []string) *Config {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {

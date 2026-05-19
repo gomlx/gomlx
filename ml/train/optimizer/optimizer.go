@@ -1,7 +1,7 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-// Package optimizers implements a collection of ML optimizers that can be used by train.Trainer,
-// or by themselves. They all implement optimizers.Interface.
+// Package optimizer implements a collection of ML optimizers that can be used by train.Trainer,
+// or by themselves. They all implement optimizer.Interface.
 package optimizer
 
 import (
@@ -28,11 +28,11 @@ type Interface interface {
 	// and the trainer (train.Trainer) will make sure these values are returned from the graph execution
 	// and the materialized values used to update the variables (Variable.SetValue).
 	//
-	// The ctx holds the variables to train (marked as trainable), the hyperparameters
-	// used by the optimizer (in `ctx.Params`) and non-trainable variables
-	// that the optimizer itself may create. One should scope it (model.Context.In("<some scope name>"))
+	// The scope holds the variables to train (marked as trainable), the hyperparameters
+	// used by the optimizer (in `scope.Store().GetParam()`) and non-trainable variables
+	// that the optimizer itself may create. One should scope it (model.Scope.In("<some scope name>"))
 	// to avoid naming conflicts on the variables created -- notice that
-	// some complex training schedule may have more than one optimizer on the same Context object.
+	// some complex training schedule may have more than one optimizer on the same Store object.
 	//
 	// loss must be a scalar value.
 	//
@@ -57,12 +57,12 @@ var (
 		"rmsprop": func(scope *model.Scope) Interface { return RMSProp().FromContext(scope).Done() },
 	}
 
-	// ParamOptimizer is the context parameter with the name of the optimizer.
+	// ParamOptimizer is the parameter name (in the [model.Store]) for the name of the optimizer to use.
 	// The default value is "adamw", and the valid values are "sgd", "adam", "adamw" and "adamax".
 	ParamOptimizer = "optimizer"
 
-	// ParamLearningRate is the context parameter name for the default value of learning rate.
-	// It is used by most (all?) optimizers.
+	// ParamLearningRate is the parameter name for the default value of learning rate.
+	// It is used by most (all?) optimizer.
 	ParamLearningRate = "learning_rate"
 
 	// LearningRateKey is an alias to ParamLearningRate
@@ -86,7 +86,7 @@ var (
 	ParamClipNaN = "clip_nan"
 
 	// ParamNanLogger configures a nanlogger to use to report NaNs in gradients updates for example. See TraceNaNInGradients.
-	// This value is not saved in a checkpointHandler.
+	// This value is not saved in a checkpoint.Handler.
 	// It should be set to a Tracer (which a *nanlogger.NanLogger is).
 	//
 	// Typical use:
@@ -94,7 +94,7 @@ var (
 	//	var nanLogger *nanlogger.NanLogger
 	//	if debugNaNs {
 	//		nanLogger = nanlogger.New()
-	//		ctx.SetParam(optimizers.ParamNanLogger, nanLogger)
+	//		scope.SetParam(optimizer.ParamNanLogger, nanLogger)
 	//	}
 	//	trainer := train.NewTrainer(…)
 	//	nanLogger.AttachToTrainer(trainer)
@@ -102,11 +102,11 @@ var (
 )
 
 const (
-	// GlobalStepVariableName as stored in model.Context, usually in the root scope -- but depends on the
+	// GlobalStepVariableName as stored in model.Store, usually in the root scope -- but depends on the
 	// caller.
 	GlobalStepVariableName = "global_step"
 
-	// Scope reserved for optimizers.
+	// Scope reserved for optimizer.
 	Scope = "optimizers"
 )
 
@@ -120,20 +120,20 @@ func FromScope(scope *model.Scope) Interface {
 // ByName returns an optimizer given the name, or panics if one does not exist.
 // It uses KnownOptimizers -- in case one wants to better handle invalid values.
 //
-// Some optimizers (e.g.: Adam) uses optional hyperparameters set in the context for configuration.
+// Some optimizers (e.g.: Adam) uses optional hyperparameters set in the [model.Store] for configuration.
 //
 // See also FromContext.
 //
 // Example usage:
 //
 // ```
-// var flagOptimizer = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", maps.Keys(optimizers.KnownOptimizers)))
+// var flagOptimizer = flag.String("optimizer", "adamw", fmt.Sprintf("Optimizer, options: %q", maps.Keys(optimizer.KnownOptimizers)))
 //
 // ...
 //
-//	trainer := train.NewTrainer(manager, ctx, ModelGraph,
+//	trainer := train.NewTrainer(manager, store, ModelGraph,
 //	   losses.SomeLoss,
-//	   optimizers.ByName(ctx, *flagOptimizer),
+//	   optimizer.ByName(scope, *flagOptimizer),
 //	   []metrics.Interface{someMetric},    // trainMetrics
 //	   []metrics.Interface{otherMetric})   // evalMetrics
 //
@@ -204,7 +204,7 @@ func IncrementCounter(scope *model.Scope, g *Graph, counterName string, dtype dt
 //
 // If the variable doesn't exist yet, it is initialized with initialValue.
 //
-// Consider reading the initialValue from model.GetParamOr(ctx, ParamLearningRate, SGDDefaultLearningRate).
+// Consider reading the initialValue from model.GetParamOr(scope, ParamLearningRate, SGDDefaultLearningRate).
 func LearningRateVar(scope *model.Scope, dtype dtypes.DType, initialValue float64) *model.Variable {
 	return LearningRateVarWithValue(scope, dtype, initialValue)
 }
@@ -277,7 +277,7 @@ type SGDConfig struct {
 const SGDDefaultLearningRate = 0.1
 
 // StochasticGradientDescent creates an optimizer that performs SGD.
-// It looks for "learning_rate" in Context.Params for the initial
+// It looks for "learning_rate" in the [model.Store] parameters for the initial
 // learning rate, otherwise it defaults to SGDDefaultLearningRate.
 //
 // By default, it has a learning rate decay given by: `learning_rate = initial_learning_rate / Sqrt(global_step)`
@@ -314,7 +314,7 @@ func (sgd *SGDConfig) Done() Interface {
 }
 
 // UpdateGraph builds the graph to update the weights for one training step.
-// It implements optimizers.Interface.
+// It implements optimizer.Interface.
 func (sgd *SGDConfig) UpdateGraph(scope *model.Scope, g *Graph, loss *Node) {
 	_ = g
 	if !loss.Shape().IsScalar() {
@@ -348,19 +348,19 @@ func (sgd *SGDConfig) UpdateGraphWithGradients(scope *model.Scope, grads []*Node
 
 // Clear all optimizer variables.
 // There are none for sgd, so this is a non-op.
-// It implements optimizers.Interface.
+// It implements optimizer.Interface.
 func (sgd *SGDConfig) Clear(_ *model.Scope) error {
 	return nil
 }
 
-// addGradientsToVariablesGraph takes the output of Context.BuildTrainableVariablesGradientsGraph,
+// addGradientsToVariablesGraph takes the output of scope.BuildTrainableVariablesGradientsGraph,
 // multiply by (-learningRate) and add to the current value of the variablesMap.
 //
 // It replaces NaNs with zero.
 func addGradientsToVariablesGraph(scope *model.Scope, grads []*Node, learningRate *Node) {
 	g := learningRate.Graph()
 	if !learningRate.Shape().IsScalar() {
-		Panicf("Context.addGradientsToVariablesGraph require scalar learningRate, instead got %s", learningRate.Shape())
+		Panicf("addGradientsToVariablesGraph require scalar learningRate, instead got %s", learningRate.Shape())
 	}
 	numTrainable := len(grads)
 	ii := 0
@@ -397,6 +397,79 @@ func addGradientsToVariablesGraph(scope *model.Scope, grads []*Node, learningRat
 		)
 	}
 }
+
+// MonotonicProjection transforms the input into a monotonic sequence on the given axis that respects the
+// minimum margin between consecutive points.
+//
+// Here we call "viable solution" one that respects the given margin between consecutive points. And the goal
+// is to find the viable solution that is L2-closest to the original input -- we don't achieve that, but some
+// approximate that is hopefully good enough for most algorithms.
+//
+// This is not a trivial problem, as adjustments to one point may break the monotonicity of the next, and so on.
+// A close to optimal approximate solution can be achieved using lagrange multipliers (and Dykstra alternate
+// projections), see implementation in TensorFlow Lattice:
+// https://github.com/tensorflow/lattice/blob/master/tensorflow_lattice/python/pwl_calibration_lib.py#L472
+//
+// Unfortunately, GoMLX doesn't support "while" loops in the computation graph yet, so instead we make
+// a coarse but simple projection to the viable space using a simple algorithm -- see code.
+//
+// The usual way to use this is inside a call to train.AddPerStepUpdateGraphFn, making the projection happen after
+// the gradient step.
+func MonotonicProjection(input *Node, margin *Node, axis int) *Node {
+	adjustedAxis := MustAdjustAxis(axis, input)
+	axisDim := input.Shape().Dim(axis)
+	if axisDim < 2 {
+		Panicf(
+			"MonotonicProjection of input shaped %s at axis %d is not valid: it requires axis to have dimension >= 2",
+			input.Shape(),
+			axis,
+		)
+	}
+
+	const numIter = 3
+	// Fix to the right: increasing values.
+	diffRight := ConsecutiveDifference(input, adjustedAxis, false)
+	// For a fixed number of times try to prevent everything to be pushed if possible.
+	if axisDim > 2 {
+		for range numIter {
+			adjustedDiff := Max(diffRight, margin) // Pushes everything to the right, whenever monotonicity is broken.
+			adjustment := Sub(diffRight, adjustedDiff)
+			fixedAdjustment := ShiftWithScalar(adjustment, adjustedAxis, ShiftDirRight, 1, 0.0)
+			diffRight = Add(adjustedDiff, fixedAdjustment)
+		}
+	}
+	diffRight = Max(diffRight, margin) // Make sure its valid, if numIter wasn't enough.
+	leftMostInput := SliceAxis(input, adjustedAxis, AxisElem(0))
+	diffRight = Concatenate([]*Node{leftMostInput, diffRight}, adjustedAxis)
+	fixRight := CumSum(diffRight, adjustedAxis)
+
+	// Fix to the left: increasing values.
+	diffLeft := ConsecutiveDifference(input, adjustedAxis, false)
+	initialTotalDiff := ReduceAndKeep(diffLeft, ReduceSum, adjustedAxis)
+
+	// For a fixed number of times try to prevent everything to be pushed if possible.
+	if axisDim > 2 {
+		for range numIter {
+			adjustedDiff := Max(diffLeft, margin) // Pushes everything to the left, whenever monotonicity is broken.
+			adjustment := Sub(diffLeft, adjustedDiff)
+			fixedAdjustment := ShiftWithScalar(adjustment, adjustedAxis, ShiftDirLeft, 1, 0.0)
+			diffLeft = Add(adjustedDiff, fixedAdjustment)
+		}
+	}
+	diffLeft = Max(diffLeft, margin) // Make sure it's valid if numIter wasn't enough.
+	finalTotalDiff := ReduceAndKeep(diffLeft, ReduceSum, adjustedAxis)
+
+	leftMostInput = SliceAxis(input, adjustedAxis, AxisElem(0))
+	leftMostInput = Sub(leftMostInput,
+		Sub(finalTotalDiff, initialTotalDiff))
+
+	diffLeft = Concatenate([]*Node{leftMostInput, diffLeft}, adjustedAxis)
+	fixLeft := CumSum(diffLeft, adjustedAxis)
+
+	// Reconstruct value.
+	return DivScalar(Add(fixRight, fixLeft), 2)
+}
+
 
 // MonotonicProjection transforms the input into a monotonic sequence on the given axis that respects the
 // minimum margin between consecutive points.

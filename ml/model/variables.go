@@ -16,14 +16,14 @@ import (
 
 // Variable is a value shared among computation graphs, or across multiple executions of the same graph.
 // It's commonly used to store the weights (aka. parameters) of an ML model. It's defined in a scope in
-// a Context.
+// a Store.
 //
 // The materialized value can be accessed in between graph executions by Value and SetValue methods.
 //
 // During the computation graph building, for a particular graph, one can access the graph value (Node)
 // of a variable with the methods.
 //
-// They are only initialized when Context.InitializeVariables.
+// They are only initialized when Store.InitializeVariables.
 // That is, they are created and used in graph building, possibly before they are actually initialized.
 // When building a graph, they are passed as parameters (the corresponding graph node is called ParameterNode)
 // and have their values passed only during the execution of the compiled computation graph.
@@ -227,7 +227,7 @@ func (v *Variable) DType() dtypes.DType {
 //
 // WithShardingSpec returns the variable itself to allow chaining.
 //
-// The default is to inherit from the default shardingSpec spec configured in the Context.
+// The default is to inherit from the default shardingSpec spec configured in the Store.
 //
 // On error, it panics. It's assumed to be used within the model (graph) function, but it can also be
 // used during setup -- pre-model building. See SetShardingSpec for a version that returns an error.
@@ -366,7 +366,7 @@ func (v *Variable) MustSetValue(value *tensors.Tensor) {
 // This affects also the distributed value: it is reset upon SetValuePreservingOld, but not immediately
 // finalized.
 //
-// If the variable is set to nil, the context is automatically marked as needing initialization, just in case.
+// If the variable is set to nil, the store is automatically marked as needing initialization, just in case.
 //
 // The shape of the variable is set to the new value set. If the value is nil, the shape is left unchanged.
 func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) error {
@@ -385,7 +385,7 @@ func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) error {
 
 // SetDistributedValue is like Variable.SetValue(), but uses a dtensor.Tensor instead.
 //
-// If the variable is set to nil, the context is automatically marked as needing initialization, just in case.
+// If the variable is set to nil, the store is automatically marked as needing initialization, just in case.
 //
 // WARNING: memory management here is tricky: a call to SetValue triggers the current value to be deallocated,
 // and what is returned by a previous call to Value to become invalid.
@@ -573,7 +573,7 @@ func (v *Variable) SetTrainable(trainable bool) *Variable {
 // Finalize variable and associate value(s).
 // Variable is left in an unusable state, only do this if you are sure this variable is no longer in use.
 //
-// Usually, one calls Context.Finalize, which in turn finalizes all variables.
+// Usually, one calls Store.Finalize, which in turn finalizes all variables.
 func (v *Variable) Finalize() error {
 	if v.CheckValid() != nil {
 		// Already finalized.

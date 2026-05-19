@@ -227,7 +227,7 @@ type adam struct {
 }
 
 // UpdateGraph builds the graph to update the weights for one training step.
-// It implements optimizers.Interface.
+// It implements optimizer.Interface.
 func (o *adam) UpdateGraph(scope *model.Scope, g *Graph, loss *Node) {
 	if !loss.Shape().IsScalar() {
 		Panicf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
@@ -419,7 +419,7 @@ func (o *adam) getMomentVariables(
 }
 
 // Clear all optimizer variables.
-// It implements optimizers.Interface.
+// It implements optimizer.Interface.
 func (o *adam) Clear(scope *model.Scope) error {
 	ctxAdam := scope.In("%s", o.config.scopeName)
 	return ctxAdam.DeleteVariablesInScope()

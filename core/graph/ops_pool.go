@@ -52,7 +52,7 @@ type PoolBuilder struct {
 //
 // The "channels" axis is also known as the depth or feature axis.
 //
-// Note: `images` refers to the package `github.com/gomlx/gomlx/pkg/core/tensors/images`.
+// Note: `images` refers to the package `github.com/gomlx/gomlx/core/tensors/images`.
 func MaxPool(x *Node) *PoolBuilder {
 	return makePoolBuilder(x, compute.ReduceOpMax)
 }
@@ -73,7 +73,7 @@ func MaxPool(x *Node) *PoolBuilder {
 //
 // The "channels" axis is also known as the depth or feature axis.
 //
-// Note: `images` refers to the package `github.com/gomlx/gomlx/pkg/core/tensors/images`.
+// Note: `images` refers to the package `github.com/gomlx/gomlx/core/tensors/images`.
 func MinPool(x *Node) *PoolBuilder {
 	return makePoolBuilder(x, compute.ReduceOpMin)
 }
@@ -94,7 +94,7 @@ func MinPool(x *Node) *PoolBuilder {
 //
 // The "channels" axis is also known as the depth or feature axis.
 //
-// Note: `images` refers to the package `github.com/gomlx/gomlx/pkg/core/tensors/images`.
+// Note: `images` refers to the package `github.com/gomlx/gomlx/core/tensors/images`.
 func SumPool(x *Node) *PoolBuilder {
 	return makePoolBuilder(x, compute.ReduceOpSum)
 }
@@ -115,7 +115,7 @@ func SumPool(x *Node) *PoolBuilder {
 //
 // The "channels" axis is also known as the depth or feature axis.
 //
-// Note: `images` refers to the package `github.com/gomlx/gomlx/pkg/core/tensors/images`.
+// Note: `images` refers to the package `github.com/gomlx/gomlx/core/tensors/images`.
 func MeanPool(x *Node) *PoolBuilder {
 	pool := makePoolBuilder(x, compute.ReduceOpSum)
 	pool.isMean = true

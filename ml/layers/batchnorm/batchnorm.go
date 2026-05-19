@@ -141,7 +141,7 @@ func (builder *Config) CurrentScope() *Config {
 // The default is `true`.
 //
 // Independent of the value set here, if the context is not set for training (
-// see `model.Context.IsTraining()`) like during evaluation and inference,
+// see `model.Store.IsTraining()`) like during evaluation and inference,
 // the Config will generate code for inference only.
 func (builder *Config) Trainable(trainable bool) *Config {
 	builder.trainable = trainable

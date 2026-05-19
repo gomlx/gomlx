@@ -29,7 +29,7 @@ func init() {
 	}
 }
 
-// TestDemo trains the model for 10 steps, not generating any checkpoints.
+// TestDemo trains the model for 10 steps, not generating any checkpoint.
 //
 // Still it has to download the training data, and it will use the flag *flagDataDir (--data)
 // as the location to store the training data.

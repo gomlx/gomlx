@@ -80,10 +80,10 @@ func CreateModelStore() *model.Store {
 		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
 		plotly.ParamPlots: false,
 
-		optimizers.ParamOptimizer:       "adamw",
-		optimizers.ParamLearningRate:    1e-4,
-		optimizers.ParamAdamEpsilon:     1e-7,
-		optimizers.ParamAdamDType:       "",
+		optimizer.ParamOptimizer:       "adamw",
+		optimizer.ParamLearningRate:    1e-4,
+		optimizer.ParamAdamEpsilon:     1e-7,
+		optimizer.ParamAdamDType:       "",
 		cosineschedule.ParamPeriodSteps: 0,
 		activations.ParamActivation:     "relu",
 		layers.ParamDropoutRate:         0.5,
@@ -164,7 +164,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	trainer = train.NewTrainer(backend, store,
 		modelFn,
 		lossFn,
-		optimizers.FromScope(scope),
+		optimizer.FromScope(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
@@ -212,7 +212,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 
 	// Loop for a given number of steps.
 	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(scope))
+	globalStep := int(optimizer.GetGlobalStep(scope))
 	if globalStep > 0 {
 		fmt.Printf("\t- restarting from global step %d\n", globalStep)
 	}

@@ -68,11 +68,11 @@ func MagModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	}
 
 	lrDType := dtype
-	if adamDType := model.GetParamOr(scope, optimizers.ParamAdamDType, ""); adamDType != "" {
+	if adamDType := model.GetParamOr(scope, optimizer.ParamAdamDType, ""); adamDType != "" {
 		var err error
 		lrDType, err = dtypes.DTypeString(adamDType)
 		if err != nil || !lrDType.IsFloat() {
-			Panicf("Cannot parse hyperparameter %s=%q: %v", optimizers.ParamAdamDType, adamDType, err)
+			Panicf("Cannot parse hyperparameter %s=%q: %v", optimizer.ParamAdamDType, adamDType, err)
 		}
 	}
 	cosineschedule.New(scope, g, lrDType).FromScope().Done()

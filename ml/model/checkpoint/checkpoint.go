@@ -1,24 +1,24 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-// Package checkpoints implements checkpoint management: saving and loading of checkpoints to file,
+// Package checkpoint implements checkpoint management: saving and loading of checkpoints to file,
 // or loading a checkpoint from an embedded checkpointHandler.
 //
 // The main object is the Handler, that should be created by calling Build, followed by the
 // various options setting and finally calling Config.Done.
 // Once create, if a previous saved checkpoint exists, it will automatically load variables and parameters
-// for your model into Context.
+// for your model into the model.Store.
 // And as the model trains, one can call Handler.Save() at any time to save a new checkpoint --
 // typically one will do that inside train.EveryNSteps().
 //
-// Example: After creating the Context, it checks if a checkpoint directory was set (`*flagCheckpoint`)
-// and if yes, creates a checkpoints.Handler to save checkpoints every 100 steps, keeping the last
+// Example: After creating the model.Store, it checks if a checkpoint directory was set (`*flagCheckpoint`)
+// and if yes, creates a checkpoint.Handler to save checkpoints every 100 steps, keeping the last
 // `*flagCheckpointKeep` steps.
 //
 //	…
 //	store := model.NewStore()
-//	store.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
+//	store.SetParam(optimizer.ParamLearningRate, *flagLearningRate)
 //
-//	var checkpointHandler *checkpoints.Handler
+//	var checkpointHandler *checkpoint.Handler
 //	if *flagCheckpoint != "" {
 //		var err error
 //		checkpointHandler, err = checkpoint.Build(store).Dir(*flagCheckpoint).Keep(*flagCheckpointKeep).Done()
@@ -37,14 +37,14 @@
 // Example 2: To load a checkpoint from an embedded checkpoint, something usually used to distribute a model for
 // inference:
 //
-//	//go:embed "my_model/checkpointHandler.json"
+//	//go:embed "my_model/checkpoint.json"
 //	var myModelJson string
 //
-//	//go:embed "my_model/checkpointHandler.bin"
+//	//go:embed "my_model/checkpoint.bin"
 //	var myModelBin []byte
 //
 //	...
-//	_ = checkpoints.Build(ctx).
+//	_ = checkpoint.Build(store).
 //		FromEmbed(myModelJson, myModelBin).
 //		Done()
 //
@@ -125,10 +125,10 @@ func keyToScopeAndName(key string) (scope, name string) {
 	return model.SplitPath(fullPath)
 }
 
-// Config for the checkpoints' Handler to be created. This is created with Build() and
+// Config for the checkpoint Handler to be created. This is created with Build() and
 // configured with the various methods. Once finished, call Done() and it will output
-// a checkpoints.Handler that loads (if there are any previously saved checkpoints) and
-// saves checkpoints.
+// a checkpoint.Handler that loads (if there are any previously saved checkpoints) and
+// saves checkpoint.
 type Config struct {
 	store *model.Store
 
@@ -153,17 +153,17 @@ type Config struct {
 	binFormat BinFormat // the compression format
 }
 
-// Build a configuration for building a checkpoints.Handler. After configuring the
-// Config object returned, call `Done` to get the configured checkpoints.Handler.
+// Build a configuration for building a checkpoint.Handler. After configuring the
+// Config object returned, call `Done` to get the configured checkpoint.Handler.
 //
-// The new checkpoints.Handler will load ("lazy" by default) a checkpoint to the context
+// The new checkpoint.Handler will load ("lazy" by default) a checkpoint to the model.Store
 // (see Config.Dir, Config.DirFromBase or Config.FromEmbed to specify where to load/save)
-// if it exists, otherwise it creates a new directory and can simply be used to save checkpoints.
+// if it exists, otherwise it creates a new directory and can simply be used to save checkpoint.
 //
-// When a checkpoint is "lazily loaded", its variables are not listed by default (if one uses Context.EnumerateVariables
-// or Context.IterVariables). But if they are directly accessed, they are on-the-fly loaded. This is convenient
+// When a checkpoint is "lazily loaded", its variables are not listed by default (if one uses model.Store.EnumerateVariables
+// or model.Store.IterVariables). But if they are directly accessed, they are on-the-fly loaded. This is convenient
 // when loading only part of the variables for inference (if one doesn't care about the training/optimizer variables),
-// or for transfer learning part of a model. It also works to continue training a model loaded from a checkpointHandler.
+// or for transfer learning part of a model. It also works to continue training a model loaded from a checkpoint.
 // But if you need to variables to be loaded immediately, use Config.Immediate() -- an inspecting tool, like
 // gomlx_checkpoints, will want to do that.
 //
@@ -197,9 +197,9 @@ func (c *Config) setError(err error) {
 	}
 }
 
-// Dir sets the directory where to save / load the checkpoints.
+// Dir sets the directory where to save / load the checkpoint.
 //
-// One must be set either Dir, DirFromBase, or TempDir before building the checkpoints.Handler.
+// One must be set either Dir, DirFromBase, or TempDir before building the checkpoint.Handler.
 func (c *Config) Dir(dir string) *Config {
 	c.dir = fsutil.MustReplaceTildeInDir(dir)
 	fi, err := os.Stat(dir)
@@ -228,10 +228,10 @@ func (c *Config) Dir(dir string) *Config {
 	return c
 }
 
-// DirFromBase sets the directory where to save / load the checkpoints.
+// DirFromBase sets the directory where to save / load the checkpoint.
 // If `dir` is not an absolute path, assumes it is a subdirectory of baseDir.
 //
-// One must be set either Dir, DirFromBase, or TempDir before building the checkpoints.Handler.
+// One must be set either Dir, DirFromBase, or TempDir before building the checkpoint.Handler.
 func (c *Config) DirFromBase(dir, baseDir string) *Config {
 	dir = fsutil.MustReplaceTildeInDir(dir)
 	if !filepath.IsAbs(dir) {
@@ -250,14 +250,14 @@ func (c *Config) DirFromBase(dir, baseDir string) *Config {
 //
 // Example:
 //
-//	//go:embed "my_model/checkpointHandler.json"
+//	//go:embed "my_model/checkpoint.json"
 //	var myModelJson []byte
 //
-//	//go:embed "my_model/checkpointHandler.bin"
+//	//go:embed "my_model/checkpoint.bin"
 //	var myModelBin []byte
 //
 //	...
-//	_ = checkpoints.Build(ctx).FromEmbed(myModelJson, myModelBin).Done()
+//	_ = checkpoint.Build(store).FromEmbed(myModelJson, myModelBin).Done()
 func (c *Config) FromEmbed(json string, binary []byte) *Config {
 	c.jsonReader = bytes.NewBufferString(json)
 	c.binReader, _ = getLoadVarFilesFromReader(bytes.NewReader(binary))
@@ -277,7 +277,7 @@ func (c *Config) Immediate() *Config {
 }
 
 // TempDir creates a temporary directory under dir, with the pattern name, and uses this
-// directory to load / save checkpoints. It's a convenience wrapper to os.MkdirTemp.
+// directory to load / save checkpoint. It's a convenience wrapper to os.MkdirTemp.
 //
 // If dir is the empty string, MkdirTemp uses the default directory for temporary files, as returned
 // by os.TempDir.
@@ -287,7 +287,7 @@ func (c *Config) Immediate() *Config {
 //
 // Any errors are reported on the return to the call to the method Done.
 //
-// One must be set either Dir, DirFromBase, or TempDir before building the checkpoints.Handler.
+// One must be set either Dir, DirFromBase, or TempDir before building the checkpoint.Handler.
 func (c *Config) TempDir(dir, pattern string) *Config {
 	newDir, err := os.MkdirTemp(dir, pattern)
 	if err != nil {
@@ -303,11 +303,11 @@ func (c *Config) TempDir(dir, pattern string) *Config {
 	return c
 }
 
-// ExcludeAllParams configures Handler to exclude Context parameters (values usually
-// read/written by Context.GetParam and model.SetParam) from being read.
+// ExcludeAllParams configures Handler to exclude model.Store parameters (values usually
+// read/written by model.Store.GetParam and model.SetParam) from being read.
 //
-// By default, Params are loaded and set into Context the moment Handler is created
-// (when Done() is called), overriding values already present in the Context.
+// By default, Params are loaded and set into the model.Store the moment Handler is created
+// (when Done() is called), overriding values already present in the model.Store.
 //
 // See also ExcludeParams to exclude specific params from being read.
 func (c *Config) ExcludeAllParams() *Config {
@@ -315,8 +315,8 @@ func (c *Config) ExcludeAllParams() *Config {
 	return c
 }
 
-// ExcludeParams configures Handler to exclude certain Context parameters (values usually
-// read/written by Context.GetParam and model.SetParam) from being read.
+// ExcludeParams configures Handler to exclude certain model.Store parameters (values usually
+// read/written by model.Store.GetParam and model.SetParam) from being read.
 // It can be called multiple times; each call adds new parameters to be excluded.
 //
 // For values in paramsToExclude that don't include a preceding scope (separated by "/"), the exclusion applies to all scopes.
@@ -343,15 +343,15 @@ func (c *Config) ExcludeVars(vars ...*model.Variable) *Config {
 	return c
 }
 
-// Keep configures the number of checkpoint files to keep. If set to -1, it will never erase older checkpoints.
+// Keep configures the number of checkpoint files to keep. If set to -1, it will never erase older checkpoint.
 // The default is 1.
 func (c *Config) Keep(n int) *Config {
 	c.keep = n
 	return c
 }
 
-// TakeMean loads the mean of the last `n` checkpoints.
-// If `n <= 0`, take the mean of all available checkpoints.
+// TakeMean loads the mean of the last `n` checkpoint.
+// If `n <= 0`, take the mean of all available checkpoint.
 // Notice that only trainable variables are averaged.
 // Variables that have integer values or are not marked as trainable (e.g., the global step)
 // are taken from the most recent checkpoint instead.
@@ -475,40 +475,40 @@ func (c *Config) Done() (*Handler, error) {
 	return handler, nil
 }
 
-// MustDone constructs the checkpoints.Handler. It panics if there was an error.
+// MustDone constructs the checkpoint.Handler. It panics if there was an error.
 func (c *Config) MustDone() *Handler {
 	h, err := c.Done()
 	if err != nil {
-		panic(errors.Wrap(err, "Failed to create checkpoints.Handler"))
+		panic(errors.Wrap(err, "Failed to create checkpoint.Handler"))
 	}
 	return h
 }
 
-// Handler handles saving and loading of checkpoints for a model.Context. See an example in the
+// Handler handles saving and loading of checkpoints for a model.Store. See an example in the
 // package documentation.
 //
 // It is created and configured using Build(), followed by options setting and then calling
 // Config.Done().
 //
-// Loading data into Handler happens at its creation time: it loads from the latest checkpointHandler.
-// (Hyper-)Parameters are immediately loaded into the context then (if not Config.ExcludeAllParams)
+// Loading data into Handler happens at its creation time: it loads from the latest checkpoint.
+// (Hyper-)Parameters are immediately loaded into the model.Store then (if not Config.ExcludeAllParams)
 // but the loaded variable values are only "consumed" (used) one at a time, as the variables are
 // created during the graph building (e.g., when building the model).
 //
 // Saving of checkpoints is explicit, by calling Handler.Save(). Usually this is
 // done by configuring train.Loop to call it using train.EveryNSteps or train.NTimesDuringLoop.
-// When saving all variables in Context are saved, along with any previous variables loaded
-// by the Handler that were not used by Context and with the `Params` for all scopes (including
+// When saving all variables in the model.Store are saved, along with any previous variables loaded
+// by the Handler that were not used by the model.Store and with the `Params` for all scopes (including
 // changed values).
 //
-// There can be more than one Handler attached to a Context -- they are used for loading in order
+// There can be more than one Handler attached to a model.Store -- they are used for loading in order
 // they are created (so the first one created takes priority). Multiple Handler set up can
 // be used, for instance, for transfer learning, where parts of the model are loaded from somewhere
 // else.
 //
-// A Handler can only be "attached" to one model.Context. If one wants to load the same
-// checkpoint to two different contexts, another Handler object needs to be created.
-// This is because once a variable is loaded, it is transferred to Context, and handler does
+// A Handler can only be "attached" to one model.Store. If one wants to load the same
+// checkpoint to two different model.Stores, another Handler object needs to be created.
+// This is because once a variable is loaded, it is transferred to the model.Store, and handler does
 // not keep it.
 type Handler struct {
 	config            *Config
@@ -612,7 +612,7 @@ func (p *serializedParam) jsonDecodeTypeConvert() {
 
 // String implements Stringer.
 func (h *Handler) String() string {
-	return fmt.Sprintf("checkpoints.Handler(%q)", h.config.dir)
+	return fmt.Sprintf("checkpoint.Handler(%q)", h.config.dir)
 }
 
 // newCheckpointBaseName returns the base name for the checkpoint files.
@@ -889,7 +889,7 @@ func (h *Handler) Save() error {
 		return nil
 	}
 	if h.store == nil {
-		return errors.Errorf("%s not attached to a model.Context yet.", h)
+		return errors.Errorf("%s not attached to a model.Store yet.", h)
 	}
 
 	// Read globalStep if one is set.
@@ -1000,12 +1000,12 @@ func (h *Handler) Save() error {
 	if err != nil {
 		return errors.Wrapf(err, "%s: failed to close checkpoint metadata file %s", h, jsonFileName)
 	}
-	// Remove excess checkpoints.
+	// Remove excess checkpoint.
 	return h.keepNCheckpoints()
 }
 
 // Backup links (or copies) the latest checkpoint to a separate sub-directory under the model directory called
-// "backup" (constant in checkpoints.BackupDir).
+// "backup" (constant in checkpoint.BackupDir).
 //
 // This way the backed up checkpoint doesn't get automatically deleted as the model training progresses.
 //
@@ -1073,8 +1073,8 @@ func (h *Handler) keepNCheckpoints() error {
 	return nil
 }
 
-// attachTo attaches Handler to a model.Context. The first thing it does if there is a checkpoint
-// loaded is to set the Context's Params from the loaded values (except if the Handler was configured
+// attachTo attaches Handler to a model.Store. The first thing it does if there is a checkpoint
+// loaded is to set the Store's Params from the loaded values (except if the Handler was configured
 // with ExcludeAllParams).
 //
 // attachTo can only be called once. It will fail, and set the given context to an error state if
@@ -1111,7 +1111,7 @@ func (h *Handler) Dir() string {
 }
 
 // LoadVariable implements model.Loader.
-// This is called by model.Context when the variable is used for the first time.
+// This is called by model.Store when the variable is used for the first time.
 // The user may want to use this function to inspect loaded values for testing.
 func (h *Handler) LoadVariable(store *model.Store, fullPath string) (value *tensors.Tensor, found bool) {
 	// Priority is based on the installation order. That means we attempt first the previously configured loaders.

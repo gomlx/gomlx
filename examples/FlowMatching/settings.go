@@ -22,7 +22,7 @@ func CreateDefaultContext() *model.Scope {
 		// Model type to use
 		"train_steps":          300_000,
 		"num_checkpoints":      5,
-		"checkpoint_frequency": "3m", // How often to save checkpoints. Default to 3 minutes. See time.ParseDuration.
+		"checkpoint_frequency": "3m", // How often to save checkpoint. Default to 3 minutes. See time.ParseDuration.
 
 		// batch_size for training.
 		"batch_size": 32,
@@ -87,12 +87,12 @@ func CreateDefaultContext() *model.Scope {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "layer",
 
-		optimizers.ParamOptimizer:        "adam",
-		optimizers.ParamAdamEpsilon:      1e-7,
-		optimizers.ParamAdamDType:        "float32",
-		optimizers.ParamAdamWeightDecay:  1e-4,
-		optimizers.ParamClipStepByValue:  0.0,
-		optimizers.ParamClipNaN:          false,
+		optimizer.ParamOptimizer:        "adam",
+		optimizer.ParamAdamEpsilon:      1e-7,
+		optimizer.ParamAdamDType:        "float32",
+		optimizer.ParamAdamWeightDecay:  1e-4,
+		optimizer.ParamClipStepByValue:  0.0,
+		optimizer.ParamClipNaN:          false,
 		cosineschedule.ParamPeriodSteps:  0,
 		activations.ParamActivation:      "swish",
 		layers.ParamDropoutRate:          0.15,
@@ -102,7 +102,7 @@ func CreateDefaultContext() *model.Scope {
 		regularizers.ParamL2:             0.0,
 		regularizers.ParamL1:             0.0,
 
-		optimizers.ParamLearningRate:        1e-3,
+		optimizer.ParamLearningRate:        1e-3,
 		cosineschedule.ParamPeriodSteps:     0, // Enabled if > 0, it sets the period of the cosine schedule. Typically, the same value as 'train_steps'.
 		cosineschedule.ParamMinLearningRate: 1e-5,
 

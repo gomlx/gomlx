@@ -86,10 +86,10 @@ func CreateModelStore() *model.Store {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "layer",
 
-		optimizers.ParamOptimizer:       "adamw",
-		optimizers.ParamLearningRate:    1e-4,
-		optimizers.ParamAdamEpsilon:     1e-7,
-		optimizers.ParamAdamDType:       "",
+		optimizer.ParamOptimizer:       "adamw",
+		optimizer.ParamLearningRate:    1e-4,
+		optimizer.ParamAdamEpsilon:     1e-7,
+		optimizer.ParamAdamDType:       "",
 		cosineschedule.ParamPeriodSteps: 0,
 		activations.ParamActivation:     "",
 		layers.ParamDropoutRate:         0.1,
@@ -211,7 +211,7 @@ func TrainWithStore(
 	}
 	trainer := train.NewTrainer(backend, store, modelFn,
 		theLoss,
-		optimizers.FromScope(scope),
+		optimizer.FromScope(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
@@ -243,7 +243,7 @@ func TrainWithStore(
 
 	// Loop for given number of steps.
 	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(store))
+	globalStep := int(optimizer.GetGlobalStep(store))
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if verbosity >= 1 {

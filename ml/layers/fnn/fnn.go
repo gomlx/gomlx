@@ -4,13 +4,13 @@
 // It should suffice for the common cases and can be extended as needed.
 //
 // It also provides support for various hyperparameter configuration -- so the defaults can be given by
-// the context parameters.
+// the scope parameters.
 //
 // E.g: A FNN for a multi-class classification model with NumClasses classes.
 //
-//	func MyMode(ctx *model.Context, inputs []*Node) (outputs []*Node) {
+//	func MyMode(scope *model.Scope, inputs []*Node) (outputs []*Node) {
 //		x := inputs[0]
-//		logits := fnn.New(ctx.In("model"), x, NumClasses).
+//		logits := fnn.New(scope.In("model"), x, NumClasses).
 //			NumHiddenLayers(3).
 //			Apply("swish").
 //			Dropout(0.3).
@@ -91,9 +91,9 @@ type Config struct {
 //
 // E.g: A FNN for a multi-class classification model with NumClasses classes.
 //
-//	func MyModel(ctx *model.Context, inputs []*Node) (outputs []*Node) {
+//	func MyModel(scope *model.Scope, inputs []*Node) (outputs []*Node) {
 //		x := inputs[0]
-//		logits := fnn.New(ctx.In("model"), x, NumClasses).
+//		logits := fnn.New(scope.In("model"), x, NumClasses).
 //			NumHiddenLayers(3, 128).
 //			Activation(activations.TypeSilu).
 //			Dropout(0.3).

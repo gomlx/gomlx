@@ -87,9 +87,9 @@ type Config struct {
 //
 // Example with only one cycle, and a warmup of 1000 steps.
 // We assume that the learning rate is set in the context as the parameter "learning_rate"
-// (== optimizers.ParamLearningRate):
+// (== optimizer.ParamLearningRate):
 //
-//	func MyModelGraph(cxt *model.Context, inputs []*Node) *Node {
+//	func MyModelGraph(cxt *model.Scope, inputs []*Node) *Node {
 //		...
 //		g := inputs[0].Graph()
 //		cosineschedule.New(ctx, g, dtypes.Float32).
@@ -101,7 +101,7 @@ type Config struct {
 // Or more simply, pass the hyperparameters in the context (see ParamPeriodSteps, ParamMinLearningRate, and
 // ParamWarmUpSteps):
 //
-//	func modelGraph(cxt *model.Context, inputs []*Node) *Node {
+//	func modelGraph(cxt *model.Scope, inputs []*Node) *Node {
 //		...
 //		g := inputs[0].Graph()
 //		cosineschedule.New(ctx, g, dtypes.Float32).FromContext().Done()

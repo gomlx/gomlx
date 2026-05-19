@@ -189,7 +189,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(
 		backend, scope.Store(), config.BuildTrainingModelGraph(), customLoss,
-		optimizers.FromScope(scope),
+		optimizer.FromScope(scope),
 		[]metrics.Interface{movingImagesLoss, movingNoiseLoss, movingMAE}, // trainMetrics
 		[]metrics.Interface{meanImagesLoss, meanMAE})                      // evalMetrics
 	if nanLogger != nil {
@@ -244,7 +244,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 
 	// Loop for given number of steps.
 	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(store))
+	globalStep := int(optimizer.GetGlobalStep(store))
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if verbosity >= 1 {
@@ -316,7 +316,7 @@ func TrainingMonitor(checkpointHandler *checkpoint.Handler, loop *train.Loop, me
 
 // DisplayTrainingPlots simply display the training plots of a model, without any training.
 //
-// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseSettings).
 func DisplayTrainingPlots(scope *model.Scope, dataDir, checkpointPath string, paramsSet []string) {
 	backend := compute.MustNew()
 	config := NewConfig(backend, scope, dataDir, paramsSet)

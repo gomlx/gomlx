@@ -31,7 +31,7 @@ var (
 	flagSkipReport    = flag.Bool("skip_report", false, "Set to true to skip report of quality after training.")
 	flagSkipTrainEval = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
 	flagDataDir       = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
-	flagCheckpoint    = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoints.")
+	flagCheckpoint    = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoint.")
 	flagLayerWise     = flag.Bool("layerwise", true, "Whether to use Layer-Wise inference for evaluation -- default is true.")
 )
 
@@ -79,14 +79,14 @@ func createModelStore() *model.Store {
 		kan.ParamPWLSplitPointsTrainable: false,
 
 		// Optimizer parameters.
-		optimizers.ParamOptimizer:           "adamw",
-		optimizers.ParamLearningRate:        0.001,
+		optimizer.ParamOptimizer:           "adamw",
+		optimizer.ParamLearningRate:        0.001,
 		cosineschedule.ParamPeriodSteps:     -1, // If set to -1, does automatic setting of CosineScheduleSteps to train_steps.
 		cosineschedule.ParamMinLearningRate: 0.0,
-		optimizers.ParamClipStepByValue:     0.0,
-		optimizers.ParamAdamEpsilon:         1e-7,
-		optimizers.ParamAdamDType:           "float32",
-		optimizers.ParamClipNaN:             false,
+		optimizer.ParamClipStepByValue:     0.0,
+		optimizer.ParamAdamEpsilon:         1e-7,
+		optimizer.ParamAdamDType:           "float32",
+		optimizer.ParamClipNaN:             false,
 
 		regularizers.ParamL2:        1e-5,
 		layers.ParamDropoutRate:     0.2,

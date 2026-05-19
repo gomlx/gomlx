@@ -64,7 +64,7 @@ func createModelStore() *model.Store {
 
 		// Training hyperparameters
 		ParamTrainSteps:              1000,
-		optimizers.ParamLearningRate: 0.001,
+		optimizer.ParamLearningRate: 0.001,
 
 		// Generation hyperparameters
 		// decode.ParamStrategy is initialized to "greedy" by default.
@@ -142,7 +142,7 @@ func createTrainingBatch(scope *model.Scope, text string) (inputs [][]int32, tar
 
 func trainModel(backend compute.Backend, scope *model.Scope) {
 	steps := model.GetParamOr(scope, ParamTrainSteps, 200)
-	learningRate := model.GetParamOr(scope, optimizers.ParamLearningRate, 0.01)
+	learningRate := model.GetParamOr(scope, optimizer.ParamLearningRate, 0.01)
 	batchSize := model.GetParamOr(scope, ParamBatchSize, 4)
 	seqLen := model.GetParamOr(scope, ParamSeqLen, 32)
 
@@ -159,7 +159,7 @@ func trainModel(backend compute.Backend, scope *model.Scope) {
 
 	trainer := train.NewTrainer(backend, scope.Store(), modelFn,
 		losses.SparseCategoricalCrossEntropyLogits,
-		optimizers.Adam().Done(),
+		optimizer.Adam().Done(),
 		nil, nil) // no metrics for this simple example
 
 	for step := range steps {

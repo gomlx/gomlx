@@ -124,7 +124,7 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
 		}
-		globalStep = optimizers.GetGlobalStep(scope.Store())
+		globalStep = optimizer.GetGlobalStep(scope.Store())
 		if globalStep != 0 {
 			fmt.Printf("> restarting training from global_step=%d\n", globalStep)
 		}
@@ -140,7 +140,7 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	theOptimizer := optimizers.ByName(scope, model.GetParamOr(scope, "optimizer", "adamw"))
+	theOptimizer := optimizer.ByName(scope, model.GetParamOr(scope, "optimizer", "adamw"))
 	trainer := train.NewTrainer(backend, scope.Store(), ModelFn,
 		lossFn,
 		theOptimizer,

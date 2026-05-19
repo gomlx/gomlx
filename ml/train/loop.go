@@ -53,7 +53,7 @@ type Loop struct {
 	Trainer *Trainer
 
 	// LoopStep currently being executed.
-	// It is initialized with the current context's `GlobalStep`, which will be 0 for a new model.
+	// It is initialized with the current store's `GlobalStep`, which will be 0 for a new model.
 	//
 	// Notice if using Trainer.AccumulateGradients: this is a measure of "train steps", and "global steps"
 	// will be incremented only every "numAccumulatedGradients" train steps are made.

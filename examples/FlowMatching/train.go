@@ -93,7 +93,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(
 		backend, scope.Store(), BuildTrainComputation(config), customLoss,
-		optimizers.FromScope(scope),
+		optimizer.FromScope(scope),
 		[]metrics.Interface{}, // trainMetrics
 		[]metrics.Interface{}) // evalMetrics
 	if config.NanLogger != nil {
@@ -152,7 +152,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 
 	// Loop for given number of steps.
 	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(scope.Store()))
+	globalStep := int(optimizer.GetGlobalStep(scope.Store()))
 	if globalStep < numTrainSteps {
 		fmt.Println("Starting training stage:")
 		_, err := loop.RunSteps(trainDS, numTrainSteps-globalStep)

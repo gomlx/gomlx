@@ -15,7 +15,7 @@ import (
 
 var (
 	// ParamsExcludedFromLoading is the list of parameters (see CreateDefaultContext) that shouldn't be loaded
-	// from models checkpoints.
+	// from models checkpoint.
 	//
 	// These are appended to the list of settings given in the command line in the flag -set.
 	ParamsExcludedFromLoading = []string{
@@ -31,7 +31,7 @@ func CreateModelStore() *model.Store {
 		// Model type to use
 		"train_steps":          300_000,
 		"num_checkpoints":      5,
-		"checkpoint_frequency": "3m", // How often to save checkpoints. Default to 3 minutes. See time.ParseDuration.
+		"checkpoint_frequency": "3m", // How often to save checkpoint. Default to 3 minutes. See time.ParseDuration.
 
 		// batch_size for training.
 		"batch_size": 32,
@@ -86,17 +86,17 @@ func CreateModelStore() *model.Store {
 		// "diffusion_loss" is deprecated, use "loss" (losses.ParamLoss) instead.
 		"diffusion_loss":                "mse", // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error), "huber" or "apl" (Adaptive-Power-Loss).
 		losses.ParamLoss:                "",    // Falls-back to hyperparameter diffusion_loss (for backward compatibility).
-		optimizers.ParamOptimizer:       "adam",
-		optimizers.ParamAdamEpsilon:     1e-7,
-		optimizers.ParamAdamDType:       "",
-		optimizers.ParamAdamWeightDecay: 1e-4,
+		optimizer.ParamOptimizer:       "adam",
+		optimizer.ParamAdamEpsilon:     1e-7,
+		optimizer.ParamAdamDType:       "",
+		optimizer.ParamAdamWeightDecay: 1e-4,
 		cosineschedule.ParamPeriodSteps: 0,
 		activations.ParamActivation:     "swish",
 		layers.ParamDropoutRate:         0.15,
 		regularizers.ParamL2:            0.0,
 		regularizers.ParamL1:            0.0,
 
-		optimizers.ParamLearningRate:        1e-3,
+		optimizer.ParamLearningRate:        1e-3,
 		cosineschedule.ParamPeriodSteps:     0, // Enabled if > 0, it sets the period of the cosine schedule. Typically, the same value as 'train_steps'.
 		cosineschedule.ParamMinLearningRate: 1e-5,
 

@@ -28,7 +28,7 @@ type Exec struct {
 	store   *Store
 	exec    *graph.Exec
 
-	// Original function that takes ctx and the converted closure
+	// Original function that takes scope and the converted closure
 	// that only takes *Node as input.
 	modelGraphFn                              CanonicalExecGraphFn
 	inputIsGraph, inputAsSlice, outputAsSlice bool
@@ -48,7 +48,7 @@ type Exec struct {
 	muChangedVars sync.Mutex
 
 	// isInitializeVariablesExec indicates this executor is being used to initialize variables.
-	// Initializing variables within the cxtGraphFn would lead to an infinite recursion.
+	// Initializing variables within the modelGraphFn would lead to an infinite recursion.
 	// This checks for that.
 	isInitializeVariablesExec bool
 }

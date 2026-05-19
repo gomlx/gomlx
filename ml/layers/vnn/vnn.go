@@ -96,7 +96,7 @@ type Config struct {
 //
 // E.g.: A VNN for a multi-class classification model with NumClasses classes, rotation invariant.
 //
-//	func MyModel(ctx *model.Context, inputs []*Node) (outputs []*Node) {
+//	func MyModel(ctx *model.Scope, inputs []*Node) (outputs []*Node) {
 //		pointCloud := inputs[0]  // [batchSize, numPoints, 3]
 //		ctx = ctx.In("model")
 //		base := vnn.New(ctx.In("base"), pointCloud, 128).Done()  // [batchSize, 128, 3]

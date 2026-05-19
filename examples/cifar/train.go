@@ -103,7 +103,7 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 	scope = scope.In("model") // Convention scope used for model creation.
 	trainer := train.NewTrainer(Backend, store, modelFn,
 		losses.SparseCategoricalCrossEntropyLogits,
-		optimizers.FromScope(scope),
+		optimizer.FromScope(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
@@ -135,7 +135,7 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 
 	// Loop for given number of steps.
 	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(store))
+	globalStep := int(optimizer.GetGlobalStep(store))
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if verbosity >= 1 {

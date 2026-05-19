@@ -465,7 +465,7 @@ func SliderDiffusionSteps(
 // GenerateImagesOfFlowerType is similar to DisplayImagesAcrossTime, but it limits itself to generating images of only one
 // flower type.
 //
-// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseSettings).
 func GenerateImagesOfFlowerType(
 	cfg *diffusion.Config,
 	numImages int,
@@ -537,7 +537,7 @@ func DropdownFlowerTypes(
 
 // GenerateImagesOfAllFlowerTypes takes one random noise, and generate the flower for each of the 102 types.
 //
-// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseSettings).
 func GenerateImagesOfAllFlowerTypes(cfg *diffusion.Config, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
 	scope := cfg.Context
 	numImages := flowers.NumLabels

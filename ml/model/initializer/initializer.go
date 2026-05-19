@@ -28,7 +28,7 @@ var (
 )
 
 // VariableInitializer builds a node that returns a value to initialize a variable of the given
-// shape. It is defined in the Context.
+// shape. It is defined in the Store.
 type VariableInitializer = model.VariableInitializer
 
 // Zero initializes variables with zero.
@@ -44,7 +44,7 @@ func One(graph *Graph, shape shapes.Shape) *Node {
 // RandomNormalFn returns an initializer that generates random normal values with the given standard deviation
 // and mean set to 0.
 //
-// It uses the context's ParamInitialSeed hyperparameter to initialize the random number generator --
+// It uses the store's ParamInitialSeed hyperparameter to initialize the random number generator --
 // only the first time it is used for a graph.
 // If it is set to 0 (NoSeed, the default), a random seed is instead generated (from the nanosecond clock).
 //
@@ -61,7 +61,7 @@ func RandomNormalFn(scope *model.Scope, stddev float64) VariableInitializer {
 
 // RandomUniformFn return an initializer that generates random uniform values from [min, max).
 //
-// It uses the context's ParamInitialSeed hyperparameter to initialize the random number generator --
+// It uses the store's ParamInitialSeed hyperparameter to initialize the random number generator --
 // only the first time it is used for a graph.
 // If it is set to 0 (NoSeed, the default), a random seed is instead generated (from the nanosecond clock).
 //
@@ -80,7 +80,7 @@ func RandomUniformFn(scope *model.Scope, min, max float64) VariableInitializer {
 
 // GlorotUniformFn return a Glorot uniform initializer, also called Xavier uniform initializer.
 //
-// It can be set to a context with `ctx.WithInitializer(GlorotUniformFn(ctx))`,
+// It can be set to a scope with `scope.WithInitializer(GlorotUniformFn(scope))`,
 // where `initialSeed` can be 0 for a random seed to be generated.
 //
 // For float and complex values, it draws samples from a uniform distribution within
@@ -92,7 +92,7 @@ func RandomUniformFn(scope *model.Scope, min, max float64) VariableInitializer {
 // for biases, matrix multiplications or 2D or 3D convolutions.
 // Using it for different types of shapes may not get the expected result.
 //
-// It uses the context's ParamInitialSeed hyperparameter to initialize the random number generator --
+// It uses the store's ParamInitialSeed hyperparameter to initialize the random number generator --
 // only the first time it is used for a graph.
 // If it is set to 0 (NoSeed, the default), a random seed is instead generated (from the nanosecond clock).
 //

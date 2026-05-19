@@ -75,12 +75,12 @@ func configureLayerWiseTestContext(scope *model.Scope) {
 		"train_steps":     0,
 		"plots":           true,
 
-		optimizers.ParamOptimizer:       "adam",
-		optimizers.ParamLearningRate:    0.001,
+		optimizer.ParamOptimizer:       "adam",
+		optimizer.ParamLearningRate:    0.001,
 		cosineschedule.ParamPeriodSteps: 0,
-		optimizers.ParamClipStepByValue: 0.0,
-		optimizers.ParamAdamEpsilon:     1e-7,
-		optimizers.ParamAdamDType:       "",
+		optimizer.ParamClipStepByValue: 0.0,
+		optimizer.ParamAdamEpsilon:     1e-7,
+		optimizer.ParamAdamDType:       "",
 
 		layers.ParamL2Regularization: 1e-5,
 		layers.ParamDropoutRate:      0.2,
@@ -107,7 +107,7 @@ func configureLayerWiseTestContext(scope *model.Scope) {
 	// Test parameters.
 	scope.SetParam(gnn.ParamNumGraphUpdates, 6)
 	scope.SetParam(ParamDType, "float32")
-	scope.SetParam(optimizers.ParamAdamDType, "float32")
+	scope.SetParam(optimizer.ParamAdamDType, "float32")
 }
 
 // TestLayerWiseInferenceLogits checks that the logits from layer-wise and by sampling are the same, for one paper

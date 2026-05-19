@@ -59,10 +59,10 @@ func createModelStore() *model.Store {
 		// "normalization" is overridden by "fnn_normalization" if set.
 		layers.ParamNormalization: "none",
 
-		optimizers.ParamOptimizer:       "adamw",
-		optimizers.ParamLearningRate:    1e-4,
-		optimizers.ParamAdamEpsilon:     1e-7,
-		optimizers.ParamAdamDType:       "",
+		optimizer.ParamOptimizer:       "adamw",
+		optimizer.ParamLearningRate:    1e-4,
+		optimizer.ParamAdamEpsilon:     1e-7,
+		optimizer.ParamAdamDType:       "",
 		cosineschedule.ParamPeriodSteps: 0,
 		activations.ParamActivation:     "swish",
 		layers.ParamDropoutRate:         0.0,

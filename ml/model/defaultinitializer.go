@@ -16,7 +16,7 @@ type VariableInitializer = func(g *graph.Graph, shape shapes.Shape) *Node
 // computeFanInFanOut of a variable expected to be the parameters of
 // either layers.Dense or layers.Convolution.
 //
-// Copied from initializers package to set the DefaultInitializer with a good value.
+// Copied from initializer package to set the DefaultInitializer with a good value.
 func computeFanInFanOut(shape shapes.Shape) (fanIn, fanOut int) {
 	rank := shape.Rank()
 	switch rank {
@@ -47,9 +47,9 @@ func computeFanInFanOut(shape shapes.Shape) (fanIn, fanOut int) {
 // [1] https://medium.com/@tylernisonoff/weight-initialization-for-cnns-a-deep-dive-into-he-initialization-50b03f37f53d
 // [2] https://arxiv.org/pdf/1502.01852
 //
-// Copy from package initializers, used to populate the DefaultInitializer.
+// Copy from package initializer, used to populate the DefaultInitializer.
 //
-// It uses the context random state (as opposed to initializers.HeFn which uses initializers own RNG state).
+// It uses the Store random state (as opposed to initializer.HeFn which uses initializer own RNG state).
 func heInitializer(store *Store) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
 		if !shape.DType.IsFloat() && !shape.DType.IsComplex() {
@@ -67,10 +67,10 @@ func heInitializer(store *Store) VariableInitializer {
 	}
 }
 
-// DefaultInitializer is used whenever a new context is created to create a new VariableInitializer.
-// You can always set your own initializer with Context.WithInitializer.
+// DefaultInitializer is used whenever a new Store is created to create a new VariableInitializer.
+// You can always set your own initializer with Scope.WithInitializer.
 //
-// See package initializers for various standard initializers.
+// See package initializer for various standard initializer.
 //
 // It defaults to a He initializer (https://arxiv.org/pdf/1502.01852)
 var DefaultInitializer func(store *Store) VariableInitializer = heInitializer

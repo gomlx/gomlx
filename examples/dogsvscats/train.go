@@ -91,10 +91,10 @@ func CreateModelStore() *model.Store {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "batch",
 
-		optimizers.ParamOptimizer:       "adamw",
-		optimizers.ParamLearningRate:    1e-4,
-		optimizers.ParamAdamEpsilon:     1e-7,
-		optimizers.ParamAdamDType:       "",
+		optimizer.ParamOptimizer:       "adamw",
+		optimizer.ParamLearningRate:    1e-4,
+		optimizer.ParamAdamEpsilon:     1e-7,
+		optimizer.ParamAdamDType:       "",
 		cosineschedule.ParamPeriodSteps: 0,
 		activations.ParamActivation:     "",
 		layers.ParamDropoutRate:         0.1,
@@ -199,7 +199,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	backend := compute.MustNew()
 	var trainer *train.Trainer
-	theOptimizer := optimizers.FromScope(scope)
+	theOptimizer := optimizer.FromScope(scope)
 	if !preTraining {
 		trainer = train.NewTrainer(backend, store, modelFn,
 			losses.BinaryCrossentropyLogits,
@@ -254,7 +254,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 
 	// Loop for given number of steps.
 	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(store))
+	globalStep := int(optimizer.GetGlobalStep(store))
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, int(numTrainSteps-globalStep)))
 		fmt.Printf(
@@ -270,13 +270,13 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
 			"to current global step.\n", numTrainSteps)
 	}
-	fmt.Printf("Training done (global_step=%d).\n", optimizers.GetGlobalStep(scope))
+	fmt.Printf("Training done (global_step=%d).\n", optimizer.GetGlobalStep(scope))
 
 	if preTraining {
 		// If pre-training (unsupervised), skip evaluation, and clear optimizer variables and global step.
 		fmt.Println("Pre-training only, no evaluation.")
 		check(theOptimizer.Clear(scope))
-		check(optimizers.DeleteGlobalStep(scope))
+		check(optimizer.DeleteGlobalStep(scope))
 		check(checkpointHandler.Save())
 		return
 	}

@@ -73,10 +73,10 @@ func createModelStore() *model.Store {
 		//	$ gomlx_checkpoints -metrics -metrics_labels -metrics_types=accuracy --metrics_names='E(bat)/#loss,E(tes)/#loss' -loop=3s fnn
 		"plots": true,
 
-		optimizers.ParamOptimizer:       "adam",
-		optimizers.ParamLearningRate:    0.001,
-		optimizers.ParamAdamEpsilon:     1e-7,
-		optimizers.ParamAdamDType:       "",
+		optimizer.ParamOptimizer:       "adam",
+		optimizer.ParamLearningRate:    0.001,
+		optimizer.ParamAdamEpsilon:     1e-7,
+		optimizer.ParamAdamDType:       "",
 		cosineschedule.ParamPeriodSteps: 0,
 		activations.ParamActivation:     "sigmoid",
 		layers.ParamDropoutRate:         0.0,
@@ -111,7 +111,7 @@ var (
 	flagDataDir = flag.String("data", "~/work/uci-adult",
 		"Directory to save and load downloaded and generated dataset files.")
 	flagCheckpoint = flag.String("checkpoint", "", "Checkpoint subdirectory under the --data directory. "+
-		"If empty does not use checkpoints. If absolute path, use that instead.")
+		"If empty does not use checkpoint. If absolute path, use that instead.")
 	flagForceDownload = flag.Bool("force_download", false, "Force re-download of Adult dataset files.")
 
 	flagNumQuantiles = flag.Int("quantiles", 100,
@@ -269,7 +269,7 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(backend, store, Model, losses.BinaryCrossentropyLogits,
-		optimizers.FromScope(scope),
+		optimizer.FromScope(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 
@@ -297,7 +297,7 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 
 	// Train up to "train_steps".
 	trainSteps := model.GetParamOr(scope, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(scope))
+	globalStep := int(optimizer.GetGlobalStep(scope))
 	if globalStep != 0 {
 		fmt.Printf("- Restarting training from global step %d\n", globalStep)
 	}

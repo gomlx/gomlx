@@ -98,8 +98,8 @@ var NanLogger *nanlogger.NanLogger
 //
 //	func MyGnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 //		g := inputs[0].Graph()
-//		optimizers.CosineAnnealingSchedule(scope, g, dtypes.Float32)
-//		scope = scope.WithInitializer(initializers.GlorotUniformFn(initializers.NoSeed))
+//		optimizer.CosineAnnealingSchedule(scope, g, dtypes.Float32)
+//		scope = scope.WithInitializer(initializer.GlorotUniformFn(initializer.NoSeed))
 //		strategy := spec.(*sampler.Strategy)
 //		graphStates := MyFeaturePreprocessing(scope, strategy, inputs)
 //		NodePrediction(scope, strategy, graphStates)
@@ -527,9 +527,9 @@ func kanUpdateState(scope *model.Scope, prevState, input, mask *Node) *Node {
 		return fnn.New(scope, input, inputDim).NumHiddenLayers(1, inputDim).Done()
 		//g := input.Graph()
 		//inputDim := input.Shape().Dim(-1)
-		//a := ctx.In("adjust").WithInitializer(initializers.One).
+		//a := ctx.In("adjust").WithInitializer(initializer.One).
 		//	VariableWithShape("a", shapes.Make(input.DType(), inputDim)).ValueGraph(g)
-		//b := ctx.In("adjust").WithInitializer(initializers.Zero).
+		//b := ctx.In("adjust").WithInitializer(initializer.Zero).
 		//	VariableWithShape("b", shapes.Make(input.DType(), inputDim)).ValueGraph(g)
 		//a = ExpandLeftToRank(a, input.Rank())
 		//b = ExpandLeftToRank(b, input.Rank())

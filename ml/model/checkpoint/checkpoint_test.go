@@ -132,7 +132,7 @@ func TestCheckpoints(t *testing.T) {
 		assert.Equal(t, 12.0, globalStep, "Re-loaded global step")
 	}
 
-	// Test that one can embed the checkpoints.
+	// Test that one can embed the checkpoint.
 	var (
 		jsonBlob, binBlob []byte
 	)

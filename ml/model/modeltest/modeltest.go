@@ -1,7 +1,7 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-// Package ctxtest holds test utilities for packages that depend on context package. It allows
-// for easy running tests on graph building functions that depends on model.Context objects.
+// Package modeltest holds test utilities for packages that depend on model package. It allows
+// for easy running tests on graph building functions that depends on model.Scope objects.
 package modeltest
 
 import (
