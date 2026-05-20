@@ -12,7 +12,7 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/examples/inceptionv3"
-	"github.com/gomlx/gomlx/ml/datasets"
+	"github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
@@ -240,13 +240,13 @@ func CreateDatasets(config *PreprocessingConfiguration) (trainDS, trainEvalDS, v
 	// Read tensors in parallel:
 	if config.UseParallelism {
 		if trainDS != nil {
-			trainDS = datasets.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
+			trainDS = dataset.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
 		}
 		if trainEvalDS != nil {
-			trainEvalDS = datasets.CustomParallel(trainEvalDS).Buffer(config.BufferSize).Start()
+			trainEvalDS = dataset.CustomParallel(trainEvalDS).Buffer(config.BufferSize).Start()
 		}
 		if validationEvalDS != nil {
-			validationEvalDS = datasets.CustomParallel(validationEvalDS).Buffer(config.BufferSize).Start()
+			validationEvalDS = dataset.CustomParallel(validationEvalDS).Buffer(config.BufferSize).Start()
 		}
 	}
 

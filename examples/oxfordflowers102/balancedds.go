@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/compute/support/humanize"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/datasets"
+	"github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
@@ -111,7 +111,7 @@ func (bds *BalancedDataset) readAllImages() error {
 	bds.AllLabels = tensors.FromShape(shapes.Make(dtypes.Int32, NumExamples))
 	tensors.MustMutableFlatData[uint8](bds.AllImages, func(flatAllImages []uint8) {
 		tensors.MustMutableFlatData[int32](bds.AllLabels, func(flatAllLabels []int32) {
-			ds := datasets.Parallel(NewDataset(dtypes.Uint8, bds.Size))
+			ds := dataset.Parallel(NewDataset(dtypes.Uint8, bds.Size))
 			pbar := progressbar.Default(int64(NumExamples), "Processing images")
 			for exampleIdx := range NumExamples {
 				_, inputs, labels, yieldErr := ds.Yield()

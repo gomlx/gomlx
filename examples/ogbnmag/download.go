@@ -20,7 +20,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/downloader"
-	mldata "github.com/gomlx/gomlx/ml/datasets"
+	mldata "github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	. "github.com/gomlx/gomlx/support/exceptions"

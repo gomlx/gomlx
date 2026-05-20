@@ -14,7 +14,7 @@ import (
 	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/examples/adult"
-	"github.com/gomlx/gomlx/ml/datasets"
+	"github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
@@ -73,10 +73,10 @@ func createModelStore() *model.Store {
 		//	$ gomlx_checkpointss -metrics -metrics_labels -metrics_types=accuracy --metrics_names='E(bat)/#loss,E(tes)/#loss' -loop=3s fnn
 		"plots": true,
 
-		optimizer.ParamOptimizer:       "adam",
-		optimizer.ParamLearningRate:    0.001,
-		optimizer.ParamAdamEpsilon:     1e-7,
-		optimizer.ParamAdamDType:       "",
+		optimizer.ParamOptimizer:        "adam",
+		optimizer.ParamLearningRate:     0.001,
+		optimizer.ParamAdamEpsilon:      1e-7,
+		optimizer.ParamAdamDType:        "",
 		cosineschedule.ParamPeriodSteps: 0,
 		activations.ParamActivation:     "sigmoid",
 		layers.ParamDropoutRate:         0.0,
@@ -232,17 +232,17 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 		inputShardingSpecs := []*distributed.ShardingSpec{shardingSpec}
 		labelsShardingSpecs := []*distributed.ShardingSpec{shardingSpec}
 		var deviceAssignment []compute.DeviceNum // nil, the default assignment will be used.
-		trainDS, err = datasets.NewDistributedAccumulator(
+		trainDS, err = dataset.NewDistributedAccumulator(
 			backend, trainDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
 		if err != nil {
 			return err
 		}
-		trainEvalDS, err = datasets.NewDistributedAccumulator(
+		trainEvalDS, err = dataset.NewDistributedAccumulator(
 			backend, trainEvalDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
 		if err != nil {
 			return err
 		}
-		testEvalDS, err = datasets.NewDistributedAccumulator(
+		testEvalDS, err = dataset.NewDistributedAccumulator(
 			backend, testEvalDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
 		if err != nil {
 			return err
@@ -254,7 +254,7 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 		// Distributed datasets already prefetch on device, so we don't need to do it here.
 		if !*flagDistributed {
 			var err error
-			trainDS, err = datasets.NewOnDevice(backend, trainDS, false, *flagPrefetchOnDevice, compute.DeviceNum(0))
+			trainDS, err = dataset.NewOnDevice(backend, trainDS, false, *flagPrefetchOnDevice, compute.DeviceNum(0))
 			if err != nil {
 				return err
 			}

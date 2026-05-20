@@ -14,7 +14,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/datasets"
+	"github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/ml/train"
@@ -170,7 +170,7 @@ func TestGradientRealFFT(t *testing.T) {
 		return []*Node{y}
 	}
 
-	theDataset, err := datasets.InMemoryFromData(backend, "dataset", []any{trueX}, []any{trueY})
+	theDataset, err := dataset.InMemoryFromData(backend, "dataset", []any{trueX}, []any{trueY})
 	require.NoError(t, err)
 	theDataset.BatchSize(1, false).Infinite(true)
 	trainer := train.NewTrainer(
@@ -210,7 +210,7 @@ func TestGradientInverseRealFFT(t *testing.T) {
 		return []*Node{y}
 	}
 
-	theDataset, err := datasets.InMemoryFromData(backend, "dataset", []any{trueX}, []any{trueY})
+	theDataset, err := dataset.InMemoryFromData(backend, "dataset", []any{trueX}, []any{trueY})
 	require.NoError(t, err)
 	theDataset.BatchSize(1, false).Infinite(true)
 	trainer := train.NewTrainer(

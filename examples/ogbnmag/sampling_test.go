@@ -9,7 +9,7 @@ import (
 
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	mldata "github.com/gomlx/gomlx/ml/datasets"
+	mldata "github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/sets"

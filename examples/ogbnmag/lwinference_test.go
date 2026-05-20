@@ -15,7 +15,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	mldata "github.com/gomlx/gomlx/ml/datasets"
+	mldata "github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/model"
@@ -75,12 +75,12 @@ func configureLayerWiseTestScope(scope *model.Scope) {
 		"train_steps":     0,
 		"plots":           true,
 
-		optimizer.ParamOptimizer:       "adam",
-		optimizer.ParamLearningRate:    0.001,
+		optimizer.ParamOptimizer:        "adam",
+		optimizer.ParamLearningRate:     0.001,
 		cosineschedule.ParamPeriodSteps: 0,
-		optimizer.ParamClipStepByValue: 0.0,
-		optimizer.ParamAdamEpsilon:     1e-7,
-		optimizer.ParamAdamDType:       "",
+		optimizer.ParamClipStepByValue:  0.0,
+		optimizer.ParamAdamEpsilon:      1e-7,
+		optimizer.ParamAdamDType:        "",
 
 		layers.ParamL2Regularization: 1e-5,
 		layers.ParamDropoutRate:      0.2,
@@ -95,7 +95,7 @@ func configureLayerWiseTestScope(scope *model.Scope) {
 		gnn.ParamUpdateNumHiddenLayers: 0,
 		gnn.ParamMessageDim:            32, // 128 or 256 will work better, but takes way more time
 		gnn.ParamStateDim:              32, // 128 or 256 will work better, but takes way more time
-		gnn.ParamUseRootAsScope:      false,
+		gnn.ParamUseRootAsScope:        false,
 
 		ParamEmbedDropoutRate:     0.0,
 		ParamSplitEmbedTablesSize: 1,

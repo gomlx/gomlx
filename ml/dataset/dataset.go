@@ -4,7 +4,7 @@
 // preprocessing: `Take`, `InMemory`, `Parallel`, `MapWithGraphFn`, `Freeing`.
 //
 // It also includes normalization tools.
-package datasets
+package dataset
 
 import (
 	"fmt"

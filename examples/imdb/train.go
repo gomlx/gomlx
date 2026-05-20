@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/datasets"
+	"github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
@@ -86,10 +86,10 @@ func CreateModelStore() *model.Store {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "layer",
 
-		optimizer.ParamOptimizer:       "adamw",
-		optimizer.ParamLearningRate:    1e-4,
-		optimizer.ParamAdamEpsilon:     1e-7,
-		optimizer.ParamAdamDType:       "",
+		optimizer.ParamOptimizer:        "adamw",
+		optimizer.ParamLearningRate:     1e-4,
+		optimizer.ParamAdamEpsilon:      1e-7,
+		optimizer.ParamAdamDType:        "",
 		cosineschedule.ParamPeriodSteps: 0,
 		activations.ParamActivation:     "",
 		layers.ParamDropoutRate:         0.1,
@@ -171,9 +171,9 @@ func TrainWithStore(
 	testEvalDS = NewDataset("test-eval", TypeTest, maxLen, batchSize, false)
 
 	// Parallelize generation of batches.
-	trainDS = datasets.Parallel(trainDS)
-	trainEvalDS = datasets.Parallel(trainEvalDS)
-	testEvalDS = datasets.Parallel(testEvalDS)
+	trainDS = dataset.Parallel(trainDS)
+	trainEvalDS = dataset.Parallel(trainEvalDS)
+	testEvalDS = dataset.Parallel(testEvalDS)
 
 	// Checkpoints saving.
 	var checkpointHandler *checkpoint.Handler

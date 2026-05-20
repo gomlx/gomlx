@@ -9,7 +9,7 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/core/tensors"
-	mldata "github.com/gomlx/gomlx/ml/datasets"
+	mldata "github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

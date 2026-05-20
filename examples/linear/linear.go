@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/datasets"
+	"github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
@@ -113,10 +113,9 @@ func main() {
 	inputs, labels := buildExamples(backend, trueCoefficients, trueBias, *flagNumExamples, *flagNoise)
 	fmt.Printf("Training data (inputs, labels): (%s, %s)\n\n", inputs.Shape(), labels.Shape())
 
-	// Create an in-memory dataset from the tensors.
-	dataset := check1(datasets.InMemoryFromData(backend, "linear dataset", []any{inputs}, []any{labels})).
+	// Create an in-memory ds from the tensors.
+	ds := must1(dataset.InMemoryFromData(backend, "linear dataset", []any{inputs}, []any{labels})).
 		Infinite(true).Shuffle().BatchSize(*flagNumExamples, false)
-	// dataset := &Dataset{"training", []*tensors.Tensor{inputs}, []*tensors.Tensor{labels}}
 
 	// Creates Scope with learned weights and bias.
 	store := model.NewStore()
@@ -132,7 +131,7 @@ func main() {
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Loop for the given number of steps.
-	_, err := loop.RunSteps(dataset, *flagNumSteps)
+	_, err := loop.RunSteps(ds, *flagNumSteps)
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
 	}
@@ -145,16 +144,16 @@ func main() {
 	fmt.Printf("Learned bias: %0.5v\n", learnedBias.Value())
 }
 
-// check reports and exits on error.
-func check(err error) {
+// must reports and exits on error.
+func must(err error) {
 	if err == nil {
 		return
 	}
 	klog.Fatalf("Fatal error: %+v", err)
 }
 
-// check1 reports and exits on error. Otherwise returns the value passed.
-func check1[T any](v T, err error) T {
-	check(err)
+// must1 reports and exits on error. Otherwise returns the value passed.
+func must1[T any](v T, err error) T {
+	must(err)
 	return v
 }

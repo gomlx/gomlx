@@ -18,7 +18,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/ml/datasets"
+	"github.com/gomlx/gomlx/ml/dataset"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
@@ -317,7 +317,7 @@ func NewDataset(
 	source DataSource,
 	dtype dtypes.DType,
 	partition Partition,
-) *datasets.InMemoryDataset {
+) *dataset.InMemoryDataset {
 	if source > C100 {
 		Panicf("Invalid source value %d, only C10 or C100 accepted", source)
 	}
@@ -339,7 +339,7 @@ func NewDataset(
 		imagesAndLabelsCache[source][dtype] = partitioned
 	}
 	imagesAndLabels := partitioned[partition]
-	ds, err := datasets.InMemoryFromData(backend, name, []any{imagesAndLabels.images}, []any{imagesAndLabels.labels})
+	ds, err := dataset.InMemoryFromData(backend, name, []any{imagesAndLabels.images}, []any{imagesAndLabels.labels})
 	if err != nil {
 		panic(err)
 	}

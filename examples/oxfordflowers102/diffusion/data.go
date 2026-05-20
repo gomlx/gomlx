@@ -17,7 +17,7 @@ import (
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 
-	"github.com/gomlx/gomlx/ml/datasets"
+	"github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/model"
 
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
@@ -35,7 +35,7 @@ var (
 // See NewConfig.
 type Config struct {
 	Backend compute.Backend
-	Scope *model.Scope // Usually, at the root scope.
+	Scope   *model.Scope // Usually, at the root scope.
 
 	// DataDir is where the data is downloaded, and models are saved.
 	DataDir string
@@ -69,7 +69,7 @@ func NewConfig(backend compute.Backend, scope *model.Scope, dataDir string, para
 		model.GetParamOr(scope, "dtype", "float32")))
 	cfg := &Config{
 		Backend:       backend,
-		Scope:       scope,
+		Scope:         scope,
 		DataDir:       dataDir,
 		ImageSize:     model.GetParamOr(scope, "image_size", 64),
 		BatchSize:     model.GetParamOr(scope, "batch_size", 64),
@@ -85,7 +85,7 @@ func NewConfig(backend compute.Backend, scope *model.Scope, dataDir string, para
 }
 
 // CreateInMemoryDatasets returns a train and a validation InMemoryDataset.
-func (c *Config) CreateInMemoryDatasets() (trainDS, validationDS *datasets.InMemoryDataset) {
+func (c *Config) CreateInMemoryDatasets() (trainDS, validationDS *dataset.InMemoryDataset) {
 	trainDS = check1(
 		flowers.InMemoryDataset(c.Backend, c.DataDir, c.ImageSize, "train", PartitionSeed, ValidationFraction, 1.0))
 	validationDS = check1(
@@ -137,7 +137,7 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 
 	trainDS, _ := c.CreateInMemoryDatasets()
 	trainDS.BatchSize(128, false)
-	ds := datasets.MapWithGraphFn(
+	ds := dataset.MapWithGraphFn(
 		c.Backend,
 		nil,
 		trainDS,
@@ -147,7 +147,7 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 		},
 	)
 	var err2 error
-	normalizationMean, normalizationStdDev, err2 = datasets.Normalization(c.Backend, ds, 0, -1) // mean/stddev for each channel (axis=-1) separately.
+	normalizationMean, normalizationStdDev, err2 = dataset.Normalization(c.Backend, ds, 0, -1) // mean/stddev for each channel (axis=-1) separately.
 	check(err2)
 	mean, stddev = normalizationMean, normalizationStdDev
 
@@ -181,7 +181,7 @@ func (c *Config) PreprocessImages(images *Node, normalize bool) *Node {
 
 	images = Div(
 		Sub(images, mean),
-		datasets.ReplaceZerosByOnes(stddev))
+		dataset.ReplaceZerosByOnes(stddev))
 	images = ConvertDType(images, c.DType)
 	c.NanLogger.TraceFirstNaN(images, "PreprocessImages:"+c.DType.String())
 	return images
@@ -197,7 +197,7 @@ func (c *Config) DenormalizeImages(images *Node) *Node {
 	stddev := Const(g, stddevT)
 
 	images = Add(
-		Mul(images, datasets.ReplaceZerosByOnes(stddev)),
+		Mul(images, dataset.ReplaceZerosByOnes(stddev)),
 		mean)
 	images = ClipScalar(images, 0.0, 255.0)
 	return images

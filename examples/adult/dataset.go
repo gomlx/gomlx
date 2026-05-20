@@ -22,15 +22,15 @@ import (
 	"log"
 
 	"github.com/gomlx/compute"
-	"github.com/gomlx/gomlx/ml/datasets"
+	"github.com/gomlx/gomlx/ml/dataset"
 	"github.com/pkg/errors"
 )
 
 // NewDataset creates a new `datasets.InMemoryDataset` (can be used for training and evaluation) for the
 // MCI Adult dataset.
-func NewDataset(backend compute.Backend, rawData *RawData, name string) *datasets.InMemoryDataset {
+func NewDataset(backend compute.Backend, rawData *RawData, name string) *dataset.InMemoryDataset {
 	tensorData := rawData.CreateTensors(backend)
-	ds, err := datasets.InMemoryFromData(backend, name,
+	ds, err := dataset.InMemoryFromData(backend, name,
 		[]any{tensorData.CategoricalTensor, tensorData.ContinuousTensor, tensorData.WeightsTensor},
 		[]any{tensorData.LabelsTensor})
 	if err != nil {

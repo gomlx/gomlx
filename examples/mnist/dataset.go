@@ -35,7 +35,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/ml/datasets"
+	"github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
 
@@ -151,7 +151,7 @@ var (
 //   - name:
 //   - baseDir:
 //   - mode: choose between 'train' and 'test'
-func NewDataset(backend compute.Backend, name, baseDir, mode string, dtype dtypes.DType) (ds *datasets.InMemoryDataset, err error) {
+func NewDataset(backend compute.Backend, name, baseDir, mode string, dtype dtypes.DType) (ds *dataset.InMemoryDataset, err error) {
 	imagesFile := mnistFiles[mode][ImageFileType]
 	labelsFile := mnistFiles[mode][LabelFileType]
 
@@ -164,7 +164,7 @@ func NewDataset(backend compute.Backend, name, baseDir, mode string, dtype dtype
 		return nil, err
 	}
 
-	return datasets.InMemoryFromData(
+	return dataset.InMemoryFromData(
 		backend,
 		name,
 		[]any{timage.ToTensor(dtype).Batch(images)},
