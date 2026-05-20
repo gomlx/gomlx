@@ -6,7 +6,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/model"
@@ -42,14 +42,14 @@ func normalizeCNN(scope *model.Scope, logits *graph.Node) *graph.Node {
 	switch normalizationType {
 	case "layer":
 		if logits.Rank() == 2 {
-			return layers.LayerNormalization(scope, logits, -1).Done()
+			return norm.LayerNorm(scope, logits, -1).Done()
 		} else if logits.Rank() == 4 {
-			return layers.LayerNormalization(scope, logits, 2, 3).Done()
+			return norm.LayerNorm(scope, logits, 2, 3).Done()
 		} else {
 			return logits
 		}
 	case "batch":
-		return batchnorm.New(scope, logits, -1).Done()
+		return norm.BatchNorm(scope, logits, -1).Done()
 	case "none", "":
 		return logits
 	default:

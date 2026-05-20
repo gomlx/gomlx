@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
@@ -262,7 +262,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 			loop.LoopStep,
 			loop.MedianTrainStepDuration().Microseconds(),
 		)
-		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
+		if check1(norm.UpdateBatchNormAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			check(checkpointHandler.Save())
 		}

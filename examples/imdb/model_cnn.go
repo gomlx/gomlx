@@ -6,7 +6,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -72,10 +72,10 @@ func NormalizeSequence(scope *model.Scope, x *Node) *Node {
 
 	switch norm {
 	case "layer":
-		return layers.LayerNormalization(scope, x, -2).
+		return norm.LayerNorm(scope, x, -2).
 			LearnedOffset(true).LearnedGain(true).ScaleNormalization(true).Done()
 	case "batch":
-		return batchnorm.New(scope, x, -1).Done()
+		return norm.BatchNorm(scope, x, -1).Done()
 	case "none", "":
 		return x
 	}

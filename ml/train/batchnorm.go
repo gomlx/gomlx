@@ -23,7 +23,7 @@ const (
 // It's recommended one resets the batch normalization weights with layers.BatchNormalizationResetWeights before
 // calling this function.
 //
-// Usually this method is not used directly, instead use batchnorm.UpdateAverages.
+// Usually this method is not used directly, instead use norm.UpdateBatchNormAverages.
 //
 // DistributedDatasets are not accepted yet -- open an issue if you need it.
 func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) error {

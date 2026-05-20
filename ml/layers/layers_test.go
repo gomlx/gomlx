@@ -208,32 +208,4 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 	}
 }
 
-func TestLayerNormalization(t *testing.T) {
-	testSimpleFunc(t, "LayerNormalization()",
-		[][]float32{{0, 10}, {20, 30}, {40, 50}},
-		func(scope *model.Scope, input *Node) *Node {
-			return LayerNormalization(scope, input, -1).LearnedOffset(false).LearnedGain(false).Epsilon(0).Done()
-		},
-		[][]float32{{-1, 1}, {-1, 1}, {-1, 1}},
-	)
 
-	testSimpleFunc(t, "LayerNormalization()",
-		[][]float32{{0, 10}, {20, 30}, {40, 50}},
-		func(scope *model.Scope, input *Node) *Node {
-			return LayerNormalization(scope, input, -1).LearnedOffset(false).LearnedGain(false).Epsilon(0).ScaleNormalization(false).Done()
-		},
-		[][]float32{{-5, 5}, {-5, 5}, {-5, 5}},
-	)
-	testSimpleFuncMany(t, "LayerNormalization()",
-		[]any{
-			[][]float32{{0, 10, 5}, {20, 30, 0}, {0, 30, 50}, {0, 0, 0}},
-			[][]bool{{true, true, true}, {true, true, false}, {true, false, true}, {false, false, false}},
-		},
-		func(scope *model.Scope, inputs []*Node) *Node {
-			return LayerNormalization(scope, inputs[0], -1).Mask(inputs[1]).
-				LearnedOffset(false).LearnedGain(false).Epsilon(0).
-				ScaleNormalization(false).Done()
-		},
-		[][]float32{{-5, 5, 0}, {-5, 5, 0}, {-25, 0, 25}, {0, 0, 0}},
-	)
-}

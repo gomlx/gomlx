@@ -18,7 +18,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
 	types "github.com/gomlx/gomlx/support/sets"
@@ -77,7 +77,7 @@ type CustomMetricFn func(plotter Plotter, step float64) error
 func AddTrainAndEvalMetrics(plotter Plotter, loop *train.Loop, trainMetrics []*tensors.Tensor,
 	evalDatasets []train.Dataset, batchNormAveragesDS train.Dataset) error {
 	if batchNormAveragesDS != nil {
-		_, err := batchnorm.UpdateAverages(loop.Trainer, batchNormAveragesDS)
+		_, err := norm.UpdateBatchNormAverages(loop.Trainer, batchNormAveragesDS)
 		if err != nil {
 			return errors.WithMessagef(err, "Updating batch normalization averages before evaluation: ")
 		}

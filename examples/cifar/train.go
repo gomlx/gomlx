@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
@@ -144,7 +144,7 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 		}
 
 		// Update batch normalization averages, if they are used.
-		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
+		if check1(norm.UpdateBatchNormAverages(trainer, trainEvalDS)) {
 			if verbosity >= 1 {
 				fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			}

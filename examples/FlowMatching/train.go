@@ -14,7 +14,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
@@ -172,7 +172,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		}
 
 		// Update batch normalization averages, if they are used.
-		bnUpdated, err := batchnorm.UpdateAverages(trainer, trainEvalDS)
+		bnUpdated, err := norm.UpdateBatchNormAverages(trainer, trainEvalDS)
 		if err != nil {
 			klog.Exitf("Error while updating batch normalization averages: %+v", err)
 		}

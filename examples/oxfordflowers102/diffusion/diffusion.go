@@ -26,7 +26,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/attention"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/ml/train"
@@ -77,10 +77,10 @@ func NormalizeLayer(scope *model.Scope, x *Node) *Node {
 	case "none":
 		// No-op.
 	case "batch":
-		x = batchnorm.New(scope, x, -1).Center(false).Scale(false).Done()
+		x = norm.BatchNorm(scope, x, -1).Center(false).Scale(false).Done()
 	case "layer":
-		//x = layers.LayerNormalization(scope, x, -1).Done()
-		x = layers.LayerNormalization(scope, x, 1, 2).Done()
+		//x = norm.LayerNorm(scope, x, -1).Done()
+		x = norm.LayerNorm(scope, x, 1, 2).Done()
 	}
 	nanLogger.TraceFirstNaN(x)
 	return x

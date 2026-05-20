@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors/images"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
@@ -410,7 +410,7 @@ func (cfg *Config) conv2DWithBatchNorm(scope *model.Scope, x *Node, kernelFilter
 
 	// Batch Normalization:
 	scopeWithWeights = cfg.readNextBatchNormalization(scope, g) // Create a new scope scope and read weights from `.h5` file.
-	x = batchnorm.New(scopeWithWeights, x, cfg.channelsAxis).CurrentScope().
+	x = norm.BatchNorm(scopeWithWeights, x, cfg.channelsAxis).CurrentScope().
 		Scale(cfg.batchNormScale).Epsilon(cfg.batchNormEpsilon).Trainable(cfg.trainable).
 		UseBackendInference(false).
 		FrozenAverages(cfg.baseDir != ""). // If we are loading the weights, we don't want the averages to move.

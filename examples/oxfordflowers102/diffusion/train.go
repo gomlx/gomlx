@@ -17,7 +17,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
@@ -253,7 +253,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 		}
 
 		// Update batch normalization averages, if they are used.
-		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
+		if check1(norm.UpdateBatchNormAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpointHandler != nil {
 				check(checkpointHandler.Save())

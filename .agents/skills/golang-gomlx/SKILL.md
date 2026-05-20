@@ -170,17 +170,17 @@ func DenseLayer(scope *model.Scope, x *Node, outputDim int) *Node {
 
 - The `layers` package provides standard higher-level building blocks for ML models.
 - Uses `*model.Scope` extensively to manage the weights/biases for each layer.
-- Sub-packages include `activations` (Relu, Swish, etc.), `fnn` (feed-forward neural networks), `kan` (Kolmogorov-Arnold Networks), `regularizers`, etc.
+- Sub-packages include `activation` (Relu, Swish, etc.), `fnn` (feed-forward neural networks), `kan` (Kolmogorov-Arnold Networks), `regularizer`, `norm`, etc.
 - **See [`layers` package reference](./references/layers.md)** for a list of common layers and their PyTorch equivalents.
 
 ### Training loop -- package `github.com/gomlx/gomlx/ml/train`
 
 - Example from `examples/adult/demo`: Shows a full ML pipeline.
 - `train.Trainer` orchestrates the model function, the loss function, and the optimizer.
-  - Needs `model.Store`, a model function, a loss function (e.g., `losses.BinaryCrossentropyLogits`), and an optimizer (e.g., `optimizer.Adam`).
-- Metrics (`ml/train/metrics`): Used to evaluate model performance during training and evaluation.
+  - Needs `model.Store`, a model function, a loss function (e.g., `loss.BinaryCrossentropyLogits`), and an optimizer (e.g., `optimizer.Adam`).
+- Metrics (`ml/train/metric`): Used to evaluate model performance during training and evaluation.
   - Metrics are provided as lists during `train.NewTrainer` initialization (one list for train metrics, one for eval metrics).
-  - Common metrics include `metrics.NewMeanBinaryLogitsAccuracy()`, `metrics.NewSparseCategoricalAccuracy()`.
+  - Common metrics include `metric.NewMeanBinaryLogitsAccuracy()`, `metric.NewSparseCategoricalAccuracy()`.
 - `train.Loop` manages the iterative process, feeding datasets to the `Trainer` and calling callbacks (e.g., checkpoint saving, plotting).
 
 Example Training Pipeline:
@@ -194,14 +194,14 @@ store.SetParam("learning_rate", *flagLearningRate)
 trainDS := CreateDataset(...)
 
 // Metrics we are interested in.
-meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
-movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
+meanAccuracyMetric := metric.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
+movingAccuracyMetric := metric.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 // Create a train.Trainer: orchestrates running the model, feeding results to the optimizer, evaluating metrics.
-trainer := train.NewTrainer(backend, store, Model, losses.BinaryCrossentropyLogits,
+trainer := train.NewTrainer(backend, store, Model, loss.BinaryCrossentropyLogits,
 	optimizer.FromScope(store.RootScope()),
-	[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-	[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+	[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+	[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 
 // Create a standard training loop
 loop := train.NewLoop(trainer)

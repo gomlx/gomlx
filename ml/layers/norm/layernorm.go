@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package layers
+package norm
 
 import (
 	"github.com/gomlx/compute/dtypes"
@@ -14,9 +14,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// LayerNormBuilder is a helper to build a layer normalization computation. Create it with LayerNormalization,
+// LayerNormBuilder is a helper to build a layer normalization computation. Create it with LayerNorm,
 // set the desired parameters and when all is set, call Done.
-// See LayerNormalization for details.
+// See LayerNorm for details.
 type LayerNormBuilder struct {
 	scope              *model.Scope
 	x, mask            *Node
@@ -69,10 +69,10 @@ var (
 	ParamLayerNormNormalizationDType = "layer_norm_dtype"
 )
 
-// LayerNormalization performs a layer normalization on the input. It includes a scaling and offset factor,
+// LayerNorm performs a layer normalization on the input. It includes a scaling and offset factor,
 // and normalization over the feature entries.
 //
-// This is an alternative to BatchNormalization, that doesn't suffer from the problem of variance
+// This is an alternative to BatchNorm, that doesn't suffer from the problem of variance
 // on small batch sizes, nor does it need to keep a moving average of the normalization parameters.
 // Commonly used with transformer layers (see MultiHeadAttention).
 //
@@ -82,7 +82,7 @@ var (
 // of shape [batch_size, height, width, channels] one common approach is to normalize over the image, so
 // `normalizingAxes=[1 2]`, but not over the channels.
 //
-// Notice the difference between BatchNormalization, that normalizes over the batch dimension, as opposed
+// Notice the difference between BatchNorm, that normalizes over the batch dimension, as opposed
 // to the feature dimensions.
 //
 // The layer norm may have a learned gain and offset, controlled by LayerNormBuilder.LearnedGain
@@ -98,7 +98,7 @@ var (
 // https://arxiv.org/abs/1607.06450
 //
 // FutureWork: support padding by not normalizing parts that weren't touched ...
-func LayerNormalization(scope *model.Scope, x *Node, normalizingAxes ...int) *LayerNormBuilder {
+func LayerNorm(scope *model.Scope, x *Node, normalizingAxes ...int) *LayerNormBuilder {
 	builder := &LayerNormBuilder{
 		scope:              scope.In("layer_normalization"),
 		x:                  x,
@@ -180,7 +180,7 @@ func (builder *LayerNormBuilder) Mask(mask *Node) *LayerNormBuilder {
 	return builder
 }
 
-// Done finishes configuring the LayerNormalization and generates the graph computation to normalize the input.
+// Done finishes configuring the LayerNorm and generates the graph computation to normalize the input.
 func (builder *LayerNormBuilder) Done() *Node {
 	x := builder.x
 	gamma, beta := builder.createVariables()

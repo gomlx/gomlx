@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package layers
+package norm
 
 import (
 	. "github.com/gomlx/gomlx/core/graph"
@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"testing"
+
+	_ "github.com/gomlx/gomlx/backends/default"
 )
 
 func TestRMSNorm(t *testing.T) {

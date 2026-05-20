@@ -1,6 +1,6 @@
 # GoMLX `graph` Package Reference
 
-This table maps common functions from the `pkg/core/graph` package to their PyTorch equivalents, to help AI agents understand their purpose.
+This table maps common functions from the `core/graph` package to their PyTorch equivalents, to help AI agents understand their purpose.
 
 **Note**: It is assumed that the `graph` package is dot-imported (`import . "github.com/gomlx/gomlx/core/graph"`), so these functions can be called directly without the `graph.` prefix.
 
@@ -20,6 +20,7 @@ This table maps common functions from the `pkg/core/graph` package to their PyTo
 | `Pow(x, y)` | Element-wise power `x^y`. | `torch.pow(x, y)` |
 | `Max(a, b)` | Element-wise maximum of two nodes. | `torch.maximum(a, b)` |
 | `Min(a, b)` | Element-wise minimum of two nodes. | `torch.minimum(a, b)` |
+| `Sigmoid(x)` / `Logistic(x)` | Element-wise sigmoid activation function. | `torch.sigmoid(x)` |
 | `Sin(x)`, `Cos(x)`, `Tanh(x)` | Element-wise trigonometric functions. | `torch.sin(x)`, `torch.cos(x)`, `torch.tanh(x)` |
 | **Shape & Tensor Manipulation** | | |
 | `Reshape(x, dims...)` | Reshapes a node to the given dimensions. | `torch.reshape(x, dims)` or `x.view(dims)` |
@@ -52,6 +53,7 @@ This table maps common functions from the `pkg/core/graph` package to their PyTo
 | `Convolve(x, kernel).Done()` | General convolution operation using a builder API. Chain methods like `Strides`, `PadSame`, then `Done()`. | `torch.nn.functional.conv1d`, `conv2d`, `conv3d` |
 | `MaxPool(x).Done()` | Max pooling operation using a builder API. Chain methods like `Window`, `Strides`, then `Done()`. | `torch.nn.functional.max_pool1d`, `max_pool2d`, `max_pool3d` |
 | `MeanPool(x).Done()` | Average pooling operation using a builder API. Chain methods like `Window`, `Strides`, then `Done()`. | `torch.nn.functional.avg_pool1d`, `avg_pool2d`, `avg_pool3d` |
+| `Softmax(logits, axes...)` | Computes Softmax over the specified axes (dimensions). | `torch.softmax(logits, dim=axes)` |
 | **Constants & Generation** | | |
 | `Const(g, value)` | Creates a constant node in the graph `g` from a given value (scalar, slice, tensor, etc). | `torch.tensor(value)` |
 | `Scalar(g, dtype, value)` | Creates a scalar node in the graph `g`. | `torch.tensor(value, dtype=dtype)` |

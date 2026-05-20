@@ -1,13 +1,7 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-// Package batchnorm implements a batch normalization layer, and associated tools.
-// It's a very common normalization technique that greatly facilitates training of deeper models.
-//
-// See details and examples in New.
-//
-// Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
-// Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
-package batchnorm
+// Package norm implements normalization layers for GoMLX, including Batch, Layer, and RMS normalization.
+package norm
 
 import (
 	"strings"
@@ -23,9 +17,9 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 )
 
-// Config for a batch normalization layer.
-// Create it with New, set the desired parameters, and when all is set, call Done.
-type Config struct {
+// BatchNormBuilder is a builder for configuring a batch normalization layer.
+// Create it with BatchNorm, set the desired parameters, and when all is set, call Done.
+type BatchNormBuilder struct {
 	scope                     *model.Scope
 	x                         *Node
 	featureAxis               int
@@ -41,7 +35,7 @@ const (
 	BatchNormalizationScopeName = "batch_normalization"
 )
 
-// New creates builder performs a batch normalization layer on the input. It includes a scaling and offset factor,
+// BatchNorm creates a builder for a batch normalization layer on the input. It includes a scaling and offset factor,
 // and normalization over the batch entries.
 // It maintains a moving average mean and variance of the inputs which is later used during inference.
 //
@@ -50,13 +44,13 @@ const (
 // E.g: if your input is `[batch_size, features]` you should use featureAxis=1 (same as -1) to normalize over
 // the batch; if your input is an image of shape `[batch_size, height, width, channels]` you should use
 // featureAxis=3 (same as -1) to normalize over the batch and all the pixels, so each channel is
-// normalized differently, but normalization happens over all the pixes of the whole batch.
+// normalized differently, but normalization happens over all the pixels of the whole batch.
 //
-// Notice the difference between LayerNormalization, that normalizes over the feature dimensions, as opposed
+// Notice the difference between LayerNorm, that normalizes over the feature dimensions, as opposed
 // to the batch dimension.
 //
-// To ease setting its parameters, it returns a Config object for configuration. Once it is
-// set up call `Config.Done` and it will return the normalized x. Browse through Config to see the
+// To ease setting its parameters, it returns a BatchNormBuilder object for configuration. Once it is
+// set up call `BatchNormBuilder.Done` and it will return the normalized x. Browse through BatchNormBuilder to see the
 // capabilities and the defaults.
 //
 // Batch normalization behaves differently during training and inference: during training it normalizes over
@@ -66,16 +60,16 @@ const (
 // Based on paper "Batch Normalization: Accelerating Deep Network Training by Reducing
 // Internal Covariate Shift" (Sergey Ioffe, Christian Szegedy), https://arxiv.org/abs/1502.03167.
 //
-// See also UpdateAverages to update the running averages after the training of the model -- or just
+// See also UpdateBatchNormAverages to update the running averages after the training of the model -- or just
 // before evaluations. Because during training the target averages of the mean and variances are moving (as the
-// model changes), they are often biases and suboptimal, UpdateAverages fixes that and often provides some
+// model changes), they are often biased and suboptimal, UpdateBatchNormAverages fixes that and often provides some
 // significant gains.
 //
 // FutureWork:
 // 1. Support padding by not normalizing parts that weren't touched.
 // 2. Support selection of multiple features axes.
-func New(scope *model.Scope, x *Node, featureAxis int) *Config {
-	return &Config{
+func BatchNorm(scope *model.Scope, x *Node, featureAxis int) *BatchNormBuilder {
+	return &BatchNormBuilder{
 		scope:               scope,
 		x:                   x,
 		featureAxis:         featureAxis,
@@ -89,15 +83,15 @@ func New(scope *model.Scope, x *Node, featureAxis int) *Config {
 	}
 }
 
-// Momentum sets the moment of the moving averages collected for the mean and variance of the values.
-// New maintains moving averages for the mean and variance during training.
+// Momentum sets the momentum of the moving averages collected for the mean and variance of the values.
+// BatchNorm maintains moving averages for the mean and variance during training.
 // This averaged mean and variance is used during inference for normalization.
 // The default is 0.99.
 //
 // Notice Keras default is 0.99 (the one we use), but PyTorch's default of 0.9.
 //
 // This has no effect if one sets `Trainable(false)`.
-func (builder *Config) Momentum(value float64) *Config {
+func (builder *BatchNormBuilder) Momentum(value float64) *BatchNormBuilder {
 	builder.momentum = value
 	return builder
 }
@@ -106,7 +100,7 @@ func (builder *Config) Momentum(value float64) *Config {
 // It defaults to 1e-3.
 //
 // Notice Keras default is 1e-3 (the one we use), but PyTorch's default of 1e-05.
-func (builder *Config) Epsilon(value float64) *Config {
+func (builder *BatchNormBuilder) Epsilon(value float64) *BatchNormBuilder {
 	builder.epsilon = value
 	return builder
 }
@@ -115,23 +109,23 @@ func (builder *Config) Epsilon(value float64) *Config {
 // Default to true.
 //
 // This is also called the β (beta) parameter, and referred to as a "learnable offset".
-func (builder *Config) Center(value bool) *Config {
+func (builder *BatchNormBuilder) Center(value bool) *BatchNormBuilder {
 	builder.center = value
 	return builder
 }
 
 // Scale defines whether the batch normalization tries to scale the input by adding a learned scale. Default to true.
 //
-// This is also called the	γ (gamma) parameter.
-func (builder *Config) Scale(value bool) *Config {
+// This is also called the γ (gamma) parameter.
+func (builder *BatchNormBuilder) Scale(value bool) *BatchNormBuilder {
 	builder.scale = value
 	return builder
 }
 
-// CurrentScope configures New not to create a new sub-scope named BatchNormalizationScopeName for its variables.
+// CurrentScope configures BatchNorm not to create a new sub-scope named BatchNormalizationScopeName for its variables.
 // This allows more control on scope names, but it breaks things that rely on batch normalization variables to be under
-// BatchNormalizationScopeName (e.g.: ResetWeights).
-func (builder *Config) CurrentScope() *Config {
+// BatchNormalizationScopeName (e.g.: ResetBatchNormWeights).
+func (builder *BatchNormBuilder) CurrentScope() *BatchNormBuilder {
 	builder.newScope = false
 	return builder
 }
@@ -142,8 +136,8 @@ func (builder *Config) CurrentScope() *Config {
 //
 // Independent of the value set here, if the scope is not set for training (
 // see `model.Store.IsTraining()`) like during evaluation and inference,
-// the Config will generate code for inference only.
-func (builder *Config) Trainable(trainable bool) *Config {
+// the BatchNormBuilder will generate code for inference only.
+func (builder *BatchNormBuilder) Trainable(trainable bool) *BatchNormBuilder {
 	builder.trainable = trainable
 	return builder
 }
@@ -153,7 +147,7 @@ func (builder *Config) Trainable(trainable bool) *Config {
 //
 // This is useful in transfer learning when the sub-model being incorporated was trained on a different
 // distribution, and we don't want to impact that.
-func (builder *Config) FrozenAverages(frozen bool) *Config {
+func (builder *BatchNormBuilder) FrozenAverages(frozen bool) *BatchNormBuilder {
 	builder.frozenAverages = frozen
 	return builder
 }
@@ -163,13 +157,13 @@ func (builder *Config) FrozenAverages(frozen bool) *Config {
 // Only used if training is false.
 //
 // The default is true.
-func (builder *Config) UseBackendInference(value bool) *Config {
+func (builder *BatchNormBuilder) UseBackendInference(value bool) *BatchNormBuilder {
 	builder.useBackendInference = value
 	return builder
 }
 
-// Done finishes configuring the New and generates the graph computation to normalize the input.
-func (builder *Config) Done() *Node {
+// Done finishes configuring the BatchNorm and generates the graph computation to normalize the input.
+func (builder *BatchNormBuilder) Done() *Node {
 	x := builder.x
 	g := x.Graph()
 	dtype := x.DType()
@@ -275,7 +269,7 @@ func (builder *Config) Done() *Node {
 	return normalized
 }
 
-func (builder *Config) batchMeanAndVariance(x *Node) (batchMean, batchVariance *Node) {
+func (builder *BatchNormBuilder) batchMeanAndVariance(x *Node) (batchMean, batchVariance *Node) {
 	featureAxis := MustAdjustAxis(builder.featureAxis, x)
 	nonFeatureAxes := make([]int, 0, x.Rank()-1)
 	for ii := range x.Rank() {
@@ -292,7 +286,7 @@ func (builder *Config) batchMeanAndVariance(x *Node) (batchMean, batchVariance *
 }
 
 // directBatchNormGraph calculates the batch normalized x without using XLA -- so it's differentiable.
-func (builder *Config) directBatchNormGraph(x, scale, offset, mean, variance *Node) *Node {
+func (builder *BatchNormBuilder) directBatchNormGraph(x, scale, offset, mean, variance *Node) *Node {
 	featureAxis := MustAdjustAxis(builder.featureAxis, x)
 	featureDim := x.Shape().Dimensions[featureAxis]
 
@@ -314,17 +308,9 @@ func (builder *Config) directBatchNormGraph(x, scale, offset, mean, variance *No
 	return normalized
 }
 
-// batchNormUpdater implements model.PerStepUpdateHandler, which is called by optimizers at every step
-type batchNormUpdater struct {
-	builder                            *Config
-	meanAverageVar, varianceAverageVar *model.Variable
-	weightVar                          *model.Variable
-	mean, variance                     *Node
-}
-
 // updateMeanAndVariance values that will be used in inference later. It's a moving average, where weight is how many
 // examples have been seen so far -- it's incremented at every step.
-func (builder *Config) updateMeanAndVariance(
+func (builder *BatchNormBuilder) updateMeanAndVariance(
 	scope *model.Scope,
 	graph *Graph,
 	batchMean, batchVariance *Node,
@@ -354,20 +340,24 @@ func (builder *Config) updateMeanAndVariance(
 	varianceAverageVar.SetNodeValue(varianceAverage)
 }
 
-// ResetWeights reset the weights of the moving averages, forcing them to be reinitialized to 0.
+// ResetBatchNormWeights resets the weights of the moving averages, forcing them to be reinitialized to 0.
 // It searches for all variables under scope named "batch_normalization"
 //
 // This is not a graph building function, it sets the materialized values to zero.
 //
 // It is a no-op if no batch-normalization was used.
 //
-// Usually this method is not used directly, instead use UpdateAverages.
-func ResetWeights(backend compute.Backend, store *model.Store) error {
+// Usually this method is not used directly, instead use UpdateBatchNormAverages.
+func ResetBatchNormWeights(backend compute.Backend, store *model.Store) error {
 	suffix := "/" + BatchNormalizationScopeName
 	for v := range store.IterVariables() {
 		scope, name := model.SplitPath(v.Path())
 		if strings.HasSuffix(scope, suffix) && name == "avg_weight" {
 			zeros, err := tensors.FromShapeForBackend(backend, 0, v.Shape())
+			if err != nil {
+				return err
+			}
+			err = v.SetValue(zeros)
 			if err != nil {
 				return err
 			}
@@ -382,11 +372,11 @@ func ResetWeights(backend compute.Backend, store *model.Store) error {
 
 const (
 	// AveragesUpdatesTriggerParam is a boolean parameter set in case batch normalization was used.
-	// See UpdateAverages.
+	// See UpdateBatchNormAverages.
 	AveragesUpdatesTriggerParam = "batch_normalization_averages_updates_trigger"
 )
 
-// UpdateAverages resets the weights of the moving averages and recalculate them over the
+// UpdateBatchNormAverages resets the weights of the moving averages and recalculates them over the
 // given oneEpochDS dataset and the trainer.
 // It uses the scope assigned to the trainer.
 //
@@ -394,7 +384,7 @@ const (
 //
 // The oneEpochDS dataset (typically, the same as a training data evaluation dataset) should be a 1-epoch training
 // data dataset, and it can use evaluation batch sizes.
-// If oneEpochDS is nil, it disabled the updating of the averages.
+// If oneEpochDS is nil, it disables the updating of the averages.
 //
 // It returns whether batch normalization was used and averages were updated.
 //
@@ -403,14 +393,14 @@ const (
 // See discussions:
 // - https://www.mindee.com/blog/batch-normalization
 // - https://discuss.pytorch.org/t/batch-norm-instability/32159/14
-func UpdateAverages(trainer *train.Trainer, oneEpochDS train.Dataset) (bool, error) {
+func UpdateBatchNormAverages(trainer *train.Trainer, oneEpochDS train.Dataset) (bool, error) {
 	rootScope := trainer.Store().RootScope()
 	if !model.GetParamOr(rootScope, AveragesUpdatesTriggerParam, false) {
 		// No-op.
 		return false, nil
 	}
 
-	err := ResetWeights(trainer.Backend(), trainer.Store())
+	err := ResetBatchNormWeights(trainer.Backend(), trainer.Store())
 	if err != nil {
 		return true, err
 	}

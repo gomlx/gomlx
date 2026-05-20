@@ -7,17 +7,17 @@ import (
 
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/ml/layers/batchnorm"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
 const (
-	// NormalizationLayerNorm is the value for LayerNormalization.
+	// NormalizationLayerNorm is the value for norm.LayerNorm.
 	NormalizationLayerNorm = "layer"
-	// NormalizationRMSNorm is the value for RMSNorm.
+	// NormalizationRMSNorm is the value for norm.RMSNorm.
 	NormalizationRMSNorm = "rms"
-	// NormalizationBatchNorm is the value for batchnorm.New.
+	// NormalizationBatchNorm is the value for norm.BatchNorm.
 	NormalizationBatchNorm = "batch"
 	// NormalizationNone is the value for no normalization.
 	NormalizationNone = "none"
@@ -36,13 +36,13 @@ var (
 	// normalization variables across more than one application.
 	KnownNormalizers = map[string]func(scope *model.Scope, input *Node) *Node{
 		NormalizationBatchNorm: func(scope *model.Scope, input *Node) *Node {
-			return batchnorm.New(scope, input, -1).Done()
+			return norm.BatchNorm(scope, input, -1).Done()
 		},
 		NormalizationLayerNorm: func(scope *model.Scope, input *Node) *Node {
-			return LayerNormalization(scope, input, -1).Done()
+			return norm.LayerNorm(scope, input, -1).Done()
 		},
 		NormalizationRMSNorm: func(scope *model.Scope, input *Node) *Node {
-			return RMSNorm(scope, input).Done()
+			return norm.RMSNorm(scope, input).Done()
 		},
 		NormalizationNone: func(scope *model.Scope, input *Node) *Node {
 			return input
@@ -122,15 +122,15 @@ func MaskedNormalizeFromScope(scope *model.Scope, input, mask *Node) *Node {
 	case NormalizationNone, "":
 		return input
 	case NormalizationLayerNorm:
-		return LayerNormalization(scope, input, -1).Mask(mask).Done()
+		return norm.LayerNorm(scope, input, -1).Mask(mask).Done()
 	case NormalizationRMSNorm:
-		return RMSNorm(scope, input).Done()
+		return norm.RMSNorm(scope, input).Done()
 	case NormalizationBatchNorm:
 		if mask != nil {
 			Panicf("'batch' normalization set in scope parameter %q does not support usage of mask yet, please open a feature request",
 				ParamNormalization)
 		}
-		return batchnorm.New(scope, input, -1).Done()
+		return norm.BatchNorm(scope, input, -1).Done()
 	default:
 		Panicf("invalid normalization type %q given in scope parameter %q -- valid values are 'none', 'layer' or 'batch'",
 			normType, ParamNormalization)
