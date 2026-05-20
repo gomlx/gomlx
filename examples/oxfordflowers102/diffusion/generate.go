@@ -27,7 +27,7 @@ import (
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/xsync"
 	"github.com/janpfeifer/gonb/cache"
@@ -480,12 +480,12 @@ func (c *Config) GenerateFlowerIds(numImages int) *tensors.Tensor {
 
 // KidGenerator generates the [Kernel Inception Distance (KID)](https://arxiv.org/abs/1801.01401) metric.
 type KidGenerator struct {
-	config         *Config
+	config           *Config
 	scopeInceptionV3 *model.Scope
-	ds             train.Dataset
-	generator      *ImagesGenerator
-	kid            metrics.Interface
-	evalExec       *model.Exec
+	ds               train.Dataset
+	generator        *ImagesGenerator
+	kid              metric.Interface
+	evalExec         *model.Exec
 }
 
 // NewKidGenerator allows to generate the Kid metric.
@@ -495,11 +495,11 @@ func (c *Config) NewKidGenerator(evalDS train.Dataset, numDiffusionStep int) *Ki
 	i3Path := path.Join(c.DataDir, "inceptionV3")
 	check(inceptionv3.DownloadAndUnpackWeights(i3Path))
 	kg := &KidGenerator{
-		config:         c,
+		config:           c,
 		scopeInceptionV3: model.NewStore().RootScope(),
-		ds:             evalDS,
-		generator:      c.NewImagesGenerator(noise, flowerIds, numDiffusionStep),
-		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
+		ds:               evalDS,
+		generator:        c.NewImagesGenerator(noise, flowerIds, numDiffusionStep),
+		kid:              inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
 	}
 	kg.evalExec = model.MustNewExec(c.Backend, kg.scopeInceptionV3.Store(), kg.EvalStepGraph)
 	return kg

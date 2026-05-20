@@ -19,7 +19,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/loss"
-	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -94,8 +94,8 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	trainer := train.NewTrainer(
 		backend, scope.Store(), BuildTrainComputation(config), customLoss,
 		optimizer.FromScope(scope),
-		[]metrics.Interface{}, // trainMetrics
-		[]metrics.Interface{}) // evalMetrics
+		[]metric.Interface{}, // trainMetrics
+		[]metric.Interface{}) // evalMetrics
 	if config.NanLogger != nil {
 		trainer.OnExecCreation(func(exec *model.Exec, _ train.GraphType) {
 			config.NanLogger.AttachToExec(exec)

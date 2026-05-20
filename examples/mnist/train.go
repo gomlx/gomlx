@@ -38,7 +38,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/loss"
-	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/fsutil"
@@ -155,8 +155,8 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(backend, dsConfig)
 
 	// Metrics we are interested in.
-	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
+	meanAccuracyMetric := metric.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metric.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the modelType, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
@@ -165,8 +165,8 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 		modelFn,
 		lossFn,
 		optimizer.FromScope(scope),
-		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 
 	// Debugging.
 	if model.GetParamOr(scope, "nan_logger", false) {

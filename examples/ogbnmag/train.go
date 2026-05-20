@@ -20,7 +20,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/loss"
-	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
@@ -242,8 +242,8 @@ func newTrainer(backend compute.Backend, store *model.Store) *train.Trainer {
 	lossFn := loss.SparseCategoricalCrossEntropyLogits
 
 	// Metrics we are interested.
-	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
+	meanAccuracyMetric := metric.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metric.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
@@ -251,9 +251,9 @@ func newTrainer(backend compute.Backend, store *model.Store) *train.Trainer {
 	scope := store.RootScope()
 	trainer := train.NewTrainer(backend, store, MagModelGraph,
 		lossFn,
-		optimizer.FromScope(scope), // Based on `scope.GetParam("optimizer")`.
-		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+		optimizer.FromScope(scope),               // Based on `scope.GetParam("optimizer")`.
+		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 	if NanLogger != nil {
 		NanLogger.AttachToTrainer(trainer)
 	}

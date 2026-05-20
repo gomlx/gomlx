@@ -21,7 +21,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -158,23 +158,23 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	pprintLossFn := func(t *tensors.Tensor) string {
 		return fmt.Sprintf("%.3f", t.Value())
 	}
-	meanImagesLoss := metrics.NewMeanMetric(
+	meanImagesLoss := metric.NewMeanMetric(
 		"Images Loss", "img_loss", "img_loss", imgMetricFn, pprintLossFn)
-	movingImagesLoss := metrics.NewExponentialMovingAverageMetric(
+	movingImagesLoss := metric.NewExponentialMovingAverageMetric(
 		"Moving Images Loss", "~img_loss", "img_loss", imgMetricFn, pprintLossFn, 0.05)
 
-	movingNoiseLoss := metrics.NewExponentialMovingAverageMetric(
+	movingNoiseLoss := metric.NewExponentialMovingAverageMetric(
 		"Moving (faster) Noise Loss", "~fast_loss", "loss",
 		func(scope *model.Scope, labels, predictions []*Node) *Node {
 			return predictions[1]
 		}, pprintLossFn, 0.05)
 
-	movingMAE := metrics.NewExponentialMovingAverageMetric(
+	movingMAE := metric.NewExponentialMovingAverageMetric(
 		"Moving MAE Loss", "~mae", "loss",
 		func(scope *model.Scope, labels, predictions []*Node) *Node {
 			return predictions[3]
 		}, pprintLossFn, 0.05)
-	meanMAE := metrics.NewMeanMetric(
+	meanMAE := metric.NewMeanMetric(
 		"MAE Loss", "#mae", "loss",
 		func(scope *model.Scope, labels, predictions []*Node) *Node {
 			return predictions[3]
@@ -190,8 +190,8 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	trainer := train.NewTrainer(
 		backend, scope.Store(), config.BuildTrainingModelGraph(), customLoss,
 		optimizer.FromScope(scope),
-		[]metrics.Interface{movingImagesLoss, movingNoiseLoss, movingMAE}, // trainMetrics
-		[]metrics.Interface{meanImagesLoss, meanMAE})                      // evalMetrics
+		[]metric.Interface{movingImagesLoss, movingNoiseLoss, movingMAE}, // trainMetrics
+		[]metric.Interface{meanImagesLoss, meanMAE})                      // evalMetrics
 	if nanLogger != nil {
 		trainer.OnExecCreation(func(exec *model.Exec, _ train.GraphType) {
 			nanLogger.AttachToExec(exec)

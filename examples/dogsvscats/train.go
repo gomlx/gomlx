@@ -21,7 +21,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/loss"
-	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -174,8 +174,8 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(config)
 
 	// Metrics we are interested.
-	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
+	meanAccuracyMetric := metric.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metric.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Select the model type we are using:
 	modelType := model.GetParamOr(scope, "model", "")
@@ -204,8 +204,8 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 		trainer = train.NewTrainer(backend, store, modelFn,
 			loss.BinaryCrossentropyLogits,
 			theOptimizer,
-			[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-			[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+			[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+			[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 	} else {
 		// Pre-training: no loss, no metrics.
 		trainer = train.NewTrainer(backend, store, modelFn,

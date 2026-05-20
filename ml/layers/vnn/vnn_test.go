@@ -17,7 +17,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/loss"
-	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
@@ -47,9 +47,9 @@ func TestLinearLayer(t *testing.T) {
 		}
 
 		// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
-		out1 := RotateOnOrigin(linearFn(scope, input), roll, pitch, yaw)
+		out1 := RotateOnOrigin(linearFn(scope.In("linear"), input), roll, pitch, yaw)
 		require.NoError(t, out1.Shape().CheckDims(1, 1, 1, 2, 3))
-		out2 := linearFn(scope, RotateOnOrigin(input, roll, pitch, yaw))
+		out2 := linearFn(scope.Shared("linear"), RotateOnOrigin(input, roll, pitch, yaw))
 
 		require.NoError(t, out2.Shape().CheckDims(1, 1, 1, 2, 3))
 		diff := Abs(Sub(out1, out2))
@@ -84,7 +84,7 @@ func TestRelu(t *testing.T) {
 					yaw := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
 					// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
-					out1 := Relu(scope, input).
+					out1 := Relu(scope.In("relu"), input).
 						NegativeSlope(negativeSlope).
 						ShareNonLinearity(shareNonLinearity).
 						Done()
@@ -92,7 +92,7 @@ func TestRelu(t *testing.T) {
 					out1 = RotateOnOrigin(out1, roll, pitch, yaw)
 					require.True(t, out1.Shape().Equal(testShape))
 
-					out2 := Relu(scope, RotateOnOrigin(input, roll, pitch, yaw)).
+					out2 := Relu(scope.Shared("relu"), RotateOnOrigin(input, roll, pitch, yaw)).
 						NegativeSlope(negativeSlope).
 						ShareNonLinearity(shareNonLinearity).
 						Done()
@@ -168,9 +168,9 @@ func TestVNN_Equivariant(t *testing.T) {
 		}
 
 		// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
-		out1 := RotateOnOrigin(vnnFn(scope, input), roll, pitch, yaw)
+		out1 := RotateOnOrigin(vnnFn(scope.In("vnn"), input), roll, pitch, yaw)
 		require.NoError(t, out1.Shape().CheckDims(2, 3, 5, 3))
-		out2 := vnnFn(scope, RotateOnOrigin(input, roll, pitch, yaw))
+		out2 := vnnFn(scope.Shared("vnn"), RotateOnOrigin(input, roll, pitch, yaw))
 		require.NoError(t, out2.Shape().CheckDims(2, 3, 5, 3))
 		diff := Abs(Sub(out1, out2))
 		return ReduceAllMean(diff)
@@ -260,8 +260,8 @@ func TestVNNTrain(t *testing.T) {
 	trainer := train.NewTrainer(
 		backend, store, modelFn, loss.BinaryCrossentropyLogits,
 		optimizer.Adam().LearningRate(3e-5).Done(),
-		[]metrics.Interface{metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Accuracy", "~acc", 0.01)},
-		[]metrics.Interface{metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")})
+		[]metric.Interface{metric.NewMovingAverageBinaryLogitsAccuracy("Moving Accuracy", "~acc", 0.01)},
+		[]metric.Interface{metric.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")})
 
 	loop := train.NewLoop(trainer)
 	//commandline.AttachProgressBar(loop)

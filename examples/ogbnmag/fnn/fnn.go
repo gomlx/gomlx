@@ -19,7 +19,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/loss"
-	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
@@ -135,8 +135,8 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 	lossFn := loss.SparseCategoricalCrossEntropyLogits
 
 	// Metrics we are interested.
-	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
+	meanAccuracyMetric := metric.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metric.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
@@ -144,8 +144,8 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 	trainer := train.NewTrainer(backend, scope.Store(), ModelFn,
 		lossFn,
 		theOptimizer,
-		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)

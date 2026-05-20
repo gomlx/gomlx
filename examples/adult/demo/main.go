@@ -24,7 +24,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/loss"
-	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/fsutil"
@@ -262,16 +262,16 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 	}
 
 	// Metrics we are interested.
-	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy",
+	meanAccuracyMetric := metric.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metric.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy",
 		"~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(backend, store, Model, loss.BinaryCrossentropyLogits,
 		optimizer.FromScope(scope),
-		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 
 	// Use a standard training loop, with a progress bar.
 	loop := train.NewLoop(trainer)

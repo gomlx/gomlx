@@ -16,7 +16,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/loss"
-	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
@@ -95,8 +95,8 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 	}
 
 	// Metrics we are interested.
-	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
+	meanAccuracyMetric := metric.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metric.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
@@ -104,8 +104,8 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 	trainer := train.NewTrainer(Backend, store, modelFn,
 		loss.SparseCategoricalCrossEntropyLogits,
 		optimizer.FromScope(scope),
-		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)

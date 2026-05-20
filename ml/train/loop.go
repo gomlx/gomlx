@@ -16,7 +16,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
@@ -330,7 +330,7 @@ func checkDistributedYield(inputs, labels []*dtensor.Tensor) error {
 }
 
 // freeMetrics finalizes the metrics and returns an error if any of them cannot be finalized.
-func freeMetrics(metricsInterfaces []metrics.Interface, metrics []*tensors.Tensor) error {
+func freeMetrics(metricsInterfaces []metric.Interface, metrics []*tensors.Tensor) error {
 	var err error
 	for metricIdx, metric := range metrics {
 		if metric != nil {

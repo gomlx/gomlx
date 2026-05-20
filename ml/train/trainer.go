@@ -21,7 +21,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train/loss"
-	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
@@ -70,7 +70,7 @@ type Trainer struct {
 
 	// Training data
 	trainStepExecMap map[any]*model.Exec
-	trainMetrics     []metrics.Interface
+	trainMetrics     []metric.Interface
 
 	// Accumulate gradients mode:
 	accumulateGradients                bool
@@ -81,7 +81,7 @@ type Trainer struct {
 
 	// Eval data
 	evalStepExecMap map[any]*model.Exec
-	evalMetrics     []metrics.Interface
+	evalMetrics     []metric.Interface
 
 	// BatchNormAverages data
 	batchNormStepExecMap map[any]*model.Exec
@@ -159,7 +159,7 @@ const (
 //     as the first metric. It's ok to be empty (nil).
 func NewTrainer(backend compute.Backend, store *model.Store,
 	modelFn ModelFn, lossFn LossFn, theOptimizer optimizer.Interface,
-	trainMetrics, evalMetrics []metrics.Interface) *Trainer {
+	trainMetrics, evalMetrics []metric.Interface) *Trainer {
 
 	r := &Trainer{
 		backend:   backend,
@@ -188,7 +188,7 @@ func NewTrainer(backend compute.Backend, store *model.Store,
 
 	// Create a scope executor for TrainStep. Automatically include batch loss and moving average loss metrics.
 	numMetrics := len(trainMetrics) + 3
-	lossAndMetrics := make([]metrics.Interface, 0, numMetrics)
+	lossAndMetrics := make([]metric.Interface, 0, numMetrics)
 	batchLossFn := func(_ *model.Scope, labels, predictions []*graph.Node) *graph.Node {
 		// Assume lossVar has already been set.
 		g := predictions[0].Graph()
@@ -209,14 +209,14 @@ func NewTrainer(backend compute.Backend, store *model.Store,
 	}
 	lossAndMetrics = append(
 		lossAndMetrics,
-		metrics.NewBaseMetric("Batch Loss+Regularization", "loss+", metrics.LossMetricType, batchLossFn, nil),
+		metric.NewBaseMetric("Batch Loss+Regularization", "loss+", metric.LossMetricType, batchLossFn, nil),
 	)
 	lossAndMetrics = append(
 		lossAndMetrics,
-		metrics.NewExponentialMovingAverageMetric(
+		metric.NewExponentialMovingAverageMetric(
 			"Moving Average Loss+Regularization",
 			"~loss+",
-			metrics.LossMetricType,
+			metric.LossMetricType,
 			batchLossFn,
 			nil,
 			0.01,
@@ -224,7 +224,7 @@ func NewTrainer(backend compute.Backend, store *model.Store,
 	)
 	if r.lossFn != nil {
 		lossAndMetrics = append(lossAndMetrics,
-			metrics.NewExponentialMovingAverageMetric("Moving Average Loss", "~loss", metrics.LossMetricType,
+			metric.NewExponentialMovingAverageMetric("Moving Average Loss", "~loss", metric.LossMetricType,
 				lossNoRegularizationFn, nil, 0.01))
 	}
 
@@ -233,13 +233,13 @@ func NewTrainer(backend compute.Backend, store *model.Store,
 
 	// Create a scope executor for EvalStep. Automatically include the mean loss metric as the first eval metric.
 	numMetrics = len(evalMetrics) + 2
-	lossAndMetrics = make([]metrics.Interface, 0, numMetrics)
+	lossAndMetrics = make([]metric.Interface, 0, numMetrics)
 	lossAndMetrics = append(
 		lossAndMetrics,
-		metrics.NewMeanMetric("Mean Loss+Regularization", "#loss+", metrics.LossMetricType, batchLossFn, nil),
+		metric.NewMeanMetric("Mean Loss+Regularization", "#loss+", metric.LossMetricType, batchLossFn, nil),
 	)
 	if r.lossFn != nil {
-		lossAndMetrics = append(lossAndMetrics, metrics.NewMeanMetric("Mean Loss", "#loss", metrics.LossMetricType,
+		lossAndMetrics = append(lossAndMetrics, metric.NewMeanMetric("Mean Loss", "#loss", metric.LossMetricType,
 			lossNoRegularizationFn, nil))
 	}
 	lossAndMetrics = append(lossAndMetrics, evalMetrics...)
@@ -330,11 +330,11 @@ func (r *Trainer) WithMaxExecutors(maxExecutors int) *Trainer {
 
 // TrainMetrics returns the train metrics objects (not the actual values just the objects
 // that implement them).
-func (r *Trainer) TrainMetrics() []metrics.Interface { return r.trainMetrics }
+func (r *Trainer) TrainMetrics() []metric.Interface { return r.trainMetrics }
 
 // EvalMetrics returns the eval metrics objects: not the actual metric values, just the objects
 // that implement them, holds their name and a default pretty-printing function.
-func (r *Trainer) EvalMetrics() []metrics.Interface { return r.evalMetrics }
+func (r *Trainer) EvalMetrics() []metric.Interface { return r.evalMetrics }
 
 // createExecutor (train or eval) for the given spec. Returns an error if it failed for
 // any reason, including exceeding maxExecutors.
@@ -612,7 +612,7 @@ func (r *Trainer) ResetComputationGraphs() {
 
 // metricsUpdatesGraph creates the graph for a set of metrics.
 func (r *Trainer) metricsUpdatesGraph(scope *model.Scope, labels, predictions []*graph.Node,
-	metricsObjects []metrics.Interface) (metrics []*graph.Node) {
+	metricsObjects []metric.Interface) (metrics []*graph.Node) {
 	numMetrics := len(metricsObjects)
 	metrics = make([]*graph.Node, 0, numMetrics)
 	for _, m := range metricsObjects {
@@ -685,10 +685,10 @@ func (r *Trainer) DistributedEvalStep(strategy distributed.Strategy, deviceAssig
 
 // resetEvalMetrics call Metrics.Reset on all eval metrics.
 func (r *Trainer) resetEvalMetrics() error {
-	for _, metric := range r.evalMetrics {
-		err := exceptions.TryCatch[error](func() { metric.Reset(r.store.RootScope()) })
+	for _, m := range r.evalMetrics {
+		err := exceptions.TryCatch[error](func() { m.Reset(r.store.RootScope()) })
 		if err != nil {
-			return errors.WithMessagef(err, "Eval() failed to reset metric %q", metric.Name())
+			return errors.WithMessagef(err, "Eval() failed to reset metric %q", m.Name())
 		}
 	}
 	return nil
@@ -708,9 +708,9 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor, err error)
 	finalizeInputs := finalizeYieldedTensors(ds)
 
 	// Check for metrics with Go updates: these are update functions not written as a computation graph.
-	goUpdateFns := make([]metrics.UpdateGo, len(r.evalMetrics))
-	for ii, metric := range r.evalMetrics {
-		if fn, ok := metric.(metrics.UpdateGo); ok {
+	goUpdateFns := make([]metric.UpdateGo, len(r.evalMetrics))
+	for ii, m := range r.evalMetrics {
+		if fn, ok := m.(metric.UpdateGo); ok {
 			goUpdateFns[ii] = fn
 		}
 	}
@@ -785,9 +785,9 @@ func (r *Trainer) DistributedEval(ds DistributedDataset) (lossAndMetrics []*tens
 	deviceAssignment := ds.DeviceAssignment()
 
 	// Check for metrics with Go updates: these are update functions not written as a computation graph.
-	goUpdateFns := make([]metrics.UpdateGo, len(r.evalMetrics))
-	for ii, metric := range r.evalMetrics {
-		if fn, ok := metric.(metrics.UpdateGo); ok {
+	goUpdateFns := make([]metric.UpdateGo, len(r.evalMetrics))
+	for ii, m := range r.evalMetrics {
+		if fn, ok := m.(metric.UpdateGo); ok {
 			goUpdateFns[ii] = fn
 		}
 	}
@@ -850,7 +850,7 @@ func (r *Trainer) DistributedEval(ds DistributedDataset) (lossAndMetrics []*tens
 }
 
 // Metrics return list of registered eval metrics, including the loss metric that is added automatically.
-func (r *Trainer) Metrics() []metrics.Interface {
+func (r *Trainer) Metrics() []metric.Interface {
 	return r.evalMetrics
 }
 

@@ -1,7 +1,7 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 // Package metrics holds a library of metrics and defines
-package metrics
+package metric
 
 import (
 	"fmt"
@@ -228,7 +228,7 @@ func (m *MeanMetric) UpdateGraph(scope *model.Scope, labels, predictions []*Node
 	result = upPrecision(result)
 
 	// Create scope in scope for metrics state.
-	scope = scope.In(Scope).In("%s", m.ScopeName())
+	scope = scope.At(Scope).In("%s", m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
 	totalVar := scope.VariableWithValue("total", zero).SetTrainable(false)
@@ -318,7 +318,7 @@ func (m *movingAverageMetric) UpdateGraph(scope *model.Scope, labels, prediction
 	result = upPrecision(result)
 
 	// Create scope in scope for metrics state.
-	scope = scope.In(Scope).In("%s", m.ScopeName())
+	scope = scope.At(Scope).In("%s", m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
 

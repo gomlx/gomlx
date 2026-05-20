@@ -6,7 +6,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors/images"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/train/metrics"
+	"github.com/gomlx/gomlx/ml/train/metric"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -36,9 +36,9 @@ import (
 //     Passed to `PreprocessImage` function.
 //
 // Note: `images` refers to package `github.com/gomlx/gomlx/core/tensors/images`.
-func KidMetric(dataDir string, kidImageSize int, maxImageValue float64, channelsConfig images.ChannelsAxisConfig) metrics.Interface {
+func KidMetric(dataDir string, kidImageSize int, maxImageValue float64, channelsConfig images.ChannelsAxisConfig) metric.Interface {
 	builder := NewKidBuilder(dataDir, kidImageSize, maxImageValue, channelsConfig)
-	return metrics.NewMeanMetric("Kernel Inception Distance", "KID", "KID", builder.BuildGraph, nil)
+	return metric.NewMeanMetric("Kernel Inception Distance", "KID", "KID", builder.BuildGraph, nil)
 }
 
 // KidBuilder builds the graph to calculate [Kernel Inception Distance (KID)](https://arxiv.org/abs/1801.01401) between

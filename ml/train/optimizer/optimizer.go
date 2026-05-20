@@ -215,7 +215,7 @@ func LearningRateVar(scope *model.Scope, dtype dtypes.DType, initialValue float6
 
 // LearningRateVarWithValue creates (or reuses) variable for learning rate with the given value.
 func LearningRateVarWithValue(scope *model.Scope, dtype dtypes.DType, value float64) *model.Variable {
-	scope = scope.In(Scope)
+	scope = scope.At(Scope)
 	return scope.VariableWithValue(ParamLearningRate, shapes.CastAsDType(value, dtype)).SetTrainable(false)
 }
 
