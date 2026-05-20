@@ -52,7 +52,7 @@ const BuildScope = "InceptionV3"
 //     That means one can call BuildGraph more than once, and have the same
 //     model be used for more than one input -- for instance, for 2-tower models.
 //     To instantiate more than one model with different weights, just use
-//     the context in a different scope.
+//     the scope in a different scope.
 //   - Image: image tensor (`*Node`) on which to apply the model. There must be
 //     3 channels, and they must be scaled from -1.0 to 1.0 -- see PreprocessImage
 //     to scale image accordingly if needed. If using ClassificationTop(true),
@@ -348,8 +348,8 @@ func (cfg *Config) Done() (output *Node) {
 	if cfg.includeTop {
 		// Returns the logits at the top, for the 1000 classes.
 		x = ReduceMean(x, cfg.spatialAxes...) // Global mean pooling across spatial dimensions, shape=[batch_size, 2048].
-		ctxWithWeights := cfg.readPredictionsWeights(scope, g)
-		x = layers.DenseWithBias(ctxWithWeights, x, 1000)
+		scopeWithWeights := cfg.readPredictionsWeights(scope, g)
+		x = layers.DenseWithBias(scopeWithWeights, x, 1000)
 		if cfg.useAliases {
 			x = x.WithAlias("logits")
 		}
@@ -395,8 +395,8 @@ func (cfg *Config) conv2DWithBatchNorm(scope *model.Scope, x *Node, kernelFilter
 	}
 
 	// 2D Convolution:
-	ctxWithWeights := cfg.readNextConv2D(scope, g) // Create a new context scope and read weights from `.h5` file.
-	convCfg := layers.Convolution(ctxWithWeights, x).CurrentScope().ChannelsAxis(cfg.channelsAxisConfig).
+	scopeWithWeights := cfg.readNextConv2D(scope, g) // Create a new scope scope and read weights from `.h5` file.
+	convCfg := layers.Convolution(scopeWithWeights, x).CurrentScope().ChannelsAxis(cfg.channelsAxisConfig).
 		Channels(kernelFilters).UseBias(false).KernelSizePerAxis(kernelHeight, kernelWidth)
 	if len(strides) > 0 {
 		convCfg = convCfg.StridePerAxis(strides...)
@@ -409,8 +409,8 @@ func (cfg *Config) conv2DWithBatchNorm(scope *model.Scope, x *Node, kernelFilter
 	x = convCfg.Done()
 
 	// Batch Normalization:
-	ctxWithWeights = cfg.readNextBatchNormalization(scope, g) // Create a new context scope and read weights from `.h5` file.
-	x = batchnorm.New(ctxWithWeights, x, cfg.channelsAxis).CurrentScope().
+	scopeWithWeights = cfg.readNextBatchNormalization(scope, g) // Create a new scope scope and read weights from `.h5` file.
+	x = batchnorm.New(scopeWithWeights, x, cfg.channelsAxis).CurrentScope().
 		Scale(cfg.batchNormScale).Epsilon(cfg.batchNormEpsilon).Trainable(cfg.trainable).
 		UseBackendInference(false).
 		FrozenAverages(cfg.baseDir != ""). // If we are loading the weights, we don't want the averages to move.
@@ -447,49 +447,49 @@ func (cfg *Config) loadTensorToVariable(scope *model.Scope, graph *Graph, tensor
 }
 
 // readNextConv2D enters a new scope and initializes it with the pre-trained weights for the next Conv2D layer.
-func (cfg *Config) readNextConv2D(scope *model.Scope, graph *Graph) (ctxInScope *model.Scope) {
+func (cfg *Config) readNextConv2D(scope *model.Scope, graph *Graph) (scopeInScope *model.Scope) {
 	// Set scope name to something similar to the original model layer names (cosmetic only).
-	ctxInScope = scope
+	scopeInScope = scope
 	if cfg.conv2dCount == 0 {
-		ctxInScope = scope.In("conv2d")
+		scopeInScope = scope.In("conv2d")
 	} else {
-		ctxInScope = scope.In("conv2d_%d", cfg.conv2dCount)
+		scopeInScope = scope.In("conv2d_%d", cfg.conv2dCount)
 	}
 	cfg.conv2dCount += 1
 
 	// h5 names start with 1 instead of 0 (!!)
 	h5Name := fmt.Sprintf("conv2d_%d/conv2d_%d/kernel:0", cfg.conv2dCount, cfg.conv2dCount)
-	cfg.loadTensorToVariable(ctxInScope, graph, h5Name, "weights")
+	cfg.loadTensorToVariable(scopeInScope, graph, h5Name, "weights")
 
 	return
 }
 
 // readPredictionsWeights enters a new scope and initializes it with the pre-trained dense weights.
-func (cfg *Config) readPredictionsWeights(scope *model.Scope, graph *Graph) (ctxInScope *model.Scope) {
-	ctxInScope = scope.In("predictions")
-	ctxTmp := ctxInScope.At("dense") // layers.Dense will create a sub-scope, which we need to match.
-	cfg.loadTensorToVariable(ctxTmp, graph, "predictions/predictions/kernel:0", "weights")
-	cfg.loadTensorToVariable(ctxTmp, graph, "predictions/predictions/bias:0", "biases")
+func (cfg *Config) readPredictionsWeights(scope *model.Scope, graph *Graph) (scopeInScope *model.Scope) {
+	scopeInScope = scope.In("predictions")
+	scopeTmp := scopeInScope.At("dense") // layers.Dense will create a sub-scope, which we need to match.
+	cfg.loadTensorToVariable(scopeTmp, graph, "predictions/predictions/kernel:0", "weights")
+	cfg.loadTensorToVariable(scopeTmp, graph, "predictions/predictions/bias:0", "biases")
 	return
 }
 
 // readNextBatchNormalization enters a new scope and initializes it with the pre-trained weights.
-func (cfg *Config) readNextBatchNormalization(scope *model.Scope, graph *Graph) (ctxInScope *model.Scope) {
-	ctxInScope = scope
+func (cfg *Config) readNextBatchNormalization(scope *model.Scope, graph *Graph) (scopeInScope *model.Scope) {
+	scopeInScope = scope
 
 	// Set scope name to something similar to the original model layer names (cosmetic only).
 	if cfg.batchNormCount == 0 {
-		ctxInScope = scope.In("batch_normalization")
+		scopeInScope = scope.In("batch_normalization")
 	} else {
-		ctxInScope = scope.In("batch_normalization_%d", cfg.batchNormCount)
+		scopeInScope = scope.In("batch_normalization_%d", cfg.batchNormCount)
 	}
 	cfg.batchNormCount += 1
 
 	// h5 names start with 1 instead of 0 (!!)
 	h5Group := fmt.Sprintf("batch_normalization_%d/batch_normalization_%d/", cfg.conv2dCount, cfg.conv2dCount)
-	cfg.loadTensorToVariable(ctxInScope, graph, h5Group+"moving_mean:0", "mean")
-	cfg.loadTensorToVariable(ctxInScope, graph, h5Group+"moving_variance:0", "variance")
-	cfg.loadTensorToVariable(ctxInScope, graph, h5Group+"beta:0", "offset")
+	cfg.loadTensorToVariable(scopeInScope, graph, h5Group+"moving_mean:0", "mean")
+	cfg.loadTensorToVariable(scopeInScope, graph, h5Group+"moving_variance:0", "variance")
+	cfg.loadTensorToVariable(scopeInScope, graph, h5Group+"beta:0", "offset")
 
 	return
 }

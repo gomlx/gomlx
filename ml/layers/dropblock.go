@@ -33,13 +33,13 @@ var (
 // DropBlock implements a block dropout, as described in [1].
 //
 // Parameters:
-//   - ctx: the Context, and it's used to check if it is training, and the default dropout probability and block
+//   - scope: the Scope, and it's used to check if it is training, and the default dropout probability and block
 //     size as a hyperparameter.
 //     DropBlock is a no-op during inference (not training) or if no dropout probability was configured.
 //   - x: operand to be regularized with block dropout. The default is to assume x is shaped
 //     [batchSize, <...spatial axes...>, channelsAxis]. Use ChannelsAxis or FullShape to configure that.
 //
-// The dropout probability and the block sizes are read by default from the context hyperparameters
+// The dropout probability and the block sizes are read by default from the scope hyperparameters
 // (see ParamDropBlockProbability and ParamDropBlockSize). But they can be optionally configured as well.
 //
 // It returns a configuration object that can be further configured.
@@ -88,7 +88,7 @@ func (cfg *DropBlockConfig) FullShape() *DropBlockConfig {
 // It is the expectation of ratio of "pixels" (or voxels if 3d) that will be dropped out in blocks
 // from the image (if 2D).
 //
-// By default, it reads ParamDropBlockProbability hyperparameter from ctx.
+// By default, it reads ParamDropBlockProbability hyperparameter from scope.
 func (cfg *DropBlockConfig) WithDropoutProbability(prob float64) *DropBlockConfig {
 	if prob <= 0 {
 		cfg.dropoutProbability = nil
@@ -103,7 +103,7 @@ func (cfg *DropBlockConfig) WithDropoutProbability(prob float64) *DropBlockConfi
 // It is the expectation of ratio of "pixels" (or voxels if 3d) that will be dropped out in blocks
 // from the image (if 2D).
 //
-// By default, it reads ParamDropBlockProbability hyperparameter from ctx and use that as a constant.
+// By default, it reads ParamDropBlockProbability hyperparameter from scope and use that as a constant.
 func (cfg *DropBlockConfig) WithDropoutProbabilityNode(prob *Node) *DropBlockConfig {
 	if !prob.IsScalar() || prob.DType() != dtypes.Float32 {
 		exceptions.Panicf("DropBlockConfig.WithDropoutProbabilityNode requires prob to be a scalar of type dtypes.Float32, got %s",

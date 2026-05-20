@@ -29,15 +29,15 @@ type LayerNormBuilder struct {
 }
 
 var (
-	// ParamLayerNormEpsilon is the context parameter that defines the default layer normalization epsilon value.
+	// ParamLayerNormEpsilon is the scope parameter that defines the default layer normalization epsilon value.
 	// The default is 1e-3.
 	ParamLayerNormEpsilon = "layer_norm_epsilon"
 
-	// ParamLayerNormCenter is the context parameter that defines whether to center the norm by default.
+	// ParamLayerNormCenter is the scope parameter that defines whether to center the norm by default.
 	// The default is true.
 	ParamLayerNormCenter = "layer_norm_center"
 
-	// ParamLayerNormLearnedGain is the context parameter that defines whether to learn a gain for the
+	// ParamLayerNormLearnedGain is the scope parameter that defines whether to learn a gain for the
 	// layer norm, that multiplies its output.
 	// The default is true.
 	ParamLayerNormLearnedGain = "layer_norm_learned_gain"
@@ -46,12 +46,12 @@ var (
 	// Deprecated: renamed to follow original papers nomenclature.
 	ParamLayerNormLearnedScale = ParamLayerNormLearnedGain
 
-	// ParamLayerNormRescale is the context parameter that defines whether to rescale the layer
+	// ParamLayerNormRescale is the scope parameter that defines whether to rescale the layer
 	// by dividing it by the square root of the variance.
 	// The default is true.
 	ParamLayerNormRescale = "layer_norm_rescale"
 
-	// ParamLayerNormL2Regularization is the context parameter that defines the amount of L2 regularization
+	// ParamLayerNormL2Regularization is the scope parameter that defines the amount of L2 regularization
 	// to apply to the learned gain, if one is defined.
 	// The default is 0.0.
 	ParamLayerNormL2Regularization = "layer_norm_l2_regularization"

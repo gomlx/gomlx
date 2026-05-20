@@ -28,7 +28,7 @@ type ReluConfig struct {
 }
 
 // Relu perform an equivariant to rotation (SO(3)) relu. It involves learning a
-// projection (also equivariant), hence it needs the context to store the variable.
+// projection (also equivariant), hence it needs the scope to store the variable.
 //
 // The Relu forces the initializer of the variable to be random: a zero value here
 // would lead to NaN.
@@ -115,7 +115,7 @@ func (c *ReluConfig) Done() *Node {
 	return operand
 }
 
-// ReluFromContext applies Relu with the default parameters used from the model.
-func ReluFromContext(scope *model.Scope, operand *Node) *Node {
+// ReluFromScope applies Relu with the default parameters used from the model.
+func ReluFromScope(scope *model.Scope, operand *Node) *Node {
 	return Relu(scope, operand).Done()
 }

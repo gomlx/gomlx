@@ -5,7 +5,7 @@ package model
 // Aliases to GoMLX basic types.
 //
 // Usually one would simply import the full `graph` with a period (".") so
-// the ops don't need a package qualifier. But we can't do this in `context`
+// the ops don't need a package qualifier. But we can't do this in `scope`
 // package because we have conflicting symbols (`Exec`, `MustNewExec`).
 
 import (

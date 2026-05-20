@@ -38,23 +38,23 @@ const (
 	kvCacheValueName = "value"
 )
 
-// KVCacheReset clears all KV caches under the given context scope.
+// KVCacheReset clears all KV caches under the given scope scope.
 // Call this outside of graph execution before starting a new generation.
 // This resets the key cache, value cache, and position for all attention layers
 // under the provided model.
 //
 // Parameters:
 //   - scope: Scope under which to find and reset KV cache variables.
-//     Pass the root context to reset all caches in the model, or a
-//     layer-specific context to reset only that layer's cache.
+//     Pass the root scope to reset all caches in the model, or a
+//     layer-specific scope to reset only that layer's cache.
 //
 // Example:
 //
 //	// Reset all KV caches in the model before generating a new response:
-//	attention.KVCacheReset(ctx)
+//	attention.KVCacheReset(scope)
 //
 //	// Or reset only a specific layer's cache:
-//	attention.KVCacheReset(layerCtx)
+//	attention.KVCacheReset(layerScope)
 func KVCacheReset(scope *model.Scope) {
 	keySuffix := fmt.Sprintf("%s%s%s%s", model.ScopeSeparator, KVCacheScopeName, model.ScopeSeparator, kvCacheKeyName)
 	valueSuffix := fmt.Sprintf("%s%s%s%s", model.ScopeSeparator, KVCacheScopeName, model.ScopeSeparator, kvCacheValueName)
@@ -74,7 +74,7 @@ func KVCacheReset(scope *model.Scope) {
 // This is a low-level function; most users should use WithKVCache on the attention builder.
 //
 // Parameters:
-//   - ctx: Context for storing/retrieving cache variables
+//   - scope: Scope for storing/retrieving cache variables
 //   - cacheShape: Shape [batchSize, numHeads, maxSeqLen, headDim]
 //
 // Returns:
@@ -97,7 +97,7 @@ func KVCacheGetVars(scope *model.Scope, cacheShape shapes.Shape) (keyVar, valueV
 // This is a low-level function; most users should use WithKVCache on the attention builder.
 //
 // Parameters:
-//   - ctx: Context for storing/retrieving cache variables
+//   - scope: Scope for storing/retrieving cache variables
 //   - g: Graph for building the computation
 //   - cacheShape: Shape [batchSize, numHeads, maxSeqLen, headDim]
 //   - startPosition: Scalar Node (int32) indicating the absolute position in the sequence
@@ -107,8 +107,8 @@ func KVCacheGetVars(scope *model.Scope, cacheShape shapes.Shape) (keyVar, valueV
 // Example:
 //
 //	// During generation, update each layer's cache:
-//	for _, layerCtx := range layerContexts {
-//	    KVCacheUpdate(layerCtx, g, cacheShape, position, newKeys, newValues)
+//	for _, layerScope := range layerScopes {
+//	    KVCacheUpdate(layerScope, g, cacheShape, position, newKeys, newValues)
 //	}
 //	// Then increment position for next iteration (managed by caller)
 func KVCacheUpdate(scope *model.Scope, g *Graph, cacheShape shapes.Shape, startPosition *Node, newKeysSlice, newValuesSlice *Node) {

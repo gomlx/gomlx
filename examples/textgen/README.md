@@ -19,7 +19,7 @@ go run main.go -set="train_steps=1000"
 Try different sampling strategies:
 
 ```bash
-# For multiple context parameters, enclose them in quotes and separate with semicolons:
+# For multiple scope parameters, enclose them in quotes and separate with semicolons:
 go run main.go -set="decode_strategy=temperature;decode_temperature=1.5"
 ```
 
@@ -28,10 +28,10 @@ go run main.go -set="decode_strategy=temperature;decode_temperature=1.5"
 | Flag | Type | Description |
 |---|---|---|
 | `-prompt` | `string` | Generation prompt (default "The quick") |
-| `-set` | `string` | Set context parameters defining the model |
+| `-set` | `string` | Set scope parameters defining the model |
 
 > **Note**
-> For the full list of available context parameters (passed via `-set`), please run:
+> For the full list of available scope parameters (passed via `-set`), please run:
 > ```bash
 > go run . -h
 > ```

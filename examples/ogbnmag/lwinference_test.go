@@ -21,7 +21,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
-	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/schollz/progressbar/v3"
@@ -67,7 +67,7 @@ func findSmallestDegreeSubgraph(t *testing.T) int32 {
 	return minSeedId
 }
 
-func configureLayerWiseTestContext(scope *model.Scope) {
+func configureLayerWiseTestScope(scope *model.Scope) {
 	// Standard MAG parameters.
 	scope.SetParams(map[string]any{
 		"checkpoint":      "",
@@ -95,7 +95,7 @@ func configureLayerWiseTestContext(scope *model.Scope) {
 		gnn.ParamUpdateNumHiddenLayers: 0,
 		gnn.ParamMessageDim:            32, // 128 or 256 will work better, but takes way more time
 		gnn.ParamStateDim:              32, // 128 or 256 will work better, but takes way more time
-		gnn.ParamUseRootAsContext:      false,
+		gnn.ParamUseRootAsScope:      false,
 
 		ParamEmbedDropoutRate:     0.0,
 		ParamSplitEmbedTablesSize: 1,
@@ -138,12 +138,12 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 	require.NoError(t, err, "Dataset.Yield")
 
 	backend := testutil.BuildTestBackend()
-	for ctxSourceIdx := range 2 {
+	for scopeSourceIdx := range 2 {
 		// Create model.
 		scope := model.NewStore().RootScope()
-		if ctxSourceIdx == 0 {
-			fmt.Printf("\nRandomly initialized context:\n")
-			configureLayerWiseTestContext(scope)
+		if scopeSourceIdx == 0 {
+			fmt.Printf("\nRandomly initialized scope:\n")
+			configureLayerWiseTestScope(scope)
 			UploadOgbnMagVariables(backend, scope.Store())
 
 		} else {
@@ -152,7 +152,7 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 			require.True(t, ok, "Failed to get caller information to find out test source directory.")
 			baseDir := filepath.Dir(fileName)
 			checkpointHandler, err := checkpoint.Build(scope.Store()).DirFromBase("test_checkpoint", baseDir).Done()
-			fmt.Printf("\nLoaded trained context: %s\n", checkpointHandler.Dir())
+			fmt.Printf("\nLoaded trained scope: %s\n", checkpointHandler.Dir())
 			require.NoError(t, err, "Checkpoint loading.")
 			UploadOgbnMagVariables(backend, scope.Store())
 		}
@@ -204,7 +204,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	ds = strategy.NewDataset("lwinference_test")
 	ds = mldata.Map(ds, ExtractLabelsFromInput)
 
-	// Create context and load from pre-trained checkpointHandler.
+	// Create scope and load from pre-trained checkpointHandler.
 	backend := testutil.BuildTestBackend()
 	scope := model.NewStore().RootScope()
 	_, fileName, _, ok := runtime.Caller(0)
@@ -212,7 +212,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	baseDir := filepath.Dir(fileName)
 	checkpointHandler, err := checkpoint.Build(scope.Store()).DirFromBase("test_checkpoint", baseDir).Done()
 	require.NoError(t, err, "Checkpoint loading.")
-	fmt.Printf("\nLoaded trained context: %s\n", checkpointHandler.Dir())
+	fmt.Printf("\nLoaded trained scope: %s\n", checkpointHandler.Dir())
 	fmt.Printf("\t%s=%q\n", ParamDType, model.GetParamOr(scope, ParamDType, ""))
 	UploadOgbnMagVariables(backend, scope.Store())
 

@@ -22,7 +22,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
@@ -53,11 +53,11 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 	if checkpointPath == "" {
 		return nil, noise, flowerIDs
 	}
-	numCheckpointsToKeep := model.GetParamOr(c.Context, "num_checkpoints", 5)
+	numCheckpointsToKeep := model.GetParamOr(c.Scope, "num_checkpoints", 5)
 	excludeParams := make([]string, 0, len(c.ParamsSet)+len(ParamsExcludedFromLoading))
 	excludeParams = append(excludeParams, c.ParamsSet...)
 	excludeParams = append(excludeParams, ParamsExcludedFromLoading...)
-	checkpointHandler = check1(checkpoint.Build(c.Context.Store()).
+	checkpointHandler = check1(checkpoint.Build(c.Scope.Store()).
 		DirFromBase(checkpointPath, c.DataDir).
 		Keep(numCheckpointsToKeep).
 		ExcludeParams(excludeParams...).
@@ -67,8 +67,8 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 
 	// In case the loaded checkpoint has different values, we need to update the config accordingly.
 	c.DType = check1(dtypes.DTypeString(
-		model.GetParamOr(c.Context, "dtype", "float32")))
-	c.ImageSize = model.GetParamOr(c.Context, "image_size", 64)
+		model.GetParamOr(c.Scope, "dtype", "float32")))
+	c.ImageSize = model.GetParamOr(c.Scope, "image_size", 64)
 
 	// Load/generate sampled noise/flowerIDs.
 	noisePath := path.Join(checkpointHandler.Dir(), NoiseSamplesFile)
@@ -86,7 +86,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 	}
 
 	// Create new noise and flower ids -- and save it for future training.
-	numSamples := model.GetParamOr(c.Context, "samples_during_training", 64)
+	numSamples := model.GetParamOr(c.Scope, "samples_during_training", 64)
 	noise = c.GenerateNoise(numSamples)
 	flowerIDs = c.GenerateFlowerIds(numSamples)
 	check(noise.Save(noisePath))
@@ -95,7 +95,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 }
 
 // TrainWithStore with hyperparameters given in Store.
-// paramsSet enumerate the context parameters that were set and should override values loaded from a checkpointHandler.
+// paramsSet enumerate the scope parameters that were set and should override values loaded from a checkpointHandler.
 func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
 	scope := store.RootScope()
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.

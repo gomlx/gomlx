@@ -100,12 +100,12 @@ var (
 
 )
 
-// NewPreprocessingConfigurationFromContext create a preprocessing configuration based on hyperparameters
+// NewPreprocessingConfigurationFromScope create a preprocessing configuration based on hyperparameters
 // set in the model.
 //
 // Notice some configuration parameters depends on the model type ("model" hyperparameter): "inception" has a
 // specific size, "byol" model requires image pairs.
-func NewPreprocessingConfigurationFromContext(scope *model.Scope, dataDir string) *PreprocessingConfiguration {
+func NewPreprocessingConfigurationFromScope(scope *model.Scope, dataDir string) *PreprocessingConfiguration {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	modelType := model.GetParamOr(scope, "model", "")
 	config := &PreprocessingConfiguration{}

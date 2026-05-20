@@ -155,7 +155,7 @@ func (v *Variable) AssertValid() {
 
 // Reset sets the variable value to nil while preserving the shape.
 //
-// If you intend to reuse the variable, remember to mark the context as needing initialization.
+// If you intend to reuse the variable, remember to mark the scope as needing initialization.
 //
 // This will force to be variable to be reinitialized the next time a graph using the variable is executed.
 func (v *Variable) Reset() error {
@@ -400,7 +400,7 @@ func (v *Variable) SetDistributedValue(distValue *dtensor.Tensor) error {
 		v.shape = distValue.Shape()
 		v.shardingSpec = distValue.ShardingSpec()
 	} else {
-		// If setting to nil, marks the context as needing initialization.
+		// If setting to nil, marks the scope as needing initialization.
 		v.store.needsInitialization = true
 	}
 	return nil

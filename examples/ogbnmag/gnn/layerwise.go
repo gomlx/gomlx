@@ -84,22 +84,22 @@ func (lw *LayerWiseConfig) NodePrediction(scope *model.Scope, graphStates map[st
 	for round := range lw.numGraphUpdates {
 		visited := make(map[string]bool)
 		for _, rule := range lw.strategy.Seeds {
-			lw.recursivelyApplyGraphConvolution(ctxForGraphUpdateRound(scope, round), rule, graphStates, edges, visited)
+			lw.recursivelyApplyGraphConvolution(scopeForGraphUpdateRound(scope, round), rule, graphStates, edges, visited)
 		}
 	}
-	ctxReadout := scope.In("readout")
+	scopeReadout := scope.In("readout")
 	visited := make(map[string]bool)
 	for _, rule := range lw.strategy.Seeds {
 		seedState := graphStates[rule.Name]
 		kernelScopeName := fmt.Sprintf("%s", rule.ConvKernelScopeName)
-		var ruleCtx *model.Scope
+		var ruleScope *model.Scope
 		if visited[kernelScopeName] {
-			ruleCtx = ctxReadout.Shared("%s", kernelScopeName)
+			ruleScope = scopeReadout.Shared("%s", kernelScopeName)
 		} else {
 			visited[kernelScopeName] = true
-			ruleCtx = ctxReadout.In("%s", kernelScopeName)
+			ruleScope = scopeReadout.In("%s", kernelScopeName)
 		}
-		seedState = updateState(ruleCtx, seedState, seedState, nil)
+		seedState = updateState(ruleScope, seedState, seedState, nil)
 		graphStates[rule.Name] = seedState
 	}
 }
@@ -140,18 +140,18 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 		}
 		dependentState := graphStates[dependent.Name]
 		dependentConvKernelScopeName := fmt.Sprintf("%s", dependent.ConvKernelScopeName)
-		var convolveCtx *model.Scope
+		var convolveScope *model.Scope
 		if visited[dependentConvKernelScopeName] {
-			convolveCtx = scope.Shared("%s", dependentConvKernelScopeName).In("conv")
+			convolveScope = scope.Shared("%s", dependentConvKernelScopeName).In("conv")
 		} else {
 			visited[dependentConvKernelScopeName] = true
-			convolveCtx = scope.In("%s", dependentConvKernelScopeName).In("conv")
+			convolveScope = scope.In("%s", dependentConvKernelScopeName).In("conv")
 		}
 		if dependentState != nil {
 			// Notice that we are sending messages on the reverse order of the sampling.
 			// E.g.: If paper->"HasTopic"->topic, the sampling direction is "paper is source, topic is target".
 			// When evaluating the GNN we want the message to go from topic (source) to paper (target).
-			update := lw.convolveEdgeSet(convolveCtx, dependent.Name, dependentState, dependentEdges.TargetIndices, dependentEdges.SourceIndices, int(rule.NumNodes))
+			update := lw.convolveEdgeSet(convolveScope, dependent.Name, dependentState, dependentEdges.TargetIndices, dependentEdges.SourceIndices, int(rule.NumNodes))
 			updateInputs = append(updateInputs, update)
 		}
 		if !lw.dependentsUpdateFirst {
@@ -161,14 +161,14 @@ func (lw *LayerWiseConfig) recursivelyApplyGraphConvolution(
 
 	// Update state of current rule: only update state if there was any new incoming input.
 	ruleUpdateKernelScopeName := fmt.Sprintf("%s", rule.UpdateKernelScopeName)
-	var updateCtx *model.Scope
+	var updateScope *model.Scope
 	if visited[ruleUpdateKernelScopeName] {
-		updateCtx = scope.Shared("%s", ruleUpdateKernelScopeName).In("update")
+		updateScope = scope.Shared("%s", ruleUpdateKernelScopeName).In("update")
 	} else {
 		visited[ruleUpdateKernelScopeName] = true
-		updateCtx = scope.In("%s", ruleUpdateKernelScopeName).In("update")
+		updateScope = scope.In("%s", ruleUpdateKernelScopeName).In("update")
 	}
-	state = updateState(updateCtx, state, Concatenate(updateInputs, -1), nil)
+	state = updateState(updateScope, state, Concatenate(updateInputs, -1), nil)
 	graphStates[rule.Name] = state
 }
 

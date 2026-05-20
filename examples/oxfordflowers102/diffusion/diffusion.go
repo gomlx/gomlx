@@ -86,17 +86,17 @@ func NormalizeLayer(scope *model.Scope, x *Node) *Node {
 	return x
 }
 
-// concatContextFeatures to x, by broadcasting contextFeature to x spatial dimensions.
-func concatContextFeatures(x, contextFeatures *Node) *Node {
-	if contextFeatures == nil {
+// concatScopeFeatures to x, by broadcasting scopeFeature to x spatial dimensions.
+func concatScopeFeatures(x, scopeFeatures *Node) *Node {
+	if scopeFeatures == nil {
 		return x
 	}
-	broadcastDims := contextFeatures.Shape().Clone().Dimensions
+	broadcastDims := scopeFeatures.Shape().Clone().Dimensions
 	for _, axis := range timages.GetSpatialAxes(x, timages.ChannelsLast) {
 		broadcastDims[axis] = x.Shape().Dimensions[axis]
 	}
-	contextFeatures = BroadcastToDims(contextFeatures, broadcastDims...)
-	return Concatenate([]*Node{x, contextFeatures}, -1)
+	scopeFeatures = BroadcastToDims(scopeFeatures, broadcastDims...)
+	return Concatenate([]*Node{x, scopeFeatures}, -1)
 }
 
 // ResidualBlock on the input with `outputChannels` (axis 3) in the output.
@@ -107,35 +107,35 @@ func ResidualBlock(scope *model.Scope, nanLogger *nanlogger.NanLogger, x *Node, 
 	inputChannels := x.Shape().Dimensions[3]
 	residual := x
 	layerNum := 0
-	nextCtx := func(name string) (scopedCtx *model.Scope) {
-		scopedCtx = scope.In("%03d-%s", layerNum, name)
+	nextScope := func(name string) (newScope *model.Scope) {
+		newScope = scope.In("%03d-%s", layerNum, name)
 		layerNum++
 		return
 	}
 
 	if inputChannels != outputChannels {
-		residual = layers.Dense(nextCtx("residual_projection"), x, true, outputChannels)
-		//residual = NormalizeLayer(nextCtx("residual_normalization"), residual)
+		residual = layers.Dense(nextScope("residual_projection"), x, true, outputChannels)
+		//residual = NormalizeLayer(nextScope("residual_normalization"), residual)
 	}
 	nanLogger.TraceFirstNaN(residual, "residual")
 
-	x = NormalizeLayer(nextCtx("norm"), x)
-	nanLogger.TraceFirstNaN(x, "x = NormalizeLayer(nextCtx(\"norm\"), x)")
+	x = NormalizeLayer(nextScope("norm"), x)
+	nanLogger.TraceFirstNaN(x, "x = NormalizeLayer(nextScope(\"norm\"), x)")
 
 	version := model.GetParamOr(scope, "diffusion_residual_version", 1)
 	switch version {
 	case 1: // Version 1: the original.
-		x = layers.Convolution(nextCtx("conv"), x).Channels(outputChannels).KernelSize(3).PadSame().Done()
+		x = layers.Convolution(nextScope("conv"), x).Channels(outputChannels).KernelSize(3).PadSame().Done()
 		x = layers.DropBlock(scope, x).ChannelsAxis(timages.ChannelsLast).Done()
-		x = activations.ApplyFromContext(scope, x)
-		x = layers.Convolution(nextCtx("conv"), x).Channels(outputChannels).KernelSize(3).PadSame().Done()
+		x = activations.ApplyFromScope(scope, x)
+		x = layers.Convolution(nextScope("conv"), x).Channels(outputChannels).KernelSize(3).PadSame().Done()
 		x = layers.DropBlock(scope, x).ChannelsAxis(timages.ChannelsLast).Done()
 		nanLogger.TraceFirstNaN(x, "x (Version 1)")
 
 	case 2: // Version 2: slimmer.
-		residual = activations.ApplyFromContext(scope, residual)
-		convCtx := nextCtx("conv").WithInitializer(initializer.Zero)
-		x = layers.Convolution(convCtx, x).Channels(outputChannels).KernelSize(3).PadSame().Done()
+		residual = activations.ApplyFromScope(scope, residual)
+		convScope := nextScope("conv").WithInitializer(initializer.Zero)
+		x = layers.Convolution(convScope, x).Channels(outputChannels).KernelSize(3).PadSame().Done()
 		x = layers.DropBlock(scope, x).ChannelsAxis(timages.ChannelsLast).Done()
 		nanLogger.TraceFirstNaN(x, "x (Version 2)")
 
@@ -143,8 +143,8 @@ func ResidualBlock(scope *model.Scope, nanLogger *nanlogger.NanLogger, x *Node, 
 		exceptions.Panicf("ResidualBlock(): invalid \"diffusion_residual_version\" %d: valid values are 1 or 2", version)
 	}
 
-	x = layers.DropPathFromContext(scope, x)
-	nanLogger.TraceFirstNaN(x, "x = layers.DropPathFromContext(scope, x)")
+	x = layers.DropPathFromScope(scope, x)
+	nanLogger.TraceFirstNaN(x, "x = layers.DropPathFromScope(scope, x)")
 	x = Add(x, residual)
 	nanLogger.TraceFirstNaN(x, "x = Add(x, residual)")
 	return x
@@ -200,12 +200,12 @@ func UpBlock(scope *model.Scope, nanLogger *nanlogger.NanLogger, x *Node, skips 
 	x = UpSampleImages(x)
 	nanLogger.TraceFirstNaN(x, "UpSampleImage")
 	for ii := range numBlocks {
-		scopedCtx := scope.In("%03d-residual", ii)
-		nanLogger.PushScope(scopedCtx.Scope())
+		blockScope := scope.In("%03d-residual", ii)
+		nanLogger.PushScope(blockScope.Scope())
 		var skip *Node
 		skip, skips = xslices.Pop(skips)
 		x = Concatenate([]*Node{x, skip}, -1)
-		x = ResidualBlock(scopedCtx, nanLogger, x, outputChannels)
+		x = ResidualBlock(blockScope, nanLogger, x, outputChannels)
 		nanLogger.TraceFirstNaN(x)
 		nanLogger.PopScope()
 	}
@@ -240,10 +240,10 @@ func UNetModelGraph(scope *model.Scope, nanLogger *nanlogger.NanLogger, noisyIma
 	dtype := noisyImages.DType()
 	scope = scope.In(UNetModelScope).WithInitializer(initializer.XavierNormalFn(scope))
 
-	// nextCtx return a new context prefixed with a counter, to give a nice ordering to the variables.
+	// nextScope return a new scope prefixed with a counter, to give a nice ordering to the variables.
 	layerNum := 0
-	nextCtx := func(format string, args ...any) (scopedCtx *model.Scope) {
-		scopedCtx = scope.In("%03d-"+format, append([]any{layerNum}, args...)...)
+	nextScope := func(format string, args ...any) (newScope *model.Scope) {
+		newScope = scope.In("%03d-"+format, append([]any{layerNum}, args...)...)
 		layerNum++
 		return
 	}
@@ -268,7 +268,7 @@ func UNetModelGraph(scope *model.Scope, nanLogger *nanlogger.NanLogger, noisyIma
 	// Get variance sinusoidal representation, always included, and broadcast them to the spatial dimensions.
 	sinEmbed := SinusoidalEmbedding(scope, noiseVariances)
 	nanLogger.TraceFirstNaN(sinEmbed)
-	contextFeatures := sinEmbed
+	scopeFeatures := sinEmbed
 	nanLogger.TraceFirstNaN(sinEmbed, "UNetModelGraph:sinEmbed")
 
 	// Get flower embeddings.
@@ -276,26 +276,26 @@ func UNetModelGraph(scope *model.Scope, nanLogger *nanlogger.NanLogger, noisyIma
 	flowerEmbedSize := model.GetParamOr(scope, "flower_type_embed_size", 16)
 	if flowerEmbedSize > 0 {
 		flowerTypeEmbed := layers.Embedding(
-			nextCtx("FlowerEmbeddings").WithInitializer(initializer.RandomNormalFn(scope, 1.0/float64(flowerEmbedSize))),
+			nextScope("FlowerEmbeddings").WithInitializer(initializer.RandomNormalFn(scope, 1.0/float64(flowerEmbedSize))),
 			flowerIds, dtype, flowers.NumLabels, flowerEmbedSize, false)
 		nanLogger.TraceFirstNaN(flowerTypeEmbed, "UNetModelGraph:flowerTypeEmbed")
-		contextFeatures = Concatenate([]*Node{contextFeatures, flowerTypeEmbed}, -1)
+		scopeFeatures = Concatenate([]*Node{scopeFeatures, flowerTypeEmbed}, -1)
 	}
 
 	// Adjust imageChannels to initial num channels.
 	x := noisyImages
-	x = layers.Dense(nextCtx("StartingChannelsProjection"), x, true, numChannelsList[0])
+	x = layers.Dense(nextScope("StartingChannelsProjection"), x, true, numChannelsList[0])
 	nanLogger.TraceFirstNaN(x, "UNetModelGraph:x")
 
 	// Downward: keep pooling image to a smaller size.
 	// Keep the `skips` features as we move "downward," so they can be "skip" connected later as we move upward.
 	skips := make([]*Node, 0, numBlocks*len(numChannelsList))
 	for ii, numChannels := range numChannelsList {
-		blockCtx := nextCtx("DownBlock_%d", ii)
-		nanLogger.PushScope(blockCtx.Scope())
-		// Apply context features: noise rate as a sinusoidal embedding and flower types embeddings.
-		x = concatContextFeatures(x, contextFeatures)
-		x, skips = DownBlock(blockCtx, nanLogger, x, skips, numBlocks, numChannels)
+		blockScope := nextScope("DownBlock_%d", ii)
+		nanLogger.PushScope(blockScope.Scope())
+		// Apply scope features: noise rate as a sinusoidal embedding and flower types embeddings.
+		x = concatScopeFeatures(x, scopeFeatures)
+		x, skips = DownBlock(blockScope, nanLogger, x, skips, numBlocks, numChannels)
 		nanLogger.TraceFirstNaN(x, "UNetModelGraph:x")
 		nanLogger.PopScope()
 	}
@@ -304,18 +304,18 @@ func UNetModelGraph(scope *model.Scope, nanLogger *nanlogger.NanLogger, noisyIma
 	//fmt.Printf("Inner shape: %s\n", x.Shape())
 	numAttentionLayers := model.GetParamOr(scope, "unet_attn_layers", 0)
 	if numAttentionLayers > 0 {
-		blockCtx := nextCtx("Attention")
-		nanLogger.PushScope(blockCtx.Scope())
-		x = TransformerBlock(blockCtx, nanLogger, x)
+		blockScope := nextScope("Attention")
+		nanLogger.PushScope(blockScope.Scope())
+		x = TransformerBlock(blockScope, nanLogger, x)
 		nanLogger.PopScope()
 
 	} else {
 		// Normal residual block for inner image:
 		lastNumChannels := xslices.Last(numChannelsList)
 		for ii := range numBlocks {
-			blockCtx := nextCtx("IntermediaryBlock-%02d", ii)
-			nanLogger.PushScope(blockCtx.Scope())
-			x = ResidualBlock(blockCtx, nanLogger, x, lastNumChannels)
+			blockScope := nextScope("IntermediaryBlock-%02d", ii)
+			nanLogger.PushScope(blockScope.Scope())
+			x = ResidualBlock(blockScope, nanLogger, x, lastNumChannels)
 			nanLogger.TraceFirstNaN(x, "x")
 			nanLogger.PopScope()
 		}
@@ -323,10 +323,10 @@ func UNetModelGraph(scope *model.Scope, nanLogger *nanlogger.NanLogger, noisyIma
 
 	// Upward: up-sample image back to original size, one block at a time.
 	for ii := range numChannelsList {
-		blockCtx := nextCtx("UpBlock_%d", ii)
-		nanLogger.PushScope(blockCtx.Scope())
+		blockScope := nextScope("UpBlock_%d", ii)
+		nanLogger.PushScope(blockScope.Scope())
 		numChannels := numChannelsList[len(numChannelsList)-(ii+1)]
-		x, skips = UpBlock(blockCtx, nanLogger, x, skips, numBlocks, numChannels)
+		x, skips = UpBlock(blockScope, nanLogger, x, skips, numBlocks, numChannels)
 		nanLogger.TraceFirstNaN(x, "UNetModelGraph:x")
 		nanLogger.PopScope()
 	}
@@ -335,7 +335,7 @@ func UNetModelGraph(scope *model.Scope, nanLogger *nanlogger.NanLogger, noisyIma
 	}
 
 	// Output initialized to 0, which is the mean of the target.
-	x = layers.DenseWithBias(nextCtx("Readout").WithInitializer(initializer.Zero), x, imageChannels)
+	x = layers.DenseWithBias(nextScope("Readout").WithInitializer(initializer.Zero), x, imageChannels)
 	nanLogger.TraceFirstNaN(x, "UNetModelGraph:x")
 
 	return x
@@ -376,14 +376,14 @@ func DiffusionSchedule(scope *model.Scope, times *Node, clipStart bool) (signalR
 func Denoise(scope *model.Scope, noisyImages, signalRatios, noiseRatios, flowerIds *Node) (
 	predictedImages, predictedNoises *Node) {
 	g := noisyImages.Graph()
-	var modelCtx *model.Scope
+	var modelScope *model.Scope
 
 	useEMA := model.GetParamOr(scope, "use_ema", false)
 	if useEMA && !scope.IsTraining(g) {
 		// Use exponential moving average (EMA) for inference.
-		modelCtx = scope.In("ema")
+		modelScope = scope.In("ema")
 	} else {
-		modelCtx = scope
+		modelScope = scope
 	}
 
 	// Noise variance: since the noise is expected to have variance 1, the adjusted
@@ -392,7 +392,7 @@ func Denoise(scope *model.Scope, noisyImages, signalRatios, noiseRatios, flowerI
 	noiseVariances := Square(noiseRatios)
 
 	// It's easy to model the noise than the image:
-	predictedNoises = UNetModelGraph(modelCtx, nil, noisyImages, noiseVariances, flowerIds)
+	predictedNoises = UNetModelGraph(modelScope, nil, noisyImages, noiseVariances, flowerIds)
 	predictedImages = Sub(noisyImages, Mul(predictedNoises, noiseRatios))
 	predictedImages = Div(predictedImages, signalRatios)
 
@@ -463,7 +463,7 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 			lossName = model.GetParamOr(scope, "diffusion_loss", "mse")
 		}
 		scope.SetParam(losses.ParamLoss, lossName) // Needed for old models that used "diffusion_loss".
-		lossFn := check1(losses.LossFromContext(scope))
+		lossFn := check1(losses.LossFromScope(scope))
 		noisesLoss := lossFn([]*Node{noises}, []*Node{predictedNoises})
 		if !noisesLoss.IsScalar() {
 			noisesLoss = ReduceAllMean(noisesLoss)
@@ -510,24 +510,24 @@ func TransformerBlock(scope *model.Scope, nanLogger *nanlogger.NanLogger, x *Nod
 	// Add the requested number of attention layers.
 	for ii := range numLayers {
 		// Each layer in its own scope.
-		scopedCtx := scope.In("AttLayer_%d", ii)
+		layerScope := scope.In("AttLayer_%d", ii)
 		residual := embed
 		embed = Concatenate([]*Node{embed, posEmbed}, -1)
-		embed = attention.MultiHeadAttention(scopedCtx, embed, embed, embed, numHeads, keyQueryDim).
+		embed = attention.MultiHeadAttention(layerScope, embed, embed, embed, numHeads, keyQueryDim).
 			WithOutputDim(embedDim).
 			WithValueHeadDim(embedDim).Done()
 		nanLogger.TraceFirstNaN(embed)
-		embed = layers.DropoutFromContext(scopedCtx, embed)
-		embed = NormalizeLayer(scopedCtx.In("normalization_1"), embed)
+		embed = layers.DropoutFromScope(layerScope, embed)
+		embed = NormalizeLayer(layerScope.In("normalization_1"), embed)
 		attentionOutput := embed
 
 		// Transformers recipe: 2 dense layers after attention.
-		embed = layers.Dense(scopedCtx.In("ffn_1"), embed, true, embedDim)
-		embed = activations.ApplyFromContext(scopedCtx, embed)
-		embed = layers.Dense(scopedCtx.In("ffn_2"), embed, true, embedDim)
-		embed = layers.DropoutFromContext(scopedCtx, embed)
+		embed = layers.Dense(layerScope.In("ffn_1"), embed, true, embedDim)
+		embed = activations.ApplyFromScope(layerScope, embed)
+		embed = layers.Dense(layerScope.In("ffn_2"), embed, true, embedDim)
+		embed = layers.DropoutFromScope(layerScope, embed)
 		embed = Add(embed, attentionOutput)
-		embed = NormalizeLayer(scopedCtx.In("normalization_2"), embed)
+		embed = NormalizeLayer(layerScope.In("normalization_2"), embed)
 
 		// Residual connection: not part of the usual transformer layer ...
 		embed = Add(residual, embed)

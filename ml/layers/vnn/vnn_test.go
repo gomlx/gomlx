@@ -281,5 +281,5 @@ func TestVNNTrain(t *testing.T) {
 	sample := model.MustExecOnce(backend, store, func(scope *model.Scope, g *Graph) *Node {
 		return scope.RandomUniform(g, shapes.Make(dtypes.Float64))
 	})
-	fmt.Printf("Context random sample: %s\n", sample.GoStr())
+	fmt.Printf("Scope random sample: %s\n", sample.GoStr())
 }

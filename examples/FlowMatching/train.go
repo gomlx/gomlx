@@ -20,7 +20,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
@@ -28,9 +28,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// TrainModel with a given config -- it includes the context with hyperparameters.
+// TrainModel with a given config -- it includes the scope with hyperparameters.
 func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd bool, verbosity int) {
-	scope := config.Context
+	scope := config.Scope
 	paramsSet := config.ParamsSet
 	backend := config.Backend
 
@@ -259,7 +259,7 @@ func BuildTrainComputation(config *diffusion.Config) train.ModelFn {
 		lossName := model.GetParamOr(scope, losses.ParamLoss,
 			model.GetParamOr(scope, "diffusion_loss", "mse"))
 		scope.SetParam("loss", lossName) // Needed for old models that used "diffusion_loss".
-		lossFn := check1(losses.LossFromContext(scope))
+		lossFn := check1(losses.LossFromScope(scope))
 
 		// Large reduce operations lead to overflow for low-precision dtypes. We up-convert in those cases, before calculating the loss.
 		if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {

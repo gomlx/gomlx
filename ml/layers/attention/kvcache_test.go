@@ -24,11 +24,11 @@ func TestKVCacheFunctions(t *testing.T) {
 		headDim := 8
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := model.MustNewExec(backend, store, func(testCtx *model.Scope, input *Node) *Node {
+		exec := model.MustNewExec(backend, store, func(testScope *model.Scope, input *Node) *Node {
 			g := input.Graph()
-			cacheCtx := testCtx.Store().Scope("/cache")
+			cacheScope := testScope.Store().Scope("/cache")
 
-			keys, _ := getKVCache(cacheCtx, g, cacheShape)
+			keys, _ := getKVCache(cacheScope, g, cacheShape)
 			return keys
 		})
 
@@ -47,12 +47,12 @@ func TestKVCacheFunctions(t *testing.T) {
 		headDim := 4
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := model.MustNewExec(backend, store, func(testCtx *model.Scope, position, keys, values *Node) *Node {
+		exec := model.MustNewExec(backend, store, func(testScope *model.Scope, position, keys, values *Node) *Node {
 			g := keys.Graph()
-			cacheCtx := testCtx.Store().Scope("/cache")
+			cacheScope := testScope.Store().Scope("/cache")
 
-			KVCacheUpdate(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape, position, keys, values)
-			cachedKeys, _ := getKVCache(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape)
+			KVCacheUpdate(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape, position, keys, values)
+			cachedKeys, _ := getKVCache(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape)
 			return cachedKeys
 		})
 
@@ -83,12 +83,12 @@ func TestKVCacheFunctions(t *testing.T) {
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
 		// First update at position 0
-		exec1 := model.MustNewExec(backend, store, func(testCtx *model.Scope, position, keys, values *Node) *Node {
+		exec1 := model.MustNewExec(backend, store, func(testScope *model.Scope, position, keys, values *Node) *Node {
 			g := keys.Graph()
-			cacheCtx := testCtx.Store().Scope("/cache")
+			cacheScope := testScope.Store().Scope("/cache")
 
-			KVCacheUpdate(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape, position, keys, values)
-			cachedKeys, _ := getKVCache(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape)
+			KVCacheUpdate(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape, position, keys, values)
+			cachedKeys, _ := getKVCache(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape)
 			return cachedKeys
 		})
 
@@ -99,11 +99,11 @@ func TestKVCacheFunctions(t *testing.T) {
 		assert.InDelta(t, 1.0, cached1[0][0][0][0], 0.01)
 
 		// Second update at position 1
-		exec2 := model.MustNewExec(backend, store, func(testCtx *model.Scope, position, keys, values *Node) *Node {
+		exec2 := model.MustNewExec(backend, store, func(testScope *model.Scope, position, keys, values *Node) *Node {
 			g := keys.Graph()
-			cacheCtx := testCtx.Store().Scope("/cache")
-			KVCacheUpdate(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape, position, keys, values)
-			cachedKeys, _ := getKVCache(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape)
+			cacheScope := testScope.Store().Scope("/cache")
+			KVCacheUpdate(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape, position, keys, values)
+			cachedKeys, _ := getKVCache(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape)
 			return cachedKeys
 		})
 
@@ -127,12 +127,12 @@ func TestKVCacheFunctions(t *testing.T) {
 		headDim := 4
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := model.MustNewExec(backend, store, func(testCtx *model.Scope, position, keys, values *Node) *Node {
+		exec := model.MustNewExec(backend, store, func(testScope *model.Scope, position, keys, values *Node) *Node {
 			g := keys.Graph()
-			cacheCtx := testCtx.Store().Scope("/cache")
+			cacheScope := testScope.Store().Scope("/cache")
 
-			KVCacheUpdate(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape, position, keys, values)
-			cachedKeys, _ := getKVCache(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape)
+			KVCacheUpdate(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape, position, keys, values)
+			cachedKeys, _ := getKVCache(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape)
 			return cachedKeys
 		})
 
@@ -165,12 +165,12 @@ func TestKVCacheFunctions(t *testing.T) {
 		headDim := 4
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := model.MustNewExec(backend, store, func(testCtx *model.Scope, position, keys, values *Node) *Node {
+		exec := model.MustNewExec(backend, store, func(testScope *model.Scope, position, keys, values *Node) *Node {
 			g := keys.Graph()
-			cacheCtx := testCtx.Store().Scope("/cache")
+			cacheScope := testScope.Store().Scope("/cache")
 
-			KVCacheUpdate(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape, position, keys, values)
-			cachedKeys, _ := getKVCache(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape)
+			KVCacheUpdate(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape, position, keys, values)
+			cachedKeys, _ := getKVCache(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape)
 			return cachedKeys
 		})
 
@@ -198,12 +198,12 @@ func TestKVCacheFunctions(t *testing.T) {
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
 		// First: update the cache with some values
-		updateExec := model.MustNewExec(backend, store, func(testCtx *model.Scope, position, keys, values *Node) *Node {
+		updateExec := model.MustNewExec(backend, store, func(testScope *model.Scope, position, keys, values *Node) *Node {
 			g := keys.Graph()
-			cacheCtx := testCtx.Store().Scope("/cache")
+			cacheScope := testScope.Store().Scope("/cache")
 
-			KVCacheUpdate(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape, position, keys, values)
-			cachedKeys, _ := getKVCache(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape)
+			KVCacheUpdate(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape, position, keys, values)
+			cachedKeys, _ := getKVCache(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape)
 			return cachedKeys
 		})
 
@@ -222,14 +222,14 @@ func TestKVCacheFunctions(t *testing.T) {
 		assert.InDelta(t, 1.0, cached[0][0][0][0], 0.01)
 
 		// Reset cache outside of graph execution
-		cacheCtx := store.Scope("/cache")
-		KVCacheReset(cacheCtx)
+		cacheScope := store.Scope("/cache")
+		KVCacheReset(cacheScope)
 
 		// Verify cache is cleared by reading key values
-		getExec := model.MustNewExec(backend, store, func(testCtx *model.Scope, dummy *Node) *Node {
+		getExec := model.MustNewExec(backend, store, func(testScope *model.Scope, dummy *Node) *Node {
 			g := dummy.Graph()
-			cacheCtx := testCtx.Store().Scope("/cache")
-			cachedKeys, _ := getKVCache(cacheCtx, g, cacheShape)
+			cacheScope := testScope.Store().Scope("/cache")
+			cachedKeys, _ := getKVCache(cacheScope, g, cacheShape)
 			return cachedKeys
 		})
 
@@ -249,11 +249,11 @@ func TestKVCacheFunctions(t *testing.T) {
 		headDim := 4
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := model.MustNewExec(backend, store, func(testCtx *model.Scope, position, keys, values *Node) *Node {
+		exec := model.MustNewExec(backend, store, func(testScope *model.Scope, position, keys, values *Node) *Node {
 			g := keys.Graph()
-			cacheCtx := testCtx.Store().Scope("/cache")
+			cacheScope := testScope.Store().Scope("/cache")
 
-			KVCacheUpdate(cacheCtx, g, cacheShape, position, keys, values)
+			KVCacheUpdate(cacheScope, g, cacheShape, position, keys, values)
 			mask := createKVCacheAttentionMask(g, cacheShape, position, 1, 1)
 			return mask
 		})
@@ -278,17 +278,17 @@ func TestKVCachePersistence(t *testing.T) {
 	cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
 	// First execution: Initialize and update with 3 keys/values at position 0
-	exec1 := model.MustNewExec(backend, store, func(testCtx *model.Scope, position *Node) *Node {
+	exec1 := model.MustNewExec(backend, store, func(testScope *model.Scope, position *Node) *Node {
 		g := position.Graph()
-		cacheCtx := testCtx.Store().Scope("/cache")
+		cacheScope := testScope.Store().Scope("/cache")
 
 		// Create dummy keys/values: [batch=1, heads=2, seq=3, dim=4]
 		// Use specific values we can track
 		keys := AddScalar(IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 3, 4)), 10)
 		values := Mul(keys, Const(g, float32(2.0))) // values = 2 * keys
 
-		KVCacheUpdate(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape, position, keys, values)
-		cachedKeys, _ := getKVCache(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape)
+		KVCacheUpdate(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape, position, keys, values)
+		cachedKeys, _ := getKVCache(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape)
 		return cachedKeys
 	})
 
@@ -298,16 +298,16 @@ func TestKVCachePersistence(t *testing.T) {
 	assert.True(t, cached1[0][0][2][0] >= 10.0, "Expected non-zero value at position 2 after first update")
 
 	// Second execution: Update with 1 more key/value at position 3
-	exec2 := model.MustNewExec(backend, store, func(testCtx *model.Scope, position *Node) *Node {
+	exec2 := model.MustNewExec(backend, store, func(testScope *model.Scope, position *Node) *Node {
 		g := position.Graph()
-		cacheCtx := testCtx.Store().Scope("/cache")
+		cacheScope := testScope.Store().Scope("/cache")
 
 		// Create dummy keys/values: [batch=1, heads=2, seq=1, dim=4]
 		keys := AddScalar(IotaFull(g, shapes.Make(dtypes.Float32, 1, 2, 1, 4)), 100)
 		values := Mul(keys, Const(g, float32(2.0)))
 
-		KVCacheUpdate(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape, position, keys, values)
-		cachedKeys, _ := getKVCache(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape)
+		KVCacheUpdate(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape, position, keys, values)
+		cachedKeys, _ := getKVCache(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape)
 		return cachedKeys
 	})
 
@@ -331,12 +331,12 @@ func TestKVCacheCircular(t *testing.T) {
 		headDim := 2
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := model.MustNewExec(backend, store, func(testCtx *model.Scope, position, keys, values *Node) *Node {
+		exec := model.MustNewExec(backend, store, func(testScope *model.Scope, position, keys, values *Node) *Node {
 			g := position.Graph()
-			cacheCtx := testCtx.Store().Scope("/cache")
+			cacheScope := testScope.Store().Scope("/cache")
 
-			KVCacheUpdate(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape, position, keys, values)
-			cachedKeys, _ := getKVCache(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape)
+			KVCacheUpdate(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape, position, keys, values)
+			cachedKeys, _ := getKVCache(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape)
 
 			return cachedKeys
 		})
@@ -370,12 +370,12 @@ func TestKVCacheCircular(t *testing.T) {
 		headDim := 2
 		cacheShape := shapes.Make(dtypes.Float32, batchSize, numHeads, maxSeqLen, headDim)
 
-		exec := model.MustNewExec(backend, store, func(testCtx *model.Scope, position, keys, values *Node) *Node {
+		exec := model.MustNewExec(backend, store, func(testScope *model.Scope, position, keys, values *Node) *Node {
 			g := position.Graph()
-			cacheCtx := testCtx.Store().Scope("/cache")
+			cacheScope := testScope.Store().Scope("/cache")
 
-			KVCacheUpdate(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape, position, keys, values)
-			cachedKeys, _ := getKVCache(cacheCtx.Store().Scope(cacheCtx.Scope()), g, cacheShape)
+			KVCacheUpdate(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape, position, keys, values)
+			cachedKeys, _ := getKVCache(cacheScope.Store().Scope(cacheScope.Scope()), g, cacheShape)
 
 			return cachedKeys
 		})

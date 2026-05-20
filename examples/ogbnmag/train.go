@@ -21,7 +21,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -38,7 +38,7 @@ var (
 	// The default is 10.
 	ParamNumCheckpoints = "num_checkpoints"
 
-	// ParamReuseKernels context parameter configures whether the kernels for similar sampling rules will be reused.
+	// ParamReuseKernels scope parameter configures whether the kernels for similar sampling rules will be reused.
 	ParamReuseKernels = "mag_reuse_kernels"
 
 	// ParamIdentitySubSeeds controls whether to use an IdentitySubSeed, to allow more sharing of the kernel.
@@ -334,7 +334,7 @@ func evalLayerWise(backend compute.Backend, store *model.Store, baseDir string) 
 	return nil
 }
 
-// getDType returns the dtype selected in the context hyperparameters.
+// getDType returns the dtype selected in the scope hyperparameters.
 func getDType(scope *model.Scope) dtypes.DType {
 	dtypeStr := model.GetParamOr(scope, ParamDType, "float32")
 	switch dtypeStr {

@@ -15,7 +15,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Hyperparameter keys for context configuration
+// Hyperparameter keys for scope configuration
 const (
 	ParamMaxLength   = "decode_max_length"
 	ParamStrategy    = "decode_strategy"
@@ -35,7 +35,7 @@ const (
 // this will likely be very slow.
 //
 // Parameters:
-//   - ctx: Model context passed along by the Decoder.
+//   - scope: Model scope passed along by the Decoder.
 //   - tokens: Input token sequence, shaped [batch, seqLen].
 //
 // Returns:
@@ -43,16 +43,16 @@ const (
 type IterativeModelFn func(scope *model.Scope, tokens *Node) *Node
 
 // IncrementalModelFn represents an incremental model function, which is expected to have
-// some form of caching (stored in the variables in the context).
+// some form of caching (stored in the variables in the scope).
 //
 // It processes new tokens at a specific position, presumably reusing cached previous results
-// (typically in the form of a "KVCache" or cached key/value projections, stored in the context).
+// (typically in the form of a "KVCache" or cached key/value projections, stored in the scope).
 //
 // Currently, it doesn't support concurrent generation -- it's expected to have only one
 // cache during execution.
 //
 // Parameters:
-//   - ctx: Model context passed along by the Decoder. Likely contains the cache during the execution.
+//   - scope: Model scope passed along by the Decoder. Likely contains the cache during the execution.
 //   - newTokens: New tokens to process [batch, newLen]
 //   - position: Position in the sequence (for cache indexing)
 //
@@ -140,7 +140,7 @@ func New[M interface {
 	return decoder
 }
 
-// FromContext configures the decoder with hyperparameters from the model.
+// FromScope configures the decoder with hyperparameters from the model.
 // This allows fine-tuning an existing decoder configuration.
 //
 // Supported hyperparameters:
@@ -155,13 +155,13 @@ func New[M interface {
 //
 // Example:
 //
-//	ctx.SetParams(map[string]any{
+//	scope.SetParams(map[string]any{
 //	    "decode_strategy": "temperature",
 //	    "decode_temperature": 0.8,
 //	    "decode_max_length": 200,
 //	})
-//	decoder.FromContext(ctx)
-func (dec *Decoder) FromContext(scope *model.Scope) *Decoder {
+//	decoder.FromScope(scope)
+func (dec *Decoder) FromScope(scope *model.Scope) *Decoder {
 	dec.mu.Lock()
 	defer dec.mu.Unlock()
 	if dec.promptExec != nil {
@@ -331,7 +331,7 @@ func (dec *Decoder) validate() error {
 //
 // Parameters:
 //   - backend: Backend for computation
-//   - ctx: Context containing model parameters
+//   - scope: Scope containing model parameters
 //   - prompt: Input token sequence (1D or 2D tensor)
 //
 // Returns:
@@ -341,7 +341,7 @@ func (dec *Decoder) validate() error {
 // Example:
 //
 //	prompt := []int32{1, 2, 3}  // Token IDs
-//	output, err := decoder.Decode(backend, ctx, prompt)
+//	output, err := decoder.Decode(backend, scope, prompt)
 func (dec *Decoder) Decode(
 	backend compute.Backend,
 	scope *model.Scope,
@@ -397,7 +397,7 @@ func (dec *Decoder) Decode(
 //
 // Parameters:
 //   - backend: Backend for computation
-//   - ctx: Context containing model parameters
+//   - scope: Scope containing model parameters
 //   - prompt: Input token sequence [seqLen] or [batch, seqLen]
 //
 // Returns:
@@ -447,7 +447,7 @@ func (dec *Decoder) generateSampling(
 //
 // Parameters:
 //   - backend: Backend for computation
-//   - ctx: Context containing model parameters
+//   - scope: Scope containing model parameters
 //   - prompt: Input token sequence [batch, seqLen]
 //   - promptLen: Length of the prompt sequence
 //
@@ -483,9 +483,9 @@ func (dec *Decoder) generateSamplingFull(
 
 	// Create or reuse cached executor for full sequence generation
 	if dec.fullExec == nil {
-		predCtx := scope
+		predScope := scope
 		var err error
-		dec.fullExec, err = model.NewExec(backend, predCtx.Store(), func(scope *model.Scope, currentSeq *Node) *Node {
+		dec.fullExec, err = model.NewExec(backend, predScope.Store(), func(scope *model.Scope, currentSeq *Node) *Node {
 			logits := dec.ModelFn(scope, currentSeq)
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 			lastLogits = Squeeze(lastLogits, 1) // Remove the seq_len dimension
@@ -531,7 +531,7 @@ func (dec *Decoder) generateSamplingFull(
 //
 // Parameters:
 //   - backend: Backend for computation
-//   - ctx: Context containing model parameters and KV cache
+//   - scope: Scope containing model parameters and KV cache
 //   - prompt: Input token sequence [batch, seqLen]
 //   - batchSize: Batch size (unused, kept for consistency)
 //   - promptLen: Length of the prompt sequence
@@ -595,7 +595,7 @@ func (dec *Decoder) generateSamplingIncremental(
 		return tensors.FromValue(outputTokens), nil
 	}
 
-	genCtx := scope
+	genScope := scope
 
 	// Initialize cache if needed
 	if dec.genExecCache == nil {
@@ -610,7 +610,7 @@ func (dec *Decoder) generateSamplingIncremental(
 		exec, ok := dec.genExecCache[position]
 		if !ok {
 			var err error
-			exec, err = model.NewExec(backend, genCtx.Store(), func(scope *model.Scope, token *Node) *Node {
+			exec, err = model.NewExec(backend, genScope.Store(), func(scope *model.Scope, token *Node) *Node {
 				tokenReshaped := ExpandDims(token, -1)
 				logits := dec.IncrementalModelFn(scope, tokenReshaped, position)
 				lastLogits := Squeeze(logits, 1)
@@ -770,7 +770,7 @@ func (dec *Decoder) generateBeamSearchNonCached(
 		WithLengthPenalty(1.0)
 
 	// Main loop
-	predCtx := scope
+	predScope := scope
 	numSteps := dec.MaxLength - promptLen
 
 	for step := 0; step < numSteps; step++ {
@@ -779,7 +779,7 @@ func (dec *Decoder) generateBeamSearchNonCached(
 		// TODO: It seems I cannot cache this exec because currentLength changes each iteration
 		// and is used as a compile-time constant in the graph (passed to beamConfig.Step)
 		// I leave it like this for now as I think we need the dynamic shape support of the simplego backend.
-		exec, err := model.NewExec(backend, predCtx.Store(), func(scope *model.Scope, sequences, scores *Node) (*Node, *Node, *Node) {
+		exec, err := model.NewExec(backend, predScope.Store(), func(scope *model.Scope, sequences, scores *Node) (*Node, *Node, *Node) {
 			// Run model
 			logits := dec.ModelFn(scope, sequences)
 
@@ -857,7 +857,7 @@ func (dec *Decoder) generateBeamSearchCached(
 ) (*tensors.Tensor, error) {
 	beamSize := dec.BeamSize
 
-	// Note: KV caches are now automatically managed within the context by the attention layers.
+	// Note: KV caches are now automatically managed within the scope by the attention layers.
 	// Each call to WithKVCache in the model function will create/reuse cache variables in the model.
 
 	// Replicate prompt for each beam
@@ -914,7 +914,7 @@ func (dec *Decoder) generateBeamSearchCached(
 		WithLengthPenalty(1.0)
 
 	// Main loop
-	genCtx := scope
+	genScope := scope
 	numSteps := dec.MaxLength - promptLen
 
 	for step := 0; step < numSteps; step++ {
@@ -941,7 +941,7 @@ func (dec *Decoder) generateBeamSearchCached(
 
 		// Note: Cannot cache this exec because position changes each iteration
 		// and is used as a compile-time constant in the graph (passed to IncrementalModelFn)
-		exec, err := model.NewExec(backend, genCtx.Store(), func(scope *model.Scope, tokens, scores, sequences *Node) (*Node, *Node, *Node) {
+		exec, err := model.NewExec(backend, genScope.Store(), func(scope *model.Scope, tokens, scores, sequences *Node) (*Node, *Node, *Node) {
 			// tokens: [batch_beam_size]
 			tokensReshaped := ExpandDims(tokens, -1) // [batch_beam_size, 1]
 
@@ -1014,7 +1014,7 @@ func (dec *Decoder) generateBeamSearchCached(
 //
 // Parameters:
 //   - backend: Backend for computation
-//   - ctx: Context containing model parameters
+//   - scope: Scope containing model parameters
 //   - prompt: Input token sequence (1D or 2D tensor)
 //   - callback: Function called with each generated token ID; return false to stop
 //

@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 )
 
-// AugmentImages applies random augmentations if context is set to training, otherwise it's a no-op.
+// AugmentImages applies random augmentations if scope is set to training, otherwise it's a no-op.
 // It takes as input a batch of images shaped [batchSize, height, width, channels], and it returns
 // a randomly augmented batch of images with the exact same shape.
 //

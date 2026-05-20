@@ -2,7 +2,7 @@
 
 This table maps common functions from the `pkg/core/graph` package to their PyTorch equivalents, to help AI agents understand their purpose.
 
-**Note**: It is assumed that the `graph` package is dot-imported (`import . "github.com/gomlx/gomlx/pkg/core/graph"`), so these functions can be called directly without the `graph.` prefix.
+**Note**: It is assumed that the `graph` package is dot-imported (`import . "github.com/gomlx/gomlx/core/graph"`), so these functions can be called directly without the `graph.` prefix.
 
 | GoMLX `graph` Function | Description | PyTorch Equivalent |
 |---|---|---|

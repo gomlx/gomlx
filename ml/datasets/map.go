@@ -31,7 +31,7 @@ type mapGraphFnDataset struct {
 // MapWithGraphFn returns a `train.Dataset` with the result of applying (mapping) the batches yielded by the provided
 // `dataset` by the graph function `graphFn`.
 // The function is executed by the `backend` given.
-// If `ctx` is nil, a new one is created.
+// If `store` is nil, a new one is created.
 //
 // The graph building function `graphFn` can return a different number of `inputs` or `labels` than what it was given,
 // but these numbers should never change -- always return the same number of inputs and labels.

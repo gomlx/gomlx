@@ -32,7 +32,7 @@ var (
 	// It includes "none", which is a no-op.
 	//
 	// Notice that some normalizers use variables, and they need to be unique
-	// in their scope (`Context.In(scope)`) -- except if one wants to deliberately share
+	// in their scope (`Scope.In(scope)`) -- except if one wants to deliberately share
 	// normalization variables across more than one application.
 	KnownNormalizers = map[string]func(scope *model.Scope, input *Node) *Node{
 		NormalizationBatchNorm: func(scope *model.Scope, input *Node) *Node {
@@ -49,10 +49,10 @@ var (
 		},
 	}
 
-	// ParamNormalization context hyperparameter defines the type of normalization to use
+	// ParamNormalization scope hyperparameter defines the type of normalization to use
 	// between layers of a neural network.
 	//
-	// It is used if the model calls NormalizeFromContext or MaskedNormalizeFromContext on the embeddings in
+	// It is used if the model calls NormalizeFromScope or MaskedNormalizeFromScope on the embeddings in
 	// between layers.
 	// This is usually applied after a residual sum (but model choices varies).
 	//
@@ -76,7 +76,7 @@ var (
 // It's a simple wrapper around KnownNormalizers, if one wants to handle errors, just
 // check for its values. For valid values see KnownNormalizers.
 //
-// Some layer libraries will use this by default for you, taking the value from the context -- e.g: fnn.New.
+// Some layer libraries will use this by default for you, taking the value from the scope -- e.g: fnn.New.
 //
 // But if not, one example use:
 //
@@ -90,7 +90,7 @@ var (
 //
 //	func ModelGraph(...) {
 //	    ...
-//	    logits = MustNormalizeByName(ctx, *flagNormalization, logits)
+//	    logits = MustNormalizeByName(scope, *flagNormalization, logits)
 //	    ...
 //	}
 //
@@ -103,20 +103,20 @@ func MustNormalizeByName(scope *model.Scope, normalization string, input *Node) 
 	return normFn(scope, input)
 }
 
-// NormalizeFromContext applies a normalization (or none) according to the hyperparameter
+// NormalizeFromScope applies a normalization (or none) according to the hyperparameter
 // ParamNormalization configured in the model.
 //
 // This is not recommended for images, since one may want to normalize over specific axes.
-func NormalizeFromContext(scope *model.Scope, input *Node) *Node {
-	return MaskedNormalizeFromContext(scope, input, nil)
+func NormalizeFromScope(scope *model.Scope, input *Node) *Node {
+	return MaskedNormalizeFromScope(scope, input, nil)
 }
 
-// MaskedNormalizeFromContext applies a normalization (or none) according to the hyperparameter
+// MaskedNormalizeFromScope applies a normalization (or none) according to the hyperparameter
 // ParamNormalization configured in the model.
 // The `mask` is actually optional and can be set to nil if not using a mask.
 //
 // This is not recommended for images, since one may want to normalize over specific axes.
-func MaskedNormalizeFromContext(scope *model.Scope, input, mask *Node) *Node {
+func MaskedNormalizeFromScope(scope *model.Scope, input, mask *Node) *Node {
 	normType := model.GetParamOr(scope, ParamNormalization, "layer")
 	switch normType {
 	case NormalizationNone, "":
@@ -127,12 +127,12 @@ func MaskedNormalizeFromContext(scope *model.Scope, input, mask *Node) *Node {
 		return RMSNorm(scope, input).Done()
 	case NormalizationBatchNorm:
 		if mask != nil {
-			Panicf("'batch' normalization set in context parameter %q does not support usage of mask yet, please open a feature request",
+			Panicf("'batch' normalization set in scope parameter %q does not support usage of mask yet, please open a feature request",
 				ParamNormalization)
 		}
 		return batchnorm.New(scope, input, -1).Done()
 	default:
-		Panicf("invalid normalization type %q given in context parameter %q -- valid values are 'none', 'layer' or 'batch'",
+		Panicf("invalid normalization type %q given in scope parameter %q -- valid values are 'none', 'layer' or 'batch'",
 			normType, ParamNormalization)
 	}
 	return input

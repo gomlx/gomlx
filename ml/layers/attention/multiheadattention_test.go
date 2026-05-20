@@ -112,7 +112,7 @@ func TestMultiHeadAttentionFusedPath(t *testing.T) {
 			numHeads := 2
 			headDim := 2
 
-			// Build two graphs with the same context (shared weights):
+			// Build two graphs with the same scope (shared weights):
 			// one using DoneWithCoefficients (decomposed), one using Done (fused).
 			store := model.NewStore()
 
@@ -177,7 +177,7 @@ func TestMultiHeadAttentionWithRoPE(t *testing.T) {
 	assert.Equal(t, []int{1, 4, 8}, output.Shape().Dimensions)
 
 	// Run a second time with different sequence length to verify re-compilation
-	// with the same weights (reuse ctx so Dense parameters are shared).
+	// with the same weights (reuse scope so Dense parameters are shared).
 	exec2 := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
 		return SelfAttention(scope, x, 2, 4).
 			WithRoPE(10000.0).
@@ -466,8 +466,8 @@ func buildSyntheticAttentionModelFn(debug bool) (modelGraphFn func(scope *model.
 		batchSize := input.Shape().Dimensions[0]
 		sequenceSize := input.Shape().Dimensions[1]
 		const positionalEmbeddingSize = 16
-		noisyCtx := scope.WithInitializer(initializer.RandomNormalFn(scope, 1.0))
-		positionalVar := noisyCtx.In("positional").VariableWithShape("embeddings", shapes.Make(dtype, sequenceSize, positionalEmbeddingSize))
+		noisyScope := scope.WithInitializer(initializer.RandomNormalFn(scope, 1.0))
+		positionalVar := noisyScope.In("positional").VariableWithShape("embeddings", shapes.Make(dtype, sequenceSize, positionalEmbeddingSize))
 		positionalEmbedding := positionalVar.NodeValue(g)
 		positionalEmbedding = InsertAxes(positionalEmbedding, 0) // Prefixing with batch dimension.
 		dims := positionalEmbedding.Shape().Clone().Dimensions
@@ -551,7 +551,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
 	backend := testutil.BuildTestBackend()
 
-	// Context and optimizer used for training.
+	// Scope and optimizer used for training.
 	store := model.NewStore()
 	theOptimizer := optimizer.Adam().LearningRate(0.001).Done()
 

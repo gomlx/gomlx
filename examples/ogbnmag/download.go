@@ -483,7 +483,7 @@ func UploadOgbnMagVariables(backend compute.Backend, store *model.Store) *model.
 	magScope := store.Scope(OgbnMagVariablesScope)
 	for name, tPtr := range OgbnMagVariablesRef {
 		if *tPtr == nil {
-			Panicf("trying to upload OgbnMagVariablesRef to context before calling Download()")
+			Panicf("trying to upload OgbnMagVariablesRef to scope before calling Download()")
 		}
 		v := magScope.VariableWithValue(name, *tPtr)
 		v.Trainable = false
@@ -495,11 +495,11 @@ func UploadOgbnMagVariables(backend compute.Backend, store *model.Store) *model.
 // ExcludeOgbnMagVariablesFromSave marks the OGBN-MAG variables as not to be saved by the given `checkpoint`.
 // Since they are read separately and are constant, no need to repeat them at every checkpointHandler.
 func ExcludeOgbnMagVariablesFromSave(store *model.Store, checkpointHandler *checkpoint.Handler) {
-	ctxMag := store.Scope(OgbnMagVariablesScope)
+	scopeMag := store.Scope(OgbnMagVariablesScope)
 	for name := range OgbnMagVariablesRef {
-		v := ctxMag.GetVariable(name)
+		v := scopeMag.GetVariable(name)
 		if v == nil {
-			Panicf("OGBN-MAG variable %q not found in context!?", name)
+			Panicf("OGBN-MAG variable %q not found in scope!?", name)
 		}
 		checkpointHandler.ExcludeVarsFromSaving(v)
 	}

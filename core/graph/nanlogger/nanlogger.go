@@ -18,16 +18,16 @@
 //	func train() {
 //		…
 //		nanLogger := nanlogger.New()
-//		ctx.SetParam(optimizer.ParamNanLogger, nanLogger)  // Gradients with NaNs get reported.
+//		scope.SetParam(optimizer.ParamNanLogger, nanLogger)  // Gradients with NaNs get reported.
 //		trainer := train.NewTrainer(…)
 //		nanLogger.AttachToTrainer(trainer)
 //		…
 //	}
 //
-//	func ModelGraph(ctx *model.Scope, spec any, inputs []*Node) []*Node {
+//	func ModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 //		…
 //		for ii := range numBlocks {
-//			x = ResidualBlock(ctx.In(name), x, lastNumChannels)
+//			x = ResidualBlock(scope.In(name), x, lastNumChannels)
 //			nanLogger.TraceFirstNaN(x, fmt.Sprintf("Residual-%d", ii+1))
 //		}
 //		…

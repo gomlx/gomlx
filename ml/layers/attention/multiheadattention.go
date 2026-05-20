@@ -258,7 +258,7 @@ func (b *MultiHeadAttentionBuilder) WithDropout(rate *Node) *MultiHeadAttentionB
 // Usage pattern:
 //
 //		// Build generation graph:
-//		attention := attention.MultiHeadAttention(ctx, embeddings, embeddings, embeddings, numHeads, headDim).
+//		attention := attention.MultiHeadAttention(scope, embeddings, embeddings, embeddings, numHeads, headDim).
 //		    WithKVCache(maxSeqLen, position).
 //		    WithPositionalEncoder(pos.NewRoPE(10000.0))
 //	 logits := attention.Done()
@@ -268,7 +268,7 @@ func (b *MultiHeadAttentionBuilder) WithDropout(rate *Node) *MultiHeadAttentionB
 //		// 2. Each subsequent call with 1 new token, position=10, 11, 12, ...
 //
 //		// Before generating a new response, reset all caches in the model:
-//		attention.KVCacheReset(ctx)
+//		attention.KVCacheReset(scope)
 //
 // The cache supports circular/rotating mode: when position exceeds maxSeqLen,
 // new entries wrap around and overwrite the oldest entries. This allows efficient
@@ -319,7 +319,7 @@ func (b *MultiHeadAttentionBuilder) WithPositionalEncoder(encoder pos.Encoder) *
 // This is only valid for self-attention where query, key, and value are the same node.
 // Use SelfAttention() or pass the same node for all three to MultiHeadAttention().
 //
-// The fused weight is stored under the "qkv" context scope. This uses different variable
+// The fused weight is stored under the "qkv" scope scope. This uses different variable
 // names than the default separate projections (query/dense, key/dense, value/dense), so
 // existing checkpoints using separate projections are not compatible.
 func (b *MultiHeadAttentionBuilder) UseQKVProjection() *MultiHeadAttentionBuilder {
@@ -455,7 +455,7 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 		valueForCache := TransposeAllDims(projectedValue, 0, 2, 1, 3)
 
 		// Update cache and get full key/value (including past)
-		// KV cache variables are stored in the context under "kv_cache" scope
+		// KV cache variables are stored in the scope under "kv_cache" scope
 		// Pass b.position so the cache knows where to write the new keys/values
 		cacheScope := b.scope.At("kv_cache")
 		KVCacheUpdate(cacheScope, b.g, b.kvCacheShape, b.position, keyForCache, valueForCache)
@@ -554,24 +554,24 @@ func (b *MultiHeadAttentionBuilder) dense(scope *model.Scope, x *Node, useBias b
 // each shaped [batch, seq, numHeads, headDim] matching the BSHD layout.
 func (b *MultiHeadAttentionBuilder) qkvProject(x *Node) (projectedQuery, projectedKey, projectedValue *Node) {
 	g := x.Graph()
-	qkvCtx := b.scope.In("qkv")
+	qkvScope := b.scope.In("qkv")
 	dtype := x.DType()
 	inFeatures := x.Shape().Dim(-1)
 	queryDim := b.numHeads * b.keyQueryDim
 	keyValueDim := b.numHeads * b.valueDim
 
 	// Single fused weight: [inFeatures, queryDim + 2*keyValueDim].
-	wQKVVar := qkvCtx.VariableWithShape("weights_qkv", shapes.Make(dtype, inFeatures, queryDim+2*keyValueDim))
-	if regularizer := regularizers.FromContext(qkvCtx); regularizer != nil {
-		regularizer(qkvCtx, g, wQKVVar)
+	wQKVVar := qkvScope.VariableWithShape("weights_qkv", shapes.Make(dtype, inFeatures, queryDim+2*keyValueDim))
+	if regularizer := regularizers.FromScope(qkvScope); regularizer != nil {
+		regularizer(qkvScope, g, wQKVVar)
 	}
 	wQKV := wQKVVar.NodeValue(g)
 
 	// Separate biases for Q, K, V (always enabled, matching the separate Dense path
 	// which hardcodes useBias=true for Q/K/V projections).
-	biasQ := qkvCtx.VariableWithShape("biases_q", shapes.Make(dtype, queryDim)).NodeValue(g)
-	biasK := qkvCtx.VariableWithShape("biases_k", shapes.Make(dtype, keyValueDim)).NodeValue(g)
-	biasV := qkvCtx.VariableWithShape("biases_v", shapes.Make(dtype, keyValueDim)).NodeValue(g)
+	biasQ := qkvScope.VariableWithShape("biases_q", shapes.Make(dtype, queryDim)).NodeValue(g)
+	biasK := qkvScope.VariableWithShape("biases_k", shapes.Make(dtype, keyValueDim)).NodeValue(g)
+	biasV := qkvScope.VariableWithShape("biases_v", shapes.Make(dtype, keyValueDim)).NodeValue(g)
 
 	// QKVProjection expects [..., inFeatures] and returns [..., dim] flat outputs.
 	// With x=[batch, seq, inFeatures], outputs are [batch, seq, queryDim] etc.
@@ -620,13 +620,13 @@ func (b *MultiHeadAttentionBuilder) buildAttentionShape() {
 // SelfAttention is a convenience wrapper for MultiHeadAttention where query, key, and value
 // are all the same tensor (self-attention).
 //
-// This is equivalent to calling MultiHeadAttention(ctx, x, x, x, numHeads, headDim).
+// This is equivalent to calling MultiHeadAttention(scope, x, x, x, numHeads, headDim).
 // Returns a builder that can be further configured with methods like WithKVCache, WithRoPE,
 // UseCausalMask, etc.
 //
 // Example usage for training:
 //
-//	output := attention.SelfAttention(ctx, x, numHeads, headDim).
+//	output := attention.SelfAttention(scope, x, numHeads, headDim).
 //	    UseCausalMask().
 //	    Dropout(0.1).
 //	    Done()

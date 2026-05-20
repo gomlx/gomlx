@@ -41,8 +41,8 @@ func oneLayerManyInputsGraph(scope *model.Scope, inputs []*Node) *Node {
 func TestExec(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 
-	// Checks that Context.RNGState is auto-initialized correctly.
-	t.Run("Context.RNGState initialization", func(t *testing.T) {
+	// Checks that Scope.RNGState is auto-initialized correctly.
+	t.Run("Scope.RNGState initialization", func(t *testing.T) {
 		scope := model.NewStore()
 		result, err := model.ExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 			return Add(scope.RandomUniform(g, shapes.Make(dtypes.Float32, 10)), Const(g, float32(0.0001)))
@@ -59,7 +59,7 @@ func TestExec(t *testing.T) {
 		}
 	})
 
-	// Checks that Context.RNGState is auto-initialized correctly.
+	// Checks that Scope.RNGState is auto-initialized correctly.
 	t.Run("variable initialization", func(t *testing.T) {
 		scope := model.NewStore()
 		result, err := model.ExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
@@ -138,7 +138,7 @@ func TestExec(t *testing.T) {
 			t.Fatalf("Failed evaluating oneLayer(%v) returned 0, but weights should have been randomly initialized", x)
 		}
 
-		// Second execution: two tensors that if concatenated will be the same as the previous run. Since the context
+		// Second execution: two tensors that if concatenated will be the same as the previous run. Since the scope
 		// and hence the variables are the same, it should evaluate to exact same value.
 		oneElementOfX := [][]float64{{1}}
 		got2 := oneLayer.MustExec(oneElementOfX, oneElementOfX, oneElementOfX)[0].Value().([][]float64)

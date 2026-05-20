@@ -76,9 +76,9 @@ func main() {
 	onnxPath := must.M1(repo.DownloadFile("onnx/model.onnx"))
 	onnxModel := must.M1(onnxparser.ParseFile(onnxPath))
 
-	// Create context and load model weights
+	// Create scope and load model weights
 	scope := model.NewStore().RootScope()
-	must.M(onnxModel.VariablesToContext(scope))
+	must.M(onnxModel.VariablesToScope(scope))
 
 	// Create backend
 	backend := must.M1(compute.New())

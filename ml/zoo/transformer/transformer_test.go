@@ -98,7 +98,7 @@ func TestModel(t *testing.T) {
 		assert.False(t, cfg.UseBias)
 	})
 
-	t.Run("FromContext", func(t *testing.T) {
+	t.Run("FromScope", func(t *testing.T) {
 		store := model.NewStore()
 		scope := store.RootScope()
 		scope.SetParams(map[string]any{
@@ -112,7 +112,7 @@ func TestModel(t *testing.T) {
 			ParamNormalization: "", // or layers.NormalizationNone.
 		})
 
-		cfg := New(1000, 128, 4, 8, 16).FromContext(scope)
+		cfg := New(1000, 128, 4, 8, 16).FromScope(scope)
 		assert.Equal(t, 256, cfg.FFNDim)
 		assert.Equal(t, 1024, cfg.MaxPosEmbed)
 		assert.Equal(t, dtypes.Float16, cfg.DType)

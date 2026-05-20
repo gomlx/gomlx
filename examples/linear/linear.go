@@ -18,7 +18,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
-	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
 
@@ -118,7 +118,7 @@ func main() {
 		Infinite(true).Shuffle().BatchSize(*flagNumExamples, false)
 	// dataset := &Dataset{"training", []*tensors.Tensor{inputs}, []*tensors.Tensor{labels}}
 
-	// Creates Context with learned weights and bias.
+	// Creates Scope with learned weights and bias.
 	store := model.NewStore()
 	store.SetParam(optimizer.ParamLearningRate, *flagLearningRate)
 

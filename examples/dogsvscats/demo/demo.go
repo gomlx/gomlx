@@ -61,7 +61,7 @@ func preGenerate(scope *model.Scope, dataDir string) {
 	check(dogsvscats.Download(*flagDataDir))
 	check(dogsvscats.FilterValidImages(*flagDataDir))
 
-	config := dogsvscats.NewPreprocessingConfigurationFromContext(scope, *flagDataDir)
+	config := dogsvscats.NewPreprocessingConfigurationFromScope(scope, *flagDataDir)
 	dogsvscats.PreGenerate(config, *flagPreGenEpochs, true)
 }
 

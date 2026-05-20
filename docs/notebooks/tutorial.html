@@ -8577,8 +8577,8 @@ counter=int64(11)
           <div class="jp-InputPrompt jp-InputArea-prompt">
           </div>
           <div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-            <h2 id="Variables-and-Context">Variables and Context<a class="anchor-link"
-                href="#Variables-and-Context">¶</a></h2>
+            <h2 id="Variables-and-Scope">Variables and Scope<a class="anchor-link"
+                href="#Variables-and-Scope">¶</a></h2>
             <p>Computation graphs are <a href="https://en.wikipedia.org/wiki/Pure_function">pure functions</a>: they
               have no state,
               they take inputs, return outputs and everything in between is transient.</p>
@@ -8587,7 +8587,7 @@ counter=int64(11)
               about a model being trained or executed, like its weights/parameters.
               We want to be able to easily access and update these weights in the middle of a computation graph.</p>
             <p>To allow this <strong>GoMLX</strong> offers the <a
-                href="https://pkg.go.dev/github.com/gomlx/gomlx/ml/context"><code>model.Context</code></a> object
+                href="https://pkg.go.dev/github.com/gomlx/gomlx/ml/context"><code>model.Scope</code></a> object
               (completely unrelated to the usual Go's <code>context</code> package), and a corresponding
               <code>model.Exec</code>.
               It is a container of <strong>variables</strong>, and it manages automatically its updates, passing it as
@@ -8611,9 +8611,9 @@ counter=int64(11)
                 <pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">"github.com/gomlx/gomlx/ml/context"</span>
 
 <span class="o">%%</span>
-<span class="n">ctx</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
-<span class="n">exec</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">func</span><span class="p">(</span><span class="n">ctx</span> <span class="o">*</span><span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span> <span class="n">g</span> <span class="o">*</span><span class="n">Graph</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
-    <span class="n">counterVar</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">VariableWithValue</span><span class="p">(</span><span class="s2">"count"</span><span class="p">,</span> <span class="n">int32</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
+<span class="n">scope</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
+<span class="n">exec</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">scope</span><span class="p">,</span> <span class="n">func</span><span class="p">(</span><span class="n">scope</span> <span class="o">*</span><span class="n">context</span><span class="o">.</span><span class="n">Scope</span><span class="p">,</span> <span class="n">g</span> <span class="o">*</span><span class="n">Graph</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
+    <span class="n">counterVar</span> <span class="o">:=</span> <span class="n">scope</span><span class="o">.</span><span class="n">VariableWithValue</span><span class="p">(</span><span class="s2">"count"</span><span class="p">,</span> <span class="n">int32</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
     <span class="n">count</span> <span class="o">:=</span> <span class="n">counterVar</span><span class="o">.</span><span class="n">ValueGraph</span><span class="p">(</span><span class="n">g</span><span class="p">)</span>
     <span class="n">count</span> <span class="o">=</span> <span class="n">AddScalar</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">counterVar</span><span class="o">.</span><span class="n">SetValueGraph</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
@@ -8623,7 +8623,7 @@ counter=int64(11)
 <span class="k">for</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">count=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">exec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">())</span>
 <span class="p">}</span>
-<span class="n">counterVar</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"count"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+<span class="n">counterVar</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">scope</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">scope</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"count"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"- State of counter=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">counterVar</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
 </pre>
               </div>
@@ -8730,10 +8730,10 @@ counter=int64(11)
 
 <span class="o">//</span> <span class="n">minimizeF</span> <span class="n">does</span> <span class="n">one</span> <span class="n">gradient</span> <span class="n">descent</span> <span class="n">step</span> <span class="n">on</span> <span class="n">F</span> <span class="n">by</span> <span class="n">moving</span> <span class="n">a</span> <span class="n">variable</span> <span class="s2">"x"</span><span class="p">,</span>
 <span class="o">//</span> <span class="ow">and</span> <span class="n">returns</span> <span class="n">the</span> <span class="n">value</span> <span class="n">of</span> <span class="n">the</span> <span class="n">function</span> <span class="n">at</span> <span class="n">the</span> <span class="n">current</span> <span class="s2">"x"</span><span class="o">.</span>
-<span class="n">func</span> <span class="n">minimizeF</span><span class="p">(</span><span class="n">ctx</span> <span class="o">*</span><span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span> <span class="n">graph</span> <span class="o">*</span><span class="n">Graph</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
+<span class="n">func</span> <span class="n">minimizeF</span><span class="p">(</span><span class="n">scope</span> <span class="o">*</span><span class="n">context</span><span class="o">.</span><span class="n">Scope</span><span class="p">,</span> <span class="n">graph</span> <span class="o">*</span><span class="n">Graph</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
     <span class="o">//</span> <span class="n">Create</span> <span class="ow">or</span> <span class="n">reuse</span> <span class="n">existing</span> <span class="n">variable</span> <span class="s2">"x"</span> <span class="o">--</span> <span class="n">no</span> <span class="n">graph</span> <span class="n">operation</span> <span class="ow">is</span> <span class="n">created</span> <span class="k">with</span> <span class="n">this</span><span class="p">,</span> <span class="n">it</span><span class="s1">'s</span>
     <span class="o">//</span> <span class="n">only</span> <span class="n">a</span> <span class="n">reference</span><span class="o">.</span>
-    <span class="n">xVar</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">VariableWithShape</span><span class="p">(</span><span class="s2">"x"</span><span class="p">,</span> <span class="n">shapes</span><span class="o">.</span><span class="n">Make</span><span class="p">(</span><span class="n">dtypes</span><span class="o">.</span><span class="n">Float64</span><span class="p">))</span>
+    <span class="n">xVar</span> <span class="o">:=</span> <span class="n">scope</span><span class="o">.</span><span class="n">VariableWithShape</span><span class="p">(</span><span class="s2">"x"</span><span class="p">,</span> <span class="n">shapes</span><span class="o">.</span><span class="n">Make</span><span class="p">(</span><span class="n">dtypes</span><span class="o">.</span><span class="n">Float64</span><span class="p">))</span>
 
     <span class="n">x</span> <span class="o">:=</span> <span class="n">xVar</span><span class="o">.</span><span class="n">ValueGraph</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>                        <span class="o">//</span> <span class="n">Read</span> <span class="n">variable</span> <span class="k">for</span> <span class="n">the</span> <span class="n">current</span> <span class="n">graph</span><span class="o">.</span>
     <span class="n">y</span> <span class="o">:=</span> <span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>                                          <span class="o">//</span> <span class="n">Value</span> <span class="n">of</span> <span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span>
@@ -8742,7 +8742,7 @@ counter=int64(11)
     <span class="n">gradX</span> <span class="o">:=</span> <span class="n">Gradient</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">x</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
 
     <span class="o">//</span> <span class="n">stepNum</span> <span class="o">+=</span> <span class="mi">1</span>
-    <span class="n">stepNumVar</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">VariableWithValue</span><span class="p">(</span><span class="s2">"stepNum"</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>  <span class="o">//</span> <span class="n">Creates</span> <span class="n">the</span> <span class="n">variable</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">existing</span><span class="p">,</span> <span class="ow">or</span> <span class="n">retrieve</span> <span class="n">it</span> <span class="k">if</span> <span class="n">already</span> <span class="n">exists</span><span class="o">.</span>
+    <span class="n">stepNumVar</span> <span class="o">:=</span> <span class="n">scope</span><span class="o">.</span><span class="n">VariableWithValue</span><span class="p">(</span><span class="s2">"stepNum"</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>  <span class="o">//</span> <span class="n">Creates</span> <span class="n">the</span> <span class="n">variable</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">existing</span><span class="p">,</span> <span class="ow">or</span> <span class="n">retrieve</span> <span class="n">it</span> <span class="k">if</span> <span class="n">already</span> <span class="n">exists</span><span class="o">.</span>
     <span class="n">stepNum</span> <span class="o">:=</span> <span class="n">stepNumVar</span><span class="o">.</span><span class="n">ValueGraph</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
     <span class="n">stepNum</span> <span class="o">=</span> <span class="n">OnePlus</span><span class="p">(</span><span class="n">stepNum</span><span class="p">)</span>
     <span class="n">stepNumVar</span><span class="o">.</span><span class="n">SetValueGraph</span><span class="p">(</span><span class="n">stepNum</span><span class="p">)</span>
@@ -8758,14 +8758,14 @@ counter=int64(11)
 <span class="p">}</span>
 
 <span class="n">func</span> <span class="n">Solve</span><span class="p">()</span> <span class="p">{</span>
-    <span class="n">ctx</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
-    <span class="n">exec</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">minimizeF</span><span class="p">)</span>
+    <span class="n">scope</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
+    <span class="n">exec</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">scope</span><span class="p">,</span> <span class="n">minimizeF</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">ii</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">ii</span> <span class="o">&lt;</span> <span class="o">*</span><span class="n">flagNumSteps</span><span class="o">-</span><span class="mi">1</span><span class="p">;</span> <span class="n">ii</span><span class="o">++</span> <span class="p">{</span>
         <span class="n">_</span> <span class="o">=</span> <span class="n">exec</span><span class="o">.</span><span class="n">MustExec</span><span class="p">()</span>
     <span class="p">}</span>
     <span class="n">y</span> <span class="o">:=</span> <span class="n">exec</span><span class="o">.</span><span class="n">MustExec1</span><span class="p">()</span>
-    <span class="n">x</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"x"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
-    <span class="n">stepNum</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"stepNum"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+    <span class="n">x</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">scope</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">scope</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"x"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+    <span class="n">stepNum</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">scope</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">scope</span><span class="o">.</span><span class="n">Scope</span><span class="p">(),</span> <span class="s2">"stepNum"</span><span class="p">)</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Minimum found at x=</span><span class="si">%g</span><span class="s2">, f(x)=</span><span class="si">%g</span><span class="s2"> after </span><span class="si">%f</span><span class="s2"> steps.</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">x</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">y</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">stepNum</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
 <span class="p">}</span>
 </pre>
@@ -8875,24 +8875,24 @@ counter=int64(11)
               </ul>
             </blockquote>
             <p>There is more to <a
-                href="https://pkg.go.dev/github.com/gomlx/gomlx/ml/context"><code>model.Context</code></a>, some
+                href="https://pkg.go.dev/github.com/gomlx/gomlx/ml/context"><code>model.Scope</code></a>, some
               we'll present
               on the next section on <em>Machine Learning</em>, others can be found in its documentation. A few things
               worth advancing:</p>
             <ul>
-              <li><code>Context</code> is always configured at a certain <em>scope</em>, and variables are unique within
+              <li><code>Scope</code> is always configured at a certain <em>scope</em>, and variables are unique within
                 its scope. Scope
-                is easily changed with <code>ctx.In("new_scope")</code>. So the <code>Context</code> object is a scope
+                is easily changed with <code>scope.In("new_scope")</code>. So the <code>Scope</code> object is a scope
                 (a string) and a pointer to
                 the actual data (variables, graph and model parameters).</li>
-              <li><code>Context</code> also holds model parameters (concrete Go values), which are also scoped.
+              <li><code>Scope</code> also holds model parameters (concrete Go values), which are also scoped.
                 Those can be hyperparameters for the models (learning rate, regularization, etc.) or anything the user
                 or
                 any library may create a convention for. They are more convenient than using hundreds of flags.
                 See example of its usage in the <a
                   href="https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/main.go">UCI Adult</a> example.
               </li>
-              <li>Similarly <code>Context</code> also holds "Graph parameters". Those are very similar to model
+              <li>Similarly <code>Scope</code> also holds "Graph parameters". Those are very similar to model
                 parameters, but they
                 have one value per Graph. So if a model is created with parameters of different shape (or for
                 training/evaluation),
@@ -8920,7 +8920,7 @@ counter=int64(11)
               evaluating a model trivial.</p>
             <p>First is the package <code>layers</code> (see code in <a
                 href="../../../tree/main/ml/layers/">ml/layers</a>. It provides several composable ML layers.
-              These are graph building functions, most of which take a <code>*model.Context</code> as first parameter,
+              These are graph building functions, most of which take a <code>*model.Scope</code> as first parameter,
               where they store
               variables or access hyperparameters.
               There are several such layers, for example: <code>layers.Dense</code>, <code>layers/fnn.New</code>,
@@ -8942,7 +8942,7 @@ counter=int64(11)
               such hooks is provided by <code>gomlx/train/commandline.AttachProgressBar(loop)</code>, it pretty prints
               the progress during
               training on the command line.</p>
-            <p>There are also a collection of <strong>optimizers</strong>, <strong>initializers</strong>, <strong>loss
+            <p>There are also a collection of <strong>optimizer</strong>, <strong>initializer</strong>, <strong>loss
                 functions</strong>, <strong>metrics</strong>, etc.
               For any functionality there is always an example under the <a
                 href="../../../tree/main/examples/">examples/</a> subdirectory.</p>
@@ -9066,9 +9066,9 @@ counter=int64(11)
                   number
                   generator state, which gets updated at each call to <code>RandomUniform</code> or
                   <code>RandomNormal</code>.<ul>
-                    <li>Alternatively the <code>model.Context</code> introduced earlier can keep the state
-                      as a variable, and provides a simpler interface: see <code>Context.RandomUniform</code> and
-                      <code>Context.RandomNormal</code>.</li>
+                    <li>Alternatively the <code>model.Scope</code> introduced earlier can keep the state
+                      as a variable, and provides a simpler interface: see <code>Scope.RandomUniform</code> and
+                      <code>Scope.RandomNormal</code>.</li>
                   </ul>
                 </li>
               </ul>
@@ -9274,10 +9274,10 @@ counter=int64(11)
             <p>Next we build a model, that for our <code>train</code> package means implementing a function with the
               following signature:</p>
             <div class="highlight">
-              <pre><span></span><span class="kd">type</span><span class="w"> </span><span class="nx">ModelFn</span><span class="w"> </span><span class="kd">func</span><span class="p">(</span><span class="nx">ctx</span><span class="w"> </span><span class="o">*</span><span class="nx">context</span><span class="p">.</span><span class="nx">Context</span><span class="p">,</span><span class="w"> </span><span class="nx">spec</span><span class="w"> </span><span class="kt">any</span><span class="p">,</span><span class="w"> </span><span class="nx">inputs</span><span class="w"> </span><span class="p">[]</span><span class="o">*</span><span class="nx">graph</span><span class="p">.</span><span class="nx">Node</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="nx">predictions</span><span class="w"> </span><span class="p">[]</span><span class="o">*</span><span class="nx">graph</span><span class="p">.</span><span class="nx">Node</span><span class="p">)</span>
+              <pre><span></span><span class="kd">type</span><span class="w"> </span><span class="nx">ModelFn</span><span class="w"> </span><span class="kd">func</span><span class="p">(</span><span class="nx">scope</span><span class="w"> </span><span class="o">*</span><span class="nx">context</span><span class="p">.</span><span class="nx">Scope</span><span class="p">,</span><span class="w"> </span><span class="nx">spec</span><span class="w"> </span><span class="kt">any</span><span class="p">,</span><span class="w"> </span><span class="nx">inputs</span><span class="w"> </span><span class="p">[]</span><span class="o">*</span><span class="nx">graph</span><span class="p">.</span><span class="nx">Node</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="nx">predictions</span><span class="w"> </span><span class="p">[]</span><span class="o">*</span><span class="nx">graph</span><span class="p">.</span><span class="nx">Node</span><span class="p">)</span>
 </pre>
             </div>
-            <p>It takes a <code>model.Context</code> for the variables and hyperparameters, the <code>spec</code> and a
+            <p>It takes a <code>model.Scope</code> for the variables and hyperparameters, the <code>spec</code> and a
               slice of <code>inputs</code> —
               the last two are fed by <code>Dataset.Yield</code> above. It returns a slice of <code>predictions</code> —
               is most cases there
@@ -9301,9 +9301,9 @@ counter=int64(11)
               <div class="highlight hl-ipython3">
                 <pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">"github.com/gomlx/gomlx/ml/context"</span>
 
-<span class="n">func</span> <span class="n">modelGraph</span><span class="p">(</span><span class="n">ctx</span> <span class="o">*</span><span class="n">context</span><span class="o">.</span><span class="n">Context</span><span class="p">,</span> <span class="n">spec</span> <span class="nb">any</span><span class="p">,</span> <span class="n">inputs</span> <span class="p">[]</span><span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">([]</span><span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
+<span class="n">func</span> <span class="n">modelGraph</span><span class="p">(</span><span class="n">scope</span> <span class="o">*</span><span class="n">context</span><span class="o">.</span><span class="n">Scope</span><span class="p">,</span> <span class="n">spec</span> <span class="nb">any</span><span class="p">,</span> <span class="n">inputs</span> <span class="p">[]</span><span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">([]</span><span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">_</span> <span class="o">=</span> <span class="n">spec</span>  <span class="o">//</span> <span class="n">Not</span> <span class="n">needed</span> <span class="n">here</span><span class="p">,</span> <span class="n">we</span> <span class="n">know</span> <span class="n">the</span> <span class="n">dataset</span><span class="o">.</span>
-    <span class="n">logits</span> <span class="o">:=</span> <span class="n">layers</span><span class="o">.</span><span class="n">DenseWithBias</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">/*</span> <span class="n">outputDim</span><span class="o">=</span> <span class="o">*/</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">logits</span> <span class="o">:=</span> <span class="n">layers</span><span class="o">.</span><span class="n">DenseWithBias</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">/*</span> <span class="n">outputDim</span><span class="o">=</span> <span class="o">*/</span> <span class="mi">1</span><span class="p">)</span>
     <span class="k">return</span> <span class="p">[]</span><span class="o">*</span><span class="n">Node</span><span class="p">{</span><span class="n">logits</span><span class="p">}</span>
 <span class="p">}</span>
 </pre>
@@ -9329,7 +9329,7 @@ counter=int64(11)
                   and add a learnable bias. It's the most basic building block of neural networks (NNs).
                   The implementation of <code>layers.DenseWithBias</code> is pretty simple, and worth checking out to
                   refresh how
-                  variables from the <code>Context</code> are used.</li>
+                  variables from the <code>Scope</code> are used.</li>
                 <li>Since it's a linear model, we don't use an activation function. The usual are available for NNs
                   (<code>Relu</code>,
                   <code>Sigmoid</code>, <code>Tanh</code> and more to come).
@@ -9397,15 +9397,15 @@ counter=int64(11)
     <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Training data (inputs, labels): (</span><span class="si">%s</span><span class="s2">, </span><span class="si">%s</span><span class="s2">)</span><span class="se">\n\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">inputs</span><span class="o">.</span><span class="n">Shape</span><span class="p">(),</span> <span class="n">labels</span><span class="o">.</span><span class="n">Shape</span><span class="p">())</span>
     <span class="n">dataset</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">TrivialDataset</span><span class="p">{</span><span class="s2">"linear"</span><span class="p">,</span> <span class="p">[]</span><span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">{</span><span class="n">inputs</span><span class="p">},</span> <span class="p">[]</span><span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">{</span><span class="n">labels</span><span class="p">}}</span>
 
-    <span class="o">//</span> <span class="n">Creates</span> <span class="n">Context</span> <span class="k">with</span> <span class="n">learned</span> <span class="n">weights</span> <span class="ow">and</span> <span class="n">bias</span><span class="o">.</span>
-    <span class="n">ctx</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
-    <span class="n">ctx</span><span class="o">.</span><span class="n">SetParam</span><span class="p">(</span><span class="n">optimizers</span><span class="o">.</span><span class="n">ParamLearningRate</span><span class="p">,</span> <span class="o">*</span><span class="n">flagLearningRate</span><span class="p">)</span>  <span class="o">//</span> <span class="o">=</span> <span class="s2">"learning_rate"</span>
-    <span class="n">ctx</span><span class="o">.</span><span class="n">SetParam</span><span class="p">(</span><span class="n">regularizers</span><span class="o">.</span><span class="n">ParamL2</span><span class="p">,</span> <span class="mf">1e-3</span><span class="p">)</span>  <span class="o">//</span> <span class="mf">1e-3</span> <span class="n">of</span> <span class="n">L2</span> <span class="n">regularization</span><span class="o">.</span>
+    <span class="o">//</span> <span class="n">Creates</span> <span class="n">Scope</span> <span class="k">with</span> <span class="n">learned</span> <span class="n">weights</span> <span class="ow">and</span> <span class="n">bias</span><span class="o">.</span>
+    <span class="n">scope</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
+    <span class="n">scope</span><span class="o">.</span><span class="n">SetParam</span><span class="p">(</span><span class="n">optimizer</span><span class="o">.</span><span class="n">ParamLearningRate</span><span class="p">,</span> <span class="o">*</span><span class="n">flagLearningRate</span><span class="p">)</span>  <span class="o">//</span> <span class="o">=</span> <span class="s2">"learning_rate"</span>
+    <span class="n">scope</span><span class="o">.</span><span class="n">SetParam</span><span class="p">(</span><span class="n">regularizers</span><span class="o">.</span><span class="n">ParamL2</span><span class="p">,</span> <span class="mf">1e-3</span><span class="p">)</span>  <span class="o">//</span> <span class="mf">1e-3</span> <span class="n">of</span> <span class="n">L2</span> <span class="n">regularization</span><span class="o">.</span>
 
     <span class="o">//</span> <span class="n">train</span><span class="o">.</span><span class="n">Trainer</span> <span class="n">executes</span> <span class="n">a</span> <span class="n">training</span> <span class="n">step</span><span class="o">.</span>
-    <span class="n">trainer</span> <span class="o">:=</span> <span class="n">train</span><span class="o">.</span><span class="n">NewTrainer</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">modelGraph</span><span class="p">,</span>
+    <span class="n">trainer</span> <span class="o">:=</span> <span class="n">train</span><span class="o">.</span><span class="n">NewTrainer</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">scope</span><span class="p">,</span> <span class="n">modelGraph</span><span class="p">,</span>
         <span class="n">losses</span><span class="o">.</span><span class="n">MeanSquaredError</span><span class="p">,</span>
-        <span class="n">optimizers</span><span class="o">.</span><span class="n">StochasticGradientDescent</span><span class="p">(),</span>
+        <span class="n">optimizer</span><span class="o">.</span><span class="n">StochasticGradientDescent</span><span class="p">(),</span>
         <span class="n">nil</span><span class="p">,</span> <span class="n">nil</span><span class="p">)</span> <span class="o">//</span> <span class="n">trainMetrics</span><span class="p">,</span> <span class="n">evalMetrics</span>
     <span class="n">loop</span> <span class="o">:=</span> <span class="n">train</span><span class="o">.</span><span class="n">NewLoop</span><span class="p">(</span><span class="n">trainer</span><span class="p">)</span>
     <span class="n">AttachToLoop</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span>
@@ -9416,7 +9416,7 @@ counter=int64(11)
 
     <span class="o">//</span> <span class="n">Print</span> <span class="n">learned</span> <span class="n">coefficients</span> <span class="ow">and</span> <span class="n">bias</span> <span class="o">--</span> <span class="kn">from</span><span class="w"> </span><span class="nn">the</span> <span class="n">weights</span> <span class="ow">in</span> <span class="n">the</span> <span class="n">dense</span> <span class="n">layer</span><span class="o">.</span>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">()</span>
-    <span class="n">coefVar</span><span class="p">,</span> <span class="n">biasVar</span> <span class="o">:=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">GetVariableByScopeAndName</span><span class="p">(</span><span class="s2">"/dense"</span><span class="p">,</span> <span class="s2">"weights"</span><span class="p">),</span> <span class="n">ctx</span><span class="o">.</span><span class="n">GetVariableByScopeAndName</span><span class="p">(</span><span class="s2">"/dense"</span><span class="p">,</span> <span class="s2">"biases"</span><span class="p">)</span>
+    <span class="n">coefVar</span><span class="p">,</span> <span class="n">biasVar</span> <span class="o">:=</span> <span class="n">scope</span><span class="o">.</span><span class="n">GetVariableByScopeAndName</span><span class="p">(</span><span class="s2">"/dense"</span><span class="p">,</span> <span class="s2">"weights"</span><span class="p">),</span> <span class="n">scope</span><span class="o">.</span><span class="n">GetVariableByScopeAndName</span><span class="p">(</span><span class="s2">"/dense"</span><span class="p">,</span> <span class="s2">"biases"</span><span class="p">)</span>
     <span class="n">learnedCoef</span><span class="p">,</span> <span class="n">learnedBias</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">coefVar</span><span class="o">.</span><span class="n">Value</span><span class="p">()),</span> <span class="n">must</span><span class="p">(</span><span class="n">biasVar</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Learned: coefficients=%0.3v, bias=%0.3v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">learnedCoef</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">learnedBias</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
 <span class="p">}</span>
@@ -9459,10 +9459,10 @@ Learned: coefficients=[[-5.46] [0.395] [4.56]], bias=[-1.38]
             <blockquote>
               <p><strong>Note</strong>:</p>
               <ul>
-                <li>Hyperparameters are set on the context. Layers and optimizers can define their own
-                  hyperparemeters independently. <code>Context</code> uses a scoping mechanism (like directories),
+                <li>Hyperparameters are set on the context. Layers and optimizer can define their own
+                  hyperparemeters independently. <code>Scope</code> uses a scoping mechanism (like directories),
                   and hyperparameters can take specialized values under specific scopes -- e.g.:
-                  doing <code>ctx.In("dense_5").SetParam(regularizers.ParamL2, 0.1)</code> would set
+                  doing <code>scope.In("dense_5").SetParam(regularizers.ParamL2, 0.1)</code> would set
                   L2 regularization only for the layer <code>dense_5</code> of the model to <code>0.1</code>.</li>
                 <li>The <code>trainer</code> constructor also takes as input arbitrary metrics (for training and
                   evaluation).
@@ -9657,7 +9657,7 @@ Learned: coefficients=[[-2.89] [1.15] [-5.2]], bias=[9.04]
                 href="https://github.com/gomlx/gomlx/tree/main/examples">examples</a>.
               GoMLX libraries are well documented, and the implementation is generally simple to use and understand --
               don't hesitate into diving into the code.
-              For machine learning, we highly recommend diving into the <code>model.Context</code> package/objects, and
+              For machine learning, we highly recommend diving into the <code>model.Scope</code> package/objects, and
               looking at the <code>layers</code> library, to learn how many of the common ML layers work.</p>
           </div>
         </div>

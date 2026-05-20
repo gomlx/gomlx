@@ -51,10 +51,10 @@ var (
 	// for usually slightly better results.
 	KnownOptimizers = map[string]func(scope *model.Scope) Interface{
 		"sgd":     func(scope *model.Scope) Interface { return StochasticGradientDescent() },
-		"adam":    func(scope *model.Scope) Interface { return Adam().FromContext(scope).Done() },
-		"adamax":  func(scope *model.Scope) Interface { return Adam().Adamax().FromContext(scope).Done() },
-		"adamw":   func(scope *model.Scope) Interface { return Adam().WeightDecay(0.004).FromContext(scope).Done() },
-		"rmsprop": func(scope *model.Scope) Interface { return RMSProp().FromContext(scope).Done() },
+		"adam":    func(scope *model.Scope) Interface { return Adam().FromScope(scope).Done() },
+		"adamax":  func(scope *model.Scope) Interface { return Adam().Adamax().FromScope(scope).Done() },
+		"adamw":   func(scope *model.Scope) Interface { return Adam().WeightDecay(0.004).FromScope(scope).Done() },
+		"rmsprop": func(scope *model.Scope) Interface { return RMSProp().FromScope(scope).Done() },
 	}
 
 	// ParamOptimizer is the parameter name (in the [model.Store]) for the name of the optimizer to use.
@@ -122,7 +122,7 @@ func FromScope(scope *model.Scope) Interface {
 //
 // Some optimizers (e.g.: Adam) uses optional hyperparameters set in the [model.Store] for configuration.
 //
-// See also FromContext.
+// See also FromScope.
 //
 // Example usage:
 //
@@ -397,79 +397,6 @@ func addGradientsToVariablesGraph(scope *model.Scope, grads []*Node, learningRat
 		)
 	}
 }
-
-// MonotonicProjection transforms the input into a monotonic sequence on the given axis that respects the
-// minimum margin between consecutive points.
-//
-// Here we call "viable solution" one that respects the given margin between consecutive points. And the goal
-// is to find the viable solution that is L2-closest to the original input -- we don't achieve that, but some
-// approximate that is hopefully good enough for most algorithms.
-//
-// This is not a trivial problem, as adjustments to one point may break the monotonicity of the next, and so on.
-// A close to optimal approximate solution can be achieved using lagrange multipliers (and Dykstra alternate
-// projections), see implementation in TensorFlow Lattice:
-// https://github.com/tensorflow/lattice/blob/master/tensorflow_lattice/python/pwl_calibration_lib.py#L472
-//
-// Unfortunately, GoMLX doesn't support "while" loops in the computation graph yet, so instead we make
-// a coarse but simple projection to the viable space using a simple algorithm -- see code.
-//
-// The usual way to use this is inside a call to train.AddPerStepUpdateGraphFn, making the projection happen after
-// the gradient step.
-func MonotonicProjection(input *Node, margin *Node, axis int) *Node {
-	adjustedAxis := MustAdjustAxis(axis, input)
-	axisDim := input.Shape().Dim(axis)
-	if axisDim < 2 {
-		Panicf(
-			"MonotonicProjection of input shaped %s at axis %d is not valid: it requires axis to have dimension >= 2",
-			input.Shape(),
-			axis,
-		)
-	}
-
-	const numIter = 3
-	// Fix to the right: increasing values.
-	diffRight := ConsecutiveDifference(input, adjustedAxis, false)
-	// For a fixed number of times try to prevent everything to be pushed if possible.
-	if axisDim > 2 {
-		for range numIter {
-			adjustedDiff := Max(diffRight, margin) // Pushes everything to the right, whenever monotonicity is broken.
-			adjustment := Sub(diffRight, adjustedDiff)
-			fixedAdjustment := ShiftWithScalar(adjustment, adjustedAxis, ShiftDirRight, 1, 0.0)
-			diffRight = Add(adjustedDiff, fixedAdjustment)
-		}
-	}
-	diffRight = Max(diffRight, margin) // Make sure its valid, if numIter wasn't enough.
-	leftMostInput := SliceAxis(input, adjustedAxis, AxisElem(0))
-	diffRight = Concatenate([]*Node{leftMostInput, diffRight}, adjustedAxis)
-	fixRight := CumSum(diffRight, adjustedAxis)
-
-	// Fix to the left: increasing values.
-	diffLeft := ConsecutiveDifference(input, adjustedAxis, false)
-	initialTotalDiff := ReduceAndKeep(diffLeft, ReduceSum, adjustedAxis)
-
-	// For a fixed number of times try to prevent everything to be pushed if possible.
-	if axisDim > 2 {
-		for range numIter {
-			adjustedDiff := Max(diffLeft, margin) // Pushes everything to the left, whenever monotonicity is broken.
-			adjustment := Sub(diffLeft, adjustedDiff)
-			fixedAdjustment := ShiftWithScalar(adjustment, adjustedAxis, ShiftDirLeft, 1, 0.0)
-			diffLeft = Add(adjustedDiff, fixedAdjustment)
-		}
-	}
-	diffLeft = Max(diffLeft, margin) // Make sure it's valid if numIter wasn't enough.
-	finalTotalDiff := ReduceAndKeep(diffLeft, ReduceSum, adjustedAxis)
-
-	leftMostInput = SliceAxis(input, adjustedAxis, AxisElem(0))
-	leftMostInput = Sub(leftMostInput,
-		Sub(finalTotalDiff, initialTotalDiff))
-
-	diffLeft = Concatenate([]*Node{leftMostInput, diffLeft}, adjustedAxis)
-	fixLeft := CumSum(diffLeft, adjustedAxis)
-
-	// Reconstruct value.
-	return DivScalar(Add(fixRight, fixLeft), 2)
-}
-
 
 // MonotonicProjection transforms the input into a monotonic sequence on the given axis that respects the
 // minimum margin between consecutive points.

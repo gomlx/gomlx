@@ -93,7 +93,7 @@ func (r *Trainer) batchNormAveragesStep(phase int, spec any, inputs, labels []*t
 }
 
 // batchNormsAverageStepGraph builds the graph to eval one step, in training mode, so variables are allowed to be updates.
-// It is called by the context executor (Trainer.batchNormStepExecMap)
+// It is called by the scope executor (Trainer.batchNormStepExecMap)
 // inputsAndLabel[:-1] are the inputs, and inputsAndLabel[-1] is the labels batch.
 func (r *Trainer) batchNormsAverageStepGraphFn(
 	phase int,

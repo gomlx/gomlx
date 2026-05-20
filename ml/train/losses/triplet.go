@@ -124,19 +124,19 @@ var (
 	// ParamTripletLossPairwiseDistanceMetric is the name of the hyperparameter that defines the TripletLoss.
 	// It defaults to 0
 	//
-	// See MakeTripletLossFromContext.
+	// See MakeTripletLossFromScope.
 	ParamTripletLossPairwiseDistanceMetric = "triplet_loss_pairwise_distance_metric"
 
 	// ParamTripletLossMiningStrategy is the name of the hyperparameter that defines the TripletLoss.
 	// It defaults to 2
 	//
-	// See MakeTripletLossFromContext.
+	// See MakeTripletLossFromScope.
 	ParamTripletLossMiningStrategy = "triplet_loss_mining_strategy"
 
 	// ParamTripletLossMargin is the name of the hyperparameter that defines the TripletLoss.
 	// It defaults to 1.0
 	//
-	// See MakeTripletLossFromContext.
+	// See MakeTripletLossFromScope.
 	ParamTripletLossMargin = "triplet_loss_margin"
 )
 
@@ -272,9 +272,9 @@ func TripletLoss(labels, predictions []*Node,
 	return MaskedReduceAllMean(loss, validTriplets)
 }
 
-// MakeTripletLossFromContext calls TripletLoss using the configured by the hyperparameter
+// MakeTripletLossFromScope calls TripletLoss using the configured by the hyperparameter
 // in the model.
-func MakeTripletLossFromContext(scope *model.Scope) LossFn {
+func MakeTripletLossFromScope(scope *model.Scope) LossFn {
 	miningStrategy := model.GetParamOr(scope, ParamTripletLossMiningStrategy, TripletMiningStrategySemiHard)
 	margin := model.GetParamOr(scope, ParamTripletLossMargin, 1.0)
 	metric := model.GetParamOr(scope, ParamTripletLossPairwiseDistanceMetric, PairwiseDistanceMetricL2)

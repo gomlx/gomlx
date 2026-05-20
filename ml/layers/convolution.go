@@ -59,7 +59,7 @@ func Convolution(scope *model.Scope, x *Node) *ConvBuilder {
 		graph:             x.Graph(),
 		x:                 x,
 		newScope:          true,
-		regularizer:       regularizers.FromContext(scope),
+		regularizer:       regularizers.FromScope(scope),
 		channelGroupCount: 1,
 		batchGroupCount:   1,
 	}
@@ -299,7 +299,7 @@ func (conv *ConvBuilder) BatchGroupCount(groupCount int) *ConvBuilder {
 //
 // To use more than one type of Regularizer, use regularizers.Combine, and set the returned combined regularizer here.
 //
-// The default is regularizers.FromContext, which is configured by regularizers.ParamL1 and regularizers.ParamL2.
+// The default is regularizers.FromScope, which is configured by regularizers.ParamL1 and regularizers.ParamL2.
 func (conv *ConvBuilder) Regularizer(regularizer regularizers.Regularizer) *ConvBuilder {
 	conv.regularizer = regularizer
 	return conv
@@ -310,9 +310,9 @@ func (conv *ConvBuilder) Regularizer(regularizer regularizers.Regularizer) *Conv
 // Node.
 func (conv *ConvBuilder) Done() *Node {
 	// Default is to create a sub-scope for the convolution variables.
-	ctxInScope := conv.scope
+	scopeInScope := conv.scope
 	if conv.newScope {
-		ctxInScope = ctxInScope.In("conv")
+		scopeInScope = scopeInScope.In("conv")
 	}
 
 	if len(conv.kernelSize) == 0 || conv.outputChannels <= 0 {
@@ -359,9 +359,9 @@ func (conv *ConvBuilder) Done() *Node {
 		kernelShape.Dimensions = append(kernelShape.Dimensions, inputChannels)
 		kernelShape.Dimensions = append(kernelShape.Dimensions, conv.outputChannels)
 	}
-	kernelVar := ctxInScope.VariableWithShape("weights", kernelShape)
+	kernelVar := scopeInScope.VariableWithShape("weights", kernelShape)
 	if conv.regularizer != nil {
-		conv.regularizer(ctxInScope, conv.graph, kernelVar)
+		conv.regularizer(scopeInScope, conv.graph, kernelVar)
 	}
 	kernel := kernelVar.NodeValue(conv.graph)
 	convOpts := Convolve(conv.x, kernel).
@@ -381,7 +381,7 @@ func (conv *ConvBuilder) Done() *Node {
 
 	// Create and apply bias.
 	if conv.bias {
-		biasVar := ctxInScope.VariableWithShape("biases", shapes.Make(dtype, conv.outputChannels))
+		biasVar := scopeInScope.VariableWithShape("biases", shapes.Make(dtype, conv.outputChannels))
 		bias := biasVar.NodeValue(conv.graph)
 		expandedDims := xslices.SliceWithValue(output.Rank(), 1)
 		outputChannelsAxis := images.GetChannelsAxis(output, conv.channelsAxisConfig)
@@ -391,10 +391,10 @@ func (conv *ConvBuilder) Done() *Node {
 	}
 
 	// Add regularization.
-	if l2any, found := ctxInScope.GetParam(ParamL2Regularization); found {
+	if l2any, found := scopeInScope.GetParam(ParamL2Regularization); found {
 		l2 := l2any.(float64)
 		if l2 > 0 {
-			regularizers.L2(l2)(ctxInScope, conv.graph, kernelVar)
+			regularizers.L2(l2)(scopeInScope, conv.graph, kernelVar)
 		}
 	}
 	return output

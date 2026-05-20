@@ -120,7 +120,7 @@ func (c *Config) initDiscrete(scope *model.Scope) {
 	case "normal":
 		c.discrete.perturbation = PerturbationNormal
 	default:
-		exceptions.Panicf("Invalid Discrete-KAN perturbation given by context[%q]: %q -- valid values are "+
+		exceptions.Panicf("Invalid Discrete-KAN perturbation given by scope[%q]: %q -- valid values are "+
 			"\"triangular\", \"normal\"", ParamDiscretePerturbation, perturbationStr)
 	}
 
@@ -213,7 +213,7 @@ func (c *Config) DiscreteSoftnessScheduleType(schedule SoftnessScheduleType) *Co
 // The recommend way of using it is training in multiple stages, with a fixed softness and trainable splits
 // first, and later freezing the split points (see ParamDiscreteSplitPointsFrozen).
 //
-// Default is false, and can be set with the context hyperparameter ParamDiscreteSplitPointsTrainable.
+// Default is false, and can be set with the scope hyperparameter ParamDiscreteSplitPointsTrainable.
 func (c *Config) DiscreteSplitsTrainable(trainable bool) *Config {
 	c.discrete.splitPointsTrainable = trainable
 	return c
@@ -225,7 +225,7 @@ func (c *Config) DiscreteSplitsTrainable(trainable bool) *Config {
 // This is useful if after training the split points, one is going to use a softness schedule, and the
 // softness is going to get very small (which leads to NaNs in the split points).
 //
-// Default is false and can be set with the context hyperparameter ParamDiscreteSplitPointsFrozen.
+// Default is false and can be set with the scope hyperparameter ParamDiscreteSplitPointsFrozen.
 func (c *Config) DiscreteSplitsFrozen(frozen bool) *Config {
 	c.discrete.splitPointsFrozen = frozen
 	return c
@@ -381,11 +381,11 @@ func (c *Config) scheduledSoftness(scope *model.Scope, base *Node) *Node {
 
 	g := base.Graph()
 	dtype := base.DType()
-	rootCtx := scope.Store().Scope(model.RootScopePath)
+	rootScope := scope.Store().Scope(model.RootScopePath)
 
 	// Calculate scheduleTime: from 0.0 to 1.0 depending on training progress.
-	globalStep := ConvertDType(optimizer.GetGlobalStepVar(rootCtx).NodeValue(g), dtypes.Float32)
-	lastStep := ConvertDType(train.GetTrainLastStepVar(rootCtx).NodeValue(g), dtypes.Float32)
+	globalStep := ConvertDType(optimizer.GetGlobalStepVar(rootScope).NodeValue(g), dtypes.Float32)
+	lastStep := ConvertDType(train.GetTrainLastStepVar(rootScope).NodeValue(g), dtypes.Float32)
 	// scheduleTime will be at most 1.0, if for some reason globalStep >
 	scheduleTime := MinScalar(Div(globalStep, MaxScalar(lastStep, 1.0)), 1.0)
 	zero := ZerosLike(lastStep)

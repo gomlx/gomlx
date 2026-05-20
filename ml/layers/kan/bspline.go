@@ -172,7 +172,7 @@ func (c *Config) bsplineLayer(scope *model.Scope, x *Node, numOutputNodes int) *
 	output.AssertDims(batchSize, numOutputNodes) // Shape=[batch, outputs]
 
 	// Log variance at each layer: useful to find initialization that keeps variance under control.
-	//ReduceMean(ReduceVariance(output, -1)).SetLoggedf("(%s) Mean variance of the examples", ctx.Scope())
-	//ReduceMean(Abs(output)).SetLoggedf("(%s) Mean absolute outputs", ctx.Scope())
+	//ReduceMean(ReduceVariance(output, -1)).SetLoggedf("(%s) Mean variance of the examples", scope.Scope())
+	//ReduceMean(Abs(output)).SetLoggedf("(%s) Mean absolute outputs", scope.Scope())
 	return output
 }

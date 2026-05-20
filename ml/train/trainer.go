@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	// TrainerAbsoluteScope used for Context parameters related to the trainer.
+	// TrainerAbsoluteScope used for Scope parameters related to the trainer.
 	TrainerAbsoluteScope = model.ScopeSeparator + "trainer"
 
 	// TrainerLossGraphParamKey is the graph params key that maps to the
@@ -130,14 +130,14 @@ const (
 	BatchNormAveragesType
 )
 
-// NewTrainer constructs a trainer that can be used for training steps and evaluation. It also creates a new Context
+// NewTrainer constructs a trainer that can be used for training steps and evaluation. It also creates a new Scope
 // for model, which will hold the variables, hyperparameters, and other information. It can be changed by the user.
 //
 // Its arguments are:
 //
 //   - backend needed to create and compile computation graphs.
 //
-//   - ctx (will) hold the variables, hyperparameters, and related information for the model.
+//   - scope (will) hold the variables, hyperparameters, and related information for the model.
 //
 //   - modelFn builds the graph that transforms inputs into predictions (or logits).
 //
@@ -186,7 +186,7 @@ func NewTrainer(backend compute.Backend, store *model.Store,
 		panic(err)
 	}
 
-	// Create a context executor for TrainStep. Automatically include batch loss and moving average loss metrics.
+	// Create a scope executor for TrainStep. Automatically include batch loss and moving average loss metrics.
 	numMetrics := len(trainMetrics) + 3
 	lossAndMetrics := make([]metrics.Interface, 0, numMetrics)
 	batchLossFn := func(_ *model.Scope, labels, predictions []*graph.Node) *graph.Node {
@@ -231,7 +231,7 @@ func NewTrainer(backend compute.Backend, store *model.Store,
 	lossAndMetrics = append(lossAndMetrics, trainMetrics...)
 	r.trainMetrics = lossAndMetrics
 
-	// Create a context executor for EvalStep. Automatically include the mean loss metric as the first eval metric.
+	// Create a scope executor for EvalStep. Automatically include the mean loss metric as the first eval metric.
 	numMetrics = len(evalMetrics) + 2
 	lossAndMetrics = make([]metrics.Interface, 0, numMetrics)
 	lossAndMetrics = append(
@@ -299,7 +299,7 @@ func (r *Trainer) Backend() compute.Backend {
 	return r.backend
 }
 
-// Store returns the current Store. See SetContext to change it.
+// Store returns the current Store. See SetScope to change it.
 func (r *Trainer) Store() *model.Store {
 	return r.store
 }
@@ -381,7 +381,7 @@ func (r *Trainer) lossFnScalarLoss(_ *model.Scope, labels, predictions []*graph.
 	return loss
 }
 
-// trainStepGraph builds the graph to train one step. It is called by the context executor (`r.trainStepExecMap`)
+// trainStepGraph builds the graph to train one step. It is called by the scope executor (`r.trainStepExecMap`)
 // every time a graph needs to be built (typically for new batch sizes).
 func (r *Trainer) trainStepGraph(spec any, scope *model.Scope, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 	g := inputs[0].Graph()
@@ -406,7 +406,7 @@ func (r *Trainer) trainStepGraph(spec any, scope *model.Scope, inputs, labels []
 	// Optimizer: it will create graph for gradient.
 	r.optimizer.UpdateGraph(scope, g, loss)
 
-	// Execute registered ContextGraphFn hooks for current graph.
+	// Execute registered ScopeGraphFn hooks for current graph.
 	ExecPerStepUpdateGraphFn(scope, g)
 
 	// Metrics updates. They include: batch loss, exponential moving average of the batch loss.
@@ -643,7 +643,7 @@ func (r *Trainer) DistributedTrainStep(strategy distributed.Strategy, deviceAssi
 	return r.distributedCallGraphFn(strategy, deviceAssignment, r.trainStepGraph, TrainType, r.trainStepExecMap, spec, inputs, labels)
 }
 
-// evalStepGraph builds the graph to eval one step. It is called by the context executor (`r.evalStepExecMap`)
+// evalStepGraph builds the graph to eval one step. It is called by the scope executor (`r.evalStepExecMap`)
 // every time a graph needs to be built (typically for new batch sizes).
 func (r *Trainer) evalStepGraph(spec any, scope *model.Scope, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 	g := inputs[0].Graph()
@@ -854,7 +854,7 @@ func (r *Trainer) Metrics() []metrics.Interface {
 	return r.evalMetrics
 }
 
-// GlobalStep is an alias for optimizer.GetGlobalStep using Trainer.Context().
+// GlobalStep is an alias for optimizer.GetGlobalStep using Trainer.Scope().
 func (r *Trainer) GlobalStep() int64 {
 	return optimizer.GetGlobalStep(r.store)
 }

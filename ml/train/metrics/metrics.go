@@ -227,7 +227,7 @@ func (m *MeanMetric) UpdateGraph(scope *model.Scope, labels, predictions []*Node
 	// Up the precision for float16/bfloat16, often not enough.
 	result = upPrecision(result)
 
-	// Create scope in context for metrics state.
+	// Create scope in scope for metrics state.
 	scope = scope.In(Scope).In("%s", m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)
@@ -317,7 +317,7 @@ func (m *movingAverageMetric) UpdateGraph(scope *model.Scope, labels, prediction
 	}
 	result = upPrecision(result)
 
-	// Create scope in context for metrics state.
+	// Create scope in scope for metrics state.
 	scope = scope.In(Scope).In("%s", m.ScopeName())
 	dtype := result.DType()
 	zero := shapes.CastAsDType(0, dtype)

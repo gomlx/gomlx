@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
-	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"k8s.io/klog/v2"
@@ -33,7 +33,7 @@ var (
 func getMagVar(scope *model.Scope, g *Graph, name string) *Node {
 	magVar := scope.Store().GetVariable(model.JoinPath(OgbnMagVariablesScope, name))
 	if magVar == nil {
-		Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
+		Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on scope first.", name)
 		panic(nil) // Quiet linter.
 	}
 	return magVar.NodeValue(g)
@@ -135,14 +135,14 @@ func FeaturePreprocessing(scope *model.Scope, strategy *sampler.Strategy, inputs
 		dtypeEmbed = dtypes.Float32
 	}
 
-	// Learnable embeddings context: it may benefit from dropout to have the model handle well
+	// Learnable embeddings scope: it may benefit from dropout to have the model handle well
 	// the cases of unknown (zero) embeddings.
 	// They shouldn't be initialized with GlorotUniform, but instead with small random uniform values.
 	embedScope := scope.In("embeddings").
 		WithInitializer(initializer.RandomUniformFn(scope, -0.05, 0.05))
 	embedDropoutRate := model.GetParamOr(scope, ParamEmbedDropoutRate, 0.0)
 
-	// Preprocess papers to its features --> these are in a frozen embedding table in the context as a frozen variable.
+	// Preprocess papers to its features --> these are in a frozen embedding table in the scope as a frozen variable.
 	papersEmbeddings := getMagVar(scope, g, "PapersEmbeddings")
 	for name, rule := range strategy.Rules {
 		if rule.NodeTypeName == "papers" {

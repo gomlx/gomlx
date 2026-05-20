@@ -165,7 +165,7 @@ type Config struct {
 // when loading only part of the variables for inference (if one doesn't care about the training/optimizer variables),
 // or for transfer learning part of a model. It also works to continue training a model loaded from a checkpoint.
 // But if you need to variables to be loaded immediately, use Config.Immediate() -- an inspecting tool, like
-// gomlx_checkpoints, will want to do that.
+// gomlx_checkpointss, will want to do that.
 //
 // See Config.Dir, Config.DirFromBase or Config.FromEmbed to specify where to load/save.
 func Build(store *model.Store) *Config {
@@ -458,7 +458,7 @@ func (c *Config) Done() (*Handler, error) {
 		// Empty remaining variableValues.
 		handler.variableValues = make(map[string]*tensors.Tensor)
 	} else {
-		// Force overwriting variables already present in the context: e.g., global_step.
+		// Force overwriting variables already present in the scope: e.g., global_step.
 		for v := range c.store.IterVariables() {
 			value, found := handler.LoadedVariables()[variableToKey(v)]
 			if !found {
@@ -513,7 +513,7 @@ func (c *Config) MustDone() *Handler {
 type Handler struct {
 	config            *Config
 	store             *model.Store
-	prevContextLoader model.Loader
+	prevStoreLoader model.Loader
 
 	serialized     *serializedData
 	variableValues map[string]*tensors.Tensor
@@ -549,7 +549,7 @@ type serializedVar struct {
 	Pos, Length int
 }
 
-// serializedParam represents a serialized context parameter.
+// serializedParam represents a serialized scope parameter.
 // It includes the original ValueType, because Json decoder may
 // not be capable of recovering the original type in anonymous (any) Value.
 type serializedParam struct {
@@ -709,7 +709,7 @@ func (h *Handler) loadCheckpointFromFile(baseName string, merge bool, mergeWeigh
 	}
 	if h.store != nil {
 		return errors.Errorf(
-			"%s tried to loadCheckpointFromFile(%q) after being attached to a Context, this is not allowed",
+			"%s tried to loadCheckpointFromFile(%q) after being attached to a Scope, this is not allowed",
 			h, baseName)
 	}
 
@@ -872,9 +872,9 @@ func (bf BinFormat) String() string {
 	}
 }
 
-// Save creates a new checkpoint and save the context variables and (optionally) Params.
+// Save creates a new checkpoint and save the scope variables and (optionally) Params.
 //
-// All variables in the context are saved, as well as those previously loaded -- this allows one
+// All variables in the scope are saved, as well as those previously loaded -- this allows one
 // to load the variables only for a part of the model, update that part, and save again with everything.
 //
 // Params is (de-) serialized with package json.
@@ -923,7 +923,7 @@ func (h *Handler) Save() error {
 		return errors.Wrapf(err, "%s: failed to create checkpoint metadata file %s", h, jsonFileName)
 	}
 
-	// Copy over and set variables: both from Context and previously loaded ones, that haven't yet
+	// Copy over and set variables: both from Scope and previously loaded ones, that haven't yet
 	// been loaded into model.
 	h.serialized.Variables = make([]serializedVar, 0, h.store.NumVariables()+len(h.variableValues))
 	pos := 0
@@ -1077,17 +1077,17 @@ func (h *Handler) keepNCheckpoints() error {
 // loaded is to set the Store's Params from the loaded values (except if the Handler was configured
 // with ExcludeAllParams).
 //
-// attachTo can only be called once. It will fail, and set the given context to an error state if
+// attachTo can only be called once. It will fail, and set the given scope to an error state if
 // requested to attach more than once.
 func (h *Handler) attachTo(store *model.Store) {
 	if h.store != nil {
 		Panicf("%s already attached to a model.Store, I cannot attach to another one", h.config.dir)
 	}
 	h.store = store
-	h.prevContextLoader = store.Loader()
+	h.prevStoreLoader = store.Loader()
 	store.SetLoader(h)
 
-	// Sets ctx.Params with values read, if any.
+	// Sets scope.Params with values read, if any.
 	if h.config.includeParams {
 		for _, p := range h.serialized.Params {
 			// Check for un-scoped and scoped exclusions:
@@ -1115,8 +1115,8 @@ func (h *Handler) Dir() string {
 // The user may want to use this function to inspect loaded values for testing.
 func (h *Handler) LoadVariable(store *model.Store, fullPath string) (value *tensors.Tensor, found bool) {
 	// Priority is based on the installation order. That means we attempt first the previously configured loaders.
-	if h.prevContextLoader != nil {
-		value, found = h.prevContextLoader.LoadVariable(store, fullPath)
+	if h.prevStoreLoader != nil {
+		value, found = h.prevStoreLoader.LoadVariable(store, fullPath)
 		if found {
 			// Previous manager found value (or issued an error), return that.
 			return
@@ -1137,11 +1137,11 @@ func (h *Handler) LoadVariable(store *model.Store, fullPath string) (value *tens
 }
 
 // DeleteVariable implements model.Loader.
-// It is called whenever Context.DeleteVariable is called. The deletion should cascade to the
+// It is called whenever Scope.DeleteVariable is called. The deletion should cascade to the
 // loader, otherwise the variable will reappear after deletion.
 func (h *Handler) DeleteVariable(store *model.Store, fullPath string) error {
-	if h.prevContextLoader != nil {
-		_ = h.prevContextLoader.DeleteVariable(store, fullPath)
+	if h.prevStoreLoader != nil {
+		_ = h.prevStoreLoader.DeleteVariable(store, fullPath)
 	}
 	varParamName := pathToKey(fullPath)
 	delete(h.variableValues, varParamName)
@@ -1149,7 +1149,7 @@ func (h *Handler) DeleteVariable(store *model.Store, fullPath string) error {
 }
 
 // LoadedVariables for inspection. These are the values loaded -- but not necessarily immediately available in
-// context, since they are actually used only when a model asks for the variable.
+// scope, since they are actually used only when a model asks for the variable.
 //
 // The Handler owns the returned map, don't change it -- the behavior is undefined if you do.
 func (h *Handler) LoadedVariables() map[string]*tensors.Tensor {
@@ -1165,7 +1165,7 @@ func (h *Handler) ExcludeVarsFromSaving(vars ...*model.Variable) {
 }
 
 const (
-	binHeader     = "gomlx_checkpoints"
+	binHeader     = "gomlx_checkpointss"
 	lenBinHeader  = len(binHeader)
 	gzipHeader    = "gzip"
 	lenGzipHeader = uint8(len(gzipHeader))
@@ -1176,7 +1176,7 @@ const (
 // ----------------------------------------------
 // | 0                 16 | 17  | 18    17 +len |
 // ----------------------------------------------
-// |  "gomlx_checkpoints" | len |  "gzip"       |
+// |  "gomlx_checkpointss" | len |  "gzip"       |
 
 // getLoadVarFilesFromReader returns a reader to the decompressed binary variables.  It is compliant with legacy format,
 // i.e., non-compressed.

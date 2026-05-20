@@ -86,7 +86,7 @@ type Config struct {
 // New creates a configuration for a VNN (Vector Neural Network), which is SO(3) invariant,
 // which means that a rotation of the operand will yield the same rotation on the output.
 //
-// It is initialized with good defaults and with hyperparameters from the given Context.
+// It is initialized with good defaults and with hyperparameters from the given Scope.
 // It can then be further configured with its various methods.
 //
 // Once configured, call Config.Done to add the VNN computation graph and get the output.
@@ -96,12 +96,12 @@ type Config struct {
 //
 // E.g.: A VNN for a multi-class classification model with NumClasses classes, rotation invariant.
 //
-//	func MyModel(ctx *model.Scope, inputs []*Node) (outputs []*Node) {
+//	func MyModel(scope *model.Scope, inputs []*Node) (outputs []*Node) {
 //		pointCloud := inputs[0]  // [batchSize, numPoints, 3]
-//		ctx = ctx.In("model")
-//		base := vnn.New(ctx.In("base"), pointCloud, 128).Done()  // [batchSize, 128, 3]
-//		V := vnn.New(ctx.In("V"), base, NumClasses).NumHiddenLayers(0, 0)  // [batchSize, NumClasses, 3]
-//		T := vnn.New(ctx.In("T"), base, NumClasses).NumHiddenLayers(0, 0)  // [batchSize, NumClasses, 3]
+//		scope = scope.In("model")
+//		base := vnn.New(scope.In("base"), pointCloud, 128).Done()  // [batchSize, 128, 3]
+//		V := vnn.New(scope.In("V"), base, NumClasses).NumHiddenLayers(0, 0)  // [batchSize, NumClasses, 3]
+//		T := vnn.New(scope.In("T"), base, NumClasses).NumHiddenLayers(0, 0)  // [batchSize, NumClasses, 3]
 //		logits := InvariantDotProduct(V, T)  // [batchSize, NumClasses]
 //		return []*Node{logits}
 //	}
@@ -124,7 +124,7 @@ func New(scope *model.Scope, operand *Node, outputChannels int) *Config {
 		numHiddenNodes:  model.GetParamOr(scope, ParamNumHiddenNodes, 10),
 		activationName:  model.GetParamOr(scope, ParamActivation, "relu"),
 		normalization:   model.GetParamOr(scope, ParamNormalization, ""),
-		regularizer:     regularizers.FromContext(scope),
+		regularizer:     regularizers.FromScope(scope),
 		dropoutRatio:    model.GetParamOr(scope, ParamDropoutRate, 0.0),
 		useResidual:     model.GetParamOr(scope, ParamResidual, false),
 		useScaler:       model.GetParamOr(scope, ParamScaler, false),
@@ -144,7 +144,7 @@ func New(scope *model.Scope, operand *Node, outputChannels int) *Config {
 // Each layer will have numHiddenNodes nodes.
 //
 // The default is 0 (no hidden layers), but it will be overridden if the hyperparameter
-// ParamNumHiddenLayers is set in the context (ctx).
+// ParamNumHiddenLayers is set in the scope (scope).
 // The value for numHiddenNodes can also be configured with the hyperparameter ParamNumHiddenNodes.
 func (c *Config) NumHiddenLayers(numLayers, numHiddenNodes int) *Config {
 	if numLayers < 0 || (numLayers > 0 && numHiddenNodes < 1) {
@@ -214,7 +214,7 @@ func (c *Config) Scaler(enabled bool) *Config {
 //
 // To use more than one type of Regularizer, use regularizers.Combine, and set the returned combined regularizer here.
 //
-// The default is regularizers.FromContext, which is configured by regularizers.ParamL1 and regularizers.ParamL2.
+// The default is regularizers.FromScope, which is configured by regularizers.ParamL1 and regularizers.ParamL2.
 func (c *Config) Regularizer(regularizer regularizers.Regularizer) *Config {
 	c.regularizer = regularizer
 	return c
@@ -250,7 +250,7 @@ func (c *Config) Done() *Node {
 		case "", "none":
 			// No activation, leave it as nil.
 		case "relu":
-			activationFn = ReluFromContext
+			activationFn = ReluFromScope
 		default:
 			exceptions.Panicf("vnn: invalid activation %q given: valid values are \"relu\", \"\" or \"none\"", c.activationName)
 		}
@@ -287,22 +287,22 @@ func (c *Config) Done() *Node {
 	// For hidden layers, we have only one axis, with numHiddenNodes.
 	for ii := range c.numHiddenLayers + 1 {
 		// Scope for this layer
-		var layerCtx *model.Scope
+		var layerScope *model.Scope
 		if ii < c.numHiddenLayers {
-			layerCtx = scope.In("vnn_hidden_layer_%d", ii)
+			layerScope = scope.In("vnn_hidden_layer_%d", ii)
 		} else {
-			layerCtx = scope.In("vnn_output_layer")
+			layerScope = scope.In("vnn_output_layer")
 		}
 
 		// In between-layers: some don't apply to the operand (ii == 0)
 		if ii > 0 && activationFn != nil {
-			operand = activationFn(layerCtx, operand)
+			operand = activationFn(layerScope, operand)
 		}
 		if dropoutRatio != nil {
-			operand = DropoutNormalize(layerCtx, operand, dropoutRatio, true)
+			operand = DropoutNormalize(layerScope, operand, dropoutRatio, true)
 		}
 		if ii > 0 && normalizationFn != nil {
-			operand = normalizationFn(layerCtx, operand)
+			operand = normalizationFn(layerScope, operand)
 		}
 		if c.useResidual {
 			if residual != nil && residual.Shape().Equal(operand.Shape()) {
@@ -320,10 +320,10 @@ func (c *Config) Done() *Node {
 		}
 
 		// Linear transformation
-		weightsVar := layerCtx.VariableWithShape("weights", shapes.Make(dtype, inputChannels, outputChannels))
+		weightsVar := layerScope.VariableWithShape("weights", shapes.Make(dtype, inputChannels, outputChannels))
 		if c.regularizer != nil {
 			// Only for the weights, not for the bias.
-			c.regularizer(layerCtx, g, weightsVar)
+			c.regularizer(layerScope, g, weightsVar)
 		}
 		weights := weightsVar.NodeValue(g)
 		// The output 3D vectors are a linear combination of the operand vectors -> they are SO(3) equivariant.
@@ -339,10 +339,10 @@ func (c *Config) Done() *Node {
 			operandUnit := Div(operand, l2Operand)
 
 			scalerShape := shapes.Make(dtype, 1, outputChannels, 1)
-			alphaVar := layerCtx.
+			alphaVar := layerScope.
 				WithInitializer(initializer.One).
 				VariableWithShape("scaler_alpha", scalerShape)
-			betaVar := layerCtx.
+			betaVar := layerScope.
 				WithInitializer(initializer.Zero).
 				VariableWithShape("scaler_beta", scalerShape)
 			alpha := alphaVar.NodeValue(g)

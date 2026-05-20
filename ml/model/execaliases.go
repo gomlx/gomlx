@@ -11,12 +11,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-// NewExec constructs an Exec object for the given scopeOrStore and symbolic computation function ctxGraphFn.
+// NewExec constructs an Exec object for the given scopeOrStore and symbolic computation function graphFn.
 //
 // The scopeOrStore can be a *Scope or a *Store. If it is a *Store, it is converted to its RootScope().
 // If nil, it automatically creates a new empty store and uses its RootScope().
 //
-// The ctxGraphFn is called to build the computation graphs with a Scope.
+// The graphFn is called to build the computation graphs with a Scope.
 // It must take a *Scope input parameter followed by one or more *Node parameters as input and return one or more *Node.
 // Alternatively, it can, instead of *Node inputs, take a *Graph object when there are no input tensors.
 //
@@ -26,17 +26,17 @@ import (
 //
 // This is a generic wrapper around NewExecCanonical that checks that types are
 // correct.
-func NewExec[F ExecGraphFn](backend compute.Backend, store *Store, ctxGraphFn F) (*Exec, error) {
-	canonicalFn, numInputs, numOutputs, inputIsGraph, inputAsSlice, outputAsSlice := convertExecFn(ctxGraphFn)
+func NewExec[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F) (*Exec, error) {
+	canonicalFn, numInputs, numOutputs, inputIsGraph, inputAsSlice, outputAsSlice := convertExecFn(graphFn)
 	return NewExecCanonical(backend, store, canonicalFn, numInputs, numOutputs, inputIsGraph, inputAsSlice, outputAsSlice)
 }
 
-// MustNewExec constructs an Exec object for the given scopeOrStore and symbolic computation function ctxGraphFn.
+// MustNewExec constructs an Exec object for the given scopeOrStore and symbolic computation function graphFn.
 //
 // The scopeOrStore can be a *Scope or a *Store. If it is a *Store, it is converted to its RootScope().
 // If nil, it automatically creates a new empty store and uses its RootScope().
 //
-// The ctxGraphFn is called to build the computation graphs with a Scope.
+// The graphFn is called to build the computation graphs with a Scope.
 // It must take a *Scope input parameter followed by one or more *Node parameters as input and return one or more *Node.
 // Alternatively, it can, instead of *Node inputs, take a *Graph object when there are no input tensors.
 //
@@ -45,8 +45,8 @@ func NewExec[F ExecGraphFn](backend compute.Backend, store *Store, ctxGraphFn F)
 // More details see Exec.
 //
 // It panics on error.
-func MustNewExec[F ExecGraphFn](backend compute.Backend, store *Store, ctxGraphFn F) *Exec {
-	return must.M1(NewExec(backend, store, ctxGraphFn))
+func MustNewExec[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F) *Exec {
+	return must.M1(NewExec(backend, store, graphFn))
 }
 
 // DistributedExec is just like Exec, but aggregates the outputs into *dtensor.Tensor.
@@ -77,7 +77,7 @@ func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*dtensor.Tensor, err
 //
 // Notice it uses the Store object used during creation -- if needed, you can change it with SetStore.
 //
-// If a graph does not yet exist, one is created (using ctxGraphFn provided during creation), compiled, and cached
+// If a graph does not yet exist, one is created (using graphFn provided during creation), compiled, and cached
 // for these shapes of the inputs.
 //
 // It returns the outputs in a slice. See MustExec1, MustExec2, ..., MustExec4 as aliases when you expect a fixed number of outputs.
@@ -108,8 +108,8 @@ func (e *Exec) MustExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Gra
 // It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize.
 //
 // See ExecOnce for a more convenient version if you have only one output.
-func ExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, ctxGraphFn F, args ...any) ([]*tensors.Tensor, error) {
-	e, err := NewExec(backend, store, ctxGraphFn)
+func ExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F, args ...any) ([]*tensors.Tensor, error) {
+	e, err := NewExec(backend, store, graphFn)
 	if err != nil {
 		return nil, err
 	}
@@ -124,8 +124,8 @@ func ExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, ctxGraphFn 
 // See MustExecOnce for a more convenient version if you have only one output.
 //
 // It panics on error. See ExecOnceN for a version that returns an error.
-func MustExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, ctxGraphFn F, args ...any) []*tensors.Tensor {
-	outputs, err := ExecOnceN(backend, store, ctxGraphFn, args...)
+func MustExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F, args ...any) []*tensors.Tensor {
+	outputs, err := ExecOnceN(backend, store, graphFn, args...)
 	if err != nil {
 		panic(err)
 	}
@@ -137,8 +137,8 @@ func MustExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, ctxGrap
 // It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize for functions that return only one output.
 //
 // See ExecOnceN if you have multiple (or zero) outputs.
-func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, ctxGraphFn F, args ...any) (*tensors.Tensor, error) {
-	outputs, err := ExecOnceN(backend, store, ctxGraphFn, args...)
+func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, graphFn F, args ...any) (*tensors.Tensor, error) {
+	outputs, err := ExecOnceN(backend, store, graphFn, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -155,8 +155,8 @@ func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, ctx
 // See MustExecOnceN if you have multiple outputs.
 //
 // It panics on error. See ExecOnce for a version that returns an error.
-func MustExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, ctxGraphFn F, args ...any) *tensors.Tensor {
-	output, err := ExecOnce(backend, store, ctxGraphFn, args...)
+func MustExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, graphFn F, args ...any) *tensors.Tensor {
+	output, err := ExecOnce(backend, store, graphFn, args...)
 	if err != nil {
 		panic(err)
 	}

@@ -39,7 +39,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -50,7 +50,7 @@ var ModelList = []string{"linear", "cnn"}
 
 var excludeParams = []string{"data_dir", "train_steps", "num_checkpoints", "plots"}
 
-type ContextFn func(scope *model.Scope) *model.Scope
+type ScopeFn func(scope *model.Scope) *model.Scope
 
 func CreateModelStore() *model.Store {
 	store := model.NewStore()
@@ -75,9 +75,9 @@ func CreateModelStore() *model.Store {
 		// draw the plot with Plotly.
 		//
 		// From the command-line, an easy way to monitor the metrics being generated during the training of a model
-		// is using the gomlx_checkpoints tool:
+		// is using the gomlx_checkpointss tool:
 		//
-		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
+		//	$ gomlx_checkpointss --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
 		plotly.ParamPlots: false,
 
 		optimizer.ParamOptimizer:       "adamw",
@@ -102,9 +102,9 @@ func CreateModelStore() *model.Store {
 	return store
 }
 
-// NewDatasetsConfigurationFromContext create a preprocessing configuration based on hyperparameters
+// NewDatasetsConfigurationFromScope create a preprocessing configuration based on hyperparameters
 // set in the model.
-func NewDatasetsConfigurationFromContext(scope *model.Scope, dataDir string) *DatasetsConfiguration {
+func NewDatasetsConfigurationFromScope(scope *model.Scope, dataDir string) *DatasetsConfiguration {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	config := &DatasetsConfiguration{}
 	config.DataDir = dataDir
@@ -142,7 +142,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	backend := compute.MustNew()
 	fmt.Printf("Backend %s: %s\n", backend.Name(), backend.Description())
 
-	lossFn, err := losses.LossFromContext(scope)
+	lossFn, err := losses.LossFromScope(scope)
 	if err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 		return err
 	}
 
-	dsConfig := NewDatasetsConfigurationFromContext(scope, dataDir)
+	dsConfig := NewDatasetsConfigurationFromScope(scope, dataDir)
 	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(backend, dsConfig)
 
 	// Metrics we are interested in.

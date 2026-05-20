@@ -16,7 +16,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ParseContextSettings from settings -- typically the contents of a flag set by the user.
+// ParseScopeSettings from settings -- typically the contents of a flag set by the user.
 // The settings are a list separated by ";": e.g.: "param1=value1;param2=value2;...".
 //
 // All the parameters "param1", "param2", etc. must be already set with default values
@@ -32,17 +32,17 @@ import (
 // For integer types, "_" is removed: it allows one to enter large numbers using it as a separator, like
 // in Go. E.g.: 1_000_000 = 1000000.
 //
-// See the example in CreateContextSettingsFlag, which will create a flag for the settings.
+// See the example in CreateScopeSettingsFlag, which will create a flag for the settings.
 //
 // Example usage:
 //
 //	func main() {
 //		store := createDefaultModelStore()
-//		settings := commandline.CreateContextSettingsFlag(store.RootScope(), "")
+//		settings := commandline.CreateScopeSettingsFlag(store.RootScope(), "")
 //		flag.Parse()
-//		err := commandline.ParseContextSettings(store.RootScope(), *settings)
+//		err := commandline.ParseScopeSettings(store.RootScope(), *settings)
 //		if err != nil { panic(err) }
-//		fmt.Println(commandline.SprintContextSettings(scope))
+//		fmt.Println(commandline.SprintScopeSettings(scope))
 //		...
 //	}
 func ParseSettings(store *model.Store, settings string) (modifiedParams []string, err error) {
@@ -187,7 +187,7 @@ func parseSetting(store *model.Store, setting string, modifiedParams []string) (
 }
 
 // CreateSettingsFlag create a string flag with the given flagName (if empty it will be named
-// "set") and with a description of the current defined parameters in the context `ctx`.
+// "set") and with a description of the current defined parameters in the context `scope`.
 //
 // The flag should be created before the call to `flags.Parse()`.
 //
@@ -199,7 +199,7 @@ func parseSetting(store *model.Store, setting string, modifiedParams []string) (
 //		flag.Parse()
 //		err := commandline.ParseSettings(store, *settings)
 //		if err != nil { panic(err) }
-//		fmt.Println(commandline.SprintSettings(ctx))
+//		fmt.Println(commandline.SprintSettings(scope))
 //		...
 //	}
 func CreateSettingsFlag(store *model.Store, flagName string) *string {

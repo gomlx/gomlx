@@ -38,10 +38,10 @@ func Model(scope *model.Scope, spec any, inputs []*Node) []*Node {
 			// Take one column at a time of the categorical values.
 			split := Slice(categorical, AxisRange(), AxisRange(catIdx, catIdx+1))
 			// Embed it accordingly.
-			embedCtx := scope.In("categorical_%d_%s", catIdx, adult.Data.VocabulariesFeatures[catIdx])
+			embedScope := scope.In("categorical_%d_%s", catIdx, adult.Data.VocabulariesFeatures[catIdx])
 			vocab := adult.Data.Vocabularies[catIdx]
 			vocabSize := len(vocab)
-			embedding := layers.Embedding(embedCtx, split, ModelDType, vocabSize, *flagEmbeddingDim, false)
+			embedding := layers.Embedding(embedScope, split, ModelDType, vocabSize, *flagEmbeddingDim, false)
 			embedding.AssertDims(batchSize, *flagEmbeddingDim)
 			allEmbeddings = append(allEmbeddings, embedding)
 		}
@@ -54,10 +54,10 @@ func Model(scope *model.Scope, spec any, inputs []*Node) []*Node {
 			// Take one column at a time of the continuous values.
 			split := Slice(continuous, AxisRange(), AxisRange(contIdx, contIdx+1))
 			featureName := adult.Data.QuantilesFeatures[contIdx]
-			calibrationCtx := scope.In("continuous_%d_%s", contIdx, featureName)
+			calibrationScope := scope.In("continuous_%d_%s", contIdx, featureName)
 			quantiles := adult.Data.Quantiles[contIdx]
 			layers.AssertQuantilesForPWLCalibrationValid(quantiles)
-			calibrated := layers.PieceWiseLinearCalibration(calibrationCtx, split, Const(g, quantiles),
+			calibrated := layers.PieceWiseLinearCalibration(calibrationScope, split, Const(g, quantiles),
 				*flagTrainableCalibration)
 			calibrated.AssertDims(batchSize, 1) // 2-dim tensor, with batch size as the leading dimension.
 			allEmbeddings = append(allEmbeddings, calibrated)
@@ -68,10 +68,10 @@ func Model(scope *model.Scope, spec any, inputs []*Node) []*Node {
 
 	// Model itself is an FNN or a KAN.
 	if model.GetParamOr(scope, "kan", false) {
-		// Use KAN, all configured by context hyperparameters. See createDefaultContext for defaults.
+		// Use KAN, all configured by scope hyperparameters. See createDefaultScope for defaults.
 		logits = kan.New(scope.In("kan"), logits, 1).Done()
 	} else {
-		// Normal FNN, all configured by context hyperparameters. See createDefaultContext for defaults.
+		// Normal FNN, all configured by scope hyperparameters. See createDefaultScope for defaults.
 		logits = fnn.New(scope.In("fnn"), logits, 1).Done()
 	}
 	logits.AssertDims(batchSize, 1) // 2-dim tensor, with batch size as the leading dimension.

@@ -6,8 +6,8 @@
  ---
 ## v0.28 TODOs
 
-- `ml/initializers` -> `model/initializer`
-- `ml/checkpoints` -> `model/checkpoint`
+- `ml/initializer` -> `model/initializer`
+- `ml/checkpoint` -> `model/checkpoint`
 - Move other `pkg/ml/...` to `ml/...`
 - Fix examples and notebooks.
 - Create basic documentation in https://github.com/gomlx/gomlx.github.io.
@@ -87,7 +87,7 @@
   - **DRI:** _unassigned_
   - **Status:** idea
   - **Priority:** P1
-  - **Description:** Add recent ML layers, optimizers, regularizers.
+  - **Description:** Add recent ML layers, optimizer, regularizers.
   - **Definition of Done:**
     - Continuous: there will always be new papers.
     - For each new contribution:
@@ -268,12 +268,12 @@
 
   ---
 
-  ## [API-1] Replace Context with Plain Go Struct + Annotations
+  ## [API-1] Replace Scope with Plain Go Struct + Annotations
 
   - **DRI:** _unassigned_
   - **Status:** idea
   - **Priority:** P1
-  - **Description:** Replace Context object with struct-based annotated config.
+  - **Description:** Replace Scope object with struct-based annotated config.
   - **Definition of Done:**
     - RFC document
     - Reflection-based prototype
@@ -292,7 +292,7 @@
   - **Priority:** P1
   - **Definition of Done:**
     - Remove deprecated APIs
-    - Redesign `github.com/gomlx/gomlx/pkg/ml/context`.
+    - Redesign `github.com/gomlx/gomlx/ml/context`.
     - Fix API bad naming (inconsistencies) across the repo.
     - Improve test coverage
 

@@ -57,9 +57,9 @@ const (
 // and it will return an optimizer.Interface that can be used with the `train.Trainer` or directly in a custom
 // optimization loop.
 //
-// See [AdamConfig.FromContext] to configure it from the context hyperparameters.
+// See [AdamConfig.FromScope] to configure it from the scope hyperparameters.
 //
-// Clipping of the gradient updates available by setting the context hyperparameters ParamClipStepByValue("clip_step_by_value")
+// Clipping of the gradient updates available by setting the scope hyperparameters ParamClipStepByValue("clip_step_by_value")
 // and ParamClipNaN ("clip_nan"). NaN in gradients can be reported by assigning a `nanlogger.NanLogger` to the parameter
 // ParamNanLogger.
 func Adam() *AdamConfig {
@@ -88,7 +88,7 @@ func Adam() *AdamConfig {
 // and it will return an optimizer.Interface that can be used with the `train.Trainer` or directly in a custom
 // optimization loop.
 //
-// Clipping of the gradient updates available by setting the context hyperparameters ParamClipStepByValue("clip_step_by_value")
+// Clipping of the gradient updates available by setting the scope hyperparameters ParamClipStepByValue("clip_step_by_value")
 // and ParamClipNaN ("clip_nan"). NaN in gradients can be reported by assigning a `nanlogger.NanLogger` to the parameter
 // ParamNanLogger.
 func RMSProp() *AdamConfig {
@@ -112,9 +112,9 @@ type AdamConfig struct {
 	backoffSteps int
 }
 
-// FromContext will configure Adam with hyperparameters set in the given model.
+// FromScope will configure Adam with hyperparameters set in the given model.
 // E.g.: "adam_epsilon" (see [ParamAdamEpsilon]) is used to set [AdamConfig.Epsilon].
-func (c *AdamConfig) FromContext(scope *model.Scope) *AdamConfig {
+func (c *AdamConfig) FromScope(scope *model.Scope) *AdamConfig {
 	c.Epsilon(model.GetParamOr(scope, ParamAdamEpsilon, c.epsilon))
 	dtypeStr := model.GetParamOr(scope, ParamAdamDType, "")
 	if dtypeStr != "" {
@@ -145,7 +145,7 @@ func (c *AdamConfig) Scope(name string) *AdamConfig {
 //
 // If set to `shapes.InvalidDType` it will use the dtype of the `loss` used to optimize.
 //
-// This can also be set from context using [ParamAdamDType]("adam_dtype") hyperparameter.
+// This can also be set from scope using [ParamAdamDType]("adam_dtype") hyperparameter.
 func (c *AdamConfig) DType(dtype dtypes.DType) *AdamConfig {
 	c.dtype = dtype
 	return c
@@ -153,7 +153,7 @@ func (c *AdamConfig) DType(dtype dtypes.DType) *AdamConfig {
 
 // LearningRate sets the base learning rate as a floating point value -- eventually converted to the same dtype as the loss.
 //
-// Default is either the value of ParamLearningRate ("learning_rate") global parameter in Context if defined, or 0.001 if not.
+// Default is either the value of ParamLearningRate ("learning_rate") global parameter in Scope if defined, or 0.001 if not.
 func (c *AdamConfig) LearningRate(value float64) *AdamConfig {
 	c.learningRate = value
 	return c
@@ -240,7 +240,7 @@ func (o *adam) UpdateGraph(scope *model.Scope, g *Graph, loss *Node) {
 func (o *adam) UpdateGraphWithGradients(scope *model.Scope, grads []*Node, lossDType dtypes.DType) {
 	if len(grads) == 0 {
 		Panicf(
-			"Context.BuildTrainableVariablesGradientsGraph returned 0 gradients, are there any trainable variables ?",
+			"Scope.BuildTrainableVariablesGradientsGraph returned 0 gradients, are there any trainable variables ?",
 		)
 	}
 	g := grads[0].Graph()
@@ -305,7 +305,7 @@ func (o *adam) UpdateGraphWithGradients(scope *model.Scope, grads []*Node, lossD
 		}
 	}
 	if varIdx != numTrainable {
-		Panicf("Context.BuildTrainableVariablesGradientsGraph returned gradients for %d variables, but "+
+		Panicf("Scope.BuildTrainableVariablesGradientsGraph returned gradients for %d variables, but "+
 			"Adam only sees %d variables -- were new variables created in between ?",
 			numTrainable, varIdx)
 	}
@@ -421,6 +421,6 @@ func (o *adam) getMomentVariables(
 // Clear all optimizer variables.
 // It implements optimizer.Interface.
 func (o *adam) Clear(scope *model.Scope) error {
-	ctxAdam := scope.In("%s", o.config.scopeName)
-	return ctxAdam.DeleteVariablesInScope()
+	scopeAdam := scope.In("%s", o.config.scopeName)
+	return scopeAdam.DeleteVariablesInScope()
 }

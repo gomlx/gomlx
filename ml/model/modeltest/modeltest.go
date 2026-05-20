@@ -16,15 +16,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestContextGraphFn should build its own inputs, and return both inputs and outputs
-type TestContextGraphFn func(scope *model.Scope, g *Graph) (inputs, outputs []*Node)
+// TestScopeGraphFn should build its own inputs, and return both inputs and outputs
+type TestScopeGraphFn func(scope *model.Scope, g *Graph) (inputs, outputs []*Node)
 
 // RunTestGraphFn tests a graph building function graphFn by executing it and comparing
 // its output(s) to the values in want, reporting back any errors in t.
 //
 // delta is the margin of value on the difference of output and want values that are acceptable.
 // Values of delta <= 0 means only exact equality is accepted.
-func RunTestGraphFn(t *testing.T, testName string, graphFn TestContextGraphFn, want []any, delta float64) {
+func RunTestGraphFn(t *testing.T, testName string, graphFn TestScopeGraphFn, want []any, delta float64) {
 	store := model.NewStore()
 	var numInputs, numOutputs int
 	wrapperFn := func(scope *model.Scope, g *Graph) []*Node {

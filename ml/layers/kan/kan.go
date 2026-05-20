@@ -2,7 +2,7 @@
 
 // Package kan implements a generic Kolmogorov–Arnold Networks, as described in https://arxiv.org/pdf/2404.19756
 //
-// Start with New(ctx, x, numOutputNodes). Configure further as desired. When finished, call Config.Done, and it will
+// Start with New(scope, x, numOutputNodes). Configure further as desired. When finished, call Config.Done, and it will
 // return KAN(x), per configuration.
 //
 // The original KAN paper used B-Spline functions as the univariate functions. This package implements the
@@ -119,7 +119,7 @@ func New(scope *model.Scope, input *Node, numOutputNodes int) *Config {
 		numHiddenLayers:  model.GetParamOr(scope, ParamNumHiddenLayers, 0),
 		numHiddenNodes:   model.GetParamOr(scope, ParamNumHiddenNodes, 10),
 		activation:       activations.FromName(model.GetParamOr(scope, activations.ParamActivation, "none")),
-		regularizer:      regularizers.FromContext(scope),
+		regularizer:      regularizers.FromScope(scope),
 		useResidual:      model.GetParamOr(scope, ParamResidual, true),
 		useMean:          model.GetParamOr(scope, ParamMean, true),
 		inputGroupSize:   model.GetParamOr(scope, ParamInputGroupSize, int(0)),
@@ -148,7 +148,7 @@ func New(scope *model.Scope, input *Node, numOutputNodes int) *Config {
 // Each bsplineLayer will have numHiddenNodes nodes.
 //
 // The default is 0 (no hidden layers), but it will be overridden if the hyperparameter
-// ParamNumHiddenLayers is set in the context (ctx).
+// ParamNumHiddenLayers is set in the scope (scope).
 // The value for numHiddenNodes can also be configured with the hyperparameter ParamNumHiddenNodes.
 func (c *Config) NumHiddenLayers(numLayers, numHiddenNodes int) *Config {
 	if numLayers < 0 || (numLayers > 0 && numHiddenNodes < 1) {
@@ -253,17 +253,17 @@ func (c *Config) Done() *Node {
 	// Notice residual connections, regularization, dropout, are related layers are applied within the layers themselves.
 	for ii := range c.numHiddenLayers {
 		if c.useDiscrete {
-			layerCtx := scope.In("discrete_kan_hidden_%d", ii)
-			x = c.discreteLayer(layerCtx, x, c.numHiddenNodes)
+			layerScope := scope.In("discrete_kan_hidden_%d", ii)
+			x = c.discreteLayer(layerScope, x, c.numHiddenNodes)
 		} else if c.useRational {
-			layerCtx := scope.In("gr_kan_hidden_%d", ii)
-			x = c.rationalLayer(layerCtx, x, c.numHiddenNodes)
+			layerScope := scope.In("gr_kan_hidden_%d", ii)
+			x = c.rationalLayer(layerScope, x, c.numHiddenNodes)
 		} else if c.usePWL {
-			layerCtx := scope.In("pwl_kan_hidden_%d", ii)
-			x = c.pwlLayer(layerCtx, x, c.numHiddenNodes)
+			layerScope := scope.In("pwl_kan_hidden_%d", ii)
+			x = c.pwlLayer(layerScope, x, c.numHiddenNodes)
 		} else {
-			layerCtx := scope.In("bspline_kan_hidden_%d", ii)
-			x = c.bsplineLayer(layerCtx, x, c.numHiddenNodes)
+			layerScope := scope.In("bspline_kan_hidden_%d", ii)
+			x = c.bsplineLayer(layerScope, x, c.numHiddenNodes)
 		}
 	}
 

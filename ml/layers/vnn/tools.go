@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
-// DropoutNormalize randomly replace the operand with zeros if ctx.IsTraining() is true. Otherwise,
+// DropoutNormalize randomly replace the operand with zeros if scope.IsTraining() is true. Otherwise,
 // it's a no op (it returns operand). If normalize is set, it scales the output by 1/(1-dropoutRate)
 // to preserve the mean of the operand values.
 //

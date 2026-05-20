@@ -50,7 +50,7 @@ func CnnEmbeddings(scope *model.Scope, images *Node) *Node {
 			scope := scope.In("repeat_%02d", repeat)
 			residual := logits
 			logits = layers.Convolution(scope, logits).Channels(numChannels).KernelSize(3).PadSame().Done()
-			logits = activations.ApplyFromContext(scope, logits)
+			logits = activations.ApplyFromScope(scope, logits)
 			if dropoutNode != nil {
 				logits = layers.Dropout(scope, logits, dropoutNode)
 			}

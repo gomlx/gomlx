@@ -17,7 +17,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -33,7 +33,7 @@ var (
 	// C10ValidModels is the list of model types supported.
 	C10ValidModels = []string{"fnn", "kan", "cnn"}
 
-	// ParamsExcludedFromSaving is the list of parameters (see CreateDefaultContext) that shouldn't be saved
+	// ParamsExcludedFromSaving is the list of parameters (see CreateDefaultScope) that shouldn't be saved
 	// along on the models checkpoints, and may be overwritten in further training sessions.
 	ParamsExcludedFromSaving = []string{
 		"data_dir", "train_steps", "num_checkpoints", "plots",
@@ -167,7 +167,7 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 	}
 }
 
-// SelectModelFn based on hyperparameter "model" in Context.
+// SelectModelFn based on hyperparameter "model" in Scope.
 func SelectModelFn(scope *model.Scope) (modelFn train.ModelFn, err error) {
 	modelFn = C10PlainModelGraph // Handles all models except CNN.
 	modelType := model.GetParamOr(scope, "model", C10ValidModels[0])

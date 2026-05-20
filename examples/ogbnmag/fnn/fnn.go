@@ -20,7 +20,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -36,7 +36,7 @@ func FnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	getMagVar := func(name string) *Node {
 		magVar := scope.Store().GetVariable(model.JoinPath(mag.OgbnMagVariablesScope, name))
 		if magVar == nil {
-			exceptions.Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on context first.", name)
+			exceptions.Panicf("Missing OGBN-MAG dataset variables (%q), pls call UploadOgbnMagVariables() on scope first.", name)
 		}
 		return magVar.NodeValue(g)
 	}

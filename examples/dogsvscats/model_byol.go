@@ -20,7 +20,7 @@ import (
 )
 
 // byolModelEmbedding is the core of the BYOL ((Bootstrap Your Own Latent) model.
-// It's built twice, once for the "online" model once for the "target" model -- using contexts on different scopes.
+// It's built twice, once for the "online" model once for the "target" model -- using scopes on different scopes.
 //
 // baseTrainable defines whether the base model should be trainable (set to false for the "target"
 // model, or if fine-tuning is disabled)
@@ -53,12 +53,12 @@ func ByolCnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 
 	// Create two models: same structure, different initializations, and if `--byol_use_pairs` is set,
 	// different augmentations of the same image.
-	onlineCtx := scope.In("online")
-	targetCtx := scope.In("target").WithInitializer(initializer.RandomNormalFn(scope, 1.0))
+	onlineScope := scope.In("online")
+	targetScope := scope.In("target").WithInitializer(initializer.RandomNormalFn(scope, 1.0))
 
 	// No dropout for the "target" model.
-	targetCtx.SetParam("cnn_dropout_rate", 0.0)
-	targetCtx.SetParam(layers.ParamDropoutRate, 0.0)
+	targetScope.SetParam("cnn_dropout_rate", 0.0)
+	targetScope.SetParam(layers.ParamDropoutRate, 0.0)
 
 	// Evaluation/Inference and if pre-training is over, we only use the "online" model, and return
 	// its prediction.
@@ -68,22 +68,22 @@ func ByolCnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	if !scope.IsTraining(g) || !byolPretrain {
 		// Normal model path, without byol regularization.
 		baseTraining := scope.IsTraining(g) && byolFinetune
-		embeddings := byolModelEmbedding(onlineCtx, inputs[0], baseTraining)
+		embeddings := byolModelEmbedding(onlineScope, inputs[0], baseTraining)
 		logit := fnn.New(scope.In("readout"), embeddings, 1).NumHiddenLayers(0, 0).Done()
 		return []*Node{logit} // Return only the logits.
 	}
 
 	stackedImages12 := Concatenate([]*Node{inputs[0], inputs[1]}, 0) // For "online" model.
 	stackedImages21 := Concatenate([]*Node{inputs[1], inputs[0]}, 0) // For "target" model.
-	regularizationRate := model.GetParamOr(targetCtx, "byol_regularization_rate", 1.0)
+	regularizationRate := model.GetParamOr(targetScope, "byol_regularization_rate", 1.0)
 
-	onlineEmbedding := byolModelEmbedding(onlineCtx, stackedImages12, true)
-	onlineProjection := byolProjection(onlineCtx, onlineEmbedding, 3)
-	//byolRegularizeToLengthOne(onlineCtx, onlineTargetPrediction)
+	onlineEmbedding := byolModelEmbedding(onlineScope, stackedImages12, true)
+	onlineProjection := byolProjection(onlineScope, onlineEmbedding, 3)
+	//byolRegularizeToLengthOne(onlineScope, onlineTargetPrediction)
 
-	targetEmbedding := byolModelEmbedding(targetCtx, stackedImages21, false)
-	targetProjection := byolProjection(targetCtx, targetEmbedding, 1)
-	for v := range targetCtx.IterVariables() {
+	targetEmbedding := byolModelEmbedding(targetScope, stackedImages21, false)
+	targetProjection := byolProjection(targetScope, targetEmbedding, 1)
+	for v := range targetScope.IterVariables() {
 		v.Trainable = false
 	}
 	targetProjection = StopGradient(targetProjection)
@@ -93,8 +93,8 @@ func ByolCnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	train.AddLoss(scope, MulScalar(byolReg, regularizationRate))
 
 	// Update "target" model with moving average to the "online" model.
-	movingAverageRatio := model.GetParamOr(targetCtx, "byol_target_update_ratio", 0.999)
-	moveTargetModel(onlineCtx, targetCtx, g, movingAverageRatio)
+	movingAverageRatio := model.GetParamOr(targetScope, "byol_target_update_ratio", 0.999)
+	moveTargetModel(onlineScope, targetScope, g, movingAverageRatio)
 	return []*Node{} // No prediction to return.
 }
 
@@ -109,17 +109,17 @@ func byolProjection(scope *model.Scope, embeddings *Node, numHiddenLayers int) *
 // moveTargetModel slowly move the targetModel towards the onlineModel.
 // If movingAverageRatio > 1.0, it is a no-op.
 //
-// onlineCtx and targetCtx are the same context, in different scopes.
-func moveTargetModel(onlineCtx, targetCtx *model.Scope, g *Graph, movingAverageRatio float64) {
+// onlineScope and targetScope are the same scope, in different scopes.
+func moveTargetModel(onlineScope, targetScope *model.Scope, g *Graph, movingAverageRatio float64) {
 	if movingAverageRatio >= 1.0 {
 		return
 	}
-	onlineScope := onlineCtx.Scope()
-	targetScope := targetCtx.Scope()
-	for targetVar := range targetCtx.IterVariables() {
+	onlineScope := onlineScope.Scope()
+	targetScope := targetScope.Scope()
+	for targetVar := range targetScope.IterVariables() {
 		// Get corresponding variable in "online" model.
 		onlineVarScope := onlineScope + targetVar.Scope()[len(targetScope):]
-		onlineVar := onlineCtx.Store().GetVariable(path.Join(onlineVarScope, targetVar.Name()))
+		onlineVar := onlineScope.Store().GetVariable(path.Join(onlineVarScope, targetVar.Name()))
 		if onlineVar == nil {
 			exceptions.Panicf("BYOL target model variable %q::%q has no corresponding variable %q::%q in online model",
 				targetVar.Scope(), targetVar.Name(), onlineVarScope, targetVar.Name())

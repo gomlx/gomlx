@@ -124,7 +124,7 @@ func New(scope *model.Scope, input *Node, outputDimensions ...int) *Config {
 		numHiddenNodes:   model.GetParamOr(scope, ParamNumHiddenNodes, 10),
 		activation:       activations.FromName(model.GetParamOr(scope, activations.ParamActivation, "relu")),
 		normalization:    model.GetParamOr(scope, ParamNormalization, ""),
-		regularizer:      regularizers.FromContext(scope),
+		regularizer:      regularizers.FromScope(scope),
 		dropoutRatio:     model.GetParamOr(scope, ParamDropoutRate, -1.0),
 		useResidual:      model.GetParamOr(scope, ParamResidual, false),
 		useBias:          true,
@@ -178,7 +178,7 @@ func (c *Config) WithEnsembleAxis(ensembleAxis int) *Config {
 // Each layer will have numHiddenNodes nodes.
 //
 // The default is 0 (no hidden layers), but it will be overridden if the hyperparameter
-// ParamNumHiddenLayers is set in the context (ctx).
+// ParamNumHiddenLayers is set in the scope (scope).
 // The value for numHiddenNodes can also be configured with the hyperparameter ParamNumHiddenNodes.
 func (c *Config) NumHiddenLayers(numLayers, numHiddenNodes int) *Config {
 	if numLayers < 0 || (numLayers > 0 && numHiddenNodes < 1) {
@@ -236,7 +236,7 @@ func (c *Config) Normalization(normalization string) *Config {
 //
 // To use more than one type of Regularizer, use regularizers.Combine, and set the returned combined regularizer here.
 //
-// The default is regularizers.FromContext, which is configured by regularizers.ParamL1 and regularizers.ParamL2.
+// The default is regularizers.FromScope, which is configured by regularizers.ParamL1 and regularizers.ParamL2.
 func (c *Config) Regularizer(regularizer regularizers.Regularizer) *Config {
 	c.regularizer = regularizer
 	return c
@@ -281,11 +281,11 @@ func (c *Config) Done() *Node {
 			outputDims = c.outputDimensions
 		}
 		// Scope for this layer
-		var layerCtx *model.Scope
+		var layerScope *model.Scope
 		if ii < c.numHiddenLayers {
-			layerCtx = scope.In("fnn_hidden_layer_%d", ii)
+			layerScope = scope.In("fnn_hidden_layer_%d", ii)
 		} else {
-			layerCtx = scope.In("fnn_output_layer")
+			layerScope = scope.In("fnn_output_layer")
 		}
 
 		// In between-layers: some don't apply to the input (ii == 0)
@@ -293,11 +293,11 @@ func (c *Config) Done() *Node {
 			x = activations.Apply(c.activation, x)
 		}
 		if dropoutRatio != nil {
-			x = layers.DropoutNormalize(layerCtx, x, dropoutRatio, true)
+			x = layers.DropoutNormalize(layerScope, x, dropoutRatio, true)
 		}
 		if ii > 0 {
 			if c.normalization != "" && c.normalization != "none" {
-				x = layers.MustNormalizeByName(layerCtx, c.normalization, x)
+				x = layers.MustNormalizeByName(layerScope, c.normalization, x)
 			}
 		}
 		if c.useResidual {
@@ -330,10 +330,10 @@ func (c *Config) Done() *Node {
 		}
 		weightsDims = append(weightsDims, inputLastDimension)
 		weightsDims = append(weightsDims, outputDims...)
-		weightsVar := layerCtx.VariableWithShape("weights", shapes.Make(dtype, weightsDims...))
+		weightsVar := layerScope.VariableWithShape("weights", shapes.Make(dtype, weightsDims...))
 		if c.regularizer != nil {
 			// Only for the weights, not for the bias.
-			c.regularizer(layerCtx, g, weightsVar)
+			c.regularizer(layerScope, g, weightsVar)
 		}
 		weights := weightsVar.NodeValue(g)
 		var biasNode *Node
@@ -343,7 +343,7 @@ func (c *Config) Done() *Node {
 				biasDims = append(biasDims, c.ensembleSize)
 			}
 			biasDims = append(biasDims, outputDims...)
-			biasVar := layerCtx.VariableWithShape("biases", shapes.Make(dtype, biasDims...))
+			biasVar := layerScope.VariableWithShape("biases", shapes.Make(dtype, biasDims...))
 			biasNode = biasVar.NodeValue(g)
 		}
 

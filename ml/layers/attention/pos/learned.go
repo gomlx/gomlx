@@ -41,7 +41,7 @@ var _ Encoder = &Learned{}
 var _ PreEncoder = &Learned{}
 
 // NewLearned creates a Learned positional embedding.
-// It takes as input the context, the maximum positional embedding, and the embedding dimension.
+// It takes as input the scope, the maximum positional embedding, and the embedding dimension.
 func NewLearned(scope *model.Scope, maxPosEmbedding, embedDim int) *Learned {
 	return &Learned{
 		scope:           scope,

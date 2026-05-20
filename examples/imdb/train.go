@@ -23,7 +23,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/metrics"
-	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
@@ -40,7 +40,7 @@ var (
 		"transformer": TransformerModelGraph,
 	}
 
-	// ParamsExcludedFromLoading is the list of parameters (see CreateDefaultContext) that shouldn't be saved
+	// ParamsExcludedFromLoading is the list of parameters (see CreateDefaultScope) that shouldn't be saved
 	// along on the models checkpoints, and may be overwritten in further training sessions.
 	ParamsExcludedFromLoading = []string{
 		"data_dir", "train_steps", "num_checkpoints", "plots",
@@ -78,9 +78,9 @@ func CreateModelStore() *model.Store {
 		// draw the plot with Plotly.
 		//
 		// From the command-line, an easy way to monitor the metrics being generated during the training of a model
-		// is using the gomlx_checkpoints tool:
+		// is using the gomlx_checkpointss tool:
 		//
-		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
+		//	$ gomlx_checkpointss --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
 		plotly.ParamPlots: true,
 
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.

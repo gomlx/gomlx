@@ -3,7 +3,7 @@
 // Package activations implements several common activations, and includes a generic Apply method to apply an
 // activation by its type.
 //
-// There is also FromName to convert an activation name (string) to its type, and ApplyFromContext that applies
+// There is also FromName to convert an activation name (string) to its type, and ApplyFromScope that applies
 // an activation based on the hyperparameter ParamActivation defined in a model.
 package activations
 
@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	// ParamActivation context hyperparameter defines the activation to use, for models using ApplyFromContext.
+	// ParamActivation scope hyperparameter defines the activation to use, for models using ApplyFromScope.
 	// Available values are: `none`, `relu`, `leaky_relu`, `sigmoid`, `tanh`, `swish` (same as `silu`), `hard_swish`,
 	// `selu`, `gelu` or `gelu_approx`.
 	// The default is `relu`.
@@ -74,11 +74,11 @@ func (t Type) ToBackend() compute.ActivationType {
 
 //go:generate go tool enumer -type Type -trimprefix=Type -output=gen_type_enumer.go activations.go
 
-// ApplyFromContext picks an activation function from the context using [ParamActivation] parameter,
+// ApplyFromScope picks an activation function from the scope using [ParamActivation] parameter,
 // and applies it to x.
 //
 // It defaults to "relu".
-func ApplyFromContext(scope *model.Scope, x *Node) *Node {
+func ApplyFromScope(scope *model.Scope, x *Node) *Node {
 	activationName := model.GetParamOr(scope, ParamActivation, "relu")
 	return Apply(FromName(activationName), x)
 }

@@ -163,7 +163,7 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 //
 // The dropoutRate (if > 0) applies dropout to the attention coefficients during training.
 // When dropout is active, the fused path is skipped (fused ops don't support dropout).
-// The ctx parameter provides the training/inference context for dropout; it may be nil
+// The scope parameter provides the training/inference scope for dropout; it may be nil
 // when dropoutRate is 0.
 //
 // When wantCoefficients is true, the decomposed path is used for the entire computation

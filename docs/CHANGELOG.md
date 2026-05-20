@@ -34,19 +34,19 @@ GoMLX even thought it was no longer needed).
 We are taking the opportunity of the large API upgrade to remove the `pkg` top-level
 directory, and move the packages to the root:
 
-- `github.com/gomlx/gomlx/pkg/core/...` -> `github.com/gomlx/gomlx/core/...
-- `github.com/gomlx/gomlx/pkg/ml/...` -> `github.com/gomlx/gomlx/ml/...
-- `github.com/gomlx/gomlx/pkg/support/...` -> `github.com/gomlx/gomlx/support/...
+- `github.com/gomlx/gomlx/core/...` -> `github.com/gomlx/gomlx/core/...
+- `github.com/gomlx/gomlx/ml/...` -> `github.com/gomlx/gomlx/ml/...
+- `github.com/gomlx/gomlx/support/...` -> `github.com/gomlx/gomlx/support/...
 
 And a few small renaming:
 
-- `ml/model/initializers` -> `ml/model/initializer`
-- `ml/model/checkpoints` -> `ml/model/checkpoint`
+- `ml/model/initializer` -> `ml/model/initializer`
+- `ml/model/checkpoint` -> `ml/model/checkpoint`
 
-## **Context Redesign** now in package `model`
+## **Scope Redesign** now in package `model`
 - Package `context` -> `model`
-- `Context` -> `Store` and `Scope`
-- `NewContext` -> `NewStore` (the only "global" one)
+- `Scope` -> `Store` and `Scope`
+- `NewScope` -> `NewStore` (the only "global" one)
 - `Exec.Exec` -> `Exec.Call`, more inline with ML standards, and less stuttering.
 - Using mostly `fullPath` instead of the split scope/key pairs.
 - Variables:
@@ -54,7 +54,7 @@ And a few small renaming:
   - `InspectVariable` -> `Store.GetVariable`
   - `InspectVariableInScope` -> `Scope.GetVariable`
   - `SetValueGraph` -> `SetNodeValue`; `ValueGraph` -> `NodeValue`
-  - `Variable.ParameterName` because a private function in `checkpoints` package.
+  - `Variable.ParameterName` because a private function in `checkpoint` package.
 
 ## Graph (github.com/gomlx/gomlx/core/graph):
 - `Exec.Exec` -> `Exec.Call` (no change in name, but `Exec` is gone).
@@ -258,7 +258,7 @@ And a few small renaming:
 
 # v0.26.0: Using the new github.com/gomlx/go-xla library. Added linux/arm64 and windows/amd64 support for XLA CPU.
 
-API Change: `dtypes` package moved from `github.com/gomlx/gopjrt/dtypes` to `github.com/gomlx/gomlx/pkg/core/dtypes`.
+API Change: `dtypes` package moved from `github.com/gomlx/gopjrt/dtypes` to `github.com/gomlx/gomlx/core/dtypes`.
 It should be a simple change in import.
 
 XLA:
@@ -310,7 +310,7 @@ Distributed computation improvements and refactorings:
   - Added `RunOnDevice`.
   - Added `Exec.AutoSharding` and `Exec.SPMD`.
 - Package `context`:
-  - Added `model.MustGetParam[T](ctx, key)` and `model.MustGetGraphParam[T](ctx, graph, key)`.
+  - Added `model.MustGetParam[T](scope, key)` and `model.MustGetGraphParam[T](scope, graph, key)`.
   - Added `Exec.AutoSharding` and `Exec.SPMD`.
   - Added `Variable.DistributedValue` and `Variable.SetDistributedValue`.
 - Package `train`:
@@ -513,11 +513,11 @@ Other improvements:
 * Package `backends`:
   * Method **`New()` will return an error (as opposed to panic)**.
     The temporarily `NewOrErr` was marked as deprecated, use `New` instead.
-* Package `optimizers`:
+* Package `optimizer`:
   * New `AdamConfig.WithBackoffSteps()` (or the hyperparameter `adam_backoff`) that prevents gradient steps
     from being taken until the given number of steps has executed. This allows a better estimate (moving average) of
     the gradients ("momentum") and their variances to be calculated before applying them.
-  * New `optimizers.ParamAdamBeta1` and `optimizers.ParamAdamBeta2` hyperparameters to control Adam beta1 and beta2
+  * New `optimizer.ParamAdamBeta1` and `optimizer.ParamAdamBeta2` hyperparameters to control Adam beta1 and beta2
     hyperparameters.
 * Package `context`:
   * Added `Variable.DType()`.
@@ -556,7 +556,7 @@ Other improvements:
   * `MeanMetric` allows for disabling dynamic batch weighting.  API slightly changed: `NewMeanMetric` now
     returns a `MeanMetric` struct, not an interface.
   * Added `StreamingMedianMetric`.
-* Package `ml/train/optimizers`:
+* Package `ml/train/optimizer`:
   * Added `RMSProp()` optimizer.
 * Package `ml/layers`
   * Added normalizing 1/sqrt(d_k) factor to attention logits in the MultiHeadAttention layer: this will break current
@@ -566,11 +566,11 @@ Other improvements:
   * Added support for multiple models to allow comparing models.
   * Fixed the printing of metrics with tiny values.
 * Package `context`:
-  * Allow VariableInitializers to use the `model.Context` itself, with its own random initializer.
+  * Allow VariableInitializers to use the `model.Scope` itself, with its own random initializer.
   * `DefaultInitializer` now creates an initializer. The new default uses He initializer, the same used in PyTorch.
-  * Package `initializers`:
+  * Package `initializer`:
     * They now use the `context` random number generator state, which simplifies things.
-    * `ParamInitialSeed` removed, since the RNG is initialized by `Context.RngStateWithSeed()`.
+    * `ParamInitialSeed` removed, since the RNG is initialized by `Scope.RngStateWithSeed()`.
 * Fixed some flaky tests.
 
 # v0.20.1: 2025/06/12 Trainer.AccumulateGradients (when the batch doesn't fit memory); VNN fixes; Numpy improvements.
@@ -580,7 +580,7 @@ Other improvements:
   * Added `Trainer.AccumulateGradients(n)` to accumulate n steps of gradients before applying them. This is useful if
     the desired batch size doesn't fit in memory, so it accumulates the gradients until the virtual batch size gradient
     is calculated.
-* Package `optimizers`:
+* Package `optimizer`:
   * Added support for the new `train.OptimizeWithGradients` interface, to support gradient accumulators.
   * Cleaned up `StochasticGradientDescent` API. Added option to disable decay for testing.
 * Pacakge `vnn`:
@@ -685,7 +685,7 @@ Other improvements:
   * Added sub-package `shapeinference`: helper to implement new backends.
   * Added sub-package `default` which includes the default packages.
   * Added `List()` function that returns the currently registered (compiled-in) backends.
-* Package `checkpoints`
+* Package `checkpoint`
   * Added `Config.FromEmbed` that allows loading a checkpoint from an embedded variable.
 * Package `graph`:
   * `Gather` and `GatherSlices` now have and extra argument called `indicesAreSorted` that tells whether
@@ -705,12 +705,12 @@ Other improvements:
 * Package `tensors`:
   * Added `Tensor.Clone` and `Tensor.OnDeviceClone`.
 * Package `context`:
-  * Removed deprecated `NewContext`
-  * Added `Variable.CloneToContext`
-  * Added `Context.Clone`
+  * Removed deprecated `NewScope`
+  * Added `Variable.CloneToScope`
+  * Added `Scope.Clone`
   * Variable graphToNodeId is now a `xsync.SyncMap`, solving issues for concurrency of multiple graphs being
-    created/executed at the same time for the same Context.Exec object (with different shapes).
-  * Added `Variable.Finalize` and `Context.Finalize`.
+    created/executed at the same time for the same Scope.Exec object (with different shapes).
+  * Added `Variable.Finalize` and `Scope.Finalize`.
 * Updated all dependencies and re-tested.
 
 # v0.18.0: Ragged2D; XLA update; Fixed Scatter functions; Fixed memory leaks.
@@ -729,7 +729,7 @@ Other improvements:
 
 * Added MNIST example (thanks to @TuSKan).
 * `gomlx_checkpoints` now displays the value of scalar variables.
-* Package `checkpoints`:
+* Package `checkpoint`:
   * Loading a checkpoint overwrites the values of variables already present in the context.
   * Fixes when saving, in particular if using `Immediate()` loading.
 * Package `tensors`:
@@ -764,13 +764,13 @@ Other improvements:
 * Added "Flow Matching" examples/demo.
 * Package `layers`:
   * Added `layers.DropBlock`, a type of dropout for images.
-  * Added `layers.DropPath` and `layers.DropPathFromContext`, a type of dropout used in Residual connections, to drop full paths.
+  * Added `layers.DropPath` and `layers.DropPathFromScope`, a type of dropout used in Residual connections, to drop full paths.
   * `layers.LayerNormalization`:
     * up-scale precision by default if input is a Float16 or BFloat16. Low-precision
       lead to NaNs when reducing values for normalization. Added also a hyperparameter to configure normalization DType.
-* Added `Context.RandomBenoulli` to sample from a Bernoulli (binary) distribution.
+* Added `Scope.RandomBenoulli` to sample from a Bernoulli (binary) distribution.
 * Correctly pretty-print Float16 and BFloat16 tensors.
-* Several fixes and small improvements to command-line tool `gomlx_checkpoint`.
+* Several fixes and small improvements to command-line tool `gomlx_checkpoints`.
 * Package `nanlogger`:
   * Store only the stack-trace, and trim the stack into the nanlogger package.
   * Does not exit, simply report the NanLogger. User can define a handler, if they want the training to exit.
@@ -778,9 +778,9 @@ Other improvements:
   * Fixed nanlogger for Float16 and BFloat16; Also, it first prints other logged tensors, before failing with a NaN.
 * Package `losses`:
   * Added `ParamLoss`: hyperparameter to define the loss, and many constant values.
-  * Added `LossFromContext`, using `ParamLoss` hyperparameter.
-  * Added `MakeHuberLossFromContext`
-  * Added experimental `MakeAdaptivePowerLoss` and `MakeAdaptivePowerLossFromContext`
+  * Added `LossFromScope`, using `ParamLoss` hyperparameter.
+  * Added `MakeHuberLossFromScope`
+  * Added experimental `MakeAdaptivePowerLoss` and `MakeAdaptivePowerLossFromScope`
   * Added TripletLoss: various negative sampling strategies and distance metrics.
 * Package `graph`:
   * More unit tests.
@@ -825,11 +825,11 @@ Other improvements:
 
 * Fixed printing of `uint` tensors.
 * Fixed Dockerfile.
-* Example CIFAR -- changes will break previous checkpoints:
+* Example CIFAR -- changes will break previous checkpoint:
   * Added inference example for Cifar models.
   * Fixed model scope issue.
   * Fixed KAN model issue.
-* Added `checkpoints.Load()`: just like `checkpoints.Build`, but it complains if a checkpoint doesn't exist.
+* Added `checkpoint.Load()`: just like `checkpoint.Build`, but it complains if a checkpoint doesn't exist.
 * Package `graph`:
   * Added `ReduceVariance` and an alias `Variance`. Fixed `ReduceAndKeep` if no axes are given.
   * Added `Stack`: similar to `Concatenate` but it creates a new axis.
@@ -846,7 +846,7 @@ Other improvements:
 * Updated dependency to **gopjrt** 0.4.5
 * Moving package `huggingface` and `downloader` to "github.com/gomlx/go-huggingface": marked as deprecated.
 * Added checks and better error report for misuse of rngState in random functions.
-* Added graph.RandomIntN and model.Context.RandomIntN.
+* Added graph.RandomIntN and model.Scope.RandomIntN.
 
 # v0.15.0 - 2024/11/01 Some API clean up; Added support for ONNX model conversion.
 
@@ -875,10 +875,10 @@ Other improvements:
   * **BREAKING CHANGE**: Refactored all UI tools under `ui` directory. It only requires changing the import, the APIs are not changed.
   * New package `fyneui`, a window based training UI built using Fyne.io (EXPERIMENTAL)
 * Package `commandline`:
-  * `ParseContextSettings` now allows parsing settings from a text file.
-  *  Fixed `SprintContextSettings` for scoped hyperparameters.
-  *  Added `SprintModifiedContextSettings` to enumerate only hyperparameters set on the command line.
-* New package `cosineschedule`, refactored from `optimizers` package.
+  * `ParseScopeSettings` now allows parsing settings from a text file.
+  *  Fixed `SprintScopeSettings` for scoped hyperparameters.
+  *  Added `SprintModifiedScopeSettings` to enumerate only hyperparameters set on the command line.
+* New package `cosineschedule`, refactored from `optimizer` package.
   * Added handling negative values for the hyperparameter `cosine_schedule_steps`: they set the period of the cosine schedule
     as fractions of the total number of steps being trained.
 * Package `train`:
@@ -889,11 +889,11 @@ Other improvements:
 
 ## v0.13.0 - 2024/10/07
 
-* Package `initializers`
-  * All random initializers (`RandomUniformFn`, `RandomUniformFn`, `RandomNormalFn`, `GlorotUniformFn`, `XavierUniformFn`)
+* Package `initializer`
+  * All random initializer (`RandomUniformFn`, `RandomUniformFn`, `RandomNormalFn`, `GlorotUniformFn`, `XavierUniformFn`)
     changed to take the context as a parameter, instead of `initialSeed`.
-  * The `initialSeed` is instead read from the hyperparameter `initializers.ParamInitialSeed` ("initializers_seed")
-    and default to `initializers.NoSeed` (0), which means the seed is randomly started.
+  * The `initialSeed` is instead read from the hyperparameter `initializer.ParamInitialSeed` ("initializer_seed")
+    and default to `initializer.NoSeed` (0), which means the seed is randomly started.
 * Added learnable rational functions (ml/layers/rational): can be used for activations or as univariate learnable
   functions for KAN.
   * Added rational notebook to generate initial values with approximations to arbitrary univariate functions.
@@ -908,9 +908,9 @@ Other improvements:
   * Added `GetTrainLastStepVar` with information about last step of training: used for setting up various schedules.
   * Added `ResetComputationGraphs` to allow the trainer to recreate computation graphs, if hyperparameters change in the middle
     of training -- for training with very different schedules, for instance with freezing variables.
-* Added `initializers.BroadcastTensorToShape`: to allow variables to be initialized with a base value that is broadcast
+* Added `initializer.BroadcastTensorToShape`: to allow variables to be initialized with a base value that is broadcast
   to each variable shape requested.
-* Package `optimizers`
+* Package `optimizer`
   * Added `MonotonicProjection` to project values (usually variables) to a monotonically increasing values, with a margin.
   * Added `ParamClipNaN` to prevent NaNs going into gradient updates.
 * Added `regularizers.ConstantL1`
@@ -997,7 +997,7 @@ Other improvements:
   * Added sub-package `batchnorm`: refactored out batch normalization code.
     * Added `batchnorm.AveragesUpdate` to update the average of the means and variances used for normalization.
       Also connected it to evaluation in plots libraries.
-* Package `initializers`:
+* Package `initializer`:
   * Added `XavierFn` initializer.
 * Package `losses`:
   * Fixed `CategoricalCrossEntropyLogits` and `SparseCategoricalCrossEntropyLogits`.
@@ -1010,15 +1010,15 @@ Other improvements:
   * Added all numeric dtypes support; Added conversion tests to all types.
   * Added support to `dtypes.Float16`.
 * Package `context`
-  * Renamed `model.NewContext` to `model.New`.
+  * Renamed `model.NewScope` to `model.New`.
   * Added `Variable.Reset`: reset a variable, to be reinitialialized.
-* Package `checkpoints`: added `ExcludeParams` and `ExcludeAllParams`.
+* Package `checkpoint`: added `ExcludeParams` and `ExcludeAllParams`.
 * Package `plots`
   * Added `Point.Short` for short-name of metrics in saved metrics.
 * C/C++ code:
   * Completely removed, all C/C++ dependencies are in `gopjrt` project now.
   * Removed reference to AOT compilation, see #52.
-* Added command-line tool `gomlx_checkpoints` to introspect checkpoints.
+* Added command-line tool `gomlx_checkpoints` to introspect checkpoint.
 * Added `cmd/run_coverage.sh`.
 
 ## 0.10.0 - 2024/06/12
@@ -1032,16 +1032,16 @@ Other improvements:
   * Added support for `Int8`, `Int16`, `Uint8` and `Uint16`.
   * Renamed `UInt{X}` to `Uint{X}` and added a deprecated alias to the old form (so it still compiles).
 * Added logging of time to build and compile graph. Last version improved a lot the execution time, but slowed the compilation.
-* Context.Variable:
+* Scope.Variable:
   * Fixed `Variable.SetValueGraph` when the shape changes. Improved some documentation.
   * Fixed `Variable.SetValuePreservingOld` when shapes change.
   * Fixed checking of loaded variables -- that they are not newly created.
-* Package `optimizers`:
-  * Fixed optimizer constructor `FromContext` to allow further configuration of the optimizer by setting other hyperparameters into context.
+* Package `optimizer`:
+  * Fixed optimizer constructor `FromScope` to allow further configuration of the optimizer by setting other hyperparameters into context.
   * Added hyperparameter `clip_step_by_value`, a clip by value applied to gradient updates.
   * `Adam` optimizer: `"clip_step_by_value", "adam_epsilon", "adam_dtype"` hyperparameters support.
   * **`MustOptimizerByName` now takes also the context for the optimizer hyperparameters.** -- this breaks the API.
-* Package `checkpoints`:
+* Package `checkpoint`:
   * Allow adding variables to exclude from saving after checkpoint is created -- for newly created variables
 * Added `slices.CloseToEpsilon` to easily customize tests.
 * `Scatter` doesn't assume indices are sorted or unique.
@@ -1080,11 +1080,11 @@ Other improvements:
   * added `Manager()` accessor method.
   * added `SetParams` to set various parameters at once.
   * renaming name of parameters to be prefixed with "Param".
-* Package `context/initializers`:
+* Package `context/initializer`:
   * added `GlorotUniformFn`
-  * random initializers use zeros for non-float variables by default (as opposed to crash)
+  * random initializer use zeros for non-float variables by default (as opposed to crash)
   * default initializer now matches Keras (random uniform from `[-0.05, 0.05]`).
-* Package `context/checkpoints`:
+* Package `context/checkpoint`:
   * added `ExcludeVarsFromSaving` to allow preventing saving large static variables.
   * fixed issue with lazy-loading of variables.
 * Package `shapes`:
@@ -1093,16 +1093,16 @@ Other improvements:
   * `Make(dtype, dimensions...)` now makes a copy of the `dimensions` slice given.
 * `exceptions`: refactoring to use separate package `github.com/gomlx/exceptions`.
 * Package `layers`:
-  * Added `...FromContext` family of functions, that apply layers according to parameters set in the context:
-    `ActivationFromContext`, `DropoutFromContext`, `NormalizeFromContext` and `MaskedNormalizeFromContext`.
+  * Added `...FromScope` family of functions, that apply layers according to parameters set in the context:
+    `ActivationFromScope`, `DropoutFromScope`, `NormalizeFromScope` and `MaskedNormalizeFromScope`.
   * `LayerNormalization`: fixed shaping bug, and renamed `scale` to `gain`, more aligned with [original paper](https://arxiv.org/pdf/1607.06450v1.pdf)
     * **This will break previous models using LayerNormalization!**: this is not taken lightly, but as it is, it
       is wrong and depending on the shape it may be adversely affecting some models.
   * `LayerNormalization`: added `Mask` support; added defaults from context parameters.
   * `DropoutStatic`: Dropout api where one can pass a static dropout rate as a Go float.
   * `AddL2RegularizationStatic`: Add L2 regularization on values, where the amount of regularization is static.
-* Package `optimizers`:
-  * Added `CosineAnnealingSchedule.FromContext`. New `MinLearningRate` is 0.0 (same used in Keras).
+* Package `optimizer`:
+  * Added `CosineAnnealingSchedule.FromScope`. New `MinLearningRate` is 0.0 (same used in Keras).
 * Package `losses`:
   * Added support for `weights` and `mask`.
 * Package `ml/data`:
@@ -1115,7 +1115,7 @@ Other improvements:
     This only works in the commandline (not in notebooks).
   * Asynchronous display of updates: it works better with very fast training loops or if running
     over a slow terminal connection (network).
-  * Added `CreateContextSettingsFlag` and `ParseContextSettings`.
+  * Added `CreateScopeSettingsFlag` and `ParseScopeSettings`.
 * Package `plots`, `margaid` and `plotly`:
   * Added `margaid.Plots.PlotEveryNSteps`.
   * Remove `margaid.Plots.Done`, no longer needed, as closing of writing file is done automatically at the end of the
@@ -1135,8 +1135,8 @@ Other improvements:
   * Temporarily copied `xla/mlir/utils` library to `deps/xla_mlir`, since it is not available in all XLA distributions.
 * Package `context`:
   * Added `model.GetParamOr` and `model.GetGraphParamOr`: it uses generics to cast to the desired type, and allowing a default value to be returned.
-  * Added `Context.DeleteVariable` and `Context.DeleteVariablesInScope`.
-* Package `checkpoints`:
+  * Added `Scope.DeleteVariable` and `Scope.DeleteVariablesInScope`.
+* Package `checkpoint`:
   * Added recovery of some basic types (numeric and slices) when loading params from Json.
   * Added unique incrementing id to checkpoint file names.
 * Package `exceptions`: special case runtime panics to preserve its stack-trace.
@@ -1145,12 +1145,12 @@ Other improvements:
   * Models (e.g.: unsupervised) can return `nil` for predictions.
 * Package `optimizer`:
   * Added `GetGlobalStep`.
-  * Interface now include `Clear(ctx)` to clear all variables used by an optimizer --> this also breaks
+  * Interface now include `Clear(scope)` to clear all variables used by an optimizer --> this also breaks
     compatibility for any custom optimizer, unfortunately.
-    But if it broke you, it should be a very easy fix, since most optimizers use a fixed scope for its variables, and
-    `Context.DeleteVariablesInScope` will do the job.
+    But if it broke you, it should be a very easy fix, since most optimizer use a fixed scope for its variables, and
+    `Scope.DeleteVariablesInScope` will do the job.
   * Added `DeleteGlobalStep`.
-* Package `context`: Added `Context.EnumerateVariablesInScope()` method.
+* Package `context`: Added `Scope.EnumerateVariablesInScope()` method.
 * Package `graph`:
   * Added optional `reduceAxes` parameter to `L2Norm` and `L1Norm`.
   * Added `L2NormSquare`, `L2Normalize` and `L2NormalizeWithEpsilon`.
@@ -1222,16 +1222,16 @@ Other improvements:
 * Checkpoints: added `Handler.LoadedVariables()` method for inspection of loaded checkpointHandler.
 * Bug fixes:
   * RandomNormal: fixed rare numerical issues in RandomNormal, that would generate -Inf.
-  * Context: some rare condition on feeding variable values to executor.
+  * Scope: some rare condition on feeding variable values to executor.
   * InMemory dataset: handling cases where dataset returns the same tensor as input and label.
 * Slices: refactored `IotaSlice()` to `Iota[T number]()`.
 
 ## v0.4.0
 
 * Models: Diffusion example model (working draft); added Kernel Inception Distance (KID) metric implementation.
-* Contexts: added `model.NumParameters()`, `model.Memory()`, `model.RandomUniform`, `model.RandomNormal`,
+* Scopes: added `model.NumParameters()`, `model.Memory()`, `model.RandomUniform`, `model.RandomNormal`,
   `model.RngStateWithSeed` and `model.RngStateReset`.
-* Random numbers revamped, making graph purely functional. Also, 'model.Context' provides
+* Random numbers revamped, making graph purely functional. Also, 'model.Scope' provides
   the facilities to carry around random number generator state.
 * Added ops: `ArgMax`, `ArgMin`, `ExpandLeftToRank`, `RandomUniform` and `RandomNormal`.
 * Datasets: `InMemoryFromData` (for testing); `Normalization()` returns mean and standard deviation for dataset;
@@ -1241,7 +1241,7 @@ Other improvements:
 * Plots (margaid): added support for saving and restoring points (when continue training); optional log-scale plots;
   allow for arbitrary rate of updates; added support for loading data from multiple models.
 * Losses: added `losses.MeanAbsoluteError`.
-* Optimizers: added `optimizers.GetGlobalStepVar`.
+* Optimizers: added `optimizer.GetGlobalStepVar`.
 * Training loop (`train.Loop`): added `MeanTrainingStepDuration()`; check for infinity and "nan" losses -- training
   is immediately interrupted with an error.
 * Added to slices package: `Flag()`, `At()`, `Last()`, `Copy`.

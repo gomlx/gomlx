@@ -35,7 +35,7 @@ var (
 // See NewConfig.
 type Config struct {
 	Backend compute.Backend
-	Context *model.Scope // Usually, at the root scope.
+	Scope *model.Scope // Usually, at the root scope.
 
 	// DataDir is where the data is downloaded, and models are saved.
 	DataDir string
@@ -69,7 +69,7 @@ func NewConfig(backend compute.Backend, scope *model.Scope, dataDir string, para
 		model.GetParamOr(scope, "dtype", "float32")))
 	cfg := &Config{
 		Backend:       backend,
-		Context:       scope,
+		Scope:       scope,
 		DataDir:       dataDir,
 		ImageSize:     model.GetParamOr(scope, "image_size", 64),
 		BatchSize:     model.GetParamOr(scope, "batch_size", 64),

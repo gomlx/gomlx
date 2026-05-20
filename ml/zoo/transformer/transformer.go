@@ -18,7 +18,7 @@ import (
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
-// Hyperparameter keys for context configuration
+// Hyperparameter keys for scope configuration
 const (
 	ParamVocabSize   = "transformer_vocab_size"
 	ParamEmbedDim    = "transformer_embed_dim"
@@ -147,35 +147,35 @@ func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
 //
 // Example usage:
 //
-//	ctx.SetParams(map[string]any{
+//	scope.SetParams(map[string]any{
 //	    "transformer_vocab_size": 50257,
 //	    "transformer_embed_dim": 768,
 //	    "transformer_num_layers": 12,
 //	    "transformer_num_heads": 12,
 //	    "transformer_head_dim": 64,
 //	})
-//	model := transformer.NewFromScope(ctx)
+//	model := transformer.NewFromScope(scope)
 func NewFromScope(scope *model.Scope) *Model {
 	// Required parameters
 	vocabSize, found := scope.GetParam(ParamVocabSize)
 	if !found {
-		panic(fmt.Sprintf("Required hyperparameter %q not found in context", ParamVocabSize))
+		panic(fmt.Sprintf("Required hyperparameter %q not found in scope", ParamVocabSize))
 	}
 	embedDim, found := scope.GetParam(ParamEmbedDim)
 	if !found {
-		panic(fmt.Sprintf("Required hyperparameter %q not found in context", ParamEmbedDim))
+		panic(fmt.Sprintf("Required hyperparameter %q not found in scope", ParamEmbedDim))
 	}
 	numLayers, found := scope.GetParam(ParamNumLayers)
 	if !found {
-		panic(fmt.Sprintf("Required hyperparameter %q not found in context", ParamNumLayers))
+		panic(fmt.Sprintf("Required hyperparameter %q not found in scope", ParamNumLayers))
 	}
 	numHeads, found := scope.GetParam(ParamNumHeads)
 	if !found {
-		panic(fmt.Sprintf("Required hyperparameter %q not found in context", ParamNumHeads))
+		panic(fmt.Sprintf("Required hyperparameter %q not found in scope", ParamNumHeads))
 	}
 	headDim, found := scope.GetParam(ParamHeadDim)
 	if !found {
-		panic(fmt.Sprintf("Required hyperparameter %q not found in context", ParamHeadDim))
+		panic(fmt.Sprintf("Required hyperparameter %q not found in scope", ParamHeadDim))
 	}
 
 	// Create model with required parameters
@@ -187,14 +187,14 @@ func NewFromScope(scope *model.Scope) *Model {
 		headDim.(int),
 	)
 
-	// Apply optional parameters from context
-	m.FromContext(scope)
+	// Apply optional parameters from scope
+	m.FromScope(scope)
 	return m
 }
 
-// FromContext configures the model with optional hyperparameters from the model.
+// FromScope configures the model with optional hyperparameters from the model.
 // This allows fine-tuning an existing model configuration.
-func (m *Model) FromContext(scope *model.Scope) *Model {
+func (m *Model) FromScope(scope *model.Scope) *Model {
 	// Optional parameters with defaults
 	m.FFNDim = model.GetParamOr(scope, ParamFFNDim, m.FFNDim)
 	m.MaxPosEmbed = model.GetParamOr(scope, ParamMaxPosEmbed, m.MaxPosEmbed)
@@ -219,7 +219,7 @@ func (m *Model) FromContext(scope *model.Scope) *Model {
 	m.Activation = activations.FromName(model.GetParamOr(scope, ParamActivation, m.Activation.String()))
 	m.NumKVHeads = model.GetParamOr(scope, ParamNumKVHeads, m.NumKVHeads)
 
-	// Legacy RoPE configuration from context
+	// Legacy RoPE configuration from scope
 	useRoPE := model.GetParamOr(scope, ParamUseRoPE, false)
 	if useRoPE {
 		baseFreq := model.GetParamOr(scope, ParamRoPEBaseFreq, 10000.0)
@@ -462,8 +462,8 @@ func (m *Model) AllLayers(scope *model.Scope, tokens, mask *Node, useKVCache boo
 	allLayers = append(allLayers, x)
 	// Apply all layers.
 	for layerNum := range m.NumLayers {
-		layerCtx := scope.In("layer_%d", layerNum)
-		x = m.ForwardLayer(layerCtx, layerNum, x, mask, useKVCache, position)
+		layerScope := scope.In("layer_%d", layerNum)
+		x = m.ForwardLayer(layerScope, layerNum, x, mask, useKVCache, position)
 		allLayers = append(allLayers, x)
 	}
 	if m.FinalNormalization != layers.NormalizationNone {
@@ -562,7 +562,7 @@ func (m *Model) LogitsFromEmbeddings(scope *model.Scope, embeddings *Node) *Node
 
 // ForwardLayer executes a single transformer layer block depending on the configured architecture.
 //
-// - ctx: context must be already scoped for the layer, e.g. ctx.In("layer_0")
+// - scope: scope must be already scoped for the layer, e.g. scope.In("layer_0")
 // - x: features coming from the previous layer (or token embedding table), shape [batchSize, seqLen, embedDim]
 // - mask: (optional, can be nil) shaped [batchSize, seqLen]
 // - useCache: if true, use KV cache -- Experimental: KVCache will change.
@@ -579,13 +579,13 @@ func (m *Model) ForwardLayer(scope *model.Scope, layerNum int, x, mask *Node, us
 	return m.forwardLayerStandard(scope, layerNum, x, mask, useCache, position)
 }
 
-func (m *Model) forwardLayerStandard(layerCtx *model.Scope, layerNum int, x, mask *Node, useCache bool, position int) *Node {
+func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x, mask *Node, useCache bool, position int) *Node {
 	residual := x
 	var attn *Node
 
 	if useCache {
 		positionNode := Const(x.Graph(), int32(position))
-		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, m.NumHeads, m.HeadDim).
+		attnBuilder := attention.SelfAttention(layerScope.In("attn"), x, m.NumHeads, m.HeadDim).
 			WithKVCache(m.MaxPosEmbed, positionNode).
 			UseTransposedWeights(m.TransposedProjections)
 		if mask != nil {
@@ -616,7 +616,7 @@ func (m *Model) forwardLayerStandard(layerCtx *model.Scope, layerNum int, x, mas
 		}
 		attn = attnBuilder.Done()
 	} else {
-		attnBuilder := attention.SelfAttention(layerCtx.In("attn"), x, m.NumHeads, m.HeadDim).
+		attnBuilder := attention.SelfAttention(layerScope.In("attn"), x, m.NumHeads, m.HeadDim).
 			UseTransposedWeights(m.TransposedProjections)
 		if mask != nil {
 			attnBuilder = attnBuilder.WithMask(mask)
@@ -651,17 +651,17 @@ func (m *Model) forwardLayerStandard(layerCtx *model.Scope, layerNum int, x, mas
 	}
 
 	x = Add(residual, attn)
-	x = m.normalize(layerCtx.In("norm1"), x, m.Normalization)
+	x = m.normalize(layerScope.In("norm1"), x, m.Normalization)
 
 	residual = x
-	ff := m.dense(layerCtx.In("ff1"), x, m.UseBias, m.FFNDim)
+	ff := m.dense(layerScope.In("ff1"), x, m.UseBias, m.FFNDim)
 	ff = activations.Apply(m.Activation, ff)
 	if m.Dropout > 0 {
-		ff = layers.Dropout(layerCtx.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), m.Dropout))
+		ff = layers.Dropout(layerScope.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), m.Dropout))
 	}
-	ff = m.dense(layerCtx.In("ff2"), ff, m.UseBias, m.EmbedDim)
+	ff = m.dense(layerScope.In("ff2"), ff, m.UseBias, m.EmbedDim)
 	x = Add(residual, ff)
-	x = m.normalize(layerCtx.In("norm2"), x, m.Normalization)
+	x = m.normalize(layerScope.In("norm2"), x, m.Normalization)
 	return x
 }
 
@@ -717,15 +717,15 @@ func (m *Model) normalize(scope *model.Scope, operand *Node, normType string) *N
 	}
 }
 
-func (m *Model) forwardLayerGemma(layerCtx *model.Scope, layerNum int, x, mask *Node, useCache bool, position int) *Node {
+func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x, mask *Node, useCache bool, position int) *Node {
 	residual := x
 
 	// Pre-attention normalization.
-	x = m.normalize(layerCtx.In("input_norm"), x, m.Normalization)
+	x = m.normalize(layerScope.In("input_norm"), x, m.Normalization)
 
 	// Attention.
 	var attn *Node
-	attnBuilder := attention.SelfAttention(layerCtx.In("self_attn"), x, m.NumHeads, m.HeadDim).
+	attnBuilder := attention.SelfAttention(layerScope.In("self_attn"), x, m.NumHeads, m.HeadDim).
 		UseTransposedWeights(m.TransposedProjections)
 	if mask != nil {
 		attnBuilder.WithMask(mask)
@@ -768,27 +768,27 @@ func (m *Model) forwardLayerGemma(layerCtx *model.Scope, layerNum int, x, mask *
 	attn = attnBuilder.Done()
 
 	// Post-attention normalization.
-	attn = m.normalize(layerCtx.In("post_attention_norm"), attn, m.Normalization)
+	attn = m.normalize(layerScope.In("post_attention_norm"), attn, m.Normalization)
 	x = Add(residual, attn)
 	residual = x
 
 	// Pre-feedforward normalization
-	x = m.normalize(layerCtx.In("pre_feedforward_norm"), x, m.Normalization)
+	x = m.normalize(layerScope.In("pre_feedforward_norm"), x, m.Normalization)
 
 	// Gemma uses SwiGLU: gate_proj, up_proj, down_proj
-	ffCtx := layerCtx.In("mlp")
-	gate := m.dense(ffCtx.In("gate_proj"), x, m.UseBias, m.FFNDim)
-	up := m.dense(ffCtx.In("up_proj"), x, m.UseBias, m.FFNDim)
+	ffScope := layerScope.In("mlp")
+	gate := m.dense(ffScope.In("gate_proj"), x, m.UseBias, m.FFNDim)
+	up := m.dense(ffScope.In("up_proj"), x, m.UseBias, m.FFNDim)
 	switchedNode := activations.Apply(m.Activation, gate)
 	ff := Mul(switchedNode, up)
 
 	if m.Dropout > 0 {
-		ff = layers.Dropout(ffCtx.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), m.Dropout))
+		ff = layers.Dropout(ffScope.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), m.Dropout))
 	}
-	ff = m.dense(ffCtx.In("down_proj"), ff, m.UseBias, m.EmbedDim)
+	ff = m.dense(ffScope.In("down_proj"), ff, m.UseBias, m.EmbedDim)
 
 	// Post-feedforward normalization
-	ff = m.normalize(layerCtx.In("post_feedforward_norm"), ff, m.Normalization)
+	ff = m.normalize(layerScope.In("post_feedforward_norm"), ff, m.Normalization)
 	x = Add(residual, ff)
 	return x
 }

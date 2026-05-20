@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	// ParamL2Regularization context hyperparameter defines the L2 regularization of kernels.
+	// ParamL2Regularization scope hyperparameter defines the L2 regularization of kernels.
 	// Each layer may decide independently to implement it or not.
 	//
 	// This is an alias to regularizers.ParamL2
@@ -32,18 +32,18 @@ const (
 	// Deprecated: use regularizers.ParamL2
 	ParamL2Regularization = "l2_regularization"
 
-	// ParamDropoutRate context hyperparameter defines the amount of dropout applied when DropoutFromContext is used.
+	// ParamDropoutRate scope hyperparameter defines the amount of dropout applied when DropoutFromScope is used.
 	// Should be a value from `0.0` to `1.0`, where 0 means no dropout, and 1 would drop everything out.
 	//
-	// It is only applied if `Context.IsTraining() == true`, that is, during evaluation/inference it is
+	// It is only applied if `Scope.IsTraining() == true`, that is, during evaluation/inference it is
 	// ignored.
 	//
 	// The default is `0.0`, which means no dropout.
 	ParamDropoutRate = "dropout_rate"
 
-	// ParamDropPathProbability provides the probability of DropPathFromContext to drop paths.
+	// ParamDropPathProbability provides the probability of DropPathFromScope to drop paths.
 	//
-	// This is only applied if the model actually calls DropPathFromContext.
+	// This is only applied if the model actually calls DropPathFromScope.
 	//
 	// Default is `0.0`, which means never do any DropPath.
 	ParamDropPathProbability = "droppath_prob"
@@ -62,7 +62,7 @@ func DenseWithBias(scope *model.Scope, input *Node, outputDimensions ...int) *No
 // Dense adds a single dense linear layer, a learnable linear transformation.
 // Optionally, it can include a bias term.
 //
-// It automatically adds regularization to the weights (not to biases) configured in hyperparameters -- see regularizers.FromContext.
+// It automatically adds regularization to the weights (not to biases) configured in hyperparameters -- see regularizers.FromScope.
 //
 // It the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
@@ -71,7 +71,7 @@ func DenseWithBias(scope *model.Scope, input *Node, outputDimensions ...int) *No
 func Dense(scope *model.Scope, input *Node, useBias bool, outputDimensions ...int) *Node {
 	g := input.Graph()
 	scope = scope.In("dense")
-	regularizer := regularizers.FromContext(scope)
+	regularizer := regularizers.FromScope(scope)
 
 	inputShape := input.Shape()
 	inputRank := inputShape.Rank()
@@ -307,7 +307,7 @@ func PieceWiseLinearCalibrationCascaded(scope *model.Scope, input, keypoints *No
 	return ReshapeWithShape(calibrated, inputShape)
 }
 
-// Dropout randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
+// Dropout randomly replace the input with zeros if scope.IsTraining() is true. Otherwise,
 // it's a no op (it returns input).
 // If the input is float, it scales the output by 1/(1-dropoutRate) to preserve the mean of the values of the input.
 func Dropout(scope *model.Scope, input *Node, dropoutRate *Node) *Node {
@@ -330,7 +330,7 @@ func IsDropoutActive(scope *model.Scope, g *Graph) bool {
 	return scope != nil && scope.IsTraining(g)
 }
 
-// DropoutNormalize randomly replace the input with zeros if ctx.IsTraining() is true. Otherwise,
+// DropoutNormalize randomly replace the input with zeros if scope.IsTraining() is true. Otherwise,
 // it's a no op (it returns input). If normalize is set, it scales the output by 1/(1-dropoutRate)
 // to preserve the mean of the input values.
 func DropoutNormalize(scope *model.Scope, input *Node, dropoutRate *Node, normalize bool) *Node {
@@ -353,11 +353,11 @@ func DropoutNormalize(scope *model.Scope, input *Node, dropoutRate *Node, normal
 	return result
 }
 
-// DropoutFromContext applies a dropout configured in the context parameters keyed by [ParamDropoutRate].
+// DropoutFromScope applies a dropout configured in the scope parameters keyed by [ParamDropoutRate].
 //
 // If it is 0.0 this is a no-op.
-// If `Context.IsTraining() == false` this is also a no-op, so it doesn't impact evaluation or inference.
-func DropoutFromContext(scope *model.Scope, x *Node) *Node {
+// If `Scope.IsTraining() == false` this is also a no-op, so it doesn't impact evaluation or inference.
+func DropoutFromScope(scope *model.Scope, x *Node) *Node {
 	dropoutRate := model.GetParamOr(scope, ParamDropoutRate, 0.0)
 	if dropoutRate > 0 {
 		// We apply edge dropout to the mask.
@@ -377,7 +377,7 @@ func DropoutFromContext(scope *model.Scope, x *Node) *Node {
 //
 // If it is not training or dropProbability is nil, it is a no-op.
 //
-// See also DropPathFromContext.
+// See also DropPathFromScope.
 func DropPath(scope *model.Scope, x, dropProbability *Node) *Node {
 	g := x.Graph()
 	if !scope.IsTraining(g) || dropProbability == nil {
@@ -390,9 +390,9 @@ func DropPath(scope *model.Scope, x, dropProbability *Node) *Node {
 	return Mul(x, scope.RandomBernoulli(OneMinus(dropProbability), maskShape))
 }
 
-// DropPathFromContext will execute DropPath if the hyperparameter ParamDropPathProb is set to a value > 0.
+// DropPathFromScope will execute DropPath if the hyperparameter ParamDropPathProb is set to a value > 0.
 // If ParamDropPathProb is not set or if not training, this is a no-op.
-func DropPathFromContext(scope *model.Scope, x *Node) *Node {
+func DropPathFromScope(scope *model.Scope, x *Node) *Node {
 	g := x.Graph()
 	if !scope.IsTraining(g) {
 		return x

@@ -143,7 +143,7 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 	<canvas id="canvas_{{.Id}}" height="{{.Size}}px" width="{{.Width}}px"></canvas>
 	<script>
 	var canvas_{{.Id}} = document.getElementById("canvas_{{.Id}}");
-	var ctx_{{.Id}} = canvas_{{.Id}}.getContext("2d");
+	var ctx_{{.Id}} = canvas_{{.Id}}.getScope("2d");
 	var currentFrame_{{.Id}} = 0;
 	var frameRate_{{.Id}} = {{.FrameRateMs}};
 	var imagePaths_{{.Id}} = [{{range .Images}}
@@ -165,12 +165,12 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 	}
 
 	function animate_{{.Id}}() {
-		var Context = ctx_{{.Id}};
+		var Scope = ctx_{{.Id}};
 		var canvas = canvas_{{.Id}};
-		Context.clearRect(0, 0, canvas.width, canvas.height);
+		Scope.clearRect(0, 0, canvas.width, canvas.height);
 		var images = images_{{.Id}}[currentFrame_{{.Id}}];
 		for (var jj = 0; jj < {{.ImagesPerSample}}; jj++) {
-			Context.drawImage(images[jj], jj*{{.Size}}, 0);
+			Scope.drawImage(images[jj], jj*{{.Size}}, 0);
 		}
 		currentFrame_{{.Id}} = (currentFrame_{{.Id}} + 1) % images_{{.Id}}.length;
 		var timeout = frameRate_{{.Id}};
@@ -215,7 +215,7 @@ func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSt
 			"DisplayImagesAcrossDiffusionSteps requires a model loaded from a checkpoint, see Config.AttachCheckpoint.",
 		)
 	}
-	scope := c.Context
+	scope := c.Scope
 	_ = scope.Store().ResetRNGState()
 	noise := c.GenerateNoise(numImages)
 	flowerIds := c.GenerateFlowerIds(numImages)
@@ -316,7 +316,7 @@ func (c *Config) GenerateImagesOfFlowerType(
 	flowerType int32,
 	numDiffusionSteps int,
 ) (predictedImages *tensors.Tensor) {
-	scope := c.Context
+	scope := c.Scope
 	_ = scope.Store().ResetRNGState()
 	noise := c.GenerateNoise(numImages)
 	flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
@@ -373,7 +373,7 @@ func (c *Config) DropdownFlowerTypes(cacheKey string, numImages, numDiffusionSte
 
 // GenerateImagesOfAllFlowerTypes takes one random noise, and generate the flower for each of the 102 types.
 func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages *tensors.Tensor) {
-	scope := c.Context
+	scope := c.Scope
 	numImages := flowers.NumLabels
 	_ = scope.Store().ResetRNGState()
 	imageSize := c.ImageSize
@@ -403,7 +403,7 @@ type ImagesGenerator struct {
 // NewImagesGenerator generates flowers given initial `noise` and `flowerIds`, in `numDiffusionSteps`.
 // Typically, 20 diffusion steps will suffice.
 func (c *Config) NewImagesGenerator(noise, flowerIds *tensors.Tensor, numDiffusionSteps int) *ImagesGenerator {
-	scope := c.Context
+	scope := c.Scope
 	if numDiffusionSteps <= 0 {
 		exceptions.Panicf("Expected numDiffusionSteps > 0, got %d", numDiffusionSteps)
 	}
@@ -481,7 +481,7 @@ func (c *Config) GenerateFlowerIds(numImages int) *tensors.Tensor {
 // KidGenerator generates the [Kernel Inception Distance (KID)](https://arxiv.org/abs/1801.01401) metric.
 type KidGenerator struct {
 	config         *Config
-	ctxInceptionV3 *model.Scope
+	scopeInceptionV3 *model.Scope
 	ds             train.Dataset
 	generator      *ImagesGenerator
 	kid            metrics.Interface
@@ -496,12 +496,12 @@ func (c *Config) NewKidGenerator(evalDS train.Dataset, numDiffusionStep int) *Ki
 	check(inceptionv3.DownloadAndUnpackWeights(i3Path))
 	kg := &KidGenerator{
 		config:         c,
-		ctxInceptionV3: model.NewStore().RootScope(),
+		scopeInceptionV3: model.NewStore().RootScope(),
 		ds:             evalDS,
 		generator:      c.NewImagesGenerator(noise, flowerIds, numDiffusionStep),
 		kid:            inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
 	}
-	kg.evalExec = model.MustNewExec(c.Backend, kg.ctxInceptionV3.Store(), kg.EvalStepGraph)
+	kg.evalExec = model.MustNewExec(c.Backend, kg.scopeInceptionV3.Store(), kg.EvalStepGraph)
 	return kg
 }
 
@@ -518,7 +518,7 @@ func (kg *KidGenerator) EvalStepGraph(scope *model.Scope, allImages []*Node) (me
 
 func (kg *KidGenerator) Eval() (metric *tensors.Tensor) {
 	kg.ds.Reset()
-	kg.kid.Reset(kg.ctxInceptionV3)
+	kg.kid.Reset(kg.scopeInceptionV3)
 	generatedImages := kg.generator.Generate()
 	count := 0
 	for {

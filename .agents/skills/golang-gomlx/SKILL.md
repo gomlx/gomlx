@@ -121,7 +121,7 @@ func EuclideanDistance(a, b *Node) *Node {
   than executing it, so it's better to reuse the same input shapes where possible, using padding to fixed sizes.
 
 
-### Tensors -- package `github.com/gomlx/gomlx/pkg/core/tensors`
+### Tensors -- package `github.com/gomlx/gomlx/core/tensors`
 
 - Local/On-Device: Tensors can be instantiated on the local CPU (`tensors.FromValue(...)`) or directly on the backend
   device device (usually happens automatically for outputs of executions).
@@ -146,7 +146,7 @@ func EuclideanDistance(a, b *Node) *Node {
   in the current scope).
 - Hyperparameters: Set with `Scope.SetParam("key", value)` and retrieved with 
   `model.GetParamOr(scope, "key", defaultValue)`.
-- Checkpointing (saving/loading): `checkpoints.New(ctx, dir)` (github.com/gomlx/gomlx/ml/model/checkpoints) helps save
+- Checkpointing (saving/loading): `checkpoint.Build(store)` (github.com/gomlx/gomlx/ml/model/checkpoint) helps save
   and load the state of all variables in a `model.Store`.
 - Trainable: Variables are by default trainable.
 - `model.Exec`: it uses `graph.Exec` and has a very similar API, but it takes a `model.Store` as a construction
@@ -177,7 +177,7 @@ func DenseLayer(scope *model.Scope, x *Node, outputDim int) *Node {
 
 - Example from `examples/adult/demo`: Shows a full ML pipeline.
 - `train.Trainer` orchestrates the model function, the loss function, and the optimizer.
-  - Needs `model.Context`, a model function, a loss function (e.g., `losses.BinaryCrossentropyLogits`), and an optimizer (e.g., `optimizers.Adam`).
+  - Needs `model.Store`, a model function, a loss function (e.g., `losses.BinaryCrossentropyLogits`), and an optimizer (e.g., `optimizer.Adam`).
 - Metrics (`ml/train/metrics`): Used to evaluate model performance during training and evaluation.
   - Metrics are provided as lists during `train.NewTrainer` initialization (one list for train metrics, one for eval metrics).
   - Common metrics include `metrics.NewMeanBinaryLogitsAccuracy()`, `metrics.NewSparseCategoricalAccuracy()`.
@@ -199,7 +199,7 @@ movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Ave
 
 // Create a train.Trainer: orchestrates running the model, feeding results to the optimizer, evaluating metrics.
 trainer := train.NewTrainer(backend, store, Model, losses.BinaryCrossentropyLogits,
-	optimizers.FromContext(store.RootScope()),
+	optimizer.FromScope(store.RootScope()),
 	[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 	[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
 

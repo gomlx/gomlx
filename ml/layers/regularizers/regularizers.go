@@ -17,14 +17,14 @@ import (
 )
 
 const (
-	// ParamL2 context hyperparameter defines the amount of L2 regularization of kernels.
+	// ParamL2 scope hyperparameter defines the amount of L2 regularization of kernels.
 	// Each layer may decide independently to implement it or not.
 	// layers.Dense, layers.DenseWithBias, layers.FNN, kan.New and layers.Convolution kernels look at this hyperparameter.
 	// The value should be a float64.
 	// The default is `0.0`.
 	ParamL2 = "l2_regularization"
 
-	// ParamL1 context hyperparameter defines the L1 regularizer of kernels.
+	// ParamL1 scope hyperparameter defines the L1 regularizer of kernels.
 	// Each layer may decide independently to implement it or not.
 	// layers.Dense, layers.DenseWithBias, layers.FNN, kan.New and layers.Convolution kernels look at this hyperparameter.
 	// The value should be a float64.
@@ -90,8 +90,8 @@ func L1(amount float64) Regularizer {
 		// Update weights such that if they are smaller than the regularization amount, they are set to 0.
 		// Part of this is finding a unique name for all weights, so we don't add updates to the same scope.
 		for _, weight := range weights {
-			scopedCtx := scope.Store().Scope(weight.Scope()).In("regularizers.L1(%s)", weight.Name())
-			train.AddPerStepUpdateGraphFn(scopedCtx, g,
+			weightScope := scope.Store().Scope(weight.Scope()).In("regularizers.L1(%s)", weight.Name())
+			train.AddPerStepUpdateGraphFn(weightScope, g,
 				func(scope *model.Scope, g *Graph) {
 					value := weight.NodeValue(g)
 					dtype := value.DType()
@@ -124,11 +124,11 @@ func Combine(regs ...Regularizer) Regularizer {
 	}
 }
 
-// FromContext returns a regularizer from context hyperparameters.
+// FromScope returns a regularizer from scope hyperparameters.
 // It may be nil if no regularization is configured.
 //
 // It looks at ParamL2 and ParamL1 regularizer for now.
-func FromContext(scope *model.Scope) Regularizer {
+func FromScope(scope *model.Scope) Regularizer {
 	var regs []Regularizer
 
 	amount := model.GetParamOr(scope, ParamL2, 0.0)

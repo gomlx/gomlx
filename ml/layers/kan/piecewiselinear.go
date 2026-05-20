@@ -250,6 +250,6 @@ func (c *Config) pwlLayer(scope *model.Scope, x *Node, numOutputNodes int) *Node
 		output = Add(output, residual)
 	}
 
-	//ReduceMean(ReduceVariance(output, -1)).SetLoggedf("(%s) Mean variance of the examples", ctx.Scope())
+	//ReduceMean(ReduceVariance(output, -1)).SetLoggedf("(%s) Mean variance of the examples", scope.Scope())
 	return output
 }

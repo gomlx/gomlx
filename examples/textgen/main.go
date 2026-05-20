@@ -32,7 +32,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
-	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/zoo/transformer"
 	"github.com/gomlx/gomlx/ui/commandline"
 )
@@ -193,7 +193,7 @@ func generateText(backend compute.Backend, scope *model.Scope, prompt string) {
 	transformerModel := transformer.NewFromScope(scope)
 	modelFn := transformer.MakeIncrementalModelFn(transformerModel)
 
-	decoder := decode.New(modelFn).FromContext(scope)
+	decoder := decode.New(modelFn).FromScope(scope)
 	fmt.Printf("\nGeneration\nStrategy: %s  Temp: %.2f  MaxLen: %d\nPrompt: %q\n\n",
 		decoder.Strategy, decoder.Temperature, decoder.MaxLength, prompt)
 
@@ -237,7 +237,7 @@ func main() {
 	flag.Parse()
 	_, err := commandline.ParseSettings(store, *settings)
 	if err != nil {
-		log.Fatalf("Failed to parse context settings: %v", err)
+		log.Fatalf("Failed to parse scope settings: %v", err)
 	}
 
 	fmt.Println(commandline.SprintSettings(store))

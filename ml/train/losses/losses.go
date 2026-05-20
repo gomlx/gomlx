@@ -53,12 +53,12 @@ func epsilonForDType(g *Graph, dtype dtypes.DType) *Node {
 
 var (
 	// ParamLoss defines the loss to use (the value of the hyperparameter is a string),
-	// when using LossFromContext.
+	// when using LossFromScope.
 	//
 	// See enumeration Type for accepted loss types.
 	//
-	// Some losses may have extra parameters, also read from the context hyperparameters -- e.g.:
-	// MakeHuberLossFromContext and MakeAdaptivePowerLossFromContext.
+	// Some losses may have extra parameters, also read from the scope hyperparameters -- e.g.:
+	// MakeHuberLossFromScope and MakeAdaptivePowerLossFromScope.
 	ParamLoss = "loss"
 )
 
@@ -105,13 +105,13 @@ const (
 	TypeEuclideanSquare
 )
 
-// LossFromContext takes the value from the ParamLoss hyperparameter as a string and
+// LossFromScope takes the value from the ParamLoss hyperparameter as a string and
 // returns or creates the corresponding loss. It defaults to "mae".
 //
 // Useful for projects where more than one loss matches the problem underlying optimization goal.
 //
 // It returns an error if the configured loss is unknown.
-func LossFromContext(scope *model.Scope) (LossFn, error) {
+func LossFromScope(scope *model.Scope) (LossFn, error) {
 	lossName := model.GetParamOr(scope, ParamLoss, "mae")
 	lossType, err := TypeString(lossName)
 	if err != nil {
@@ -125,9 +125,9 @@ func LossFromContext(scope *model.Scope) (LossFn, error) {
 	case TypeMSE:
 		return MeanSquaredError, nil
 	case TypeAPL:
-		return MakeAdaptivePowerLossFromContext(scope), nil
+		return MakeAdaptivePowerLossFromScope(scope), nil
 	case TypeHuber:
-		return MakeHuberLossFromContext(scope), nil
+		return MakeHuberLossFromScope(scope), nil
 	case TypeBinCross:
 		return BinaryCrossentropy, nil
 	case TypeBinCrossLogits:
@@ -139,7 +139,7 @@ func LossFromContext(scope *model.Scope) (LossFn, error) {
 	case TypeSparseCrossLogits:
 		return SparseCategoricalCrossEntropyLogits, nil
 	case TypeTriplet:
-		return MakeTripletLossFromContext(scope), nil
+		return MakeTripletLossFromScope(scope), nil
 	case TypeEuclidean:
 		return EuclideanDistance, nil
 	case TypeEuclideanSquare:
@@ -520,9 +520,9 @@ var (
 	ParamHuberLossDelta = "huber_loss_delta"
 )
 
-// MakeHuberLossFromContext calls MakeHuberLoss using the delta configured by the hyperparameter
+// MakeHuberLossFromScope calls MakeHuberLoss using the delta configured by the hyperparameter
 // ParamHuberLossDelta in the model.
-func MakeHuberLossFromContext(scope *model.Scope) LossFn {
+func MakeHuberLossFromScope(scope *model.Scope) LossFn {
 	delta := model.GetParamOr(scope, ParamHuberLossDelta, 1.0)
 	return MakeHuberLoss(delta)
 }
@@ -610,33 +610,33 @@ var (
 	// ParamAdaptivePowerLossNear is the name of the hyperparameter that defines the AdaptivePowerLoss.
 	// It defaults to 2.0
 	//
-	// See MakeAdaptivePowerLoss and MakeAdaptivePowerLossFromContext.
+	// See MakeAdaptivePowerLoss and MakeAdaptivePowerLossFromScope.
 	ParamAdaptivePowerLossNear = "adaptive_loss_near"
 
 	// ParamAdaptivePowerLossFar is the name of one of the hyperparameter that defines the AdaptivePowerLoss
 	// It defaults to 1.0
 	//
-	// See MakeAdaptivePowerLoss and MakeAdaptivePowerLossFromContext.
+	// See MakeAdaptivePowerLoss and MakeAdaptivePowerLossFromScope.
 	ParamAdaptivePowerLossFar = "adaptive_loss_far"
 
 	// ParamAdaptivePowerLossMiddleDelta is the name of one of the hyperparameter that defines the AdaptivePowerLoss.
 	// It defaults to 1.0
 	//
-	// See MakeAdaptivePowerLoss and MakeAdaptivePowerLossFromContext.
+	// See MakeAdaptivePowerLoss and MakeAdaptivePowerLossFromScope.
 	ParamAdaptivePowerLossMiddleDelta = "adaptive_loss_middle"
 
 	// ParamAdaptivePowerLossSharpness is the name of one of the hyperparameter that defines the AdaptivePowerLoss.
 	// It defaults to 1.0
 	//
-	// See MakeAdaptivePowerLoss and MakeAdaptivePowerLossFromContext.
+	// See MakeAdaptivePowerLoss and MakeAdaptivePowerLossFromScope.
 	ParamAdaptivePowerLossSharpness = "adaptive_loss_sharpness"
 )
 
-// MakeAdaptivePowerLossFromContext calls MakeAdaptivePowerLoss using the delta configured by the hyperparameter
+// MakeAdaptivePowerLossFromScope calls MakeAdaptivePowerLoss using the delta configured by the hyperparameter
 // in the model.
 //
 // See ParamAdaptivePowerLossNear, ParamAdaptivePowerLossFar, ParamAdaptivePowerLoss
-func MakeAdaptivePowerLossFromContext(scope *model.Scope) LossFn {
+func MakeAdaptivePowerLossFromScope(scope *model.Scope) LossFn {
 	powerNear := model.GetParamOr(scope, ParamAdaptivePowerLossNear, 2.0)
 	powerFar := model.GetParamOr(scope, ParamAdaptivePowerLossFar, 1.0)
 	middleDelta := model.GetParamOr(scope, ParamAdaptivePowerLossMiddleDelta, 1.0)

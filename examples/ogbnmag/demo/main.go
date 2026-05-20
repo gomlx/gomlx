@@ -16,7 +16,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizers"
 	"github.com/gomlx/gomlx/ml/model"
-	optimizers "github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -101,7 +101,7 @@ func createModelStore() *model.Store {
 		gnn.ParamUpdateNumHiddenLayers: 0,
 		gnn.ParamMessageDim:            32, // 128 or 256 will work better, but takes way more time
 		gnn.ParamStateDim:              32, // 128 or 256 will work better, but takes way more time
-		gnn.ParamUseRootAsContext:      false,
+		gnn.ParamUseRootAsScope:      false,
 		gnn.ParamNoKanForLayers:        "",
 
 		mag.ParamEmbedDropoutRate:     0.0,
@@ -122,9 +122,9 @@ func SetTrainSteps(scope *model.Scope) {
 		numTrainSteps = numEpochs * stepsPerEpoch
 		scope.SetParam("train_steps", numTrainSteps)
 	}
-	//cosineScheduleSteps := model.GetParamOr(ctx, cosineschedule.ParamPeriodSteps, 0)
+	//cosineScheduleSteps := model.GetParamOr(scope, cosineschedule.ParamPeriodSteps, 0)
 	//if cosineScheduleSteps < 0 {
-	//	ctx.SetParam(cosineschedule.ParamPeriodSteps, numTrainSteps/(-cosineScheduleSteps))
+	//	scope.SetParam(cosineschedule.ParamPeriodSteps, numTrainSteps/(-cosineScheduleSteps))
 	//}
 }
 
@@ -134,7 +134,7 @@ func main() {
 	store := createModelStore()
 	scope := store.RootScope()
 
-	// Flags with context settings.
+	// Flags with scope settings.
 	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()

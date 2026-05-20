@@ -25,16 +25,16 @@ import (
 )
 
 var (
-	// ParamNumGraphUpdates is the context parameter that defines the number of messages to
+	// ParamNumGraphUpdates is the scope parameter that defines the number of messages to
 	// send in the GNN tree of nodes.
 	// The default is 2.
 	ParamNumGraphUpdates = "gnn_num_messages"
 
-	// ParamMessageDim context hyperparameter defines the dimension of the messages calculated per node.
+	// ParamMessageDim scope hyperparameter defines the dimension of the messages calculated per node.
 	// The default is 128.
 	ParamMessageDim = "gnn_message_dim"
 
-	// ParamStateDim context hyperparameter defines the dimension of the updated hidden states per node.
+	// ParamStateDim scope hyperparameter defines the dimension of the updated hidden states per node.
 	// The default is 128.
 	ParamStateDim = "gnn_node_state_dim"
 
@@ -42,28 +42,28 @@ var (
 	// Default is 0.0, meaning no edge dropout.
 	ParamEdgeDropoutRate = "gnn_edge_dropout_rate"
 
-	// ParamPoolingType context hyperparameter defines how incoming messages in the graph convolutions are pooled (that is, reduced
+	// ParamPoolingType scope hyperparameter defines how incoming messages in the graph convolutions are pooled (that is, reduced
 	// or aggregated).
 	// It can take values `mean`, `sum` or `max` or a combination of them separated by `|`.
 	// The default is `mean|sum`.
 	ParamPoolingType = "gnn_pooling_type"
 
-	// ParamUpdateStateType context hyperparameter can take values `residual` or `none`.
+	// ParamUpdateStateType scope hyperparameter can take values `residual` or `none`.
 	// The default is `residual`.
 	ParamUpdateStateType = "gnn_update_state_type"
 
-	// ParamUpdateNumHiddenLayers context hyperparameter that defines the number of hidden layers for the update kernel.
+	// ParamUpdateNumHiddenLayers scope hyperparameter that defines the number of hidden layers for the update kernel.
 	ParamUpdateNumHiddenLayers = "gnn_update_num_hidden_layers"
 
-	// ParamUsePathToRootStates context hyperparameter that if set allows each update state to see the states
+	// ParamUsePathToRootStates scope hyperparameter that if set allows each update state to see the states
 	// of all nodes in its path to root.
 	// Default is false.
 	ParamUsePathToRootStates = "gnn_use_path_to_root"
 
-	// ParamUseRootAsContext context hyperparameter that if set uses the root state as a context state.
-	ParamUseRootAsContext = "gnn_use_root_as_context"
+	// ParamUseRootAsScope scope hyperparameter that if set uses the root state as a scope state.
+	ParamUseRootAsScope = "gnn_use_root_as_scope"
 
-	// ParamGraphUpdateType context hyperparameter can take values `tree` or `simultaneous`.
+	// ParamGraphUpdateType scope hyperparameter can take values `tree` or `simultaneous`.
 	// Graph updates in `tree` fashion will update from leaf all the way to the seeds (the roots of the trees),
 	// for each message configured with [ParamNumGraphUpdates].
 	// Graph updates in `simultaneous` fashion will update all states from its dependents "simultaneously". In that
@@ -82,7 +82,7 @@ var NanLogger *nanlogger.NanLogger
 // NodePrediction performs graph convolutions from leaf nodes to the seeds (the roots of the trees), this
 // is called a "graph update".
 //
-// This process is repeated [ParamNumGraphUpdates] times (parameter set in `ctx` with key [ParamNumGraphUpdates]).
+// This process is repeated [ParamNumGraphUpdates] times (parameter set in `scope` with key [ParamNumGraphUpdates]).
 // After that the state of the seed nodes go through [ParamReadoutHiddenLayers] hidden layers,
 // and these seed states (updated in `graphStates`) can be read out and converted to whatever is the output to match the
 // task.
@@ -113,31 +113,31 @@ func NodePrediction(scope *model.Scope, strategy *sampler.Strategy, graphStates 
 	for round := range numGraphUpdates {
 		switch graphUpdateType {
 		case "tree":
-			TreeGraphStateUpdate(ctxForGraphUpdateRound(scope, round), strategy, graphStates)
+			TreeGraphStateUpdate(scopeForGraphUpdateRound(scope, round), strategy, graphStates)
 		case "simultaneous":
-			SimultaneousGraphStateUpdate(ctxForGraphUpdateRound(scope, round), strategy, graphStates)
+			SimultaneousGraphStateUpdate(scopeForGraphUpdateRound(scope, round), strategy, graphStates)
 		default:
 			Panicf("invalid value for %q: valid values are \"tree\" or \"simultaneous\"", ParamGraphUpdateType)
 		}
 	}
-	ctxReadout := scope.In("readout")
+	scopeReadout := scope.In("readout")
 	visited := make(map[string]bool)
 	for _, rule := range strategy.Seeds {
 		seedState := graphStates[rule.Name]
 		kernelScopeName := fmt.Sprintf("%s", rule.ConvKernelScopeName)
-		var ruleCtx *model.Scope
+		var ruleScope *model.Scope
 		if visited[kernelScopeName] {
-			ruleCtx = ctxReadout.Shared("%s", kernelScopeName)
+			ruleScope = scopeReadout.Shared("%s", kernelScopeName)
 		} else {
 			visited[kernelScopeName] = true
-			ruleCtx = ctxReadout.In("%s", kernelScopeName)
+			ruleScope = scopeReadout.In("%s", kernelScopeName)
 		}
-		seedState.Value = updateState(ruleCtx, seedState.Value, seedState.Value, seedState.Mask)
+		seedState.Value = updateState(ruleScope, seedState.Value, seedState.Value, seedState.Mask)
 	}
 }
 
-// ctxForGraphUpdateRound returns the context with scope for the given round of graph update.
-func ctxForGraphUpdateRound(scope *model.Scope, n int) *model.Scope {
+// scopeForGraphUpdateRound returns the scope with scope for the given round of graph update.
+func scopeForGraphUpdateRound(scope *model.Scope, n int) *model.Scope {
 	return scope.In("graph_update_%d", n)
 }
 
@@ -145,7 +145,7 @@ func ctxForGraphUpdateRound(scope *model.Scope, n int) *model.Scope {
 // and updates them by running graph convolutions on the reverse direction of the sampling
 // rules in `strategy`, that is, from leaves back to the root of the trees -- trees rooted on the seed rules.
 //
-// All hyperparameters are read from the context `ctx`, and can be set to individual node sets,
+// All hyperparameters are read from the scope `scope`, and can be set to individual node sets,
 // by setting them in the scope `"gnn:"+rule.Name`, where `rule.Name` is the name of the corresponding
 // rule in the given `strategy` object.
 //
@@ -192,23 +192,23 @@ func recursivelyApplyGraphConvolution(scope *model.Scope, rule *sampler.Rule,
 	}
 
 	var subPathToRootStates []*Node
-	useRootAsContext := model.GetParamOr(scope, ParamUseRootAsContext, false)
-	if model.GetParamOr(scope, ParamUsePathToRootStates, false) || useRootAsContext {
+	useRootAsScope := model.GetParamOr(scope, ParamUseRootAsScope, false)
+	if model.GetParamOr(scope, ParamUsePathToRootStates, false) || useRootAsScope {
 		// subPathToRootStates: passed to the children rules. They need to be expanded at each level to get the correct
 		// broadcasting (the broadcasting to the right shapes will happen automatically).
 		subPathToRootStates = make([]*Node, 0, len(pathToRootStates)+1)
-		for _, contextState := range pathToRootStates {
+		for _, scopeState := range pathToRootStates {
 			// We need to expand, so it will be properly broadcast.
 			// Noted the new axis is in between the "BatchSize" and following axes, and the last embedding
 			// dimensions, which remains unchanged.
-			subPathToRootStates = append(subPathToRootStates, InsertAxes(contextState, -2))
+			subPathToRootStates = append(subPathToRootStates, InsertAxes(scopeState, -2))
 		}
 		if state.Value != nil {
-			// If useRootAsContext, only takes the root state as model.
-			if len(subPathToRootStates) == 0 || !useRootAsContext {
+			// If useRootAsScope, only takes the root state as model.
+			if len(subPathToRootStates) == 0 || !useRootAsScope {
 				// If the state of the current rule is not latent, include it as well.
-				newContextState := InsertAxes(state.Value, -2)
-				subPathToRootStates = append(subPathToRootStates, newContextState)
+				newScopeState := InsertAxes(state.Value, -2)
+				subPathToRootStates = append(subPathToRootStates, newScopeState)
 			}
 		}
 	}
@@ -219,13 +219,13 @@ func recursivelyApplyGraphConvolution(scope *model.Scope, rule *sampler.Rule,
 	if state.Value != nil { // state == nil for latent node types, at their initial state.
 		updateInputs = append(updateInputs, state.Value)
 	}
-	for _, contextState := range pathToRootStates {
+	for _, scopeState := range pathToRootStates {
 		// Broadcast dimensions where needed.
 		dims := make([]int, 0, rule.Shape.Rank()+1)
 		dims = append(dims, rule.Shape.Dimensions...)
-		dims = append(dims, contextState.Shape().Dimensions[contextState.Rank()-1])
-		contextState = BroadcastToDims(contextState, dims...)
-		updateInputs = append(updateInputs, contextState)
+		dims = append(dims, scopeState.Shape().Dimensions[scopeState.Rank()-1])
+		scopeState = BroadcastToDims(scopeState, dims...)
+		updateInputs = append(updateInputs, scopeState)
 		hasNewUpdateInputs = true
 	}
 
@@ -244,15 +244,15 @@ func recursivelyApplyGraphConvolution(scope *model.Scope, rule *sampler.Rule,
 			dependentDegree = dependentDegreePair.Value
 		}
 		dependentConvKernelScopeName := fmt.Sprintf("%s", dependent.ConvKernelScopeName)
-		var convolveCtx *model.Scope
+		var convolveScope *model.Scope
 		if visited[dependentConvKernelScopeName] {
-			convolveCtx = scope.Shared("%s", dependentConvKernelScopeName).In("conv")
+			convolveScope = scope.Shared("%s", dependentConvKernelScopeName).In("conv")
 		} else {
 			visited[dependentConvKernelScopeName] = true
-			convolveCtx = scope.In("%s", dependentConvKernelScopeName).In("conv")
+			convolveScope = scope.In("%s", dependentConvKernelScopeName).In("conv")
 		}
 		if dependentState.Value != nil {
-			updateInputs = append(updateInputs, sampledConvolveEdgeSet(convolveCtx, dependentState.Value, dependentState.Mask, dependentDegree))
+			updateInputs = append(updateInputs, sampledConvolveEdgeSet(convolveScope, dependentState.Value, dependentState.Mask, dependentDegree))
 			hasNewUpdateInputs = true
 		}
 		if !dependentsUpdateFirst {
@@ -263,21 +263,21 @@ func recursivelyApplyGraphConvolution(scope *model.Scope, rule *sampler.Rule,
 	// Update state of current rule: only update state if there was any new incoming input.
 	if hasNewUpdateInputs {
 		ruleUpdateKernelScopeName := fmt.Sprintf("%s", rule.UpdateKernelScopeName)
-		var updateCtx *model.Scope
+		var updateScope *model.Scope
 		if visited[ruleUpdateKernelScopeName] {
-			updateCtx = scope.Shared("%s", ruleUpdateKernelScopeName).In("update")
+			updateScope = scope.Shared("%s", ruleUpdateKernelScopeName).In("update")
 		} else {
 			visited[ruleUpdateKernelScopeName] = true
-			updateCtx = scope.In("%s", ruleUpdateKernelScopeName).In("update")
+			updateScope = scope.In("%s", ruleUpdateKernelScopeName).In("update")
 		}
-		state.Value = updateState(updateCtx, state.Value, Concatenate(updateInputs, -1), state.Mask)
+		state.Value = updateState(updateScope, state.Value, Concatenate(updateInputs, -1), state.Mask)
 	}
 }
 
 // sampledConvolveEdgeSet creates messages from a node set and aggregates them to the same prefix dimension of their target
 // node sets. This runs a convolution over one of the edge sets that connects a Rule to its `SourceRule`.
 //
-// The context `ctx` must already have been properly scoped.
+// The scope `scope` must already have been properly scoped.
 //
 // This function should do the same as `layeredConvolveEdgeSet`, this function does it for sampled graphs.
 // They must be aligned.
@@ -300,7 +300,7 @@ func edgeMessageGraph(scope *model.Scope, gatheredStates, gatheredMask *Node) (m
 	} else {
 		// Normal FNN
 		messages = layers.DenseWithBias(scope, gatheredStates, messageDim)
-		messages = activations.ApplyFromContext(scope, messages)
+		messages = activations.ApplyFromScope(scope, messages)
 	}
 	if NanLogger != nil {
 		NanLogger.TraceFirstNaN(messages, fmt.Sprintf("(KAN)edgeMessageGraph(%s)", scope.Scope()))
@@ -327,7 +327,7 @@ func edgeMessageGraph(scope *model.Scope, gatheredStates, gatheredMask *Node) (m
 // The parameter `degree` is optional, but if given, the `sum` and `logsum` pooling will scale the sum to the given degree.
 // It's expected to be of shape `[d_0, d_1, ..., d_{n-1}, 1]`.
 //
-// There are no training variables in this. The `ctx` is only used for the hyperparameter configuration.
+// There are no training variables in this. The `scope` is only used for the hyperparameter configuration.
 func poolMessagesWithFixedShape(scope *model.Scope, value, mask, degree *Node) *Node {
 	poolTypes := model.GetParamOr(scope, ParamPoolingType, "mean|sum")
 	poolTypesList := strings.Split(poolTypes, "|")
@@ -355,7 +355,7 @@ func poolMessagesWithFixedShape(scope *model.Scope, value, mask, degree *Node) *
 			pooledMask := ReduceMax(mask, -1)
 			pooled = Where(pooledMask, pooled, ZerosLike(pooled))
 		default:
-			Panicf("unknown graph convolution pooling type (%q) given in context: value given %q (of %q) -- valid values are sum, mean and max, or a combination of them separated by '|'",
+			Panicf("unknown graph convolution pooling type (%q) given in scope: value given %q (of %q) -- valid values are sum, mean and max, or a combination of them separated by '|'",
 				ParamPoolingType, poolType, poolTypes)
 		}
 		parts = append(parts, pooled)
@@ -369,7 +369,7 @@ func poolMessagesWithFixedShape(scope *model.Scope, value, mask, degree *Node) *
 // poolMessagesWithAdjacency will pool according to [ParamPoolingType] using the adjacency information.
 //
 // Args:
-//   - [ctx] is the context, used to read the [ParamPoolingType] hyperparameter, which defines the type(s) of
+//   - [scope] is the scope, used to read the [ParamPoolingType] hyperparameter, which defines the type(s) of
 //     pooling to be used.
 //   - [source] should be shaped `[num_source_nodes, embedding_size]` and have the `dtype` of the model.
 //   - [edgesSource] and [edgesTarget] represent the adjacency: source and target indices of the connected nodes.
@@ -380,7 +380,7 @@ func poolMessagesWithFixedShape(scope *model.Scope, value, mask, degree *Node) *
 //
 // It returns a tensor ([graph.Node]) shaped `[targetSize, pooled_embedded_size]`.
 //
-// There are no training variables in this. The `ctx` is only used for the hyperparameter configuration.
+// There are no training variables in this. The `scope` is only used for the hyperparameter configuration.
 func poolMessagesWithAdjacency(scope *model.Scope, source, edgesSource, edgesTarget *Node, targetSize int, degree *Node) *Node {
 	poolTypes := model.GetParamOr(scope, ParamPoolingType, "mean|sum")
 	if source.Rank() != 2 {
@@ -439,7 +439,7 @@ func poolMessagesWithAdjacency(scope *model.Scope, source, edgesSource, edgesTar
 			}
 		default:
 			// Notice "max" is not implemented yet.
-			Panicf("unknown graph convolution pooling type (%q) given in context: value given %q (of %q) -- valid values are sum, mean and max, or a combination of them separated by '|'",
+			Panicf("unknown graph convolution pooling type (%q) given in scope: value given %q (of %q) -- valid values are sum, mean and max, or a combination of them separated by '|'",
 				ParamPoolingType, poolType, poolTypes)
 		}
 		parts = append(parts, pooled)
@@ -495,22 +495,22 @@ func updateState(scope *model.Scope, prevState, input, mask *Node) *Node {
 	}
 
 	// Inputs: both previous state and pooled messages passes through a dropout first.
-	input = layers.DropoutFromContext(scope, input)
+	input = layers.DropoutFromScope(scope, input)
 	stateDim := model.GetParamOr(scope, ParamStateDim, 128)
 	numHiddenLayers := model.GetParamOr(scope, ParamUpdateNumHiddenLayers, 0)
 	state := input
 	for ii := range numHiddenLayers {
-		ctxHiddenLayer := scope.In("hidden_%d", ii)
-		state = layers.DenseWithBias(ctxHiddenLayer, state, stateDim)
-		state = activations.ApplyFromContext(ctxHiddenLayer, state)
+		scopeHiddenLayer := scope.In("hidden_%d", ii)
+		state = layers.DenseWithBias(scopeHiddenLayer, state, stateDim)
+		state = activations.ApplyFromScope(scopeHiddenLayer, state)
 	}
 	state = layers.DenseWithBias(scope, state, stateDim)
-	state = activations.ApplyFromContext(scope, state)
-	state = layers.DropoutFromContext(scope, state)
+	state = activations.ApplyFromScope(scope, state)
+	state = layers.DropoutFromScope(scope, state)
 	if updateType == "residual" && prevState.Shape().Equal(state.Shape()) {
 		state = Add(state, prevState)
 	}
-	state = layers.MaskedNormalizeFromContext(scope.In("normalization"), state, mask)
+	state = layers.MaskedNormalizeFromScope(scope.In("normalization"), state, mask)
 	if NanLogger != nil {
 		NanLogger.TraceFirstNaN(state, fmt.Sprintf("UpdateState(%s)", scope.Scope()))
 	}
@@ -527,16 +527,16 @@ func kanUpdateState(scope *model.Scope, prevState, input, mask *Node) *Node {
 		return fnn.New(scope, input, inputDim).NumHiddenLayers(1, inputDim).Done()
 		//g := input.Graph()
 		//inputDim := input.Shape().Dim(-1)
-		//a := ctx.In("adjust").WithInitializer(initializer.One).
+		//a := scope.In("adjust").WithInitializer(initializer.One).
 		//	VariableWithShape("a", shapes.Make(input.DType(), inputDim)).ValueGraph(g)
-		//b := ctx.In("adjust").WithInitializer(initializer.Zero).
+		//b := scope.In("adjust").WithInitializer(initializer.Zero).
 		//	VariableWithShape("b", shapes.Make(input.DType(), inputDim)).ValueGraph(g)
 		//a = ExpandLeftToRank(a, input.Rank())
 		//b = ExpandLeftToRank(b, input.Rank())
 		//input = Add(Mul(input, a), b)
 
 		/*
-			input = kan.New(ctx.In("adjust"), input, input.Shape().Dim(-1)).
+			input = kan.New(scope.In("adjust"), input, input.Shape().Dim(-1)).
 				//DiscreteInputRange(-1.6, 1.6).
 				DiscreteInitialSplitPoints(tensors.FromValue([]float32{
 					-1.439246,
@@ -564,8 +564,8 @@ func kanUpdateState(scope *model.Scope, prevState, input, mask *Node) *Node {
 	}
 	kanLayer := kan.New(scope.In("kan_update_state"), input, stateDim).NumHiddenLayers(numHiddenLayers, stateDim)
 	state := kanLayer.Done()
-	state = layers.DropoutFromContext(scope, state)
-	//state = layers.MaskedNormalizeFromContext(ctx.In("normalization"), state, mask)
+	state = layers.DropoutFromScope(scope, state)
+	//state = layers.MaskedNormalizeFromScope(scope.In("normalization"), state, mask)
 
 	updateType := model.GetParamOr(scope, ParamUpdateStateType, "residual")
 	if updateType == "residual" && prevState.Shape().Equal(state.Shape()) {

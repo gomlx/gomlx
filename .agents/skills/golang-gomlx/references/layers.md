@@ -34,7 +34,7 @@ This table maps common machine learning layers and functions from `ml/layers` an
 | `losses.BinaryCrossentropyLogits(labels, logits)` | Computes binary cross-entropy loss from logits. | `torch.nn.BCEWithLogitsLoss()` |
 | `losses.SparseCategoricalCrossEntropyLogits(labels, logits)` | Computes categorical cross-entropy where labels are sparse integers. | `torch.nn.CrossEntropyLoss()` |
 | `losses.CategoricalCrossEntropyLogits(labels, logits)` | Computes categorical cross-entropy where labels are one-hot encoded. | `torch.nn.CrossEntropyLoss()` |
-| **Optimizers** (`pkg/ml/train/optimizers`) | | |
-| `optimizers.StochasticGradientDescent(scope)` | Simple SGD optimizer. Configured via scope hyperparameters. | `torch.optim.SGD` |
-| `optimizers.Adam(scope)` | Adam optimizer. Configured via scope hyperparameters. | `torch.optim.Adam` |
-| `optimizers.AdamW(scope)` | Adam optimizer with weight decay. | `torch.optim.AdamW` |
+| **Optimizers** (`pkg/ml/train/optimizer`) | | |
+| `optimizer.StochasticGradientDescent(scope)` | Simple SGD optimizer. Configured via scope hyperparameters. | `torch.optim.SGD` |
+| `optimizer.Adam(scope)` | Adam optimizer. Configured via scope hyperparameters. | `torch.optim.Adam` |
+| `optimizer.AdamW(scope)` | Adam optimizer with weight decay. | `torch.optim.AdamW` |

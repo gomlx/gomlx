@@ -3,7 +3,7 @@
 package checkpoint
 
 // TODO:
-// * Test that previously loaded variables -- not used by the Context -- are also saved.
+// * Test that previously loaded variables -- not used by the Scope -- are also saved.
 // * Test what happens with saving/loading of objects in Params: do they need to be filtered?
 
 import (
@@ -167,7 +167,7 @@ func TestCheckpoints(t *testing.T) {
 
 	// Remove test directory.
 	if t.Failed() {
-		fmt.Printf("Temporary directory with saved context: %s\n", dir)
+		fmt.Printf("Temporary directory with saved scope: %s\n", dir)
 	} else {
 		assert.NoErrorf(t, os.RemoveAll(dir), "Removing directory used for testing %q", dir)
 	}
@@ -209,7 +209,7 @@ func TestMergedCheckpoints(t *testing.T) {
 	}
 
 	if t.Failed() {
-		fmt.Printf("Temporary directory with saved context: %s\n", dir)
+		fmt.Printf("Temporary directory with saved scope: %s\n", dir)
 	} else {
 		assert.NoErrorf(t, os.RemoveAll(dir), "Removing directory used for testing %q", dir)
 	}
@@ -272,7 +272,7 @@ func TestParams(t *testing.T) {
 	}
 
 	if t.Failed() {
-		fmt.Printf("Temporary directory with saved context: %s\n", dir)
+		fmt.Printf("Temporary directory with saved scope: %s\n", dir)
 	} else {
 		assert.NoErrorf(t, os.RemoveAll(dir), "Removing directory used for testing %q", dir)
 	}

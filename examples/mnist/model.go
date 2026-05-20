@@ -56,10 +56,10 @@ func CnnEmbeddings(scope *model.Scope, images *Node) *Node {
 	dtype := images.DType()
 
 	layerIdx := 0
-	nextCtx := func(name string) *model.Scope {
-		newCtx := scope.In("%03d_%s", layerIdx, name)
+	nextScope := func(name string) *model.Scope {
+		newScope := scope.In("%03d_%s", layerIdx, name)
 		layerIdx++
-		return newCtx
+		return newScope
 	}
 	// Dropout.
 	dropoutRate := model.GetParamOr(scope, "cnn_dropout_rate", -1.0)
@@ -71,19 +71,19 @@ func CnnEmbeddings(scope *model.Scope, images *Node) *Node {
 		dropoutNode = Scalar(g, dtype, dropoutRate)
 	}
 
-	images = layers.Convolution(nextCtx("conv"), images).Channels(32).KernelSize(3).PadSame().Done()
+	images = layers.Convolution(nextScope("conv"), images).Channels(32).KernelSize(3).PadSame().Done()
 	images.AssertDims(batchSize, 28, 28, 32)
 	images = activations.Relu(images)
-	images = normalizeCNN(nextCtx("norm"), images)
+	images = normalizeCNN(nextScope("norm"), images)
 	images = MaxPool(images).Window(2).Done()
 	images.AssertDims(batchSize, 14, 14, 32)
 
-	images = layers.Convolution(nextCtx("conv"), images).Channels(64).KernelSize(3).PadSame().Done()
+	images = layers.Convolution(nextScope("conv"), images).Channels(64).KernelSize(3).PadSame().Done()
 	images.AssertDims(batchSize, 14, 14, 64)
 	images = activations.Relu(images)
-	images = normalizeCNN(nextCtx("norm"), images)
+	images = normalizeCNN(nextScope("norm"), images)
 	images = MaxPool(images).Window(2).Done()
-	images = layers.DropoutNormalize(nextCtx("dropout"), images, dropoutNode, true)
+	images = layers.DropoutNormalize(nextScope("dropout"), images, dropoutNode, true)
 	images.AssertDims(batchSize, 7, 7, 64)
 
 	// Flatten images

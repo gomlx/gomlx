@@ -23,7 +23,7 @@ func createTestModelStore() *model.Store {
 	return store
 }
 
-func TestParseContextSettings(t *testing.T) {
+func TestParseScopeSettings(t *testing.T) {
 	store := createTestModelStore()
 	modifiedParams, err := ParseSettings(store, "x=13;/a/z=true;/a/b/y=3;s=bar;list_int=1,3,7;list_float=0.1,1.2,3e3;list_str=a,b;")
 	require.NoError(t, err)

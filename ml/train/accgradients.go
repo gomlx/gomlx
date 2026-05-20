@@ -74,7 +74,7 @@ func iterTrainableAndAccumulatorVariables(scope *model.Scope, g *graph.Graph) it
 }
 
 // accumulateStepGraphImpl implements the computation graph to generate and accumulate one step.
-// It is called by the context executor (`r.accumulateGradientsExecMap`) everytime a graph needs to be built:
+// It is called by the scope executor (`r.accumulateGradientsExecMap`) everytime a graph needs to be built:
 // the first time, when the batch size changes, or the dataset spec changes.
 //
 // If applyGradients is true, it will also apply the accumulated gradients.
@@ -140,7 +140,7 @@ func (r *Trainer) accumulateStepGraphImpl(spec any, scope *model.Scope, inputs, 
 	opt := r.optimizer.(OptimizeWithGradients)
 	opt.UpdateGraphWithGradients(scope, grads, lossDType)
 
-	// Execute registered ContextGraphFn hooks for the current graph.
+	// Execute registered ScopeGraphFn hooks for the current graph.
 	ExecPerStepUpdateGraphFn(scope, g)
 
 	// Reset accumulated gradients.

@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestVariable_CloneToContext(t *testing.T) {
+func TestVariable_CloneToScope(t *testing.T) {
 	value := []float32{3, 5, 7, 11, 13}
 	store0 := NewStore()
 	root0 := store0.RootScope()

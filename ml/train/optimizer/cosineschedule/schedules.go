@@ -26,7 +26,7 @@ var (
 	//
 	// ParamPeriodSteps and ParamPeriodCycles are mutually exclusive.
 	//
-	//  Requires calling `New().FromContext().Done()` at the start of your model.
+	//  Requires calling `New().FromScope().Done()` at the start of your model.
 	//
 	//  This only affects training; there is no effect during inference or evaluation.
 	ParamPeriodSteps = "cosine_schedule_steps"
@@ -39,7 +39,7 @@ var (
 	//
 	// ParamPeriodSteps and ParamCycles are mutually exclusive.
 	//
-	//  Requires calling `New().FromContext().Done()` at the start of your model.
+	//  Requires calling `New().FromScope().Done()` at the start of your model.
 	//
 	//  This only affects training; there is no effect during inference or evaluation.
 	ParamCycles = "cosine_schedule_cycles"
@@ -83,28 +83,28 @@ type Config struct {
 //
 // (*) The paper describes a cosine schedule with a warmup, but this is not implemented here.
 //
-//	The warmup is implemented in the context, see ParamWarmUpSteps.
+//	The warmup is implemented in the scope, see ParamWarmUpSteps.
 //
 // Example with only one cycle, and a warmup of 1000 steps.
-// We assume that the learning rate is set in the context as the parameter "learning_rate"
+// We assume that the learning rate is set in the scope as the parameter "learning_rate"
 // (== optimizer.ParamLearningRate):
 //
 //	func MyModelGraph(cxt *model.Scope, inputs []*Node) *Node {
 //		...
 //		g := inputs[0].Graph()
-//		cosineschedule.New(ctx, g, dtypes.Float32).
+//		cosineschedule.New(scope, g, dtypes.Float32).
 //			MinLearningRate(0.001).
 //			WarmUpSteps(1000).
 //			NumCycles(1).Done()
 //	}
 //
-// Or more simply, pass the hyperparameters in the context (see ParamPeriodSteps, ParamMinLearningRate, and
+// Or more simply, pass the hyperparameters in the scope (see ParamPeriodSteps, ParamMinLearningRate, and
 // ParamWarmUpSteps):
 //
 //	func modelGraph(cxt *model.Scope, inputs []*Node) *Node {
 //		...
 //		g := inputs[0].Graph()
-//		cosineschedule.New(ctx, g, dtypes.Float32).FromContext().Done()
+//		cosineschedule.New(scope, g, dtypes.Float32).FromScope().Done()
 //	}
 //
 // [1] https://paperswithcode.com/method/cosine-annealing.
@@ -188,8 +188,8 @@ func (opt *Config) WarmUpSteps(warmUpSteps int) *Config {
 }
 
 // LearningRate at the start of the cosine cycle.
-// If not given, it will try to read from the context params (keyed by ParamLearningRate).
-// If neither is set, it will fail and return an error in the context and graph.
+// If not given, it will try to read from the scope params (keyed by ParamLearningRate).
+// If neither is set, it will fail and return an error in the scope and graph.
 func (opt *Config) LearningRate(learningRate float64) *Config {
 	if learningRate < 0 {
 		exceptions.Panicf("learningRate must be >= 0, but got %g", learningRate)
@@ -228,7 +228,7 @@ func (opt *Config) Done() {
 		lrValue = model.GetParamOr(opt.scope, optimizer.ParamLearningRate, 0.0)
 		if lrValue == 0 {
 			exceptions.Panicf("learning rate not configured for New and also "+
-				"not set in the context as parameter %q", optimizer.ParamLearningRate)
+				"not set in the scope as parameter %q", optimizer.ParamLearningRate)
 			return
 		}
 	}

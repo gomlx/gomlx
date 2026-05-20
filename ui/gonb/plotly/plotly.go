@@ -2,9 +2,9 @@
 
 // Package plotly uses GoNB plotly support (`github.com/janpfeifer/gonb/gonbui/plotly`) to plot both
 // on dynamic plots while training or to quickly plot the results of a previously
-// saved plot results in a checkpoints directory.
+// saved plot results in a checkpoint directory.
 //
-// In either case, it allows adding baseline plots of previous checkpoints.
+// In either case, it allows adding baseline plots of previous checkpoint.
 //
 // The advantage of `plotly` over `margaid` plots is that it uses JavaScript to make the plot interactive (it displays
 // information on mouse hover).
@@ -87,7 +87,7 @@ type PlotConfig struct {
 // This is used when configuring the train.Loop, and a typical use example, triggered by a "plots" parameter,
 // might look like:
 //
-//	usePlots := model.GetParamOr(ctx, plotly.ParamPlots, false)
+//	usePlots := model.GetParamOr(scope, plotly.ParamPlots, false)
 //	...
 //	if usePlots {
 //		_ = plotly.New().

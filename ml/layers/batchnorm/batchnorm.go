@@ -140,7 +140,7 @@ func (builder *Config) CurrentScope() *Config {
 // If set to `false` it is frozen, and none of its parameters are changeable.
 // The default is `true`.
 //
-// Independent of the value set here, if the context is not set for training (
+// Independent of the value set here, if the scope is not set for training (
 // see `model.Store.IsTraining()`) like during evaluation and inference,
 // the Config will generate code for inference only.
 func (builder *Config) Trainable(trainable bool) *Config {
@@ -388,7 +388,7 @@ const (
 
 // UpdateAverages resets the weights of the moving averages and recalculate them over the
 // given oneEpochDS dataset and the trainer.
-// It uses the context assigned to the trainer.
+// It uses the scope assigned to the trainer.
 //
 // It is a no-op if no batch-normalization was used.
 //

@@ -22,24 +22,24 @@ var (
 	flagDataDir = flag.String("data", "~/work/oxfordflowers102", "Directory to cache downloaded and generated dataset files.")
 
 	// -set flag content
-	ctxSettings *string
+	scopeSettings *string
 )
 
 func init() {
-	scope := CreateDefaultContext()
-	ctxSettings = commandline.CreateSettingsFlag(scope, "")
+	scope := CreateDefaultScope()
+	scopeSettings = commandline.CreateSettingsFlag(scope, "")
 }
 
 func getTestConfig() *Config {
-	scope := CreateDefaultContext()
-	paramsSet := check1(commandline.ParseSettings(scope, *ctxSettings))
+	scope := CreateDefaultScope()
+	paramsSet := check1(commandline.ParseSettings(scope, *scopeSettings))
 	backend := testutil.BuildTestBackend()
 	return NewConfig(backend, scope, *flagDataDir, paramsSet)
 }
 
 func TestUNetModelGraph(t *testing.T) {
 	config := getTestConfig()
-	scope := config.Context
+	scope := config.Scope
 	g := NewGraph(config.Backend, "test")
 
 	numExamples := 5
@@ -55,13 +55,13 @@ func TestUNetModelGraph(t *testing.T) {
 
 // getZeroPredictions calls the model with some placeholder images.
 // This can be used to check the predictions shape and also as a side effect to create
-// the variables in the context `Context`.
+// the variables in the scope `Scope`.
 func getZeroPredictions(config *Config, g *Graph, numExamples int) []*Node {
 	images := Zeros(g, shapes.Make(config.DType, numExamples, config.ImageSize, config.ImageSize, 3))
 	imageIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	flowerIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	modelFn := config.BuildTrainingModelGraph()
-	return modelFn(config.Context, nil, []*Node{images, imageIds, flowerIds})
+	return modelFn(config.Scope, nil, []*Node{images, imageIds, flowerIds})
 }
 
 func TestTrainingModelGraph(t *testing.T) {
@@ -72,7 +72,7 @@ func TestTrainingModelGraph(t *testing.T) {
 
 	config := getTestConfig()
 	config.NoNormalization = true
-	scope := config.Context
+	scope := config.Scope
 	g := NewGraph(config.Backend, "test")
 
 	numExamples := 5
@@ -80,7 +80,7 @@ func TestTrainingModelGraph(t *testing.T) {
 	predictedImages, loss := predictions[0], predictions[1]
 	assert.NoError(t, predictedImages.Shape().CheckDims(numExamples, config.ImageSize, config.ImageSize, 3))
 	assert.True(t, loss.Shape().IsScalar(), "Loss must be scalar.")
-	assert.Greater(t, scope.NumParameters(), 0, "No context parameters created!?")
+	assert.Greater(t, scope.NumParameters(), 0, "No scope parameters created!?")
 	fmt.Printf("predictedImages.shape:\t%s\n", predictions[0].Shape())
 	fmt.Printf("           loss.shape:\t%s\n", predictions[1].Shape())
 	fmt.Printf("        Model #params:\t%d\n", scope.NumParameters())
@@ -100,7 +100,7 @@ func TestImagesGenerator(t *testing.T) {
 	config.NoNormalization = true
 	g := NewGraph(config.Backend, "test")
 
-	// Context.RNGStateReset() --> to truly randomize each run uncomment this.
+	// Scope.RNGStateReset() --> to truly randomize each run uncomment this.
 	_ = getZeroPredictions(config, g, 2) // Batch size won't matter, we only call this to create the model weights.
 	noise := config.GenerateNoise(numImages)
 	flowerIds := config.GenerateFlowerIds(numImages)

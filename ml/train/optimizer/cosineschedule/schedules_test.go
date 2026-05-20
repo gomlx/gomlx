@@ -102,7 +102,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		}
 	})
 
-	t.Run("numCycles with warmUp+context configuration", func(t *testing.T) {
+	t.Run("numCycles with warmUp+scope configuration", func(t *testing.T) {
 		store := model.NewStore()
 		const warmUpSteps = 10
 		const numCycles = 2

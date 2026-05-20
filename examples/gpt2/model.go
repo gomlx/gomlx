@@ -87,14 +87,14 @@ func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node
 
 	// Transformer layers (pre-norm architecture)
 	for layer := range tm.NumLayers {
-		layerCtx := scope.In("layer_%d", layer)
+		layerScope := scope.In("layer_%d", layer)
 
 		// Pre-attention LayerNorm
-		attnInput := layers.LayerNormalization(layerCtx.In("norm1"), x, -1).
+		attnInput := layers.LayerNormalization(layerScope.In("norm1"), x, -1).
 			Epsilon(m.config.NormEps).Done()
 
 		// Self-attention with KV cache
-		attn := attention.SelfAttention(layerCtx.In("attn"), attnInput, tm.NumHeads, tm.HeadDim).
+		attn := attention.SelfAttention(layerScope.In("attn"), attnInput, tm.NumHeads, tm.HeadDim).
 			WithKVCache(tm.MaxPosEmbed, position).
 			UseProjectionBias(true).
 			WithCausalMask(true).
@@ -102,13 +102,13 @@ func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node
 		x = Add(x, attn)
 
 		// Pre-MLP LayerNorm
-		ffInput := layers.LayerNormalization(layerCtx.In("norm2"), x, -1).
+		ffInput := layers.LayerNormalization(layerScope.In("norm2"), x, -1).
 			Epsilon(m.config.NormEps).Done()
 
 		// Feed-forward network
-		ff := layers.Dense(layerCtx.In("ff1"), ffInput, true, tm.FFNDim)
+		ff := layers.Dense(layerScope.In("ff1"), ffInput, true, tm.FFNDim)
 		ff = activations.Gelu(ff)
-		ff = layers.Dense(layerCtx.In("ff2"), ff, true, tm.EmbedDim)
+		ff = layers.Dense(layerScope.In("ff2"), ff, true, tm.EmbedDim)
 		x = Add(x, ff)
 	}
 
@@ -124,7 +124,7 @@ func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node
 func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenizer, error) {
 	config := DefaultGPT2Config()
 
-	// Create context for model parameters and load them.
+	// Create scope for model parameters and load them.
 	scope := model.NewStore().RootScope()
 	fmt.Println("Loading checkpoint weights...")
 	if err := loadCheckpoint(backend, scope, repo); err != nil {
@@ -285,8 +285,8 @@ func loadCheckpoint(backend compute.Backend, scope *model.Scope, repo *hub.Repo)
 			continue
 		}
 
-		// Set variable in context
-		if err := setContextVariableFromTensor(scope, scopePath, varName, tensorAndName.Tensor); err != nil {
+		// Set variable in scope
+		if err := setScopeVariableFromTensor(scope, scopePath, varName, tensorAndName.Tensor); err != nil {
 			fmt.Printf("Warning: failed to load %s -> %s/%s: %v\n",
 				tensorAndName.Name, strings.Join(scopePath, "/"), varName, err)
 			continue
@@ -300,7 +300,7 @@ func loadCheckpoint(backend compute.Backend, scope *model.Scope, repo *hub.Repo)
 			tTransposed := tensors.FromShape(transposedShape)
 			transposeFloat32Tensor(tensorAndName.Tensor, tTransposed)
 
-			if err := setContextVariableFromTensor(scope, []string{"output", "dense"}, "weights", tTransposed); err != nil {
+			if err := setScopeVariableFromTensor(scope, []string{"output", "dense"}, "weights", tTransposed); err != nil {
 				fmt.Printf("Warning: failed to set tied output weights: %v\n", err)
 			}
 		}
@@ -317,7 +317,7 @@ func loadCheckpoint(backend compute.Backend, scope *model.Scope, repo *hub.Repo)
 	return nil
 }
 
-// mapTensorName maps safetensors tensor names to GoMLX context variable names
+// mapTensorName maps safetensors tensor names to GoMLX scope variable names
 // DistilGPT-2/GPT-2 format: transformer.wte.weight, transformer.h.{N}.attn.c_attn.weight, etc.
 // GoMLX format: token_embed/embeddings, layer_{N}/attn/..., etc.
 func mapTensorName(safetensorsName string) (scopePath []string, varName string, ok bool) {
@@ -384,20 +384,20 @@ func mapTensorName(safetensorsName string) (scopePath []string, varName string, 
 	return nil, "", false
 }
 
-// setContextVariableFromTensor sets a variable in the context from a tensor
-func setContextVariableFromTensor(scope *model.Scope, scopePath []string, varName string, t *tensors.Tensor) error {
+// setScopeVariableFromTensor sets a variable in the scope from a tensor
+func setScopeVariableFromTensor(scope *model.Scope, scopePath []string, varName string, t *tensors.Tensor) error {
 	// Check if this is a fused QKV weight that needs splitting
 	if len(scopePath) >= 3 && scopePath[len(scopePath)-1] == "_fused_qkv" {
 		return splitAndSetQKV(scope, scopePath, varName, t)
 	}
 
 	// Normal case: set single variable
-	scopeCtx := scope
+	scopeScope := scope
 	for _, s := range scopePath {
-		scopeCtx = scopeCtx.In("%s", s)
+		scopeScope = scopeScope.In("%s", s)
 	}
 
-	scopeCtx.VariableWithValue(varName, t)
+	scopeScope.VariableWithValue(varName, t)
 	return nil
 }
 
@@ -405,11 +405,11 @@ func setContextVariableFromTensor(scope *model.Scope, scopePath []string, varNam
 func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *tensors.Tensor) error {
 	// Get the actual scope without "_fused_qkv"
 	baseScopePath := scopePath[:len(scopePath)-1]
-	baseCtx := scope
+	baseScope := scope
 	for _, s := range baseScopePath {
-		baseCtx = baseCtx.In("%s", s)
+		baseScope = baseScope.In("%s", s)
 	}
-	baseCtx = baseCtx.In("MultiHeadAttention")
+	baseScope = baseScope.In("MultiHeadAttention")
 
 	shape := t.Shape().Dimensions
 	var flatData []float32
@@ -449,9 +449,9 @@ func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *t
 			}
 		}
 
-		baseCtx.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, hiddenSize, numHeads, headDim))
-		baseCtx.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, hiddenSize, numHeads, headDim))
-		baseCtx.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, hiddenSize, numHeads, headDim))
+		baseScope.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, hiddenSize, numHeads, headDim))
+		baseScope.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, hiddenSize, numHeads, headDim))
+		baseScope.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, hiddenSize, numHeads, headDim))
 	} else if len(shape) == 1 {
 		// Bias vector: [3*hiddenSize]
 		totalSize := shape[0]
@@ -476,9 +476,9 @@ func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *t
 			}
 		}
 
-		baseCtx.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, numHeads, headDim))
-		baseCtx.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, numHeads, headDim))
-		baseCtx.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, numHeads, headDim))
+		baseScope.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, numHeads, headDim))
+		baseScope.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, numHeads, headDim))
+		baseScope.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, numHeads, headDim))
 	} else {
 		return fmt.Errorf("unexpected shape for fused QKV: %v", shape)
 	}

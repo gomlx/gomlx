@@ -27,7 +27,7 @@ var (
 )
 
 func main() {
-	scope := fm.CreateDefaultContext()
+	scope := fm.CreateDefaultScope()
 	settings := commandline.CreateSettingsFlag(scope.Store(), "")
 	klog.InitFlags(nil)
 	flag.Parse()

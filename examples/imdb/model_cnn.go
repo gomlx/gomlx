@@ -45,7 +45,7 @@ func Conv1DModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 			logits = NormalizeSequence(scope, logits)
 		}
 		logits = layers.Convolution(scope, embed).KernelSize(7).Channels(embedSize).Strides(1).Done()
-		logits = activations.ApplyFromContext(scope, logits)
+		logits = activations.ApplyFromScope(scope, logits)
 		if dropoutNode != nil {
 			logits = layers.Dropout(scope, logits, dropoutNode)
 		}

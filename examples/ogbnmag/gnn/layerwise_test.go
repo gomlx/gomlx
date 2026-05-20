@@ -181,7 +181,7 @@ func setMinimalTestParams(scope *model.Scope) {
 		ParamUpdateNumHiddenLayers: 0,
 		ParamMessageDim:            1, // 128 or 256 will work better, but takes way more time
 		ParamStateDim:              1, // 128 or 256 will work better, but takes way more time
-		ParamUseRootAsContext:      false,
+		ParamUseRootAsScope:      false,
 	})
 }
 
@@ -200,7 +200,7 @@ func setCommonTestParams(scope *model.Scope) {
 		ParamUpdateNumHiddenLayers: 2,
 		ParamMessageDim:            8,
 		ParamStateDim:              8,
-		ParamUseRootAsContext:      false,
+		ParamUseRootAsScope:      false,
 	})
 }
 
@@ -247,7 +247,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 
 	// Uncomment to list variables used in model.
 	/*
-		ctx.EnumerateVariables(func(v *model.Variable) {
+		scope.EnumerateVariables(func(v *model.Variable) {
 			fmt.Printf("\t%s=%s\n", v.GetParameterName(), v.Value())
 		})
 	*/
@@ -288,7 +288,7 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 
 		// Uncomment to list variables used in model.
 		/*
-			ctx.EnumerateVariables(func(v *model.Variable) {
+			scope.EnumerateVariables(func(v *model.Variable) {
 				fmt.Printf("\t%s=%s\n", v.GetParameterName(), v.Value())
 			})
 		*/
