@@ -23,6 +23,10 @@ import (
 // Store as needed based on the inputs shapes, to allow the function
 // to access (both read and set) variables and everything in the Store.
 // Otherwise, very similar to graph.Exec.
+//
+// Notice that the associated Store is linked to the graphs built with it
+// (for each different shape of inputs), and is available through model.GetStore(g)
+// any time -- but just the Store, you don't get a Scope with it.
 type Exec struct {
 	backend compute.Backend
 	store   *Store
