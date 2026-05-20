@@ -23,7 +23,7 @@ package mnist
 import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/pkg/errors"
@@ -73,14 +73,14 @@ func CnnEmbeddings(scope *model.Scope, images *Node) *Node {
 
 	images = layers.Convolution(nextScope("conv"), images).Channels(32).KernelSize(3).PadSame().Done()
 	images.AssertDims(batchSize, 28, 28, 32)
-	images = activations.Relu(images)
+	images = activation.Relu(images)
 	images = normalizeCNN(nextScope("norm"), images)
 	images = MaxPool(images).Window(2).Done()
 	images.AssertDims(batchSize, 14, 14, 32)
 
 	images = layers.Convolution(nextScope("conv"), images).Channels(64).KernelSize(3).PadSame().Done()
 	images.AssertDims(batchSize, 14, 14, 64)
-	images = activations.Relu(images)
+	images = activation.Relu(images)
 	images = normalizeCNN(nextScope("norm"), images)
 	images = MaxPool(images).Window(2).Done()
 	images = layers.DropoutNormalize(nextScope("dropout"), images, dropoutNode, true)

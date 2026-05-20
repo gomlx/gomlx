@@ -17,7 +17,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/model"
@@ -300,7 +300,7 @@ func edgeMessageGraph(scope *model.Scope, gatheredStates, gatheredMask *Node) (m
 	} else {
 		// Normal FNN
 		messages = layers.DenseWithBias(scope, gatheredStates, messageDim)
-		messages = activations.ApplyFromScope(scope, messages)
+		messages = activation.ApplyFromScope(scope, messages)
 	}
 	if NanLogger != nil {
 		NanLogger.TraceFirstNaN(messages, fmt.Sprintf("(KAN)edgeMessageGraph(%s)", scope.Scope()))
@@ -502,10 +502,10 @@ func updateState(scope *model.Scope, prevState, input, mask *Node) *Node {
 	for ii := range numHiddenLayers {
 		scopeHiddenLayer := scope.In("hidden_%d", ii)
 		state = layers.DenseWithBias(scopeHiddenLayer, state, stateDim)
-		state = activations.ApplyFromScope(scopeHiddenLayer, state)
+		state = activation.ApplyFromScope(scopeHiddenLayer, state)
 	}
 	state = layers.DenseWithBias(scope, state, stateDim)
-	state = activations.ApplyFromScope(scope, state)
+	state = activation.ApplyFromScope(scope, state)
 	state = layers.DropoutFromScope(scope, state)
 	if updateType == "residual" && prevState.Shape().Equal(state.Shape()) {
 		state = Add(state, prevState)

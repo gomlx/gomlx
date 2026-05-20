@@ -8,7 +8,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/modeltest"
 
@@ -29,7 +29,7 @@ func TestConfig_Approximate(t *testing.T) {
 				WithInputGroups(1).
 				WithDegrees(6, 5).
 				Done()
-			want := activations.Swish(xs)
+			want := activation.Swish(xs)
 			//want := activations.Relu(xs)
 			rmse := Sqrt(ReduceAllMean(Square(Sub(want, y))))
 			inputs = []*Node{}

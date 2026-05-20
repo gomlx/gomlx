@@ -31,7 +31,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
@@ -85,7 +85,7 @@ func CreateModelStore() *model.Store {
 		optimizer.ParamAdamEpsilon:      1e-7,
 		optimizer.ParamAdamDType:        "",
 		cosineschedule.ParamPeriodSteps: 0,
-		activations.ParamActivation:     "relu",
+		activation.ParamActivation:      "relu",
 		layers.ParamDropoutRate:         0.5,
 		regularizer.ParamL2:             0.0,
 		regularizer.ParamL1:             0.0,

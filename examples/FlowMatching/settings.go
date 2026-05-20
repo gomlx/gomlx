@@ -4,7 +4,7 @@ package fm
 
 import (
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train/loss"
@@ -94,7 +94,7 @@ func CreateDefaultScope() *model.Scope {
 		optimizer.ParamClipStepByValue:   0.0,
 		optimizer.ParamClipNaN:           false,
 		cosineschedule.ParamPeriodSteps:  0,
-		activations.ParamActivation:      "swish",
+		activation.ParamActivation:       "swish",
 		layers.ParamDropoutRate:          0.15,
 		layers.ParamDropBlockProbability: 0.0,
 		layers.ParamDropBlockSize:        3,

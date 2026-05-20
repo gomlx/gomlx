@@ -17,7 +17,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/decode/sample"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/attention"
 	"github.com/gomlx/gomlx/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/ml/model"
@@ -107,7 +107,7 @@ func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node
 
 		// Feed-forward network
 		ff := layers.Dense(layerScope.In("ff1"), ffInput, true, tm.FFNDim)
-		ff = activations.Gelu(ff)
+		ff = activation.Gelu(ff)
 		ff = layers.Dense(layerScope.In("ff2"), ff, true, tm.EmbedDim)
 		x = Add(x, ff)
 	}

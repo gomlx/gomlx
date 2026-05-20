@@ -4,7 +4,7 @@ package nn
 
 import (
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -15,19 +15,19 @@ import (
 // weight has shape [in_features, out_features...]. bias is optional (nil means no
 // bias). x's last axis contracts with weight's first axis.
 //
-// activation is optional; if omitted or activations.TypeNone, no activation is
+// optionalActivation is optional; if omitted or activations.TypeNone, no activation is
 // applied.
 //
 // If the backend supports fused Dense, the optimized native implementation is
 // used; otherwise the operation is decomposed into primitives. Fallback is
 // handled automatically via InternalFusedOpCaller.
-func Dense(x, weight, bias *Node, activation ...activations.Type) *Node {
-	act := activations.TypeNone
-	if len(activation) > 0 {
-		if len(activation) > 1 {
-			Panicf("nn.Dense() can only take one optional activation, got %v", activation)
+func Dense(x, weight, bias *Node, optionalActivation ...activation.Type) *Node {
+	act := activation.TypeNone
+	if len(optionalActivation) > 0 {
+		if len(optionalActivation) > 1 {
+			Panicf("nn.Dense() can only take one optional activation, got %v", optionalActivation)
 		}
-		act = activation[0]
+		act = optionalActivation[0]
 	}
 
 	decomposed := func() *Node {
@@ -42,7 +42,7 @@ func Dense(x, weight, bias *Node, activation ...activations.Type) *Node {
 }
 
 // denseDecomposed implements Dense using primitive graph ops.
-func denseDecomposed(x, weight, bias *Node, act activations.Type) *Node {
+func denseDecomposed(x, weight, bias *Node, act activation.Type) *Node {
 	xShape := x.Shape()
 	wShape := weight.Shape()
 	xRank := xShape.Rank()
@@ -78,8 +78,8 @@ func denseDecomposed(x, weight, bias *Node, act activations.Type) *Node {
 	if bias != nil {
 		y = Add(y, ExpandLeftToRank(bias, y.Rank()))
 	}
-	if act != activations.TypeNone {
-		y = activations.Apply(act, y)
+	if act != activation.TypeNone {
+		y = activation.Apply(act, y)
 	}
 	return y
 }

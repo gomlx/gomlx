@@ -25,7 +25,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/nn"
@@ -71,7 +71,7 @@ type Config struct {
 	numHiddenLayers, numHiddenNodes int
 	ensembleSize                    int
 	ensembleAxis                    int
-	activation                      activations.Type
+	activation                      activation.Type
 	normalization                   string
 	dropoutRatio                    float64
 	useBias, useResidual            bool
@@ -122,7 +122,7 @@ func New(scope *model.Scope, input *Node, outputDimensions ...int) *Config {
 		ensembleAxis:     -1,
 		numHiddenLayers:  model.GetParamOr(scope, ParamNumHiddenLayers, 0),
 		numHiddenNodes:   model.GetParamOr(scope, ParamNumHiddenNodes, 10),
-		activation:       activations.FromName(model.GetParamOr(scope, activations.ParamActivation, "relu")),
+		activation:       activation.FromName(model.GetParamOr(scope, activation.ParamActivation, "relu")),
 		normalization:    model.GetParamOr(scope, ParamNormalization, ""),
 		regularizer:      regularizer.FromScope(scope),
 		dropoutRatio:     model.GetParamOr(scope, ParamDropoutRate, -1.0),
@@ -202,7 +202,7 @@ func (c *Config) UseBias(useBias bool) *Config {
 //
 // The default is "relu", but it can be overridden by setting the hyperparameter layers.ParamActivation (="activation")
 // in the model.
-func (c *Config) Activation(activation activations.Type) *Config {
+func (c *Config) Activation(activation activation.Type) *Config {
 	c.activation = activation
 	return c
 }
@@ -290,7 +290,7 @@ func (c *Config) Done() *Node {
 
 		// In between-layers: some don't apply to the input (ii == 0)
 		if ii > 0 {
-			x = activations.Apply(c.activation, x)
+			x = activation.Apply(c.activation, x)
 		}
 		if dropoutRatio != nil {
 			x = layers.DropoutNormalize(layerScope, x, dropoutRatio, true)

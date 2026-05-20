@@ -9,7 +9,7 @@ import (
 
 	"github.com/gomlx/gomlx/examples/cifar"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
@@ -64,7 +64,7 @@ func createModelStore() *model.Store {
 		optimizer.ParamAdamEpsilon:      1e-7,
 		optimizer.ParamAdamDType:        "",
 		cosineschedule.ParamPeriodSteps: 0,
-		activations.ParamActivation:     "swish",
+		activation.ParamActivation:      "swish",
 		layers.ParamDropoutRate:         0.0,
 		regularizer.ParamL2:             0.0, // 1e-5,
 		regularizer.ParamL1:             0.0, // 1e-5,

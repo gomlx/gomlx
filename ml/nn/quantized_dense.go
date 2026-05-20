@@ -7,7 +7,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/ggml"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -23,20 +23,20 @@ import (
 //     For sub-byte types, Bitcast packed uint8 data to the correct dtype first.
 //   - quant: quantization metadata (scheme, scale, zeroPoint, blockAxis, blockSize).
 //   - bias: [N] float32 (nil means no bias).
-//   - activation: optional; if omitted or activations.TypeNone, no activation is applied.
+//   - optionalActivation: if omitted or activations.TypeNone, no activation is applied.
 //
 // If the backend supports fused QuantizedDense, the optimized native implementation is
 // used; otherwise the operation is decomposed into primitives. Fallback is handled
 // automatically via InternalFusedOpCaller.
 func QuantizedDense(x, weights *Node, quant *Quantization, bias *Node,
-	activation ...activations.Type) *Node {
+	optionalActivation ...activation.Type) *Node {
 
-	act := activations.TypeNone
-	if len(activation) > 0 {
-		if len(activation) > 1 {
-			Panicf("nn.QuantizedDense() can only take one optional activation, got %v", activation)
+	act := activation.TypeNone
+	if len(optionalActivation) > 0 {
+		if len(optionalActivation) > 1 {
+			Panicf("nn.QuantizedDense() can only take one optional activation, got %v", optionalActivation)
 		}
-		act = activation[0]
+		act = optionalActivation[0]
 	}
 
 	backendAct := act.ToBackend()
@@ -69,7 +69,7 @@ func QuantizedDense(x, weights *Node, quant *Quantization, bias *Node,
 // quantizedDenseDecomposed implements QuantizedDense using primitive graph ops.
 // Weights have their dtype set to the actual storage type (Int4, Int8, etc.).
 func quantizedDenseDecomposed(x, weights *Node, quant *Quantization, bias *Node,
-	act activations.Type) *Node {
+	act activation.Type) *Node {
 
 	// Only blockAxis=1 (output-features axis) is currently supported.
 	if quant.BlockAxis != 1 {
@@ -141,8 +141,8 @@ func quantizedDenseDecomposed(x, weights *Node, quant *Quantization, bias *Node,
 	if bias != nil {
 		y = Add(y, ExpandLeftToRank(bias, y.Rank()))
 	}
-	if act != activations.TypeNone {
-		y = activations.Apply(act, y)
+	if act != activation.TypeNone {
+		y = activation.Apply(act, y)
 	}
 	return y
 }

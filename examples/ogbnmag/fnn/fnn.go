@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
@@ -63,7 +63,7 @@ func FnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 		// Normal FNN
 		for layerNum := range numLayers {
 			logits = layers.DenseWithBias(scope.In("layer-%d", layerNum), logits, numNodes)
-			logits = activations.LeakyRelu(logits)
+			logits = activation.LeakyRelu(logits)
 			dropoutRate := model.GetParamOr(scope, "dropout_rate", 0.0)
 			if dropoutRate > 0 {
 				dropoutRateNode := Scalar(g, dtypes.Float32, dropoutRate)

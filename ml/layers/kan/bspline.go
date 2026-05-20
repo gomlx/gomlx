@@ -8,7 +8,7 @@ import (
 	"github.com/gomlx/bsplines"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	xbsplines "github.com/gomlx/gomlx/ml/layers/bsplines"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
@@ -152,7 +152,7 @@ func (c *Config) bsplineLayer(scope *model.Scope, x *Node, numOutputNodes int) *
 		output = Mul(output, weightsSplines)
 	}
 	if c.useResidual {
-		residual = activations.Apply(c.activation, residual)
+		residual = activation.Apply(c.activation, residual)
 		residual = InsertAxes(residual, 1)
 		residual.AssertDims(batchSize, 1, numInputNodes)
 		if c.bspline.MagnitudeTerms {

@@ -12,7 +12,7 @@ import (
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
@@ -88,9 +88,9 @@ func createModelStore() *model.Store {
 		optimizer.ParamAdamDType:            "float32",
 		optimizer.ParamClipNaN:              false,
 
-		regularizer.ParamL2:         1e-5,
-		layers.ParamDropoutRate:     0.2,
-		activations.ParamActivation: "swish",
+		regularizer.ParamL2:        1e-5,
+		layers.ParamDropoutRate:    0.2,
+		activation.ParamActivation: "swish",
 
 		gnn.ParamEdgeDropoutRate:       0.0,
 		gnn.ParamNumGraphUpdates:       6, // gnn_num_messages

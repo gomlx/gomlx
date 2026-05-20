@@ -5,7 +5,7 @@ package imdb
 import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/model"
@@ -45,7 +45,7 @@ func Conv1DModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 			logits = NormalizeSequence(scope, logits)
 		}
 		logits = layers.Convolution(scope, embed).KernelSize(7).Channels(embedSize).Strides(1).Done()
-		logits = activations.ApplyFromScope(scope, logits)
+		logits = activation.ApplyFromScope(scope, logits)
 		if dropoutNode != nil {
 			logits = layers.Dropout(scope, logits, dropoutNode)
 		}

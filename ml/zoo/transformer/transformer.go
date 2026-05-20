@@ -11,7 +11,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/decode"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/attention"
 	"github.com/gomlx/gomlx/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/ml/model"
@@ -71,26 +71,26 @@ const (
 
 // Model configures a cached transformer model.
 type Model struct {
-	VocabSize            int              // Vocabulary size
-	EmbedDim             int              // Embedding dimension
-	NumLayers            int              // Transformer layers
-	NumHeads             int              // Attention heads per layer
-	HeadDim              int              // Head dimension
-	FFNDim               int              // Feed-forward hidden dimension
-	MaxPosEmbed          int              // Max positional embedding length
-	DType                dtypes.DType     // Data type
-	Dropout              float64          // Dropout rate (0.0 = none)
-	UseBias              bool             // Use bias in dense layers
-	UseCausalMask        bool             // Use causal masking in attention layers
-	ScaleTokenEmbeddings bool             // Whether to scale token embeddings by sqrt(m.EmbedDim).
-	FinalNormalization   string           // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
-	Architecture         Architecture     // e.g. ArchitectureStandard, ArchitectureGemma
-	EmbedNormalization   string           // e.g. "layer", "rms", "none" or ""
-	TokenTypeEmbedSize   int              // e.g. Number of token types, 2 for BERT. See WithTokenTypeEmbedding.
-	Normalization        string           // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
-	NormEpsilon          float64          // Epsilon for normalization
-	Activation           activations.Type // e.g. "gelu", "silu", "gelu_approximate"
-	NumKVHeads           int              // For Grouped Query Attention (GQA), 0 means equal to NumHeads
+	VocabSize            int             // Vocabulary size
+	EmbedDim             int             // Embedding dimension
+	NumLayers            int             // Transformer layers
+	NumHeads             int             // Attention heads per layer
+	HeadDim              int             // Head dimension
+	FFNDim               int             // Feed-forward hidden dimension
+	MaxPosEmbed          int             // Max positional embedding length
+	DType                dtypes.DType    // Data type
+	Dropout              float64         // Dropout rate (0.0 = none)
+	UseBias              bool            // Use bias in dense layers
+	UseCausalMask        bool            // Use causal masking in attention layers
+	ScaleTokenEmbeddings bool            // Whether to scale token embeddings by sqrt(m.EmbedDim).
+	FinalNormalization   string          // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
+	Architecture         Architecture    // e.g. ArchitectureStandard, ArchitectureGemma
+	EmbedNormalization   string          // e.g. "layer", "rms", "none" or ""
+	TokenTypeEmbedSize   int             // e.g. Number of token types, 2 for BERT. See WithTokenTypeEmbedding.
+	Normalization        string          // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
+	NormEpsilon          float64         // Epsilon for normalization
+	Activation           activation.Type // e.g. "gelu", "silu", "gelu_approximate"
+	NumKVHeads           int             // For Grouped Query Attention (GQA), 0 means equal to NumHeads
 
 	posEncoder       pos.Encoder         // Positional encoder (e.g. RoPE). If nil, standard absolute positional embeddings are used.
 	layerPosEncoders map[int]pos.Encoder // Custom positional encoders per layer
@@ -123,7 +123,7 @@ func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
 		Architecture:         ArchitectureStandard,
 		Normalization:        layers.NormalizationLayerNorm,
 		NormEpsilon:          1e-5,
-		Activation:           activations.TypeGelu,
+		Activation:           activation.TypeGelu,
 		NumKVHeads:           0,
 		posEncoder:           nil,
 	}
@@ -216,7 +216,7 @@ func (m *Model) FromScope(scope *model.Scope) *Model {
 		exceptions.Panicf("invalid architecture name %q: options are %v", archStr, ArchitectureValues())
 	}
 	m.NormEpsilon = model.GetParamOr(scope, ParamNormEpsilon, m.NormEpsilon)
-	m.Activation = activations.FromName(model.GetParamOr(scope, ParamActivation, m.Activation.String()))
+	m.Activation = activation.FromName(model.GetParamOr(scope, ParamActivation, m.Activation.String()))
 	m.NumKVHeads = model.GetParamOr(scope, ParamNumKVHeads, m.NumKVHeads)
 
 	// Legacy RoPE configuration from scope
@@ -370,7 +370,7 @@ func (m *Model) WithNormEpsilon(eps float64) *Model {
 }
 
 // WithActivation sets the activation function type.
-func (m *Model) WithActivation(activation activations.Type) *Model {
+func (m *Model) WithActivation(activation activation.Type) *Model {
 	m.Activation = activation
 	return m
 }
@@ -655,7 +655,7 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x, m
 
 	residual = x
 	ff := m.dense(layerScope.In("ff1"), x, m.UseBias, m.FFNDim)
-	ff = activations.Apply(m.Activation, ff)
+	ff = activation.Apply(m.Activation, ff)
 	if m.Dropout > 0 {
 		ff = layers.Dropout(layerScope.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), m.Dropout))
 	}
@@ -779,7 +779,7 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x, mask
 	ffScope := layerScope.In("mlp")
 	gate := m.dense(ffScope.In("gate_proj"), x, m.UseBias, m.FFNDim)
 	up := m.dense(ffScope.In("up_proj"), x, m.UseBias, m.FFNDim)
-	switchedNode := activations.Apply(m.Activation, gate)
+	switchedNode := activation.Apply(m.Activation, gate)
 	ff := Mul(switchedNode, up)
 
 	if m.Dropout > 0 {

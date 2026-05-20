@@ -4,7 +4,7 @@ package diffusion
 
 import (
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train/loss"
@@ -91,7 +91,7 @@ func CreateModelStore() *model.Store {
 		optimizer.ParamAdamDType:        "",
 		optimizer.ParamAdamWeightDecay:  1e-4,
 		cosineschedule.ParamPeriodSteps: 0,
-		activations.ParamActivation:     "swish",
+		activation.ParamActivation:      "swish",
 		layers.ParamDropoutRate:         0.15,
 		regularizer.ParamL2:             0.0,
 		regularizer.ParamL1:             0.0,

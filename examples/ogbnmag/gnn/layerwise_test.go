@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	samplerPkg "github.com/gomlx/gomlx/examples/ogbnmag/sampler"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
@@ -168,9 +168,9 @@ func createDenseTestStateGraphLayerWise(
 
 func setMinimalTestParams(scope *model.Scope) {
 	scope.SetParams(map[string]any{
-		layers.ParamDropoutRate:     0.0,
-		activations.ParamActivation: "none", // No activation, to make math simpler.
-		layers.ParamNormalization:   "none",
+		layers.ParamDropoutRate:    0.0,
+		activation.ParamActivation: "none", // No activation, to make math simpler.
+		layers.ParamNormalization:  "none",
 
 		ParamEdgeDropoutRate:       0.0,
 		ParamNumGraphUpdates:       1, // gnn_num_messages
@@ -181,15 +181,15 @@ func setMinimalTestParams(scope *model.Scope) {
 		ParamUpdateNumHiddenLayers: 0,
 		ParamMessageDim:            1, // 128 or 256 will work better, but takes way more time
 		ParamStateDim:              1, // 128 or 256 will work better, but takes way more time
-		ParamUseRootAsScope:      false,
+		ParamUseRootAsScope:        false,
 	})
 }
 
 func setCommonTestParams(scope *model.Scope) {
 	scope.SetParams(map[string]any{
-		layers.ParamDropoutRate:     0.0,
-		activations.ParamActivation: "swish",
-		layers.ParamNormalization:   "layer",
+		layers.ParamDropoutRate:    0.0,
+		activation.ParamActivation: "swish",
+		layers.ParamNormalization:  "layer",
 
 		ParamEdgeDropoutRate:       0.0,
 		ParamNumGraphUpdates:       3, // gnn_num_messages
@@ -200,7 +200,7 @@ func setCommonTestParams(scope *model.Scope) {
 		ParamUpdateNumHiddenLayers: 2,
 		ParamMessageDim:            8,
 		ParamStateDim:              8,
-		ParamUseRootAsScope:      false,
+		ParamUseRootAsScope:        false,
 	})
 }
 

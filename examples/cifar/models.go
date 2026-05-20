@@ -5,7 +5,7 @@ package cifar
 import (
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
@@ -80,10 +80,10 @@ func C10ConvolutionModelGraph(scope *model.Scope, spec any, inputs []*graph.Node
 
 	logits = layers.Convolution(nextScope("conv"), logits).Channels(32).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 32, 32, 32)
-	logits = activations.Relu(logits)
+	logits = activation.Relu(logits)
 	logits = normalizeCNN(nextScope("norm"), logits)
 	logits = layers.Convolution(nextScope("conv"), logits).Channels(32).KernelSize(3).PadSame().Done()
-	logits = activations.Relu(logits)
+	logits = activation.Relu(logits)
 	logits = normalizeCNN(nextScope("norm"), logits)
 	logits = graph.MaxPool(logits).Window(2).Done()
 	logits = layers.DropoutNormalize(nextScope("dropout"), logits, graph.Scalar(g, dtype, 0.3), true)
@@ -91,11 +91,11 @@ func C10ConvolutionModelGraph(scope *model.Scope, spec any, inputs []*graph.Node
 
 	logits = layers.Convolution(nextScope("conv"), logits).Channels(64).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 16, 16, 64)
-	logits = activations.Relu(logits)
+	logits = activation.Relu(logits)
 	logits = normalizeCNN(nextScope("norm"), logits)
 	logits = layers.Convolution(nextScope("conv"), logits).Channels(64).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 16, 16, 64)
-	logits = activations.Relu(logits)
+	logits = activation.Relu(logits)
 	logits = normalizeCNN(nextScope("norm"), logits)
 	logits = graph.MaxPool(logits).Window(2).Done()
 	logits = layers.DropoutNormalize(nextScope("dropout"), logits, graph.Scalar(g, dtype, 0.5), true)
@@ -103,11 +103,11 @@ func C10ConvolutionModelGraph(scope *model.Scope, spec any, inputs []*graph.Node
 
 	logits = layers.Convolution(nextScope("conv"), logits).Channels(128).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 8, 8, 128)
-	logits = activations.Relu(logits)
+	logits = activation.Relu(logits)
 	logits = normalizeCNN(nextScope("norm"), logits)
 	logits = layers.Convolution(nextScope("conv"), logits).Channels(128).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 8, 8, 128)
-	logits = activations.Relu(logits)
+	logits = activation.Relu(logits)
 	logits = normalizeCNN(nextScope("norm"), logits)
 	logits = graph.MaxPool(logits).Window(2).Done()
 	logits = layers.DropoutNormalize(nextScope("dropout"), logits, graph.Scalar(g, dtype, 0.5), true)
@@ -116,7 +116,7 @@ func C10ConvolutionModelGraph(scope *model.Scope, spec any, inputs []*graph.Node
 	// Flatten logits, and we can use the usual FNN/KAN.
 	logits = graph.Reshape(logits, batchSize, -1)
 	logits = layers.Dense(nextScope("dense"), logits, true, 128)
-	logits = activations.Relu(logits)
+	logits = activation.Relu(logits)
 	logits = normalizeCNN(nextScope("norm"), logits)
 	logits = layers.DropoutNormalize(nextScope("dropout"), logits, graph.Scalar(g, dtype, 0.5), true)
 	numClasses := len(C10Labels)

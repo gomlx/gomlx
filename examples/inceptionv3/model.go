@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/images"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/model"
 	. "github.com/gomlx/gomlx/support/exceptions"
@@ -417,7 +417,7 @@ func (cfg *Config) conv2DWithBatchNorm(scope *model.Scope, x *Node, kernelFilter
 		Done()
 
 	// Apply:
-	x = activations.Relu(x)
+	x = activation.Relu(x)
 
 	output = x
 	if cfg.useAliases {

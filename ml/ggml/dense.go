@@ -5,7 +5,7 @@ package ggml
 import (
 	"github.com/gomlx/compute"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -21,11 +21,11 @@ import (
 //   - bias: [N] Float32 (nil for no bias).
 //   - activation: optional activation function.
 func DenseDecomposed(x, weights *Node, ggmlType compute.GGMLQuantType,
-	bias *Node, activation ...activations.Type) *Node {
+	bias *Node, optionalActivation ...activation.Type) *Node {
 
-	act := activations.TypeNone
-	if len(activation) > 0 {
-		act = activation[0]
+	act := activation.TypeNone
+	if len(optionalActivation) > 0 {
+		act = optionalActivation[0]
 	}
 
 	// Dequantize weights → [N, K] Float32.
@@ -55,8 +55,8 @@ func DenseDecomposed(x, weights *Node, ggmlType compute.GGMLQuantType,
 	if bias != nil {
 		y = Add(y, ExpandLeftToRank(bias, y.Rank()))
 	}
-	if act != activations.TypeNone {
-		y = activations.Apply(act, y)
+	if act != activation.TypeNone {
+		y = activation.Apply(act, y)
 	}
 	return y
 }

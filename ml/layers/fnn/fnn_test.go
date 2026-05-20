@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
@@ -88,7 +88,7 @@ var (
 		func(scope *model.Scope, input *Node) *Node {
 			return New(scope, input, 1).
 				NumHiddenLayers(1, 128).
-				Activation(activations.TypeRelu).
+				Activation(activation.TypeRelu).
 				Done()
 		},
 
@@ -98,7 +98,7 @@ var (
 				NumHiddenLayers(8, 8).
 				Normalization("layer").
 				Residual(true).
-				Activation(activations.TypeSigmoid).
+				Activation(activation.TypeSigmoid).
 				Done()
 		},
 	}

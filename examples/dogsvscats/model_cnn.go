@@ -7,7 +7,7 @@ package dogsvscats
 import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/model"
@@ -50,7 +50,7 @@ func CnnEmbeddings(scope *model.Scope, images *Node) *Node {
 			scope := scope.In("repeat_%02d", repeat)
 			residual := logits
 			logits = layers.Convolution(scope, logits).Channels(numChannels).KernelSize(3).PadSame().Done()
-			logits = activations.ApplyFromScope(scope, logits)
+			logits = activation.ApplyFromScope(scope, logits)
 			if dropoutNode != nil {
 				logits = layers.Dropout(scope, logits, dropoutNode)
 			}

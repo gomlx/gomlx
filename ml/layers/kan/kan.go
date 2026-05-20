@@ -21,7 +21,7 @@ import (
 	"slices"
 
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -80,7 +80,7 @@ type Config struct {
 	input                           *Node
 	numOutputNodes                  int
 	numHiddenLayers, numHiddenNodes int
-	activation                      activations.Type
+	activation                      activation.Type
 	regularizer                     regularizer.Regularizer
 	useResidual, useMean            bool
 	inputGroupSize                  int
@@ -118,7 +118,7 @@ func New(scope *model.Scope, input *Node, numOutputNodes int) *Config {
 		numOutputNodes:   numOutputNodes,
 		numHiddenLayers:  model.GetParamOr(scope, ParamNumHiddenLayers, 0),
 		numHiddenNodes:   model.GetParamOr(scope, ParamNumHiddenNodes, 10),
-		activation:       activations.FromName(model.GetParamOr(scope, activations.ParamActivation, "none")),
+		activation:       activation.FromName(model.GetParamOr(scope, activation.ParamActivation, "none")),
 		regularizer:      regularizer.FromScope(scope),
 		useResidual:      model.GetParamOr(scope, ParamResidual, true),
 		useMean:          model.GetParamOr(scope, ParamMean, true),
@@ -166,7 +166,7 @@ func (c *Config) NumHiddenLayers(numLayers, numHiddenNodes int) *Config {
 // layers.ParamActivation (="activation") is set in the model.
 //
 // Most KAN functions are already non-linear, and don't require activation.
-func (c *Config) Activation(activation activations.Type) *Config {
+func (c *Config) Activation(activation activation.Type) *Config {
 	c.activation = activation
 	return c
 }

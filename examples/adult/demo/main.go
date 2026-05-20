@@ -16,7 +16,7 @@ import (
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
@@ -78,7 +78,7 @@ func createModelStore() *model.Store {
 		optimizer.ParamAdamEpsilon:      1e-7,
 		optimizer.ParamAdamDType:        "",
 		cosineschedule.ParamPeriodSteps: 0,
-		activations.ParamActivation:     "sigmoid",
+		activation.ParamActivation:      "sigmoid",
 		layers.ParamDropoutRate:         0.0,
 		regularizer.ParamL2:             1e-5,
 		regularizer.ParamL1:             1e-5,

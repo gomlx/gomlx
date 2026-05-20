@@ -24,7 +24,7 @@ import (
 	timages "github.com/gomlx/gomlx/core/tensors/images"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/attention"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/model"
@@ -127,13 +127,13 @@ func ResidualBlock(scope *model.Scope, nanLogger *nanlogger.NanLogger, x *Node, 
 	case 1: // Version 1: the original.
 		x = layers.Convolution(nextScope("conv"), x).Channels(outputChannels).KernelSize(3).PadSame().Done()
 		x = layers.DropBlock(scope, x).ChannelsAxis(timages.ChannelsLast).Done()
-		x = activations.ApplyFromScope(scope, x)
+		x = activation.ApplyFromScope(scope, x)
 		x = layers.Convolution(nextScope("conv"), x).Channels(outputChannels).KernelSize(3).PadSame().Done()
 		x = layers.DropBlock(scope, x).ChannelsAxis(timages.ChannelsLast).Done()
 		nanLogger.TraceFirstNaN(x, "x (Version 1)")
 
 	case 2: // Version 2: slimmer.
-		residual = activations.ApplyFromScope(scope, residual)
+		residual = activation.ApplyFromScope(scope, residual)
 		convScope := nextScope("conv").WithInitializer(initializer.Zero)
 		x = layers.Convolution(convScope, x).Channels(outputChannels).KernelSize(3).PadSame().Done()
 		x = layers.DropBlock(scope, x).ChannelsAxis(timages.ChannelsLast).Done()
@@ -523,7 +523,7 @@ func TransformerBlock(scope *model.Scope, nanLogger *nanlogger.NanLogger, x *Nod
 
 		// Transformers recipe: 2 dense layers after attention.
 		embed = layers.Dense(layerScope.In("ffn_1"), embed, true, embedDim)
-		embed = activations.ApplyFromScope(layerScope, embed)
+		embed = activation.ApplyFromScope(layerScope, embed)
 		embed = layers.Dense(layerScope.In("ffn_2"), embed, true, embedDim)
 		embed = layers.DropoutFromScope(layerScope, embed)
 		embed = Add(embed, attentionOutput)

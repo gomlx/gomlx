@@ -37,7 +37,7 @@ func main() {
 			"github.com/gomlx/gomlx/pkg/ml/layers/lstm":                     "github.com/gomlx/gomlx/ml/layers/lstm",
 			"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm":                "github.com/gomlx/gomlx/ml/layers/batchnorm",
 			"github.com/gomlx/gomlx/pkg/ml/layers/bsplines":                 "github.com/gomlx/gomlx/ml/layers/bsplines",
-			"github.com/gomlx/gomlx/pkg/ml/layers/activations":              "github.com/gomlx/gomlx/ml/layers/activations",
+			"github.com/gomlx/gomlx/pkg/ml/layers/activations":              "github.com/gomlx/gomlx/ml/layers/activation",
 			"github.com/gomlx/gomlx/pkg/ml/layers/vnn":                      "github.com/gomlx/gomlx/ml/layers/vnn",
 			"github.com/gomlx/gomlx/pkg/ml/layers/rational":                 "github.com/gomlx/gomlx/ml/layers/rational",
 			"github.com/gomlx/gomlx/pkg/ml/layers/kan":                      "github.com/gomlx/gomlx/ml/layers/kan",

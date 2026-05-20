@@ -5,7 +5,7 @@
 //
 // There is also FromName to convert an activation name (string) to its type, and ApplyFromScope that applies
 // an activation based on the hyperparameter ParamActivation defined in a model.
-package activations
+package activation
 
 import (
 	"math"

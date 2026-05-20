@@ -10,7 +10,7 @@ import (
 	_ "github.com/gomlx/compute/gobackend"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
-	"github.com/gomlx/gomlx/ml/layers/activations"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/nn"
 	"github.com/gomlx/gomlx/support/testutil"
 )
@@ -77,7 +77,7 @@ func TestQuantizedDense_Int8(t *testing.T) {
 				BlockAxis: 1,
 				BlockSize: blockSize,
 			}
-			y := nn.QuantizedDense(x, w, quant, b, activations.TypeRelu)
+			y := nn.QuantizedDense(x, w, quant, b, activation.TypeRelu)
 			return []*Node{x}, []*Node{y}
 		}, []any{[][]float32{{1.1, 2.2, 3.3}, {4.1, 5.2, 6.3}}}, 1e-4)
 	})
@@ -385,7 +385,7 @@ func TestQuantizedDense_GGML_Q4_0(t *testing.T) {
 				Scheme:   compute.QuantGGML,
 				GGMLType: compute.GGMLQ4_0,
 			}
-			y := nn.QuantizedDense(x, w, quant, nil, activations.TypeSilu)
+			y := nn.QuantizedDense(x, w, quant, nil, activation.TypeSilu)
 			return []*Node{x}, []*Node{y}
 		}, []any{
 			// SiLU(x) = x * sigmoid(x) = x / (1 + exp(-x))
