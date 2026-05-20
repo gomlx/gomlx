@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers/activation"
-	xbsplines "github.com/gomlx/gomlx/ml/layers/bsplines"
+	xbsplines "github.com/gomlx/gomlx/ml/layers/bspline"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
