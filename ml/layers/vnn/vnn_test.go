@@ -47,9 +47,9 @@ func TestLinearLayer(t *testing.T) {
 		}
 
 		// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
-		out1 := RotateOnOrigin(linearFn(scope.Store().Scope(scope.Scope()), input), roll, pitch, yaw)
+		out1 := RotateOnOrigin(linearFn(scope, input), roll, pitch, yaw)
 		require.NoError(t, out1.Shape().CheckDims(1, 1, 1, 2, 3))
-		out2 := linearFn(scope.Store().Scope(scope.Scope()), RotateOnOrigin(input, roll, pitch, yaw))
+		out2 := linearFn(scope, RotateOnOrigin(input, roll, pitch, yaw))
 
 		require.NoError(t, out2.Shape().CheckDims(1, 1, 1, 2, 3))
 		diff := Abs(Sub(out1, out2))
@@ -84,7 +84,7 @@ func TestRelu(t *testing.T) {
 					yaw := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 
 					// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
-					out1 := Relu(scope.Store().Scope(scope.Scope()), input).
+					out1 := Relu(scope, input).
 						NegativeSlope(negativeSlope).
 						ShareNonLinearity(shareNonLinearity).
 						Done()
@@ -92,7 +92,7 @@ func TestRelu(t *testing.T) {
 					out1 = RotateOnOrigin(out1, roll, pitch, yaw)
 					require.True(t, out1.Shape().Equal(testShape))
 
-					out2 := Relu(scope.Store().Scope(scope.Scope()), RotateOnOrigin(input, roll, pitch, yaw)).
+					out2 := Relu(scope, RotateOnOrigin(input, roll, pitch, yaw)).
 						NegativeSlope(negativeSlope).
 						ShareNonLinearity(shareNonLinearity).
 						Done()
@@ -168,9 +168,9 @@ func TestVNN_Equivariant(t *testing.T) {
 		}
 
 		// Outputs: out1 rotates after linear transformation, out2 rotates before linear transformation.
-		out1 := RotateOnOrigin(vnnFn(scope.Store().Scope(scope.Scope()), input), roll, pitch, yaw)
+		out1 := RotateOnOrigin(vnnFn(scope, input), roll, pitch, yaw)
 		require.NoError(t, out1.Shape().CheckDims(2, 3, 5, 3))
-		out2 := vnnFn(scope.Store().Scope(scope.Scope()), RotateOnOrigin(input, roll, pitch, yaw))
+		out2 := vnnFn(scope, RotateOnOrigin(input, roll, pitch, yaw))
 		require.NoError(t, out2.Shape().CheckDims(2, 3, 5, 3))
 		diff := Abs(Sub(out1, out2))
 		return ReduceAllMean(diff)

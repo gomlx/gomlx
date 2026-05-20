@@ -37,7 +37,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 				LearningRate(baseLearningRate).
 				MinLearningRate(minLearningRate).
 				Done()
-			return optimizer.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).NodeValue(graph)
+			return optimizer.LearningRateVar(scope, dtypes.Float32, 1e3).NodeValue(graph)
 		})
 		require.NoError(t, err)
 
@@ -81,7 +81,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 				MinLearningRate(minLearningRate).
 				WarmUpSteps(warmUpSteps).
 				Done()
-			return optimizer.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).NodeValue(graph)
+			return optimizer.LearningRateVar(scope, dtypes.Float32, 1e3).NodeValue(graph)
 		})
 		require.NoError(t, err)
 		for ii := range 2*periodInSteps + warmUpSteps {
@@ -120,7 +120,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		cosineExec, err := model.NewExec(backend, store, func(scope *model.Scope, graph *Graph) *Node {
 			scope.Store().SetTraining(graph, true)
 			cosineschedule.New(scope, graph, dtypes.Float32).FromScope().Done()
-			return optimizer.LearningRateVar(scope.Store().Scope(scope.Scope()), dtypes.Float32, 1e3).NodeValue(graph)
+			return optimizer.LearningRateVar(scope, dtypes.Float32, 1e3).NodeValue(graph)
 		})
 
 		require.NoError(t, err)

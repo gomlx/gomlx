@@ -615,10 +615,10 @@ func (r *Trainer) metricsUpdatesGraph(scope *model.Scope, labels, predictions []
 	metricsObjects []metrics.Interface) (metrics []*graph.Node) {
 	numMetrics := len(metricsObjects)
 	metrics = make([]*graph.Node, 0, numMetrics)
-	for _, metric := range metricsObjects {
+	for _, m := range metricsObjects {
 		// Pass a fresh Scope (at the same path) to each metric, so its visitedPaths is empty,
 		// allowing multiple metrics to independently enter the "metrics" sub-scope.
-		metricResult := metric.UpdateGraph(scope.Store().Scope(scope.Scope()), labels, predictions)
+		metricResult := m.UpdateGraph(scope, labels, predictions)
 		metrics = append(metrics, metricResult)
 	}
 	return

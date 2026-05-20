@@ -278,6 +278,6 @@ func (opt *Config) Done() {
 	}
 
 	// Update learning rate.
-	lrVar := optimizer.LearningRateVarWithValue(scope.Store().Scope(scope.Scope()), opt.dtype, lrValue)
+	lrVar := optimizer.LearningRateVarWithValue(scope, opt.dtype, lrValue)
 	lrVar.SetNodeValue(lr)
 }
