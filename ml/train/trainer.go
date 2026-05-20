@@ -20,7 +20,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -112,7 +112,7 @@ type ModelFn func(scope *model.Scope, spec any, inputs []*graph.Node) (predictio
 // the slice and send each label/prediction pair to a predefined loss.
 //
 // Interface is defined in the losses package.
-type LossFn = losses.LossFn
+type LossFn = loss.LossFn
 
 // DefaultMaxExecutors used for Trainer objects. Each different `spec` value from a Dataset triggers
 // the creation of a new executor.

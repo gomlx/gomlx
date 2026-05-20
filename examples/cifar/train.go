@@ -15,7 +15,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -102,7 +102,7 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	scope = scope.In("model") // Convention scope used for model creation.
 	trainer := train.NewTrainer(Backend, store, modelFn,
-		losses.SparseCategoricalCrossEntropyLogits,
+		loss.SparseCategoricalCrossEntropyLogits,
 		optimizer.FromScope(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics

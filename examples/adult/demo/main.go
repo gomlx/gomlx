@@ -23,7 +23,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
@@ -268,7 +268,7 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	trainer := train.NewTrainer(backend, store, Model, losses.BinaryCrossentropyLogits,
+	trainer := train.NewTrainer(backend, store, Model, loss.BinaryCrossentropyLogits,
 		optimizer.FromScope(scope),
 		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics

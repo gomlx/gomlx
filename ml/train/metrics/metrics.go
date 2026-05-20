@@ -14,7 +14,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -476,7 +476,7 @@ func SparseCategoricalAccuracyGraph(_ *model.Scope, labels, logits []*Node) *Nod
 
 	// Weights and masks: checks whether either are defined.
 	weightsShape := shapes.Make(logitsDType, logits0.Shape().Dimensions[:logits0.Rank()-1]...)
-	weights, mask := losses.CheckExtraLabelsForWeightsAndMask(weightsShape, labels[1:])
+	weights, mask := loss.CheckExtraLabelsForWeightsAndMask(weightsShape, labels[1:])
 	modelChoices := ArgMax(logits0, -1, labelsDType)
 	correctExamples := ConvertDType(
 		Equal(modelChoices, Squeeze(labels0, -1)),

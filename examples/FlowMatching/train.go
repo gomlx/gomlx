@@ -18,7 +18,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
@@ -256,10 +256,10 @@ func BuildTrainComputation(config *diffusion.Config) train.ModelFn {
 		// Calculate our loss inside the model: use losses.ParamLoss to define the loss, and if not set,
 		// back-off to "diffusion_loss" hyper-param (for backward compatibility).
 		// Defaults to "mae" (mean-absolute-error).
-		lossName := model.GetParamOr(scope, losses.ParamLoss,
+		lossName := model.GetParamOr(scope, loss.ParamLoss,
 			model.GetParamOr(scope, "diffusion_loss", "mse"))
 		scope.SetParam("loss", lossName) // Needed for old models that used "diffusion_loss".
-		lossFn := check1(losses.LossFromScope(scope))
+		lossFn := check1(loss.LossFromScope(scope))
 
 		// Large reduce operations lead to overflow for low-precision dtypes. We up-convert in those cases, before calculating the loss.
 		if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {

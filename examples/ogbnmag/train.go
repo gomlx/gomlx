@@ -19,7 +19,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	. "github.com/gomlx/gomlx/support/exceptions"
@@ -239,7 +239,7 @@ var NanLogger *nanlogger.NanLogger
 
 func newTrainer(backend compute.Backend, store *model.Store) *train.Trainer {
 	// Loss: multi-class classification problem.
-	lossFn := losses.SparseCategoricalCrossEntropyLogits
+	lossFn := loss.SparseCategoricalCrossEntropyLogits
 
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")

@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package losses
+package loss
 
 import (
 	. "github.com/gomlx/gomlx/core/graph"
@@ -278,7 +278,7 @@ func MakeTripletLossFromScope(scope *model.Scope) LossFn {
 	miningStrategy := model.GetParamOr(scope, ParamTripletLossMiningStrategy, TripletMiningStrategySemiHard)
 	margin := model.GetParamOr(scope, ParamTripletLossMargin, 1.0)
 	metric := model.GetParamOr(scope, ParamTripletLossPairwiseDistanceMetric, PairwiseDistanceMetricL2)
-	return func(labels, predictions []*Node) (loss *Node) {
+	return func(labels, predictions []*Node) *Node {
 		return TripletLoss(labels, predictions, miningStrategy, margin, metric)
 	}
 }

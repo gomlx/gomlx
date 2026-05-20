@@ -18,7 +18,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -175,7 +175,7 @@ func TestGradientRealFFT(t *testing.T) {
 	theDataset.BatchSize(1, false).Infinite(true)
 	trainer := train.NewTrainer(
 		backend, store, modelFn,
-		losses.MeanAbsoluteError,
+		loss.MeanAbsoluteError,
 		optimizer.Adam().Done(),
 		nil, nil) // trainMetrics, evalMetrics
 	loop := train.NewLoop(trainer)
@@ -215,7 +215,7 @@ func TestGradientInverseRealFFT(t *testing.T) {
 	theDataset.BatchSize(1, false).Infinite(true)
 	trainer := train.NewTrainer(
 		backend, store, modelFn,
-		losses.MeanAbsoluteError,
+		loss.MeanAbsoluteError,
 		optimizer.StochasticGradientDescent(),
 		nil, nil) // trainMetrics, evalMetrics
 	loop := train.NewLoop(trainer)

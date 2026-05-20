@@ -15,7 +15,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/kan"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -70,10 +70,10 @@ func kanGraphModel(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	return []*Node{output, labels}
 }
 
-func lossGraphFn(labels []*Node, predictions []*Node) (loss *Node) {
+func lossGraphFn(labels []*Node, predictions []*Node) (theLoss *Node) {
 	labels = predictions[1:]
 	predictions = predictions[:1]
-	loss = losses.MeanSquaredError(labels, predictions)
+	theLoss = loss.MeanSquaredError(labels, predictions)
 	return
 }
 

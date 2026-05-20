@@ -31,7 +31,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/zoo/transformer"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -63,7 +63,7 @@ func createModelStore() *model.Store {
 		transformer.ParamDType:       "float32",
 
 		// Training hyperparameters
-		ParamTrainSteps:              1000,
+		ParamTrainSteps:             1000,
 		optimizer.ParamLearningRate: 0.001,
 
 		// Generation hyperparameters
@@ -158,7 +158,7 @@ func trainModel(backend compute.Backend, scope *model.Scope) {
 	}
 
 	trainer := train.NewTrainer(backend, scope.Store(), modelFn,
-		losses.SparseCategoricalCrossEntropyLogits,
+		loss.SparseCategoricalCrossEntropyLogits,
 		optimizer.Adam().Done(),
 		nil, nil) // no metrics for this simple example
 

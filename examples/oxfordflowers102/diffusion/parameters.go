@@ -7,7 +7,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
@@ -85,7 +85,7 @@ func CreateModelStore() *model.Store {
 
 		// "diffusion_loss" is deprecated, use "loss" (losses.ParamLoss) instead.
 		"diffusion_loss":                "mse", // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error), "huber" or "apl" (Adaptive-Power-Loss).
-		losses.ParamLoss:                "",    // Falls-back to hyperparameter diffusion_loss (for backward compatibility).
+		loss.ParamLoss:                  "",    // Falls-back to hyperparameter diffusion_loss (for backward compatibility).
 		optimizer.ParamOptimizer:        "adam",
 		optimizer.ParamAdamEpsilon:      1e-7,
 		optimizer.ParamAdamDType:        "",

@@ -48,17 +48,17 @@ func L2(amount float64) Regularizer {
 		if len(weights) == 0 {
 			Panicf("no weights given to regularizers.L2")
 		}
-		var loss *Node
+		var regLoss *Node
 		for _, v := range weights {
 			l2 := ReduceAllSum(Square(v.NodeValue(g)))
-			if loss == nil {
-				loss = l2
+			if regLoss == nil {
+				regLoss = l2
 			} else {
-				loss = Add(loss, l2)
+				regLoss = Add(regLoss, l2)
 			}
 		}
-		loss = MulScalar(loss, amount)
-		train.AddLoss(loss)
+		regLoss = MulScalar(regLoss, amount)
+		train.AddLoss(regLoss)
 	}
 }
 
@@ -74,18 +74,18 @@ func L1(amount float64) Regularizer {
 		if len(weights) == 0 {
 			Panicf("no weights given to regularizers.L1")
 		}
-		var loss *Node
+		var regLoss *Node
 		for _, v := range weights {
 			value := v.NodeValue(g)
 			l1 := ReduceAllSum(Abs(value))
-			if loss == nil {
-				loss = l1
+			if regLoss == nil {
+				regLoss = l1
 			} else {
-				loss = Add(loss, l1)
+				regLoss = Add(regLoss, l1)
 			}
 		}
-		loss = MulScalar(loss, amount)
-		train.AddLoss(loss)
+		regLoss = MulScalar(regLoss, amount)
+		train.AddLoss(regLoss)
 
 		store := model.GetStore(g)
 		if store == nil {
@@ -160,18 +160,18 @@ func FromScope(scope *model.Scope) Regularizer {
 // points that are not trained much to move towards the mean of its neighbours.
 func ConstantL1(amount float64) Regularizer {
 	return func(g *Graph, weights ...*model.Variable) {
-		var loss *Node
+		var regLoss *Node
 		for _, wVar := range weights {
 			w := wVar.NodeValue(g)
 			diff := ConsecutiveDifference(w, -1, false)
 			diff = MulScalar(diff, amount)
 			l1 := ReduceAllSum(Abs(diff))
-			if loss == nil {
-				loss = l1
+			if regLoss == nil {
+				regLoss = l1
 			} else {
-				loss = Add(l1, loss)
+				regLoss = Add(l1, regLoss)
 			}
 		}
-		train.AddLoss(loss)
+		train.AddLoss(regLoss)
 	}
 }

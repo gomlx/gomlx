@@ -20,7 +20,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/ml/model/modeltest"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
@@ -556,7 +556,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 	theOptimizer := optimizer.Adam().LearningRate(0.001).Done()
 
 	trainer := train.NewTrainer(backend, store, buildSyntheticAttentionModelFn(false),
-		losses.MeanSquaredError,
+		loss.MeanSquaredError,
 		theOptimizer,
 		nil, // trainMetrics
 		nil) // evalMetrics

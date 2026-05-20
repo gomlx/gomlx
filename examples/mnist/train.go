@@ -37,7 +37,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
@@ -95,9 +95,9 @@ func CreateModelStore() *model.Store {
 		"cnn_normalization": "layer", // "layer" or "batch".
 
 		// Triplet
-		losses.ParamTripletLossPairwiseDistanceMetric: "L2",
-		losses.ParamTripletLossMiningStrategy:         "Hard",
-		losses.ParamTripletLossMargin:                 0.5,
+		loss.ParamTripletLossPairwiseDistanceMetric: "L2",
+		loss.ParamTripletLossMiningStrategy:         "Hard",
+		loss.ParamTripletLossMargin:                 0.5,
 	})
 	return store
 }
@@ -142,7 +142,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	backend := compute.MustNew()
 	fmt.Printf("Backend %s: %s\n", backend.Name(), backend.Description())
 
-	lossFn, err := losses.LossFromScope(scope)
+	lossFn, err := loss.LossFromScope(scope)
 	if err != nil {
 		return err
 	}

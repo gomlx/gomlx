@@ -21,7 +21,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
@@ -207,7 +207,7 @@ func TrainWithStore(
 	scope = scope.In("model") // Convention scope used for model creation.
 	var theLoss train.LossFn
 	if !imdbUseUnsupervised {
-		theLoss = losses.BinaryCrossentropyLogits
+		theLoss = loss.BinaryCrossentropyLogits
 	}
 	trainer := train.NewTrainer(backend, store, modelFn,
 		theLoss,

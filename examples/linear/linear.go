@@ -17,7 +17,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
@@ -123,7 +123,7 @@ func main() {
 
 	// train.Trainer executes a training step.
 	trainer := train.NewTrainer(backend, store, modelGraph,
-		losses.MeanSquaredError,
+		loss.MeanSquaredError,
 		optimizer.StochasticGradientDescent().Done(),
 		nil, nil) // trainMetrics, evalMetrics
 

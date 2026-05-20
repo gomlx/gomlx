@@ -228,13 +228,13 @@ type adam struct {
 
 // UpdateGraph builds the graph to update the weights for one training step.
 // It implements optimizer.Interface.
-func (o *adam) UpdateGraph(scope *model.Scope, g *Graph, loss *Node) {
-	if !loss.Shape().IsScalar() {
-		Panicf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
+func (o *adam) UpdateGraph(scope *model.Scope, g *Graph, theLoss *Node) {
+	if !theLoss.Shape().IsScalar() {
+		Panicf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", theLoss.Shape())
 		return
 	}
-	grads := scope.BuildTrainableVariablesGradientsGraph(loss)
-	o.UpdateGraphWithGradients(scope, grads, loss.DType())
+	grads := scope.BuildTrainableVariablesGradientsGraph(theLoss)
+	o.UpdateGraphWithGradients(scope, grads, theLoss.DType())
 }
 
 func (o *adam) UpdateGraphWithGradients(scope *model.Scope, grads []*Node, lossDType dtypes.DType) {

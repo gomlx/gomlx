@@ -34,10 +34,10 @@ type Interface interface {
 	// to avoid naming conflicts on the variables created -- notice that
 	// some complex training schedule may have more than one optimizer on the same Store object.
 	//
-	// loss must be a scalar value.
+	// The loss must be a scalar value.
 	//
 	// This is a graph building function and panics on error.
-	UpdateGraph(scope *model.Scope, g *Graph, loss *Node)
+	UpdateGraph(scope *model.Scope, g *Graph, theLoss *Node)
 
 	// Clear deletes all temporary variables used by the optimizer.
 	// This may be used for a model to be used by inference to save space, or if the training should be reset
@@ -319,13 +319,13 @@ func (sgd *SGDConfig) Done() Interface {
 
 // UpdateGraph builds the graph to update the weights for one training step.
 // It implements optimizer.Interface.
-func (sgd *SGDConfig) UpdateGraph(scope *model.Scope, g *Graph, loss *Node) {
+func (sgd *SGDConfig) UpdateGraph(scope *model.Scope, g *Graph, theLoss *Node) {
 	_ = g
-	if !loss.Shape().IsScalar() {
-		Panicf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", loss.Shape())
+	if !theLoss.Shape().IsScalar() {
+		Panicf("optimizer requires a scalar loss to optimize, got loss.shape=%s instead", theLoss.Shape())
 	}
-	grads := scope.BuildTrainableVariablesGradientsGraph(loss)
-	sgd.UpdateGraphWithGradients(scope, grads, loss.DType())
+	grads := scope.BuildTrainableVariablesGradientsGraph(theLoss)
+	sgd.UpdateGraphWithGradients(scope, grads, theLoss.DType())
 }
 
 func (sgd *SGDConfig) UpdateGraphWithGradients(scope *model.Scope, grads []*Node, lossDType dtypes.DType) {

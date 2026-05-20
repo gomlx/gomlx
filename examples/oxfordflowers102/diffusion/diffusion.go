@@ -30,7 +30,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
@@ -458,23 +458,23 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 		// Calculate our loss inside the model: use losses.ParamLoss to define the loss, and if not set,
 		// back-off to "diffusion_loss" hyperparam (for backward compatibility).
 		// Defaults to "mae" (mean-absolute-error).
-		lossName := model.GetParamOr(scope, losses.ParamLoss, "")
+		lossName := model.GetParamOr(scope, loss.ParamLoss, "")
 		if lossName == "" {
 			lossName = model.GetParamOr(scope, "diffusion_loss", "mse")
 		}
-		scope.SetParam(losses.ParamLoss, lossName) // Needed for old models that used "diffusion_loss".
-		lossFn := check1(losses.LossFromScope(scope))
+		scope.SetParam(loss.ParamLoss, lossName) // Needed for old models that used "diffusion_loss".
+		lossFn := check1(loss.LossFromScope(scope))
 		noisesLoss := lossFn([]*Node{noises}, []*Node{predictedNoises})
 		if !noisesLoss.IsScalar() {
 			noisesLoss = ReduceAllMean(noisesLoss)
 		}
-		imagesLoss := losses.MeanAbsoluteError([]*Node{images}, []*Node{predictedImages})
+		imagesLoss := loss.MeanAbsoluteError([]*Node{images}, []*Node{predictedImages})
 		if !imagesLoss.IsScalar() {
 			imagesLoss = ReduceAllMean(imagesLoss)
 		}
 		noiseMAE := noisesLoss
 		if lossName != "mae" {
-			noiseMAE = losses.MeanAbsoluteError([]*Node{noises}, []*Node{predictedNoises})
+			noiseMAE = loss.MeanAbsoluteError([]*Node{noises}, []*Node{predictedNoises})
 		}
 
 		return []*Node{c.DenormalizeImages(predictedImages), noisesLoss, imagesLoss, noiseMAE}

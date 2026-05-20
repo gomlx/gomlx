@@ -40,8 +40,13 @@ directory, and move the packages to the root:
 
 And a few small renaming:
 
-- `ml/model/initializer` -> `ml/model/initializer`
-- `ml/model/checkpoint` -> `ml/model/checkpoint`
+- `ml/datasets` -> `ml/dataset`
+- `ml/layers/regularizers` -> `ml/layers/regularizer`
+- `ml/model/initializers` -> `ml/model/initializer`
+- `ml/model/checkpoints` -> `ml/model/checkpoint`
+- `ml/train/optimizers` -> `ml/train/optimizer`
+- `ml/train/losses` -> `ml/train/loss`
+
 
 ## **Scope Redesign** now in package `model`
 - Package `context` -> `model`

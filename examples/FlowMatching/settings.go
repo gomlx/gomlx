@@ -7,7 +7,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
@@ -56,12 +56,12 @@ func CreateDefaultScope() *model.Scope {
 		// Flow Matching settings:
 
 		// Loss
-		"diffusion_loss":                         "mse", // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
-		losses.ParamHuberLossDelta:               0.2,   // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
-		losses.ParamAdaptivePowerLossNear:        2.0,
-		losses.ParamAdaptivePowerLossFar:         1.0,
-		losses.ParamAdaptivePowerLossMiddleDelta: 0.2,
-		losses.ParamAdaptivePowerLossSharpness:   1.0,
+		"diffusion_loss":                       "mse", // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
+		loss.ParamHuberLossDelta:               0.2,   // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
+		loss.ParamAdaptivePowerLossNear:        2.0,
+		loss.ParamAdaptivePowerLossFar:         1.0,
+		loss.ParamAdaptivePowerLossMiddleDelta: 0.2,
+		loss.ParamAdaptivePowerLossSharpness:   1.0,
 
 		// Re-using diffusion model:
 		"diffusion_balanced_dataset": false, // Enable training on a balanced dataset: batch_size=102, one example per flower type.

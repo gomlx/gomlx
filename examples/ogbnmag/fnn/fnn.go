@@ -18,7 +18,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
-	"github.com/gomlx/gomlx/ml/train/losses"
+	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/metrics"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -132,7 +132,7 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 	}
 
 	// Loss: multi-class classification problem.
-	lossFn := losses.SparseCategoricalCrossEntropyLogits
+	lossFn := loss.SparseCategoricalCrossEntropyLogits
 
 	// Metrics we are interested.
 	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")

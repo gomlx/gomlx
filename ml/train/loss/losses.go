@@ -4,7 +4,7 @@
 // be called separately by custom losses.
 //
 // They all have the same signature that can be used by train.Trainer.
-package losses
+package loss
 
 import (
 	"strings"
@@ -28,7 +28,7 @@ import (
 // Most of the predefined losses in the package `gomlx/ml/train/losses` assume labels and predictions are
 // both of length one. For multi-head models, it's very easy to write a small custom LossFn that splits
 // the slice and send each label/prediction pair to a predefined loss.
-type LossFn func(labels, predictions []*Node) (loss *Node)
+type LossFn func(labels, predictions []*Node) *Node
 
 const (
 	Epsilon16 = 1e-4
