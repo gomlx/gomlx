@@ -26,15 +26,15 @@ var (
 )
 
 func init() {
-	scope := CreateDefaultScope()
-	scopeSettings = commandline.CreateSettingsFlag(scope, "")
+	store := CreateModelStore()
+	scopeSettings = commandline.CreateSettingsFlag(store, "")
 }
 
 func getTestConfig() *Config {
-	scope := CreateDefaultScope()
-	paramsSet := check1(commandline.ParseSettings(scope, *scopeSettings))
+	store := CreateModelStore()
+	paramsSet := check1(commandline.ParseSettings(store, *scopeSettings))
 	backend := testutil.BuildTestBackend()
-	return NewConfig(backend, scope, *flagDataDir, paramsSet)
+	return NewConfig(backend, store.RootScope(), *flagDataDir, paramsSet)
 }
 
 func TestUNetModelGraph(t *testing.T) {

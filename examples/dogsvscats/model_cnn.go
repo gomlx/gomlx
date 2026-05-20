@@ -73,11 +73,11 @@ func CnnEmbeddings(scope *model.Scope, images *Node) *Node {
 
 func normalizeImage(scope *model.Scope, x *Node) *Node {
 	x.AssertRank(4) // [batch_size, width, height, depth]
-	norm := model.GetParamOr(scope, "cnn_normalization", "")
-	if norm == "" {
-		model.GetParamOr(scope, layers.ParamNormalization, "")
+	normType := model.GetParamOr(scope, "cnn_normalization", "")
+	if normType == "" {
+		normType = model.GetParamOr(scope, layers.ParamNormalization, "")
 	}
-	switch norm {
+	switch normType {
 	case "layer":
 		return norm.LayerNorm(scope, x, 1, 2).ScaleNormalization(false).Done()
 	case "batch":
@@ -85,6 +85,6 @@ func normalizeImage(scope *model.Scope, x *Node) *Node {
 	case "none", "":
 		return x
 	}
-	exceptions.Panicf("invalid normalization selected %q -- valid values are batch, layer, none", norm)
+	exceptions.Panicf("invalid normalization selected %q -- valid values are batch, layer, none", normType)
 	return nil
 }

@@ -19,6 +19,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/attention/pos"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	. "github.com/gomlx/gomlx/support/exceptions"
@@ -425,8 +426,8 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	}
 
 	if b.withQKRMSNorm {
-		projectedQuery = layers.RMSNorm(b.scope.In("query"), projectedQuery).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).WithScaleOffset(1.0).Done()
-		projectedKey = layers.RMSNorm(b.scope.In("key"), projectedKey).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).WithScaleOffset(1.0).Done()
+		projectedQuery = norm.RMSNorm(b.scope.In("query"), projectedQuery).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).WithScaleOffset(1.0).Done()
+		projectedKey = norm.RMSNorm(b.scope.In("key"), projectedKey).WithEpsilon(b.qkNormEpsilon).WithNormalizationAxes(-1).WithScaleOffset(1.0).Done()
 	}
 
 	// Apply positional encoding (e.g. RoPE) if enabled.

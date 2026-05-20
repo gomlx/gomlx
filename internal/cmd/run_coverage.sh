@@ -41,12 +41,12 @@ find . -name "go.mod" -print0 | while IFS= read -r -d '' mod_file; do
     
     # If the directory is ".", run standard local tests
     if [ "$dir" == "." ]; then
-        go test -cover -coverpkg="${PACKAGE_COVERAGE}" \
+        go test -p=1 -cover -coverpkg="${PACKAGE_COVERAGE}" \
             -coverprofile="${COV_TMP}" ./... -test.count=1
     else
         # Run tests for the sub-module from the root
         # This keeps the workspace context active.
-        go test -cover -coverpkg="${PACKAGE_COVERAGE}" \
+        go test -p=1 -cover -coverpkg="${PACKAGE_COVERAGE}" \
             -coverprofile="${COV_TMP}" ./"$dir"/... -test.count=1
     fi
 

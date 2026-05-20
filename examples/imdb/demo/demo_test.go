@@ -22,8 +22,7 @@ var (
 
 func init() {
 	store := imdb.CreateModelStore()
-	scope := store.RootScope()
-	flagSettings = commandline.CreateSettingsFlag(scope, "")
+	flagSettings = commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
@@ -39,7 +38,7 @@ func TestDemo(t *testing.T) {
 
 	store := imdb.CreateModelStore()
 	store.SetParam("train_steps", 10)
-	paramsSet := check1(commandline.ParseSettings(store.RootScope(), *flagSettings))
+	paramsSet := check1(commandline.ParseSettings(store, *flagSettings))
 
 	muTrain.Lock()
 	defer muTrain.Unlock()

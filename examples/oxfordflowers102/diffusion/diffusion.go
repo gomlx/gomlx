@@ -72,8 +72,8 @@ var (
 // NormalizeLayer behaves according to the `--norm` flag.
 // It works with `x` with rank 4 and rank 3.
 func NormalizeLayer(scope *model.Scope, x *Node) *Node {
-	norm := model.GetParamOr(scope, layers.ParamNormalization, "none")
-	switch norm {
+	normType := model.GetParamOr(scope, layers.ParamNormalization, "none")
+	switch normType {
 	case "none":
 		// No-op.
 	case "batch":

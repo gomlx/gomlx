@@ -114,11 +114,11 @@ func moveTargetModel(onlineScope, targetScope *model.Scope, g *Graph, movingAver
 	if movingAverageRatio >= 1.0 {
 		return
 	}
-	onlineScope := onlineScope.Scope()
-	targetScope := targetScope.Scope()
+	onlineScopePath := onlineScope.Scope()
+	targetScopePath := targetScope.Scope()
 	for targetVar := range targetScope.IterVariables() {
 		// Get corresponding variable in "online" model.
-		onlineVarScope := onlineScope + targetVar.Scope()[len(targetScope):]
+		onlineVarScope := onlineScopePath + targetVar.Scope()[len(targetScopePath):]
 		onlineVar := onlineScope.Store().GetVariable(path.Join(onlineVarScope, targetVar.Name()))
 		if onlineVar == nil {
 			exceptions.Panicf("BYOL target model variable %q::%q has no corresponding variable %q::%q in online model",

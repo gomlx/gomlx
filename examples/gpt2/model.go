@@ -20,6 +20,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/attention"
 	"github.com/gomlx/gomlx/ml/layers/attention/pos"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/zoo/transformer"
 )
@@ -90,7 +91,7 @@ func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node
 		layerScope := scope.In("layer_%d", layer)
 
 		// Pre-attention LayerNorm
-		attnInput := layers.LayerNormalization(layerScope.In("norm1"), x, -1).
+		attnInput := norm.LayerNorm(layerScope.In("norm1"), x, -1).
 			Epsilon(m.config.NormEps).Done()
 
 		// Self-attention with KV cache
@@ -102,7 +103,7 @@ func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node
 		x = Add(x, attn)
 
 		// Pre-MLP LayerNorm
-		ffInput := layers.LayerNormalization(layerScope.In("norm2"), x, -1).
+		ffInput := norm.LayerNorm(layerScope.In("norm2"), x, -1).
 			Epsilon(m.config.NormEps).Done()
 
 		// Feed-forward network
@@ -113,7 +114,7 @@ func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node
 	}
 
 	// Final layer norm
-	x = layers.LayerNormalization(scope.In("final_norm"), x, -1).
+	x = norm.LayerNorm(scope.In("final_norm"), x, -1).
 		Epsilon(m.config.NormEps).Done()
 
 	// Output projection

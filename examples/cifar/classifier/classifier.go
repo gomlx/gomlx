@@ -47,7 +47,7 @@ func New(checkpointDir string) (*Classifier, error) {
 	// Notice all hyperparameters are read from the checkpoint as well, so it will be build the
 	// same model.
 	// We don't need to keep the checkpoint handler around, since we are not going to use it to save.
-	_, err := checkpoint.Load(c.scope).
+	_, err := checkpoint.Load(c.scope.Store()).
 		Dir(checkpointDir).
 		Done()
 	if err != nil {

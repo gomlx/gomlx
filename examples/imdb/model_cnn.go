@@ -65,12 +65,12 @@ func Conv1DModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 // NormalizeSequence `x` according to "normalization" hyperparameter. Works for sequence nodes (rank-3).
 func NormalizeSequence(scope *model.Scope, x *Node) *Node {
 	x.AssertRank(3) // [batch_size, content_length, embed_size]
-	norm := model.GetParamOr(scope, "cnn_normalization", "")
-	if norm == "" {
-		model.GetParamOr(scope, layers.ParamNormalization, "")
+	normType := model.GetParamOr(scope, "cnn_normalization", "")
+	if normType == "" {
+		normType = model.GetParamOr(scope, layers.ParamNormalization, "")
 	}
 
-	switch norm {
+	switch normType {
 	case "layer":
 		return norm.LayerNorm(scope, x, -2).
 			LearnedOffset(true).LearnedGain(true).ScaleNormalization(true).Done()
@@ -79,6 +79,6 @@ func NormalizeSequence(scope *model.Scope, x *Node) *Node {
 	case "none", "":
 		return x
 	}
-	exceptions.Panicf(`invalid normalization selected %q -- valid values are "batch", "layer", "none" or ""`, norm)
+	exceptions.Panicf(`invalid normalization selected %q -- valid values are "batch", "layer", "none" or ""`, normType)
 	return nil
 }

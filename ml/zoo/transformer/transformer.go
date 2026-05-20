@@ -14,6 +14,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/attention"
 	"github.com/gomlx/gomlx/ml/layers/attention/pos"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
@@ -704,13 +705,13 @@ func (m *Model) normalize(scope *model.Scope, operand *Node, normType string) *N
 	}
 	switch normType {
 	case layers.NormalizationRMSNorm:
-		builder := layers.RMSNorm(scope, operand).WithEpsilon(m.NormEpsilon)
+		builder := norm.RMSNorm(scope, operand).WithEpsilon(m.NormEpsilon)
 		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
 			builder = builder.WithScaleOffset(1.0)
 		}
 		return builder.Done()
 	case layers.NormalizationLayerNorm:
-		return layers.LayerNormalization(scope, operand, -1).Epsilon(m.NormEpsilon).Done()
+		return norm.LayerNorm(scope, operand, -1).Epsilon(m.NormEpsilon).Done()
 	default:
 		exceptions.Panicf("unsupported normalization type: %q", normType)
 		return nil
