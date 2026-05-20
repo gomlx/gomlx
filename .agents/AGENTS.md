@@ -70,7 +70,9 @@ Never attempt to test everything (`go test ./...`)! Many of the tests are very l
 doesn't work (because the XLA backend for CUDA allocates all the memory on startup, so there can't be more
 than one instance at a time).
 
-Insteat test only one package at a time, or even, preferrably, only the tests related to the code you are 
+If you are testing more than one package at a time (using ellipsis "..."), remember to use the flag `-p 1` (e.g., `go test -p 1 ./ml/model/...`), since creating more than one CUDA backend simultaneously fails.
+
+Instead test only one package at a time, or even, preferably, only the tests related to the code you are 
 currently modifying (`go test <./.../package> -run <test_pattern>`).
 
 ### Executing models and graphs:

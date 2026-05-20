@@ -33,9 +33,6 @@ type Store struct {
 	// params holds a model's building (hyper)parameters.
 	params *scoped.Params
 
-	// graphParams hold models parameters for a particular graph.
-	graphParams map[graph.GraphId]*scoped.Params
-
 	// variablesMap for this store organized per absolute path.
 	// The key is the full path of the variable.
 	variablesMap map[string]*Variable
@@ -69,7 +66,6 @@ type Loader interface {
 func NewStore() *Store {
 	return &Store{
 		params:       scoped.New(ScopeSeparator),
-		graphParams:  make(map[graph.GraphId]*scoped.Params),
 		variablesMap: make(map[string]*Variable),
 	}
 }
@@ -264,11 +260,11 @@ func (s *Store) IterParams() iter.Seq2[string, any] {
 
 // IterGraphParams returns an iterator that yields each parameter in the store for the given graph.
 func (s *Store) IterGraphParams(g *Graph) iter.Seq[scoped.ParamValue] {
-	graphParams, found := s.graphParams[g.GraphId()]
-	if !found {
+	gs := getGraphStore(g)
+	if gs == nil {
 		return func(yield func(scoped.ParamValue) bool) {}
 	}
-	return graphParams.Iter()
+	return gs.params.Iter()
 }
 
 // NumVariables return the number of variables in this Store.
@@ -397,26 +393,52 @@ func (s *Store) SetParams(keyValues map[string]any) {
 	}
 }
 
+type graphState struct{}
+
+type graphStore struct {
+	params *scoped.Params
+}
+
+func newGraphStore() *graphStore {
+	return &graphStore{
+		params: scoped.New(ScopeSeparator),
+	}
+}
+
+// getGraphStore returns the graphStore attached to the graph.
+func getGraphStore(g *Graph) *graphStore {
+	state := g.State(graphState{})
+	if state == nil {
+		return nil
+	}
+	return state.(*graphStore)
+}
+
+// setGraphStore attaches a graphStore to the graph.
+func setGraphStore(g *Graph, gs *graphStore) {
+	g.AttachState(graphState{}, gs)
+}
+
 // GetGraphParam returns the value for the given param key for the given graph,
 // searching successively from the current scope back to the root scope ("/").
-func (s *Store) GetGraphParam(g *Graph, fullPath string) (value any, found bool) {
-	graphParams, found := s.graphParams[g.GraphId()]
-	if !found {
+func GetGraphParam(g *Graph, fullPath string) (value any, found bool) {
+	gs := getGraphStore(g)
+	if gs == nil {
 		return
 	}
 	scope, key := SplitPath(fullPath)
-	return graphParams.Get(scope, key)
+	return gs.params.Get(scope, key)
 }
 
 // SetGraphParam sets the given Graph param in the current scope.
-func (s *Store) SetGraphParam(g *Graph, fullPath string, value any) {
-	graphParams, found := s.graphParams[g.GraphId()]
-	if !found {
-		graphParams = scoped.New(ScopeSeparator)
-		s.graphParams[g.GraphId()] = graphParams
+func SetGraphParam(g *Graph, fullPath string, value any) {
+	gs := getGraphStore(g)
+	if gs == nil {
+		gs = newGraphStore()
+		setGraphStore(g, gs)
 	}
 	scopePath, baseName := SplitPath(fullPath)
-	graphParams.Set(scopePath, baseName, value)
+	gs.params.Set(scopePath, baseName, value)
 }
 
 // GraphParamIsTraining is the name of a graph param that indicates whether is current graph is being

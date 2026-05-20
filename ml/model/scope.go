@@ -346,7 +346,7 @@ func (s *Scope) SetParams(keyValues map[string]any) {
 // GetGraphParam returns the value for the given param key for the given graph,
 // searching successively from the current scope back to the root scope ("/").
 func (s *Scope) GetGraphParam(g *Graph, key string) (value any, found bool) {
-	return s.store.GetGraphParam(g, JoinPath(s.scope, key))
+	return GetGraphParam(g, JoinPath(s.scope, key))
 }
 
 // mustConvert any value into T. Panics if the value cannot be unmarshalled.
@@ -372,7 +372,7 @@ func mustConvert[T any](valueAny any, fullPath string) (T, error) {
 // It panics if the value is not of type T (as it tries to cast to T)
 func GetGraphParamOr[T any](s *Scope, g *Graph, key string, defaultValue T) T {
 	fullPath := JoinPath(s.scope, key)
-	valueAny, found := s.store.GetGraphParam(g, fullPath)
+	valueAny, found := GetGraphParam(g, fullPath)
 	if !found || valueAny == nil {
 		return defaultValue
 	}
@@ -389,7 +389,7 @@ func GetGraphParamOr[T any](s *Scope, g *Graph, key string, defaultValue T) T {
 
 // SetGraphParam sets the given Graph param in the current scope.
 func (s *Scope) SetGraphParam(g *Graph, key string, value any) {
-	s.store.SetGraphParam(g, JoinPath(s.scope, key), value)
+	SetGraphParam(g, JoinPath(s.scope, key), value)
 }
 
 // VariableWithShape creates or returns an existing variable with the given shape in the current scope.

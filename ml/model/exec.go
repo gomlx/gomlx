@@ -92,6 +92,9 @@ func NewExecCanonical(backend compute.Backend, store *Store, modelGraphFn Canoni
 // so it can behind the scenes update the variables to the user.
 func (e *Exec) buildGraphFn() graph.CanonicalExecGraphFn {
 	return func(g *graph.Graph, inputs []*graph.Node) []*graph.Node {
+		// Initialize the graph parameters store for this graph.
+		g.AttachState(graphState{}, newGraphStore())
+
 		// Call modelGraphFn, the results will be a slice of *Node.
 		modelGraphFnResults := e.modelGraphFn(e.store.RootScope(), g, inputs)
 		graphId := g.GraphId()
