@@ -55,6 +55,8 @@ And a few small renaming:
   - `InspectVariableInScope` -> `Scope.GetVariable`
   - `SetValueGraph` -> `SetNodeValue`; `ValueGraph` -> `NodeValue`
   - `Variable.ParameterName` because a private function in `checkpoint` package.
+- Added `model.GetStore()`: it returns the `model.Store` attached to the current graph (it accepts a node also),
+  so many functions in `train` and other packages can drop the `s *model.Scope` (or `s *model.Store`) parameter.
 
 ## Graph (github.com/gomlx/gomlx/core/graph):
 - `Exec.Exec` -> `Exec.Call` (no change in name, but `Exec` is gone).

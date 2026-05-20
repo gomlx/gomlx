@@ -110,7 +110,7 @@ func (r *Trainer) batchNormsAverageStepGraphFn(
 			if !loss.Shape().IsScalar() {
 				loss = graph.ReduceAllMean(loss)
 			}
-			AddLoss(scope, loss)
+			AddLoss(loss)
 			metrics = append(metrics, loss)
 		}
 		return

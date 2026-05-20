@@ -86,12 +86,12 @@ func (r *Trainer) accumulateStepGraphImpl(spec any, scope *model.Scope, inputs, 
 	predictions := r.modelFn(scope, spec, inputs)
 	if r.lossFn != nil {
 		baseLoss := r.lossFnScalarLoss(scope, labels, predictions)
-		SetLossNoRegularization(scope, baseLoss)
-		AddLoss(scope, baseLoss)
+		SetLossNoRegularization(baseLoss)
+		AddLoss(baseLoss)
 	}
 
 	// Store total loss as a variable, so it can be used by metrics.
-	loss := GetLosses(scope, g)
+	loss := GetLosses(g)
 	if loss == nil {
 		exceptions.Panicf("no loss function defined (or it returned nil), and no loss set with AddLoss(), " +
 			"there is nothing to optimize!?")
@@ -141,7 +141,7 @@ func (r *Trainer) accumulateStepGraphImpl(spec any, scope *model.Scope, inputs, 
 	opt.UpdateGraphWithGradients(scope, grads, lossDType)
 
 	// Execute registered ScopeGraphFn hooks for the current graph.
-	ExecPerStepUpdateGraphFn(scope, g)
+	ExecPerStepUpdateGraphFn(g)
 
 	// Reset accumulated gradients.
 	for _, accVar := range iterTrainableAndAccumulatorVariables(scope, g) {

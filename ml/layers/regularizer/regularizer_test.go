@@ -17,7 +17,7 @@ func TestConstantL1(t *testing.T) {
 		wVar := scope.VariableWithValue("w", [][]float32{{0, 1, 2, 3, 4}, {0, 1, 2, 3, 4}})
 		w := wVar.NodeValue(g)
 		ConstantL1(0.1)(scope, g, wVar)
-		theLoss := train.GetLosses(scope, g)
+		theLoss := train.GetLosses(g)
 		inputs = []*Node{w}
 		outputs = []*Node{theLoss, Gradient(theLoss, w)[0]}
 		return

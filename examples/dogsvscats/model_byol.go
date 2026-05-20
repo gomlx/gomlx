@@ -90,7 +90,7 @@ func ByolCnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 
 	byolReg := byolLoss(onlineProjection, targetProjection)
 	ReduceAllMean(Sqrt(byolReg)).SetLogged("byolReg")
-	train.AddLoss(scope, MulScalar(byolReg, regularizationRate))
+	train.AddLoss(MulScalar(byolReg, regularizationRate))
 
 	// Update "target" model with moving average to the "online" model.
 	movingAverageRatio := model.GetParamOr(targetScope, "byol_target_update_ratio", 0.999)
@@ -161,5 +161,5 @@ func byolRegularizeToLengthOne(scope *model.Scope, projection *Node) {
 	ReduceAllMean(lengths).SetLogged("MeanLengthProjection")
 	regLength := Square(Sub(ScalarOne(g, dtype), lengths))
 	regLength = MulScalar(regLength, regLenOne)
-	train.AddLoss(scope, regLength)
+	train.AddLoss(regLength)
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/ml/model"
@@ -119,11 +120,17 @@ const TrainLastStepVarName = "train_last_global_step"
 // This variable is set by the Loop trainer, and may be -1 if the last train step is not known yet (for instance
 // if using RunEpochs).
 //
+// The Store object will be read from the Graph.
+//
 // It is stored in the TrainerAbsoluteScope.
 //
 // This is a graph building function and so it may panic if the variable cannot be created.
-func GetTrainLastStepVar(storeOrScope model.StoreProvider) *model.Variable {
-	return storeOrScope.Store().Scope(TrainerAbsoluteScope).
+func GetTrainLastStepVar(g *graph.Graph) *model.Variable {
+	store := model.GetStore(g)
+	if store == nil {
+		panic(errors.Errorf("the current graph does not have an associated model.Store; to get one, you need to create the graph using a [model.Exec] (see [model.NewExec])"))
+	}
+	return store.Scope(TrainerAbsoluteScope).
 		VariableWithValue(TrainLastStepVarName, int64(-1)).
 		SetTrainable(false)
 }
@@ -251,7 +258,9 @@ func (loop *Loop) setLastStep(lastStep int) error {
 	loop.EndStep = lastStep
 	var endStepVar *model.Variable
 	err := exceptions.TryCatch[error](func() {
-		endStepVar = GetTrainLastStepVar(loop.Trainer.Store())
+		endStepVar = loop.Trainer.Store().Scope(TrainerAbsoluteScope).
+			VariableWithValue(TrainLastStepVarName, int64(-1)).
+			SetTrainable(false)
 	})
 	if err != nil {
 		return err

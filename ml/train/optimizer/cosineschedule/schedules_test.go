@@ -112,7 +112,9 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		store.SetParam(cosineschedule.ParamCycles, numCycles)
 		store.SetParam(cosineschedule.ParamWarmUpSteps, warmUpSteps)
 		store.SetParam(cosineschedule.ParamMinLearningRate, minLearningRate)
-		lastStepVar := train.GetTrainLastStepVar(store.RootScope())
+		lastStepVar := store.Scope(train.TrainerAbsoluteScope).
+			VariableWithValue(train.TrainLastStepVarName, int64(-1)).
+			SetTrainable(false)
 		err := lastStepVar.SetValue(tensors.FromScalar(int64(numSteps)))
 		require.NoError(t, err)
 		cosineExec, err := model.NewExec(backend, store, func(scope *model.Scope, graph *Graph) *Node {

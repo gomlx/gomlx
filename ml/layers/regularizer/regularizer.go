@@ -58,7 +58,7 @@ func L2(amount float64) Regularizer {
 			}
 		}
 		loss = MulScalar(loss, amount)
-		train.AddLoss(scope, loss)
+		train.AddLoss(loss)
 	}
 }
 
@@ -85,7 +85,7 @@ func L1(amount float64) Regularizer {
 			}
 		}
 		loss = MulScalar(loss, amount)
-		train.AddLoss(scope, loss)
+		train.AddLoss(loss)
 
 		// Update weights such that if they are smaller than the regularization amount, they are set to 0.
 		// Part of this is finding a unique name for all weights, so we don't add updates to the same scope.
@@ -168,6 +168,6 @@ func ConstantL1(amount float64) Regularizer {
 				loss = Add(l1, loss)
 			}
 		}
-		train.AddLoss(scope, loss)
+		train.AddLoss(loss)
 	}
 }

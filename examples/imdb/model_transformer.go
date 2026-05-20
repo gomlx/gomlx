@@ -234,6 +234,6 @@ func MaskedWordTaskGraph(scope *model.Scope, tokens, embed, mask *Node,
 	theLoss := losses.SparseCategoricalCrossEntropyLogits([]*Node{wordToken}, []*Node{logits})
 	theLoss = ReduceAllMean(theLoss)
 	theLoss = MulScalar(theLoss, *flagMaskWordTask)
-	train.AddLoss(scope, theLoss)
+	train.AddLoss(theLoss)
 }
 */

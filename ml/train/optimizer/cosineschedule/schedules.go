@@ -251,7 +251,7 @@ func (opt *Config) Done() {
 		cycle = DivScalar(adjustedCosineStep, float64(opt.periodNumSteps))
 	} else {
 		// opt.numCyles > 0
-		lastStep := train.GetTrainLastStepVar(scope).NodeValue(graph)
+		lastStep := train.GetTrainLastStepVar(graph).NodeValue(graph)
 		lastStep = Where(IsNegative(lastStep), Const(graph, DefaultLastStep), lastStep)
 		if opt.warmUpSteps > 0 {
 			lastStep = SubScalar(lastStep, opt.warmUpSteps)

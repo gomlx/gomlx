@@ -192,7 +192,7 @@ func NewTrainer(backend compute.Backend, store *model.Store,
 	batchLossFn := func(_ *model.Scope, labels, predictions []*graph.Node) *graph.Node {
 		// Assume lossVar has already been set.
 		g := predictions[0].Graph()
-		theLoss := GetLosses(store, g)
+		theLoss := GetLosses(g)
 		if theLoss == nil {
 
 			return graph.ScalarZero(g, predictions[0].DType())
@@ -201,7 +201,7 @@ func NewTrainer(backend compute.Backend, store *model.Store,
 	}
 	lossNoRegularizationFn := func(scope *model.Scope, labels, predictions []*graph.Node) *graph.Node {
 		g := predictions[0].Graph()
-		theLoss := GetLossNoRegularization(scope, g)
+		theLoss := GetLossNoRegularization(g)
 		if theLoss == nil {
 			return graph.ScalarZero(g, predictions[0].DType())
 		}
@@ -391,12 +391,12 @@ func (r *Trainer) trainStepGraph(spec any, scope *model.Scope, inputs, labels []
 	predictions := r.modelFn(scope, spec, inputs)
 	if r.lossFn != nil {
 		baseLoss := r.lossFnScalarLoss(scope, labels, predictions)
-		SetLossNoRegularization(scope, baseLoss)
-		AddLoss(scope, baseLoss)
+		SetLossNoRegularization(baseLoss)
+		AddLoss(baseLoss)
 	}
 
 	// Store total loss as a variable, so it can be used by metrics.
-	loss := GetLosses(scope, g)
+	loss := GetLosses(g)
 	if loss == nil {
 		exceptions.Panicf(
 			"no loss function defined (or it returned nil), and no loss set with AddLoss(), there is nothing to optimize!?",
@@ -407,7 +407,7 @@ func (r *Trainer) trainStepGraph(spec any, scope *model.Scope, inputs, labels []
 	r.optimizer.UpdateGraph(scope, g, loss)
 
 	// Execute registered ScopeGraphFn hooks for current graph.
-	ExecPerStepUpdateGraphFn(scope, g)
+	ExecPerStepUpdateGraphFn(g)
 
 	// Metrics updates. They include: batch loss, exponential moving average of the batch loss.
 	if len(predictions) == 0 {
@@ -652,8 +652,8 @@ func (r *Trainer) evalStepGraph(spec any, scope *model.Scope, inputs, labels []*
 	predictions := r.modelFn(scope, spec, inputs)
 	if r.lossFn != nil {
 		baseLoss := r.lossFnScalarLoss(scope, labels, predictions)
-		SetLossNoRegularization(scope, baseLoss)
-		AddLoss(scope, baseLoss)
+		SetLossNoRegularization(baseLoss)
+		AddLoss(baseLoss)
 	}
 
 	// Get metrics and updates
@@ -870,26 +870,26 @@ func (r *Trainer) OnExecCreation(handler OnExecFn) {
 // AddLoss adds the given scalar loss to the trainer's Store for the current graph.
 //
 // This is a global value for the Store, not scoped.
-func AddLoss(storeOrScope model.StoreProvider, theLoss *graph.Node) {
+func AddLoss(theLoss *graph.Node) {
 	g := theLoss.Graph()
-	trainerScope := storeOrScope.Store().Scope(TrainerAbsoluteScope)
 	if !theLoss.Shape().IsScalar() {
 		theLoss = graph.ReduceAllMean(theLoss)
 	}
 
-	currentLoss, found := trainerScope.GetGraphParam(g, TrainerLossGraphParamKey)
+	fullPath := model.JoinPath(TrainerAbsoluteScope, TrainerLossGraphParamKey)
+	currentLoss, found := model.GetGraphParam(g, fullPath)
 	if found {
 		theLoss = graph.Add(theLoss, currentLoss.(*graph.Node))
 	}
-	trainerScope.SetGraphParam(g, TrainerLossGraphParamKey, theLoss)
+	model.SetGraphParam(g, fullPath, theLoss)
 }
 
 // GetLosses returns the sum of all loss terms added with AddLoss(), or nil if none was set.
 //
 // This is a global value for the Store, not scoped.
-func GetLosses(storeOrScope model.StoreProvider, g *graph.Graph) (loss *graph.Node) {
-	trainerScope := storeOrScope.Store().Scope(TrainerAbsoluteScope)
-	lossAny, found := trainerScope.GetGraphParam(g, TrainerLossGraphParamKey)
+func GetLosses(g *graph.Graph) (loss *graph.Node) {
+	fullPath := model.JoinPath(TrainerAbsoluteScope, TrainerLossGraphParamKey)
+	lossAny, found := model.GetGraphParam(g, fullPath)
 	if !found {
 		return nil
 	}
@@ -900,17 +900,17 @@ func GetLosses(storeOrScope model.StoreProvider, g *graph.Graph) (loss *graph.No
 // Consider using AddLoss instead, since this will discard any previously set losses.
 //
 // This is a global value for the Store, not scoped.
-func SetLossNoRegularization(storeOrScope model.StoreProvider, theLoss *graph.Node) {
-	trainerScope := storeOrScope.Store().Scope(TrainerAbsoluteScope)
-	trainerScope.SetGraphParam(theLoss.Graph(), TrainerLossNoRegularizationGraphParamKey, theLoss)
+func SetLossNoRegularization(theLoss *graph.Node) {
+	fullPath := model.JoinPath(TrainerAbsoluteScope, TrainerLossNoRegularizationGraphParamKey)
+	model.SetGraphParam(theLoss.Graph(), fullPath, theLoss)
 }
 
 // GetLossNoRegularization returns the loss of the model not including regularization.
 //
 // This is a global value for the Store, not scoped.
-func GetLossNoRegularization(scope *model.Scope, g *graph.Graph) (loss *graph.Node) {
-	trainerScope := scope.Store().Scope(TrainerAbsoluteScope)
-	lossAny, found := trainerScope.GetGraphParam(g, TrainerLossNoRegularizationGraphParamKey)
+func GetLossNoRegularization(g *graph.Graph) (loss *graph.Node) {
+	fullPath := model.JoinPath(TrainerAbsoluteScope, TrainerLossNoRegularizationGraphParamKey)
+	lossAny, found := model.GetGraphParam(g, fullPath)
 	if !found {
 		return nil
 	}
@@ -926,13 +926,19 @@ func AddPerStepUpdateGraphFn(scope *model.Scope, g *graph.Graph, fn ModelGraphFn
 }
 
 // ExecPerStepUpdateGraphFn executes all registered "per-step update functions".
-func ExecPerStepUpdateGraphFn(scope *model.Scope, g *graph.Graph) {
-	for p := range scope.IterGraphParams(g) {
+//
+// The Store object will be read from the Graph.
+func ExecPerStepUpdateGraphFn(g *graph.Graph) {
+	store := model.GetStore(g)
+	if store == nil {
+		panic(errors.Errorf("the current graph does not have an associated model.Store; to get one, you need to create the graph using a [model.Exec] (see [model.NewExec])"))
+	}
+	for p := range store.IterGraphParams(g) {
 		if p.Key != TrainerPerStepUpdateGraphFnParamKey {
 			continue
 		}
 		if fn, ok := p.Value.(ModelGraphFn); ok {
-			fn(scope.Store().Scope(p.Scope), g)
+			fn(store.Scope(p.Scope), g)
 		}
 	}
 }
