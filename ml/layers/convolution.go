@@ -7,7 +7,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors/images"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
@@ -29,7 +29,7 @@ type ConvBuilder struct {
 	padSame                            bool
 	dilations                          []int
 	newScope                           bool
-	regularizer                        regularizers.Regularizer
+	regularizer                        regularizer.Regularizer
 	channelGroupCount, batchGroupCount int
 }
 
@@ -59,7 +59,7 @@ func Convolution(scope *model.Scope, x *Node) *ConvBuilder {
 		graph:             x.Graph(),
 		x:                 x,
 		newScope:          true,
-		regularizer:       regularizers.FromScope(scope),
+		regularizer:       regularizer.FromScope(scope),
 		channelGroupCount: 1,
 		batchGroupCount:   1,
 	}
@@ -300,7 +300,7 @@ func (conv *ConvBuilder) BatchGroupCount(groupCount int) *ConvBuilder {
 // To use more than one type of Regularizer, use regularizers.Combine, and set the returned combined regularizer here.
 //
 // The default is regularizers.FromScope, which is configured by regularizers.ParamL1 and regularizers.ParamL2.
-func (conv *ConvBuilder) Regularizer(regularizer regularizers.Regularizer) *ConvBuilder {
+func (conv *ConvBuilder) Regularizer(regularizer regularizer.Regularizer) *ConvBuilder {
 	conv.regularizer = regularizer
 	return conv
 }
@@ -394,7 +394,7 @@ func (conv *ConvBuilder) Done() *Node {
 	if l2any, found := scopeInScope.GetParam(ParamL2Regularization); found {
 		l2 := l2any.(float64)
 		if l2 > 0 {
-			regularizers.L2(l2)(scopeInScope, conv.graph, kernelVar)
+			regularizer.L2(l2)(scopeInScope, conv.graph, kernelVar)
 		}
 	}
 	return output

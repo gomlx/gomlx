@@ -26,7 +26,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/nn"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -76,7 +76,7 @@ type Config struct {
 	dropoutRatio                    float64
 	useBias, useResidual            bool
 
-	regularizer regularizers.Regularizer
+	regularizer regularizer.Regularizer
 }
 
 // New creates a configuration for a FNN (Feedforward Neural Network).
@@ -124,7 +124,7 @@ func New(scope *model.Scope, input *Node, outputDimensions ...int) *Config {
 		numHiddenNodes:   model.GetParamOr(scope, ParamNumHiddenNodes, 10),
 		activation:       activations.FromName(model.GetParamOr(scope, activations.ParamActivation, "relu")),
 		normalization:    model.GetParamOr(scope, ParamNormalization, ""),
-		regularizer:      regularizers.FromScope(scope),
+		regularizer:      regularizer.FromScope(scope),
 		dropoutRatio:     model.GetParamOr(scope, ParamDropoutRate, -1.0),
 		useResidual:      model.GetParamOr(scope, ParamResidual, false),
 		useBias:          true,
@@ -237,7 +237,7 @@ func (c *Config) Normalization(normalization string) *Config {
 // To use more than one type of Regularizer, use regularizers.Combine, and set the returned combined regularizer here.
 //
 // The default is regularizers.FromScope, which is configured by regularizers.ParamL1 and regularizers.ParamL2.
-func (c *Config) Regularizer(regularizer regularizers.Regularizer) *Config {
+func (c *Config) Regularizer(regularizer regularizer.Regularizer) *Config {
 	c.regularizer = regularizer
 	return c
 }

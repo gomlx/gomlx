@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/nn"
 	"github.com/gomlx/gomlx/ml/train"
@@ -71,7 +71,7 @@ func DenseWithBias(scope *model.Scope, input *Node, outputDimensions ...int) *No
 func Dense(scope *model.Scope, input *Node, useBias bool, outputDimensions ...int) *Node {
 	g := input.Graph()
 	scope = scope.In("dense")
-	regularizer := regularizers.FromScope(scope)
+	regularizer := regularizer.FromScope(scope)
 
 	inputShape := input.Shape()
 	inputRank := inputShape.Rank()

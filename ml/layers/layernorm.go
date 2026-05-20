@@ -7,7 +7,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/ml/nn"
@@ -24,7 +24,7 @@ type LayerNormBuilder struct {
 	epsilon            float64
 	center, gain       bool
 	scaleNormalization bool
-	regularizer        regularizers.Regularizer
+	regularizer        regularizer.Regularizer
 	normalizationDType dtypes.DType
 }
 
@@ -112,7 +112,7 @@ func LayerNormalization(scope *model.Scope, x *Node, normalizingAxes ...int) *La
 
 	// Create default regularizer.
 	if l2 := model.GetParamOr(scope, ParamLayerNormL2Regularization, 0.0); l2 > 0 {
-		builder.regularizer = regularizers.Combine(builder.regularizer, regularizers.L2(l2))
+		builder.regularizer = regularizer.Combine(builder.regularizer, regularizer.L2(l2))
 	}
 
 	// Convert negative axes to their actual value.

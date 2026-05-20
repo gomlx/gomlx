@@ -20,7 +20,7 @@ import (
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/testutil"
@@ -38,10 +38,10 @@ func TestCheckpoints(t *testing.T) {
 		// Build model, checkpoint a few times.
 		store := model.NewStore()
 		store.SetParam("learning_rate", 0.01)
-		store.SetParam(regularizers.ParamL2, 0.001)
-		store.SetParam(regularizers.ParamL1, 1.0e7)
+		store.SetParam(regularizer.ParamL2, 0.001)
+		store.SetParam(regularizer.ParamL1, 1.0e7)
 		rootScope := store.RootScope()
-		rootScope.In("layer_1").SetParam(regularizers.ParamL2, 0.004)
+		rootScope.In("layer_1").SetParam(regularizer.ParamL2, 0.004)
 		checkpointHandler := Build(store).TempDir("", "test_checkpoints_").
 			Keep(3).MustDone()
 		assert.Equal(t, 0, checkpointHandler.checkpointsCount)
@@ -67,24 +67,24 @@ func TestCheckpoints(t *testing.T) {
 	{
 		// Build model, checkpoint a few times.
 		store := model.NewStore()
-		store.SetParam("learning_rate", 5.0)       // Value should be overwritten when loading.
-		store.SetParam(regularizers.ParamL1, 17.0) // Value should NOT be overwritten when loading.
+		store.SetParam("learning_rate", 5.0)      // Value should be overwritten when loading.
+		store.SetParam(regularizer.ParamL1, 17.0) // Value should NOT be overwritten when loading.
 		root := store.RootScope()
-		root.In("layer_1").SetParam(regularizers.ParamL2, 0.004)
-		checkpointHandler := Build(store).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).MustDone()
+		root.In("layer_1").SetParam(regularizer.ParamL2, 0.004)
+		checkpointHandler := Build(store).Dir(dir).Keep(3).ExcludeParams(regularizer.ParamL1).MustDone()
 
 		lr, found := store.GetParam("learning_rate")
 		assert.True(t, found, "learning_rate should be set")
 		assert.Equal(t, 0.01, lr.(float64), "Params[learning_rate]")
-		assert.Equal(t, 17.0, model.GetParamOr(root, regularizers.ParamL1, 0.0))
+		assert.Equal(t, 17.0, model.GetParamOr(root, regularizer.ParamL1, 0.0))
 
 		var l2 any
-		l2, found = root.GetParam(regularizers.ParamL2)
-		assert.Truef(t, found, "%s should have been set", regularizers.ParamL2)
-		assert.Equal(t, 0.001, l2.(float64), "(Scope=%s) Params[%s]", root.Scope(), regularizers.ParamL2)
-		l2, found = root.At("layer_1").GetParam(regularizers.ParamL2)
-		assert.Truef(t, found, "%s should have been set", regularizers.ParamL2)
-		assert.Equal(t, 0.004, l2.(float64), "Params[%s]", regularizers.ParamL2)
+		l2, found = root.GetParam(regularizer.ParamL2)
+		assert.Truef(t, found, "%s should have been set", regularizer.ParamL2)
+		assert.Equal(t, 0.001, l2.(float64), "(Scope=%s) Params[%s]", root.Scope(), regularizer.ParamL2)
+		l2, found = root.At("layer_1").GetParam(regularizer.ParamL2)
+		assert.Truef(t, found, "%s should have been set", regularizer.ParamL2)
+		assert.Equal(t, 0.004, l2.(float64), "Params[%s]", regularizer.ParamL2)
 
 		// If we are lazy loading, no variable should be listed.
 		for v := range root.IterVariables() {
@@ -113,7 +113,7 @@ func TestCheckpoints(t *testing.T) {
 	{
 		store := model.NewStore()
 		root := store.RootScope()
-		_ = Build(store).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
+		_ = Build(store).Dir(dir).Keep(3).ExcludeParams(regularizer.ParamL1).Immediate().MustDone()
 
 		// Check that the only variable ("global_step") is present.
 		count := 0
@@ -139,7 +139,7 @@ func TestCheckpoints(t *testing.T) {
 	{
 		// Read the whole checkpoint to a variable -- similar to embedding it.
 		store := model.NewStore()
-		handler := Build(store).Dir(dir).Keep(3).ExcludeParams(regularizers.ParamL1).Immediate().MustDone()
+		handler := Build(store).Dir(dir).Keep(3).ExcludeParams(regularizer.ParamL1).Immediate().MustDone()
 		checkpoints, err := handler.ListCheckpoints()
 		require.NoError(t, err)
 		lastCheckpoint := checkpoints[len(checkpoints)-1]

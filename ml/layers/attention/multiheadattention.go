@@ -19,7 +19,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/attention/pos"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
@@ -562,7 +562,7 @@ func (b *MultiHeadAttentionBuilder) qkvProject(x *Node) (projectedQuery, project
 
 	// Single fused weight: [inFeatures, queryDim + 2*keyValueDim].
 	wQKVVar := qkvScope.VariableWithShape("weights_qkv", shapes.Make(dtype, inFeatures, queryDim+2*keyValueDim))
-	if regularizer := regularizers.FromScope(qkvScope); regularizer != nil {
+	if regularizer := regularizer.FromScope(qkvScope); regularizer != nil {
 		regularizer(qkvScope, g, wQKVVar)
 	}
 	wQKV := wQKVVar.NodeValue(g)

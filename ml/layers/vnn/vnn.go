@@ -15,7 +15,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -80,7 +80,7 @@ type Config struct {
 	useResidual                     bool
 	useScaler                       bool
 
-	regularizer regularizers.Regularizer
+	regularizer regularizer.Regularizer
 }
 
 // New creates a configuration for a VNN (Vector Neural Network), which is SO(3) invariant,
@@ -124,7 +124,7 @@ func New(scope *model.Scope, operand *Node, outputChannels int) *Config {
 		numHiddenNodes:  model.GetParamOr(scope, ParamNumHiddenNodes, 10),
 		activationName:  model.GetParamOr(scope, ParamActivation, "relu"),
 		normalization:   model.GetParamOr(scope, ParamNormalization, ""),
-		regularizer:     regularizers.FromScope(scope),
+		regularizer:     regularizer.FromScope(scope),
 		dropoutRatio:    model.GetParamOr(scope, ParamDropoutRate, 0.0),
 		useResidual:     model.GetParamOr(scope, ParamResidual, false),
 		useScaler:       model.GetParamOr(scope, ParamScaler, false),
@@ -215,7 +215,7 @@ func (c *Config) Scaler(enabled bool) *Config {
 // To use more than one type of Regularizer, use regularizers.Combine, and set the returned combined regularizer here.
 //
 // The default is regularizers.FromScope, which is configured by regularizers.ParamL1 and regularizers.ParamL2.
-func (c *Config) Regularizer(regularizer regularizers.Regularizer) *Config {
+func (c *Config) Regularizer(regularizer regularizer.Regularizer) *Config {
 	c.regularizer = regularizer
 	return c
 }

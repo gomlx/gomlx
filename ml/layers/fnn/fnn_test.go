@@ -14,7 +14,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/layers/activations"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
@@ -156,7 +156,7 @@ func TestFNNRegularized(t *testing.T) {
 			NumHiddenLayers(2, 32).
 			Residual(true).
 			Normalization("layer").
-			Regularizer(regularizers.L1(0.01)).
+			Regularizer(regularizer.L1(0.01)).
 			Dropout(0).
 			Done()
 	}

@@ -17,7 +17,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
@@ -93,8 +93,8 @@ func CreateModelStore() *model.Store {
 		cosineschedule.ParamPeriodSteps: 0,
 		activations.ParamActivation:     "",
 		layers.ParamDropoutRate:         0.1,
-		regularizers.ParamL2:            0.0,
-		regularizers.ParamL1:            0.0,
+		regularizer.ParamL2:             0.0,
+		regularizer.ParamL1:             0.0,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 2,

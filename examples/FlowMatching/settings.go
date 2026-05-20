@@ -5,7 +5,7 @@ package fm
 import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train/losses"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
@@ -87,22 +87,22 @@ func CreateDefaultScope() *model.Scope {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "layer",
 
-		optimizer.ParamOptimizer:        "adam",
-		optimizer.ParamAdamEpsilon:      1e-7,
-		optimizer.ParamAdamDType:        "float32",
-		optimizer.ParamAdamWeightDecay:  1e-4,
-		optimizer.ParamClipStepByValue:  0.0,
-		optimizer.ParamClipNaN:          false,
+		optimizer.ParamOptimizer:         "adam",
+		optimizer.ParamAdamEpsilon:       1e-7,
+		optimizer.ParamAdamDType:         "float32",
+		optimizer.ParamAdamWeightDecay:   1e-4,
+		optimizer.ParamClipStepByValue:   0.0,
+		optimizer.ParamClipNaN:           false,
 		cosineschedule.ParamPeriodSteps:  0,
 		activations.ParamActivation:      "swish",
 		layers.ParamDropoutRate:          0.15,
 		layers.ParamDropBlockProbability: 0.0,
 		layers.ParamDropBlockSize:        3,
 		"droppath_prob":                  0.0,
-		regularizers.ParamL2:             0.0,
-		regularizers.ParamL1:             0.0,
+		regularizer.ParamL2:              0.0,
+		regularizer.ParamL1:              0.0,
 
-		optimizer.ParamLearningRate:        1e-3,
+		optimizer.ParamLearningRate:         1e-3,
 		cosineschedule.ParamPeriodSteps:     0, // Enabled if > 0, it sets the period of the cosine schedule. Typically, the same value as 'train_steps'.
 		cosineschedule.ParamMinLearningRate: 1e-5,
 

@@ -16,7 +16,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/batchnorm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
@@ -91,15 +91,15 @@ func CreateModelStore() *model.Store {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "batch",
 
-		optimizer.ParamOptimizer:       "adamw",
-		optimizer.ParamLearningRate:    1e-4,
-		optimizer.ParamAdamEpsilon:     1e-7,
-		optimizer.ParamAdamDType:       "",
+		optimizer.ParamOptimizer:        "adamw",
+		optimizer.ParamLearningRate:     1e-4,
+		optimizer.ParamAdamEpsilon:      1e-7,
+		optimizer.ParamAdamDType:        "",
 		cosineschedule.ParamPeriodSteps: 0,
 		activations.ParamActivation:     "",
 		layers.ParamDropoutRate:         0.1,
-		regularizers.ParamL2:            0.0,
-		regularizers.ParamL1:            0.0,
+		regularizer.ParamL2:             0.0,
+		regularizer.ParamL1:             0.0,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 3,

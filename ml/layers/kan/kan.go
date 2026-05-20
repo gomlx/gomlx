@@ -22,7 +22,7 @@ import (
 
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers/activations"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
@@ -81,7 +81,7 @@ type Config struct {
 	numOutputNodes                  int
 	numHiddenLayers, numHiddenNodes int
 	activation                      activations.Type
-	regularizer                     regularizers.Regularizer
+	regularizer                     regularizer.Regularizer
 	useResidual, useMean            bool
 	inputGroupSize                  int
 	numControlPoints                int
@@ -119,7 +119,7 @@ func New(scope *model.Scope, input *Node, numOutputNodes int) *Config {
 		numHiddenLayers:  model.GetParamOr(scope, ParamNumHiddenLayers, 0),
 		numHiddenNodes:   model.GetParamOr(scope, ParamNumHiddenNodes, 10),
 		activation:       activations.FromName(model.GetParamOr(scope, activations.ParamActivation, "none")),
-		regularizer:      regularizers.FromScope(scope),
+		regularizer:      regularizer.FromScope(scope),
 		useResidual:      model.GetParamOr(scope, ParamResidual, true),
 		useMean:          model.GetParamOr(scope, ParamMean, true),
 		inputGroupSize:   model.GetParamOr(scope, ParamInputGroupSize, int(0)),
@@ -135,7 +135,7 @@ func New(scope *model.Scope, input *Node, numOutputNodes int) *Config {
 
 	constL1amount := model.GetParamOr(scope, ParamConstantRegularizationL1, 0.0)
 	if constL1amount > 0 {
-		c.regularizer = regularizers.Combine(c.regularizer, regularizers.ConstantL1(constL1amount))
+		c.regularizer = regularizer.Combine(c.regularizer, regularizer.ConstantL1(constL1amount))
 	}
 
 	if input.Rank() < 2 {
@@ -179,7 +179,7 @@ func (c *Config) Activation(activation activations.Type) *Config {
 // For BSpline models it applies the regularizer to the control-points.
 //
 // The default is no regularizer, but it can be configured by regularizers.ParamL1 and regularizers.ParamL2.
-func (c *Config) Regularizer(regularizer regularizers.Regularizer) *Config {
+func (c *Config) Regularizer(regularizer regularizer.Regularizer) *Config {
 	c.regularizer = regularizer
 	return c
 }

@@ -17,7 +17,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/ml/train"
@@ -267,8 +267,8 @@ func (builder *Config) Done() *Node {
 
 	// Add regularization to scale.
 	if scaleVar != nil {
-		if l2 := model.GetParamOr(scope, regularizers.ParamL2, 0.0); l2 > 0 {
-			reg := regularizers.L2(l2)
+		if l2 := model.GetParamOr(scope, regularizer.ParamL2, 0.0); l2 > 0 {
+			reg := regularizer.L2(l2)
 			reg(scope, g, scaleVar)
 		}
 	}

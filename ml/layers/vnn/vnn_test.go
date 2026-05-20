@@ -13,7 +13,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/dataset"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/losses"
@@ -200,7 +200,7 @@ func TestVNNTrain(t *testing.T) {
 			Activation("relu").
 			Normalization("layer").
 			Scaler(true).
-			Regularizer(regularizers.L2(0.001)).
+			Regularizer(regularizer.L2(0.001)).
 			Dropout(0).
 			Done()
 

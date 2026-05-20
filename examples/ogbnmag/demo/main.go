@@ -14,7 +14,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/kan"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
@@ -79,16 +79,16 @@ func createModelStore() *model.Store {
 		kan.ParamPWLSplitPointsTrainable: false,
 
 		// Optimizer parameters.
-		optimizer.ParamOptimizer:           "adamw",
-		optimizer.ParamLearningRate:        0.001,
+		optimizer.ParamOptimizer:            "adamw",
+		optimizer.ParamLearningRate:         0.001,
 		cosineschedule.ParamPeriodSteps:     -1, // If set to -1, does automatic setting of CosineScheduleSteps to train_steps.
 		cosineschedule.ParamMinLearningRate: 0.0,
-		optimizer.ParamClipStepByValue:     0.0,
-		optimizer.ParamAdamEpsilon:         1e-7,
-		optimizer.ParamAdamDType:           "float32",
-		optimizer.ParamClipNaN:             false,
+		optimizer.ParamClipStepByValue:      0.0,
+		optimizer.ParamAdamEpsilon:          1e-7,
+		optimizer.ParamAdamDType:            "float32",
+		optimizer.ParamClipNaN:              false,
 
-		regularizers.ParamL2:        1e-5,
+		regularizer.ParamL2:         1e-5,
 		layers.ParamDropoutRate:     0.2,
 		activations.ParamActivation: "swish",
 
@@ -101,7 +101,7 @@ func createModelStore() *model.Store {
 		gnn.ParamUpdateNumHiddenLayers: 0,
 		gnn.ParamMessageDim:            32, // 128 or 256 will work better, but takes way more time
 		gnn.ParamStateDim:              32, // 128 or 256 will work better, but takes way more time
-		gnn.ParamUseRootAsScope:      false,
+		gnn.ParamUseRootAsScope:        false,
 		gnn.ParamNoKanForLayers:        "",
 
 		mag.ParamEmbedDropoutRate:     0.0,

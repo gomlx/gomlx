@@ -5,7 +5,7 @@
 // It defines a standard Regularizer interface and several methods that implement it.
 //
 // Layers like layers.Dense, layers.DenseWithBias and kan.Config will take regularizers as inputs.
-package regularizers
+package regularizer
 
 import (
 	"slices"

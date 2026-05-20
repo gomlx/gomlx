@@ -12,7 +12,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
@@ -24,10 +24,10 @@ import (
 )
 
 var (
-	flagDataDir           = flag.String("data", "~/work/cifar", "Directory to cache downloaded and generated dataset files.")
-	flagEval              = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
-	flagVerbosity         = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
-	flagCheckpoint        = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
+	flagDataDir    = flag.String("data", "~/work/cifar", "Directory to cache downloaded and generated dataset files.")
+	flagEval       = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
+	flagVerbosity  = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
+	flagCheckpoint = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 )
 
 // createModelStore sets the store with default hyperparameters
@@ -59,15 +59,15 @@ func createModelStore() *model.Store {
 		// "normalization" is overridden by "fnn_normalization" if set.
 		layers.ParamNormalization: "none",
 
-		optimizer.ParamOptimizer:       "adamw",
-		optimizer.ParamLearningRate:    1e-4,
-		optimizer.ParamAdamEpsilon:     1e-7,
-		optimizer.ParamAdamDType:       "",
+		optimizer.ParamOptimizer:        "adamw",
+		optimizer.ParamLearningRate:     1e-4,
+		optimizer.ParamAdamEpsilon:      1e-7,
+		optimizer.ParamAdamDType:        "",
 		cosineschedule.ParamPeriodSteps: 0,
 		activations.ParamActivation:     "swish",
 		layers.ParamDropoutRate:         0.0,
-		regularizers.ParamL2:            0.0, // 1e-5,
-		regularizers.ParamL1:            0.0, // 1e-5,
+		regularizer.ParamL2:             0.0, // 1e-5,
+		regularizer.ParamL1:             0.0, // 1e-5,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 8,

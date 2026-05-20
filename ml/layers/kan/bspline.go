@@ -10,7 +10,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers/activations"
 	xbsplines "github.com/gomlx/gomlx/ml/layers/bsplines"
-	"github.com/gomlx/gomlx/ml/layers/regularizers"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -40,7 +40,7 @@ var (
 type bsplineConfig struct {
 	Degree               int
 	MagnitudeTerms       bool
-	MagnitudeRegularizer regularizers.Regularizer
+	MagnitudeRegularizer regularizer.Regularizer
 }
 
 // initBSpline initializes the default values for Discrete-KANs based on model.
@@ -48,16 +48,16 @@ func (c *Config) initBSpline(scope *model.Scope) {
 	c.bspline.Degree = model.GetParamOr(scope, ParamBSplineDegree, 2)
 	c.bspline.MagnitudeTerms = true
 
-	var magRegs []regularizers.Regularizer
+	var magRegs []regularizer.Regularizer
 	magL2 := model.GetParamOr(scope, ParamBSplineMagnitudeL2, 0.0)
 	if magL2 > 0 {
-		magRegs = append(magRegs, regularizers.L2(magL2))
+		magRegs = append(magRegs, regularizer.L2(magL2))
 	}
 	magL1 := model.GetParamOr(scope, ParamBSplineMagnitudeL1, 0.0)
 	if magL1 > 0 {
-		magRegs = append(magRegs, regularizers.L1(magL1))
+		magRegs = append(magRegs, regularizer.L1(magL1))
 	}
-	c.bspline.MagnitudeRegularizer = regularizers.Combine(magRegs...)
+	c.bspline.MagnitudeRegularizer = regularizer.Combine(magRegs...)
 }
 
 // BSpline configures the KAN to use b-splines to model \phi(x), the univariate function described in the KAN the paper.
@@ -74,7 +74,7 @@ func (c *Config) BSpline() *Config {
 // Default is none, but can be changed with hyperparameters ParamBSplineMagnitudeL2 and ParamBSplineMagnitudeL1.
 //
 // For BSpline models it applies the regularizer to the control-points.
-func (c *Config) WithBSplineMagnitudeRegularizer(regularizer regularizers.Regularizer) *Config {
+func (c *Config) WithBSplineMagnitudeRegularizer(regularizer regularizer.Regularizer) *Config {
 	c.bspline.MagnitudeRegularizer = regularizer
 	return c
 }
