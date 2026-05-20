@@ -92,7 +92,7 @@ func main() {
 
 	// Load model weights into model.
 	scope := model.NewStore().RootScope()
-	if err := onnxModel.VariablesToScope(scope); err != nil {
+	if err := onnxModel.VariablesToContext(scope); err != nil {
 		klog.Fatalf("Failed to load model variables: %+v", err)
 	}
 

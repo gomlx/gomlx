@@ -78,7 +78,7 @@ func main() {
 
 	// Create scope and load model weights
 	scope := model.NewStore().RootScope()
-	must.M(onnxModel.VariablesToScope(scope))
+	must.M(onnxModel.VariablesToContext(scope))
 
 	// Create backend
 	backend := must.M1(compute.New())
