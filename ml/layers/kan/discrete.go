@@ -303,7 +303,7 @@ func (c *Config) discreteLayer(scope *model.Scope, x *Node, numOutputNodes int) 
 	controlPointsVar := scope.WithInitializer(controlPointsInitializer).
 		VariableWithShape("kan_discrete_control_points", shapes.Make(dtype, numOutputNodes, numInputGroups, c.numControlPoints))
 	if c.regularizer != nil {
-		c.regularizer(scope, g, controlPointsVar)
+		c.regularizer(g, controlPointsVar)
 	}
 	controlPoints := controlPointsVar.NodeValue(g)
 

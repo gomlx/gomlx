@@ -361,7 +361,7 @@ func (conv *ConvBuilder) Done() *Node {
 	}
 	kernelVar := scopeInScope.VariableWithShape("weights", kernelShape)
 	if conv.regularizer != nil {
-		conv.regularizer(scopeInScope, conv.graph, kernelVar)
+		conv.regularizer(conv.graph, kernelVar)
 	}
 	kernel := kernelVar.NodeValue(conv.graph)
 	convOpts := Convolve(conv.x, kernel).
@@ -394,7 +394,7 @@ func (conv *ConvBuilder) Done() *Node {
 	if l2any, found := scopeInScope.GetParam(ParamL2Regularization); found {
 		l2 := l2any.(float64)
 		if l2 > 0 {
-			regularizer.L2(l2)(scopeInScope, conv.graph, kernelVar)
+			regularizer.L2(l2)(conv.graph, kernelVar)
 		}
 	}
 	return output

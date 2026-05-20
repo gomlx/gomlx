@@ -225,7 +225,7 @@ func (builder *LayerNormBuilder) createVariables() (gamma, beta *Node) {
 	if builder.gain {
 		gainVar := scope.WithInitializer(initializer.One).VariableWithShape("gain", normShape).SetTrainable(true)
 		if builder.regularizer != nil {
-			builder.regularizer(scope, g, gainVar)
+			builder.regularizer(g, gainVar)
 		}
 		gamma = Reshape(gainVar.NodeValue(g), broadcastNormShape.Dimensions...)
 	}

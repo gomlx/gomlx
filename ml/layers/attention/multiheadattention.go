@@ -563,7 +563,7 @@ func (b *MultiHeadAttentionBuilder) qkvProject(x *Node) (projectedQuery, project
 	// Single fused weight: [inFeatures, queryDim + 2*keyValueDim].
 	wQKVVar := qkvScope.VariableWithShape("weights_qkv", shapes.Make(dtype, inFeatures, queryDim+2*keyValueDim))
 	if regularizer := regularizer.FromScope(qkvScope); regularizer != nil {
-		regularizer(qkvScope, g, wQKVVar)
+		regularizer(g, wQKVVar)
 	}
 	wQKV := wQKVVar.NodeValue(g)
 

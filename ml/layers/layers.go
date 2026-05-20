@@ -90,7 +90,7 @@ func Dense(scope *model.Scope, input *Node, useBias bool, outputDimensions ...in
 	weightsVar := scope.VariableWithShape("weights", shapes.Make(inputShape.DType, weightsDims...))
 	if regularizer != nil {
 		// Only for the weights, not for the bias.
-		regularizer(scope, g, weightsVar)
+		regularizer(g, weightsVar)
 	}
 	weights := weightsVar.NodeValue(g)
 

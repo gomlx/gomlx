@@ -179,8 +179,12 @@ func DeleteGlobalStep(scopeOrStore model.StoreProvider) error {
 //
 // GlobalStep is always stored as dtypes.Int64, but it is converted to the given DType
 // before being returned.
-func IncrementGlobalStep(scopeOrStore model.StoreProvider, g *Graph, dtype dtypes.DType) *Node {
-	globalStepVar := GetGlobalStepVar(scopeOrStore)
+func IncrementGlobalStep(g *Graph, dtype dtypes.DType) *Node {
+	store := model.GetStore(g)
+	if store == nil {
+		Panicf("the current graph does not have an associated model.Store; to get one, you need to create the graph using a [model.Exec] (see [model.NewExec])")
+	}
+	globalStepVar := GetGlobalStepVar(store)
 	globalStep := globalStepVar.NodeValue(g)
 	globalStep = Add(globalStep, OnesLike(globalStep))
 	globalStepVar.SetNodeValue(globalStep)
@@ -339,7 +343,7 @@ func (sgd *SGDConfig) UpdateGraphWithGradients(scope *model.Scope, grads []*Node
 
 	lrVar := LearningRateVar(scope, dtype, initialLearningRate)
 	learningRate := lrVar.NodeValue(g)
-	globalStep := IncrementGlobalStep(scope, g, dtype)
+	globalStep := IncrementGlobalStep(g, dtype)
 	if sgd.useDecay {
 		learningRate = Div(learningRate, Sqrt(globalStep)) // Factor global_step into the learning rate.
 	}

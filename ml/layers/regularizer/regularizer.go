@@ -37,14 +37,14 @@ const (
 // Notice it takes variables (and not the nodes) as inputs, as some specialized regularizers may want to update the variables
 // post gradient updates to impose constraints -- e.g.: L1 will reduce weights to 0 if they smaller than
 // the amount of regularization; a monotonicity regularizer may force weights to be monotonic in some direction.
-type Regularizer func(scope *model.Scope, g *Graph, weights ...*model.Variable)
+type Regularizer func(g *Graph, weights ...*model.Variable)
 
 // L2 creates a L2 regularizer (x^2 * amount) with the given static amount.
 func L2(amount float64) Regularizer {
 	if amount == 0 {
 		return nil
 	}
-	return func(scope *model.Scope, g *Graph, weights ...*model.Variable) {
+	return func(g *Graph, weights ...*model.Variable) {
 		if len(weights) == 0 {
 			Panicf("no weights given to regularizers.L2")
 		}
@@ -70,7 +70,7 @@ func L1(amount float64) Regularizer {
 	if amount == 0 {
 		return nil
 	}
-	return func(scope *model.Scope, g *Graph, weights ...*model.Variable) {
+	return func(g *Graph, weights ...*model.Variable) {
 		if len(weights) == 0 {
 			Panicf("no weights given to regularizers.L1")
 		}
@@ -87,10 +87,14 @@ func L1(amount float64) Regularizer {
 		loss = MulScalar(loss, amount)
 		train.AddLoss(loss)
 
+		store := model.GetStore(g)
+		if store == nil {
+			Panicf("the current graph does not have an associated model.Store; to get one, you need to create the graph using a [model.Exec] (see [model.NewExec])")
+		}
 		// Update weights such that if they are smaller than the regularization amount, they are set to 0.
 		// Part of this is finding a unique name for all weights, so we don't add updates to the same scope.
 		for _, weight := range weights {
-			weightScope := scope.Store().Scope(weight.Scope()).In("regularizers.L1(%s)", weight.Name())
+			weightScope := store.Scope(weight.Scope()).In("regularizers.L1(%s)", weight.Name())
 			train.AddPerStepUpdateGraphFn(weightScope, g,
 				func(scope *model.Scope, g *Graph) {
 					value := weight.NodeValue(g)
@@ -115,10 +119,10 @@ func Combine(regs ...Regularizer) Regularizer {
 	if len(regs) == 1 {
 		return regs[0]
 	}
-	return func(scope *model.Scope, g *Graph, weights ...*model.Variable) {
+	return func(g *Graph, weights ...*model.Variable) {
 		for _, reg := range regs {
 			if reg != nil {
-				reg(scope, g, weights...)
+				reg(g, weights...)
 			}
 		}
 	}
@@ -155,7 +159,7 @@ func FromScope(scope *model.Scope) Regularizer {
 // This is useful for control points in piecewise-linear, piecewise-constant or b-spline functions, when one wants to make
 // points that are not trained much to move towards the mean of its neighbours.
 func ConstantL1(amount float64) Regularizer {
-	return func(scope *model.Scope, g *Graph, weights ...*model.Variable) {
+	return func(g *Graph, weights ...*model.Variable) {
 		var loss *Node
 		for _, wVar := range weights {
 			w := wVar.NodeValue(g)

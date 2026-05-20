@@ -269,7 +269,7 @@ func (builder *Config) Done() *Node {
 	if scaleVar != nil {
 		if l2 := model.GetParamOr(scope, regularizer.ParamL2, 0.0); l2 > 0 {
 			reg := regularizer.L2(l2)
-			reg(scope, g, scaleVar)
+			reg(g, scaleVar)
 		}
 	}
 	return normalized

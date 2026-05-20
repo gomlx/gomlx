@@ -16,7 +16,7 @@ func TestConstantL1(t *testing.T) {
 	modeltest.RunTestGraphFn(t, "ConstantL1 regularizer", func(scope *model.Scope, g *Graph) (inputs, outputs []*Node) {
 		wVar := scope.VariableWithValue("w", [][]float32{{0, 1, 2, 3, 4}, {0, 1, 2, 3, 4}})
 		w := wVar.NodeValue(g)
-		ConstantL1(0.1)(scope, g, wVar)
+		ConstantL1(0.1)(g, wVar)
 		theLoss := train.GetLosses(g)
 		inputs = []*Node{w}
 		outputs = []*Node{theLoss, Gradient(theLoss, w)[0]}

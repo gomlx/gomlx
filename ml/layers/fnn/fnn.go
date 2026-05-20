@@ -333,7 +333,7 @@ func (c *Config) Done() *Node {
 		weightsVar := layerScope.VariableWithShape("weights", shapes.Make(dtype, weightsDims...))
 		if c.regularizer != nil {
 			// Only for the weights, not for the bias.
-			c.regularizer(layerScope, g, weightsVar)
+			c.regularizer(g, weightsVar)
 		}
 		weights := weightsVar.NodeValue(g)
 		var biasNode *Node
