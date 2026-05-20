@@ -256,3 +256,33 @@ func TestStore_Clone(t *testing.T) {
 	root2 := store2.RootScope()
 	require.Equal(t, int64(42), GetParamOr(root2.In("a").In("b"), "initial_seed", int64(0)))
 }
+
+func TestGraphStore(t *testing.T) {
+	store := NewStore()
+	backend := testutil.BuildTestBackend()
+
+	var innerStore *Store
+	var innerParam string
+	var foundParam bool
+
+	e := MustNewExec(backend, store, func(s *Scope, g *graph.Graph) *graph.Node {
+		innerStore = GetStore(g)
+		s.SetGraphParam(g, "test_param", "hello")
+		val, ok := s.GetGraphParam(g, "test_param")
+		if ok {
+			innerParam = val.(string)
+			foundParam = true
+		}
+		return graph.Const(g, float32(1.0))
+	})
+	_ = e.MustExec()
+
+	// Verify that the inner store retrieved via GetStore(g) is the correct store.
+	assert.Equal(t, store, innerStore)
+	assert.True(t, foundParam)
+	assert.Equal(t, "hello", innerParam)
+
+	// Verify that a manually created graph has no Store associated.
+	gManual := graph.NewGraph(backend, "manual")
+	assert.Nil(t, GetStore(gManual))
+}

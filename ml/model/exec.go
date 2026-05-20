@@ -95,6 +95,9 @@ func (e *Exec) buildGraphFn() graph.CanonicalExecGraphFn {
 		// Initialize the graph parameters store for this graph.
 		g.AttachState(graphState{}, newGraphStore())
 
+		// Attach a link to the model.Store used by model.Exec.
+		g.AttachState(graphStoreLink{}, e.store)
+
 		// Call modelGraphFn, the results will be a slice of *Node.
 		modelGraphFnResults := e.modelGraphFn(e.store.RootScope(), g, inputs)
 		graphId := g.GraphId()

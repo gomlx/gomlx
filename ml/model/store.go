@@ -399,6 +399,24 @@ type graphStore struct {
 	params *scoped.Params
 }
 
+type graphStoreLink struct{}
+
+// GetStore returns the current model.Store associated with the graph (if any, otherwise nil).
+func GetStore(g graph.GraphProvider) *Store {
+	if g == nil {
+		return nil
+	}
+	gr := g.Graph()
+	if gr == nil {
+		return nil
+	}
+	state := gr.State(graphStoreLink{})
+	if state == nil {
+		return nil
+	}
+	return state.(*Store)
+}
+
 func newGraphStore() *graphStore {
 	return &graphStore{
 		params: scoped.New(ScopeSeparator),
