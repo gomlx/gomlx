@@ -37,7 +37,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/train"
-	stdplots "github.com/gomlx/gomlx/ui/plots"
+	stdplots "github.com/gomlx/gomlx/ui/plot"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"

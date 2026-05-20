@@ -18,7 +18,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
 	. "github.com/gomlx/gomlx/support/exceptions"
-	"github.com/gomlx/gomlx/ui/plots"
+	"github.com/gomlx/gomlx/ui/plot"
 	"k8s.io/klog/v2"
 )
 
@@ -74,17 +74,17 @@ func BuildLayerWiseCustomMetricFn(
 	backend compute.Backend,
 	scope *model.Scope,
 	strategy *sampler.Strategy,
-) plots.CustomMetricFn {
+) plot.CustomMetricFn {
 	exec := model.MustNewExec(backend, scope.Store(), BuildLayerWiseInferenceModel(strategy, true))
 	scope = scope
 	labels := tensors.MustCopyFlatData[int32](PapersLabels)
-	return func(plotter plots.Plotter, step float64) error {
+	return func(plotter plot.Plotter, step float64) error {
 		predictions := exec.MustExec()[0].Value().([]int16)
 		train, validation, test := layerWiseCalculateAccuracies(predictions, labels)
 		accuracies := []float64{train, validation, test}
 		names := []string{"Train", "Validation", "Test"}
 		for ii, acc := range accuracies {
-			plotter.AddPoint(plots.Point{
+			plotter.AddPoint(plot.Point{
 				MetricName: fmt.Sprintf("%s: layer-wise eval", names[ii]),
 				MetricType: "accuracy",
 				Step:       step,

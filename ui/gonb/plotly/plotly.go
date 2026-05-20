@@ -28,7 +28,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/support/sets"
-	"github.com/gomlx/gomlx/ui/plots"
+	"github.com/gomlx/gomlx/ui/plot"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/janpfeifer/gonb/gonbui/dom"
 	gonbplotly "github.com/janpfeifer/gonb/gonbui/plotly"
@@ -70,7 +70,7 @@ type PlotConfig struct {
 	// lastStepCollected that metrics was collected.
 	lastStepCollected int
 
-	customMetricFn plots.CustomMetricFn
+	customMetricFn plot.CustomMetricFn
 
 	// finalPlot indicates whether the final plot has already been drawn.
 	scheduledFinalPlot, finalPlot bool
@@ -78,7 +78,7 @@ type PlotConfig struct {
 	// filePath where to save data points to. Only used if not empty.
 	enablePointsWriting bool
 	filePath            string
-	fileWriter          chan<- plots.Point
+	fileWriter          chan<- plot.Point
 	errFileWriter       <-chan error
 }
 
@@ -176,7 +176,7 @@ func (pc *PlotConfig) ScheduleEveryNSteps(loop *train.Loop, n int) *PlotConfig {
 // Only one function can be registered. Set to nil to reset.
 //
 // It returns itself to allow cascading configuration method calls.
-func (pc *PlotConfig) WithCustomMetricFn(fn plots.CustomMetricFn) *PlotConfig {
+func (pc *PlotConfig) WithCustomMetricFn(fn plot.CustomMetricFn) *PlotConfig {
 	pc.customMetricFn = fn
 	return pc
 }
@@ -197,7 +197,7 @@ func (pc *PlotConfig) addMetrics(loop *train.Loop, metrics []*tensors.Tensor) er
 		}
 	}
 
-	return plots.AddTrainAndEvalMetrics(pc, loop, metrics, pc.EvalDatasets, pc.batchNormAveragesDS)
+	return plot.AddTrainAndEvalMetrics(pc, loop, metrics, pc.EvalDatasets, pc.batchNormAveragesDS)
 }
 
 // attachOnEnd registers a final call to DynamicPlot when training finishes. After that, no more dynamic plots
@@ -236,8 +236,8 @@ func (pc *PlotConfig) WithCheckpoint(checkpointHandler *checkpoint.Handler) *Plo
 	// Ignore errors while loading: maybe nothing was written yet.
 	_ = pc.LoadCheckpointData(checkpointDir)
 	checkpointDir = fsutil.MustReplaceTildeInDir(checkpointDir)
-	filePath := path.Join(checkpointDir, plots.TrainingPlotFileName)
-	pc.fileWriter, pc.errFileWriter = plots.CreatePointsWriter(filePath)
+	filePath := path.Join(checkpointDir, plot.TrainingPlotFileName)
+	pc.fileWriter, pc.errFileWriter = plot.CreatePointsWriter(filePath)
 	pc.enablePointsWriting = true
 	return pc
 }
@@ -255,12 +255,12 @@ func (pc *PlotConfig) stopWriting() {
 	}
 }
 
-// PointFilter can change any [plots.Point] arbitrarily. If it returns false means the point should be dropped.
-type PointFilter func(p *plots.Point) bool
+// PointFilter can change any [plot.Point] arbitrarily. If it returns false means the point should be dropped.
+type PointFilter func(p *plot.Point) bool
 
 // LoadCheckpointData loads plotting data from a checkpoint path.
 // Notice this only works if the model was trained with plotting, with the metrics saved into the file
-// `training_plot_points.json` ([plots.TrainingPlotFileName]).
+// `training_plot_points.json` ([plot.TrainingPlotFileName]).
 // Notice that if `dataDirOrFile` is a file, it reads from that instead.
 //
 // The `filters` are an optional list of filters to apply (in order) to each of the points read: it allows points
@@ -275,11 +275,11 @@ func (pc *PlotConfig) LoadCheckpointData(dataDirOrFile string, filters ...PointF
 	if err != nil {
 		return errors.Wrapf(err, "plotly.LoadCheckpointData(%q) cannot stat the file", dataDirOrFile)
 	}
-	var points []plots.Point
+	var points []plot.Point
 	if fi.IsDir() {
-		points, err = plots.LoadPointsFromCheckpoint(dataDirOrFile)
+		points, err = plot.LoadPointsFromCheckpoint(dataDirOrFile)
 	} else {
-		points, err = plots.LoadPoints(dataDirOrFile)
+		points, err = plot.LoadPoints(dataDirOrFile)
 	}
 	if err != nil {
 		return errors.WithMessagef(err, "plotly.LoadCheckpointData(%q) failed to load points", dataDirOrFile)
@@ -310,7 +310,7 @@ nextPoint:
 //
 // Usually not called directly, instead use [LoadCheckpointData] or [Dynamic], which will attach to a
 // training loop and call this automatically.
-func (pc *PlotConfig) AddPoint(pt plots.Point) {
+func (pc *PlotConfig) AddPoint(pt plot.Point) {
 	if math.IsNaN(pt.Value) || math.IsInf(pt.Value, 0) || math.IsNaN(pt.Step) || math.IsInf(pt.Step, 0) {
 		// Ignore invalid points.
 		return

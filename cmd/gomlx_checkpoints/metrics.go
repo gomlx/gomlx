@@ -16,15 +16,15 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/internal/must"
 	"github.com/gomlx/gomlx/support/sets"
-	"github.com/gomlx/gomlx/ui/plots"
+	"github.com/gomlx/gomlx/ui/plot"
 	"k8s.io/klog/v2"
 )
 
 var (
 	flagMetrics = flag.Bool("metrics", false,
-		fmt.Sprintf("Lists the metrics collected for plotting in file %q", plots.TrainingPlotFileName))
+		fmt.Sprintf("Lists the metrics collected for plotting in file %q", plot.TrainingPlotFileName))
 	flagMetricsLabels = flag.Bool("metrics_labels", false,
-		fmt.Sprintf("Lists the metrics labels (short names) with their full description from file %q", plots.TrainingPlotFileName))
+		fmt.Sprintf("Lists the metrics labels (short names) with their full description from file %q", plot.TrainingPlotFileName))
 	flagMetricsNames = flag.String("metrics_names", "", "Regular expression that if matches the name or short name, the metric is included.")
 	flagMetricsTypes = flag.String("metrics_types", "", "Comma-separate list of metric types to include in metrics Reports. ")
 )
@@ -34,17 +34,17 @@ func metrics(checkpointPaths, modelNames []string) {
 	_ = numCheckpoints
 
 	// Load metrics points from the checkpointPath.
-	points := make([][]plots.Point, numCheckpoints)
+	points := make([][]plot.Point, numCheckpoints)
 	foundSomething := false
 	for ii, checkpointPath := range checkpointPaths {
-		trainingMetricsPath := path.Join(checkpointPath, plots.TrainingPlotFileName)
-		points[ii] = must.M1(plots.LoadPoints(trainingMetricsPath))
+		trainingMetricsPath := path.Join(checkpointPath, plot.TrainingPlotFileName)
+		points[ii] = must.M1(plot.LoadPoints(trainingMetricsPath))
 		if len(points) > 0 {
 			foundSomething = true
 		}
 	}
 	if !foundSomething {
-		klog.Errorf("No metrics found in file %q in paths %v", plots.TrainingPlotFileName, checkpointPaths)
+		klog.Errorf("No metrics found in file %q in paths %v", plot.TrainingPlotFileName, checkpointPaths)
 	}
 
 	var metricsNamesMatcher *regexp.Regexp
@@ -126,7 +126,7 @@ func ReportMetricsLabels(shortToName map[string]string) {
 }
 
 // ReportMetrics of the model.
-func ReportMetrics(names []string, metricsOrder map[ModelNameAndMetric]int, points [][]plots.Point) {
+func ReportMetrics(names []string, metricsOrder map[ModelNameAndMetric]int, points [][]plot.Point) {
 	numCheckpoints := len(names)
 	fmt.Println(titleStyle.Render("Metrics Table"))
 	table := newPlainTable(true, lipgloss.Right)

@@ -27,7 +27,7 @@ import (
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
-	stdplots "github.com/gomlx/gomlx/ui/plots"
+	stdplots "github.com/gomlx/gomlx/ui/plot"
 	"k8s.io/klog/v2"
 )
 

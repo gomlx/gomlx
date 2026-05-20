@@ -1,7 +1,7 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 // Package plots define common types and utilities to the different plot libraries.
-package plots
+package plot
 
 import (
 	"encoding/json"
