@@ -208,8 +208,8 @@ func CallOnceN[F ExecGraphFn](backend compute.Backend, graphFn F, args ...any) (
 // ExecOnceN is a deprecated alias to CallOnceN.
 //
 // Deprecated: please use CallOnceN instead.
-func ExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F, args ...any) ([]*tensors.Tensor, error) {
-	return CallOnceN(backend, store, graphFn, args...)
+func ExecOnceN[F ExecGraphFn](backend compute.Backend, graphFn F, args ...any) ([]*tensors.Tensor, error) {
+	return CallOnceN(backend, graphFn, args...)
 }
 
 // MustExecOnce builds the graph and calls it with the given arguments and returns the one output.
