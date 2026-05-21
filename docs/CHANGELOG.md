@@ -7,10 +7,14 @@ It hasn't reached yet a 1.0 release yet (it is close), so instead we use every m
 # (In progress) v0.28.0: Large API and Packages Cleanup and Reorganization:
 
 To faciliate conversion to this updated API, we added the CLI tool `cmd/convert_v0.28`.
-It won't fully fix the code, but will change the import package paths and names.
+It won't fully fix the code (mostly because of the `context.Context` to `model.Store`/`model.Scope` redesign),
+but it will change the import package paths and names.
+
+Remember to save your code before running the conversion -- allow yourself to revert to files where the fix
+make things worse.
 
 ```
-go run <path_to_gomlx>/cmd/convert_v0.28 [-dir <directory>]
+go run <path_to_gomlx>/cmd/convert_v0.28/main.go [-dir <directory>]
 ```
 
 ## API Changes: `backends` and related packages moved to `github.com/gomlx/compute`
