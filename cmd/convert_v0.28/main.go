@@ -1,3 +1,13 @@
+// convert_v0.28 faciliates the conversion of pre-v0.28 GoMLX code to the updated APIs
+// in v0.28.0 release.
+//
+// It won't fully fix the code (mostly because of the `context.Context` to `model.Store`/`model.Scope` redesign),
+// but it will change the import package paths and names.
+//
+// Remember to save your code before running the conversion -- allow yourself to revert to files where the fix
+// make things worse.
+//
+//	go run <path_to_gomlx>/cmd/convert_v0.28/main.go -dir <directory_to_convert>
 package main
 
 import (
@@ -5,6 +15,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -16,7 +27,23 @@ var (
 )
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "convert_v0.28 faciliates the conversion of pre-v0.28 GoMLX code to the updated APIs\n"+
+			"in v0.28.0 release.\n\n"+
+			"It won't fully fix the code (mostly because of the `context.Context` to `model.Store`/`model.Scope` redesign),\n"+
+			"but it will change the import package paths and names.\n\n"+
+			"Remember to save your code before running the conversion -- allow yourself to revert to files where the fix\n"+
+			"make things worse.\n\n"+
+			"\tgo run <path_to_gomlx>/cmd/convert_v0.28/main.go [-dir <directory>]\n\n"+
+			"Flags:\n")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
+
+	if len(os.Args) == 1 {
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	rules := importrefactor.RewriteRules{
 		ImportPathMap: map[string]string{
