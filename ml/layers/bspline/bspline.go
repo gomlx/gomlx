@@ -12,7 +12,7 @@
 // function.
 //
 // [1] https://arxiv.org/pdf/2404.19756
-package bsplines
+package bspline
 
 import (
 	"github.com/gomlx/bsplines"
