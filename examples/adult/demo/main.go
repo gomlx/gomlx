@@ -295,6 +295,7 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 			Dynamic().
 			WithDatasets(trainEvalDS, testEvalDS).
 			ScheduleExponential(loop, 200, 1.2).
+			WithBatchNormalizationAveragesUpdate(trainEvalDS)
 	}
 
 	// Train up to "train_steps".
