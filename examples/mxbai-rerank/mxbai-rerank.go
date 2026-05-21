@@ -148,7 +148,7 @@ func rerank(backend compute.Backend, scope *model.Scope, onnxModel onnx.Model, t
 	// Run inference. MustExecOnce converts [][]int slices to tensors automatically.
 	var output *tensors.Tensor
 	if hasTokenTypeIDs {
-		output = model.MustExecOnce(
+		output = model.MustCallOnce(
 			backend, scope.Store(),
 			func(scope *model.Scope, inputIDs, attentionMask, tokenTypeIDs *Node) *Node {
 				g := inputIDs.Graph()
@@ -162,7 +162,7 @@ func rerank(backend compute.Backend, scope *model.Scope, onnxModel onnx.Model, t
 			pairs.inputIDs, pairs.attentionMask, pairs.tokenTypeIDs,
 		)
 	} else {
-		output = model.MustExecOnce(
+		output = model.MustCallOnce(
 			backend, scope.Store(),
 			func(scope *model.Scope, inputIDs, attentionMask *Node) *Node {
 				g := inputIDs.Graph()

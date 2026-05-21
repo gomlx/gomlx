@@ -105,7 +105,7 @@ func main() {
 	}
 
 	// Run inference with argmax and softmax computed in the graph
-	outputs := model.MustExecOnceN(
+	outputs := model.MustCallOnceN(
 		backend, scope.Store(),
 		func(scope *model.Scope, inputs []*Node) []*Node {
 			g := inputs[0].Graph()

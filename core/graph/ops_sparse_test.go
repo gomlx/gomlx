@@ -377,7 +377,7 @@ func TestScatterSumGradient(t *testing.T) {
 	operand := []float32{0, 0, 0, 0, -1}
 	updates := []float32{1, 3, 5, 7, 11, 13}
 	indices := []int32{0, 0, 0, 1, 1, 3}
-	outputs, err := ExecOnceN(backend, func(inputs []*Node) []*Node {
+	outputs, err := CallOnceN(backend, func(inputs []*Node) []*Node {
 		operand, indices, updates := inputs[0], inputs[1], inputs[2]
 		indices = ExpandAxes(indices, -1)
 		g := operand.Graph()

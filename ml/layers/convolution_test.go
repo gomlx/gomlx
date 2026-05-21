@@ -21,7 +21,7 @@ func TestConvolution(t *testing.T) {
 		defer scope.Finalize()
 
 		t.Run("2D-PadSame", func(t *testing.T) {
-			gotT := model.MustExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
+			gotT := model.MustCallOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 				x := Ones(g, shapes.Make(dtypes.F32, 5, 4, 4, 3))
 				scope = scope.In("%s", model.BasePath(t.Name()))
 				conv := Convolution(scope, x).
@@ -35,7 +35,7 @@ func TestConvolution(t *testing.T) {
 		})
 
 		t.Run("3D-Strides", func(t *testing.T) {
-			gotT := model.MustExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
+			gotT := model.MustCallOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 				x := Ones(g, shapes.Make(dtypes.F32, 5, 3, 8, 8, 8))
 				scope = scope.In("%s", model.BasePath(t.Name()))
 				conv := Convolution(scope, x).

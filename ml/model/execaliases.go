@@ -72,7 +72,7 @@ func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*dtensor.Tensor, err
 	return e.exec.AggregateShards(shards)
 }
 
-// MustExec parses the arguments into tensors (if they are not yet) and executes
+// MustCall parses the arguments into tensors (if they are not yet) and executes
 // the graph corresponding to the shapes of the arguments.
 //
 // Notice it uses the Store object used during creation -- if needed, you can change it with SetStore.
@@ -83,18 +83,18 @@ func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*dtensor.Tensor, err
 // It returns the outputs in a slice. See MustExec1, MustExec2, ..., MustExec4 as aliases when you expect a fixed number of outputs.
 //
 // It panics with an informative error if something goes wrong.
-func (e *Exec) MustExec(args ...any) []*tensors.Tensor {
-	outputs, _ := e.MustExecWithGraph(args...)
+func (e *Exec) MustCall(args ...any) []*tensors.Tensor {
+	outputs, _ := e.MustCallWithGraph(args...)
 	return outputs
 }
 
-// MustExecWithGraph is similar to MustExec, but it also returns the computation graph used in the call.
+// MustCallWithGraph is similar to MustExec, but it also returns the computation graph used in the call.
 //
 // Since Exec creates different computation graphs when the inputs shapes change,
 // this can help disambiguate in case the user needs to use the Graph for something else.
 //
 // It panics with an informative error if something goes wrong.
-func (e *Exec) MustExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph) {
+func (e *Exec) MustCallWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph) {
 	var err error
 	outputs, g, err = e.ExecWithGraph(args...)
 	if err != nil {
@@ -103,12 +103,12 @@ func (e *Exec) MustExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Gra
 	return
 }
 
-// ExecOnceN builds the graph and executes it with the given arguments and returns various output.
+// CallOnceN builds the graph and executes it with the given arguments and returns various output.
 //
 // It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize.
 //
 // See ExecOnce for a more convenient version if you have only one output.
-func ExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F, args ...any) ([]*tensors.Tensor, error) {
+func CallOnceN[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F, args ...any) ([]*tensors.Tensor, error) {
 	e, err := NewExec(backend, store, graphFn)
 	if err != nil {
 		return nil, err
@@ -117,28 +117,28 @@ func ExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F, 
 	return e.Exec(args...)
 }
 
-// MustExecOnceN builds the graph and executes it with the given arguments and returns various output.
+// MustCallOnceN builds the graph and executes it with the given arguments and returns various output.
 //
 // It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize.
 //
 // See MustExecOnce for a more convenient version if you have only one output.
 //
 // It panics on error. See ExecOnceN for a version that returns an error.
-func MustExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F, args ...any) []*tensors.Tensor {
-	outputs, err := ExecOnceN(backend, store, graphFn, args...)
+func MustCallOnceN[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F, args ...any) []*tensors.Tensor {
+	outputs, err := CallOnceN(backend, store, graphFn, args...)
 	if err != nil {
 		panic(err)
 	}
 	return outputs
 }
 
-// ExecOnce builds the graph and executes it with the given arguments and returns the one output.
+// CallOnce builds the graph and executes it with the given arguments and returns the one output.
 //
 // It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize for functions that return only one output.
 //
 // See ExecOnceN if you have multiple (or zero) outputs.
-func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, graphFn F, args ...any) (*tensors.Tensor, error) {
-	outputs, err := ExecOnceN(backend, store, graphFn, args...)
+func CallOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, graphFn F, args ...any) (*tensors.Tensor, error) {
+	outputs, err := CallOnceN(backend, store, graphFn, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -148,27 +148,27 @@ func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, gra
 	return outputs[0], nil
 }
 
-// MustExecOnce builds the graph and executes it with the given arguments and returns the one output.
+// MustCallOnce builds the graph and executes it with the given arguments and returns the one output.
 //
 // It's short for a call to NewExec, Exec.MustExec, and Exec.Finalize for functions that return only one output.
 //
 // See MustExecOnceN if you have multiple outputs.
 //
 // It panics on error. See ExecOnce for a version that returns an error.
-func MustExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, graphFn F, args ...any) *tensors.Tensor {
-	output, err := ExecOnce(backend, store, graphFn, args...)
+func MustCallOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, graphFn F, args ...any) *tensors.Tensor {
+	output, err := CallOnce(backend, store, graphFn, args...)
 	if err != nil {
 		panic(err)
 	}
 	return output
 }
 
-// Exec1 executes the graph with the given arguments and returns one output.
+// Call1 executes the graph with the given arguments and returns one output.
 //
 // It returns an error if the graph doesn't return exactly one output.
 //
 // See Exec for more details.
-func (e *Exec) Exec1(args ...any) (*tensors.Tensor, error) {
+func (e *Exec) Call1(args ...any) (*tensors.Tensor, error) {
 	results, _, err := e.ExecWithGraph(args...)
 	if err != nil {
 		return nil, err
@@ -179,12 +179,12 @@ func (e *Exec) Exec1(args ...any) (*tensors.Tensor, error) {
 	return results[0], nil
 }
 
-// Exec2 executes the graph with the given arguments and returns two outputs.
+// Call2 executes the graph with the given arguments and returns two outputs.
 //
 // It returns an error if the graph doesn't return exactly two outputs.
 //
 // See Exec for more details.
-func (e *Exec) Exec2(args ...any) (*tensors.Tensor, *tensors.Tensor, error) {
+func (e *Exec) Call2(args ...any) (*tensors.Tensor, *tensors.Tensor, error) {
 	results, _, err := e.ExecWithGraph(args...)
 	if err != nil {
 		return nil, nil, err
@@ -195,12 +195,12 @@ func (e *Exec) Exec2(args ...any) (*tensors.Tensor, *tensors.Tensor, error) {
 	return results[0], results[1], nil
 }
 
-// Exec3 executes the graph with the given arguments and returns three outputs.
+// Call3 executes the graph with the given arguments and returns three outputs.
 //
 // It returns an error if the graph doesn't return exactly three outputs.
 //
 // See Exec for more details.
-func (e *Exec) Exec3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, error) {
+func (e *Exec) Call3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, error) {
 	results, _, err := e.ExecWithGraph(args...)
 	if err != nil {
 		return nil, nil, nil, err
@@ -211,12 +211,12 @@ func (e *Exec) Exec3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Te
 	return results[0], results[1], results[2], nil
 }
 
-// Exec4 executes the graph with the given arguments and returns four outputs.
+// Call4 executes the graph with the given arguments and returns four outputs.
 //
 // It returns an error if the graph doesn't return exactly four outputs.
 //
 // See Exec for more details.
-func (e *Exec) Exec4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, *tensors.Tensor, error) {
+func (e *Exec) Call4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, *tensors.Tensor, error) {
 	results, _, err := e.ExecWithGraph(args...)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -227,54 +227,152 @@ func (e *Exec) Exec4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Te
 	return results[0], results[1], results[2], results[3], nil
 }
 
-// MustExec1 executes the graph with the given arguments and returns one output.
+// MustCall1 executes the graph with the given arguments and returns one output.
 //
 // It panics on errors (with full stack-traces) or if the graph doesn't return exactly one output.
 //
 // See MustExec for more details.
-func (e *Exec) MustExec1(args ...any) *tensors.Tensor {
-	results := e.MustExec(args...)
+func (e *Exec) MustCall1(args ...any) *tensors.Tensor {
+	results := e.MustCall(args...)
 	if len(results) != 1 {
 		exceptions.Panicf("graph %q returned %d results, as opposed to exactly one as expected by MustExec1", e.Name(), len(results))
 	}
 	return results[0]
 }
 
-// MustExec2 executes the graph with the given arguments and returns two outputs.
+// MustCall2 executes the graph with the given arguments and returns two outputs.
 //
 // It panics on errors (with full stack-traces) or if the graph doesn't return exactly two outputs.
 //
 // See MustExec for more details.
-func (e *Exec) MustExec2(args ...any) (*tensors.Tensor, *tensors.Tensor) {
-	results := e.MustExec(args...)
+func (e *Exec) MustCall2(args ...any) (*tensors.Tensor, *tensors.Tensor) {
+	results := e.MustCall(args...)
 	if len(results) != 2 {
 		exceptions.Panicf("graph %q returned %d results, as opposed to exactly two as expected by MustExec2", e.Name(), len(results))
 	}
 	return results[0], results[1]
 }
 
-// MustExec3 executes the graph with the given arguments and returns three outputs.
+// MustCall3 executes the graph with the given arguments and returns three outputs.
 //
 // It panics on errors (with full stack-traces) or if the graph doesn't return exactly three outputs.
 //
 // See MustExec for more details.
-func (e *Exec) MustExec3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
-	results := e.MustExec(args...)
+func (e *Exec) MustCall3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
+	results := e.MustCall(args...)
 	if len(results) != 3 {
 		exceptions.Panicf("graph %q returned %d results, as opposed to exactly three as expected by MustExec3", e.Name(), len(results))
 	}
 	return results[0], results[1], results[2]
 }
 
-// MustExec4 executes the graph with the given arguments and returns four outputs.
+// MustCall4 executes the graph with the given arguments and returns four outputs.
 //
 // It panics on errors (with full stack-traces) or if the graph doesn't return exactly four outputs.
 //
 // See MustExec for more details.
-func (e *Exec) MustExec4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
-	results := e.MustExec(args...)
+func (e *Exec) MustCall4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
+	results := e.MustCall(args...)
 	if len(results) != 4 {
 		exceptions.Panicf("graph %q returned %d results, as opposed to exactly four as expected by MustExec4", e.Name(), len(results))
 	}
 	return results[0], results[1], results[2], results[3]
+}
+
+// MustExec is a deprecated alias to MustCall.
+//
+// Deprecated: please, use MustCall instead.
+func (e *Exec) MustExec(args ...any) []*tensors.Tensor {
+	return e.MustCall(args...)
+}
+
+// MustExecWithGraph is a deprecated alias to MustCallWithGraph.
+//
+// Deprecated: please, use MustCallWithGraph instead.
+func (e *Exec) MustExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph) {
+	return e.MustCallWithGraph(args...)
+}
+
+// ExecOnceN is a deprecated alias to CallOnceN.
+//
+// Deprecated: please, use CallOnceN instead.
+func ExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F, args ...any) ([]*tensors.Tensor, error) {
+	return CallOnceN(backend, store, graphFn, args...)
+}
+
+// MustExecOnceN is a deprecated alias to MustCallOnceN.
+//
+// Deprecated: please, use MustCallOnceN instead.
+func MustExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F, args ...any) []*tensors.Tensor {
+	return MustCallOnceN(backend, store, graphFn, args...)
+}
+
+// ExecOnce is a deprecated alias to CallOnce.
+//
+// Deprecated: please, use CallOnce instead.
+func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, graphFn F, args ...any) (*tensors.Tensor, error) {
+	return CallOnce(backend, store, graphFn, args...)
+}
+
+// MustExecOnce is a deprecated alias to MustCallOnce.
+//
+// Deprecated: please, use MustCallOnce instead.
+func MustExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store, graphFn F, args ...any) *tensors.Tensor {
+	return MustCallOnce(backend, store, graphFn, args...)
+}
+
+// Exec1 is a deprecated alias to Call1.
+//
+// Deprecated: please, use Call1 instead.
+func (e *Exec) Exec1(args ...any) (*tensors.Tensor, error) {
+	return e.Call1(args...)
+}
+
+// Exec2 is a deprecated alias to Call2.
+//
+// Deprecated: please, use Call2 instead.
+func (e *Exec) Exec2(args ...any) (*tensors.Tensor, *tensors.Tensor, error) {
+	return e.Call2(args...)
+}
+
+// Exec3 is a deprecated alias to Call3.
+//
+// Deprecated: please, use Call3 instead.
+func (e *Exec) Exec3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, error) {
+	return e.Call3(args...)
+}
+
+// Exec4 is a deprecated alias to Call4.
+//
+// Deprecated: please, use Call4 instead.
+func (e *Exec) Exec4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, *tensors.Tensor, error) {
+	return e.Call4(args...)
+}
+
+// MustExec1 is a deprecated alias to MustCall1.
+//
+// Deprecated: please, use MustCall1 instead.
+func (e *Exec) MustExec1(args ...any) *tensors.Tensor {
+	return e.MustCall1(args...)
+}
+
+// MustExec2 is a deprecated alias to MustCall2.
+//
+// Deprecated: please, use MustCall2 instead.
+func (e *Exec) MustExec2(args ...any) (*tensors.Tensor, *tensors.Tensor) {
+	return e.MustCall2(args...)
+}
+
+// MustExec3 is a deprecated alias to MustCall3.
+//
+// Deprecated: please, use MustCall3 instead.
+func (e *Exec) MustExec3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
+	return e.MustCall3(args...)
+}
+
+// MustExec4 is a deprecated alias to MustCall4.
+//
+// Deprecated: please, use MustCall4 instead.
+func (e *Exec) MustExec4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
+	return e.MustCall4(args...)
 }

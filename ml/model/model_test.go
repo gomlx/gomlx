@@ -227,7 +227,7 @@ func TestStore_SetLoader(t *testing.T) {
 		v1 := s.VariableWithValue("y", int32(1))
 		return v0.NodeValue(g), v1.NodeValue(g)
 	})
-	results := e.MustExec()
+	results := e.MustCall()
 	gotV0 := tensors.ToScalar[float32](results[0])
 	gotV1 := tensors.ToScalar[int32](results[1])
 	assert.Equal(t, float32(2), gotV0)
@@ -275,7 +275,7 @@ func TestGraphStore(t *testing.T) {
 		}
 		return graph.Const(g, float32(1.0))
 	})
-	_ = e.MustExec()
+	_ = e.MustCall()
 
 	// Verify that the inner store retrieved via GetStore(g) is the correct store.
 	assert.Equal(t, store, innerStore)

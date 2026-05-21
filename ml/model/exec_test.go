@@ -44,7 +44,7 @@ func TestExec(t *testing.T) {
 	// Checks that Scope.RNGState is auto-initialized correctly.
 	t.Run("Scope.RNGState initialization", func(t *testing.T) {
 		scope := model.NewStore()
-		result, err := model.ExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
+		result, err := model.CallOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 			return Add(scope.RandomUniform(g, shapes.Make(dtypes.Float32, 10)), Const(g, float32(0.0001)))
 		})
 		require.NoError(t, err)
@@ -62,7 +62,7 @@ func TestExec(t *testing.T) {
 	// Checks that Scope.RNGState is auto-initialized correctly.
 	t.Run("variable initialization", func(t *testing.T) {
 		scope := model.NewStore()
-		result, err := model.ExecOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
+		result, err := model.CallOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
 			v := scope.WithInitializer(initializer.RandomUniformFn(scope, 0.0001, 1.0)).
 				VariableWithShape("v", shapes.Make(dtypes.Float32, 10))
 			return v.NodeValue(g)
@@ -88,7 +88,7 @@ func TestExec(t *testing.T) {
 
 		// First graph build, variable should be initialized.
 		x := [][]float64{{1, 1, 1}}
-		got := oneLayer.MustExec(x)[0].Value().([][]float64)[0][0]
+		got := oneLayer.MustCall(x)[0].Value().([][]float64)[0][0]
 		assert.NotEqual(
 			t,
 			0.0,
@@ -98,7 +98,7 @@ func TestExec(t *testing.T) {
 		)
 
 		// The second call should reuse the graph and yield the same result.
-		got2 := oneLayer.MustExec(x)[0].Value().([][]float64)[0][0]
+		got2 := oneLayer.MustCall(x)[0].Value().([][]float64)[0][0]
 		assert.InDeltaf(
 			t,
 			got,
@@ -112,7 +112,7 @@ func TestExec(t *testing.T) {
 
 		// Different batch size: it should generate a new graph but yield the same result.
 		x = [][]float64{{1, 1, 1}, {2, 2, 2}}
-		got3 := oneLayer.MustExec(x)[0].Value().([][]float64)[0][0]
+		got3 := oneLayer.MustCall(x)[0].Value().([][]float64)[0][0]
 		assert.InDeltaf(t, got, got3, 1e-3,
 			"Exec to oneLayer(%v) on a larger batch returned %f, but original call returned %f",
 			x, got, got3)
@@ -120,7 +120,7 @@ func TestExec(t *testing.T) {
 		// If X changes the inner dimension, then the layers.DenseWithBias would require different shaped variables, which should
 		// fail to build.
 		x = [][]float64{{1, 1, 1, 1}}
-		require.Panics(t, func() { _ = oneLayer.MustExec(x) },
+		require.Panics(t, func() { _ = oneLayer.MustCall(x) },
 			"oneLayer(%v) leads to a graph with differently shaped variables should have failed", x)
 	})
 
@@ -132,7 +132,7 @@ func TestExec(t *testing.T) {
 
 		// First execution builds graph and should initialize variables (weights) randomly.
 		x := [][]float64{{1, 1, 1}}
-		got := oneLayer.MustExec(x)[0].Value().([][]float64)
+		got := oneLayer.MustCall(x)[0].Value().([][]float64)
 		fmt.Printf("\toneLayer(%v)=%v\n", x, got)
 		if got[0][0] == 0 {
 			t.Fatalf("Failed evaluating oneLayer(%v) returned 0, but weights should have been randomly initialized", x)
@@ -141,7 +141,7 @@ func TestExec(t *testing.T) {
 		// Second execution: two tensors that if concatenated will be the same as the previous run. Since the scope
 		// and hence the variables are the same, it should evaluate to exact same value.
 		oneElementOfX := [][]float64{{1}}
-		got2 := oneLayer.MustExec(oneElementOfX, oneElementOfX, oneElementOfX)[0].Value().([][]float64)
+		got2 := oneLayer.MustCall(oneElementOfX, oneElementOfX, oneElementOfX)[0].Value().([][]float64)
 		fmt.Printf("\toneLayer(%v, %v, %v)=%v\n", oneElementOfX, oneElementOfX, oneElementOfX, got)
 		require.Truef(t, math.Abs(got[0][0]-got2[0][0]) < 1.0e-3,
 			"oneLayer(%v) should have been the same as oneLayer(%v, %v, %v), but got %v and %v",
@@ -158,13 +158,13 @@ func TestExec(t *testing.T) {
 			counterVar.SetNodeValue(counterNode)
 			return counterNode
 		})
-		results := counter.MustExec()
+		results := counter.MustCall()
 		gotTensor := results[0]
 		got := gotTensor.Value().(int64)
 		if got != 1 {
 			t.Fatalf("Wanted first counter value to be 1, got %d instead", got)
 		}
-		results = counter.MustExec()
+		results = counter.MustCall()
 		gotTensor = results[0]
 		got = gotTensor.Value().(int64)
 		if got != 2 {

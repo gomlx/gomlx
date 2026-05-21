@@ -88,7 +88,7 @@ func (mapDS *mapGraphFnDataset) Yield() (spec any, inputs []*tensors.Tensor, lab
 
 	inputsAndLabels := append(inputs, labels...)
 	err = exceptions.TryCatch[error](func() {
-		inputsAndLabels = mapDS.mapGraphFnExec.MustExec(
+		inputsAndLabels = mapDS.mapGraphFnExec.MustCall(
 			// We have to map inputsAndLabels to an `[]any` slice.
 			xslices.Map(inputsAndLabels, func(e *tensors.Tensor) any { return e })...)
 	})

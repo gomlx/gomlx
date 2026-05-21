@@ -85,6 +85,6 @@ func TestKidMetric(t *testing.T) {
 	kidExec := model.MustNewExec(manager, scope, func(scope *model.Scope, imagesPair []*Node) *Node {
 		return kidBuilder.BuildGraph(scope, []*Node{imagesPair[0]}, []*Node{imagesPair[1]})
 	})
-	kid := kidExec.MustExec(imagesBatch, noisyBatch)[0].Value().(float32)
+	kid := kidExec.MustCall(imagesBatch, noisyBatch)[0].Value().(float32)
 	require.InDelta(t, -1.5879, kid, 0.005, "KID value different from expected for batch.")
 }

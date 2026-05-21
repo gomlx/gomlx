@@ -42,7 +42,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		require.NoError(t, err)
 
 		for ii := range 2 * periodInSteps {
-			lrT, err := cosineExec.Exec1()
+			lrT, err := cosineExec.Call1()
 			require.NoErrorf(t, err, "failed for step %d", ii)
 
 			// Checks the correct step number is set.
@@ -85,7 +85,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 		})
 		require.NoError(t, err)
 		for ii := range 2*periodInSteps + warmUpSteps {
-			lrT, err := cosineExec.Exec1()
+			lrT, err := cosineExec.Call1()
 			require.NoErrorf(t, err, "failed for step %d", ii)
 
 			// Check learning rate is following cosine formulation.
@@ -125,7 +125,7 @@ func TestCosineAnnealingSchedule(t *testing.T) {
 
 		require.NoError(t, err)
 		for ii := range numSteps {
-			lrT, err := cosineExec.Exec1()
+			lrT, err := cosineExec.Call1()
 			require.NoErrorf(t, err, "failed for step %d", ii)
 
 			// Check learning rate is following cosine formulation.

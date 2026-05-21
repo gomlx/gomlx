@@ -40,7 +40,7 @@ func TestBinaryAccuracyGraph(t *testing.T) {
 	scope := model.NewStore()
 	accuracyExec := model.MustNewExec(manager, scope, takeFirstFn(BinaryAccuracyGraph))
 	labels, probs := []float32{0, 1, 0, 1, 0, 1}, []float32{0.1, 0.1, 0.5, 0.5, 0.8, 0.8}
-	results := accuracyExec.MustExec(labels, probs)
+	results := accuracyExec.MustCall(labels, probs)
 	got := results[0].Value().(float32)
 	if got != float32(2.0/6.0) {
 		t.Errorf("TestBinaryAccuracyGraph: wanted 2/6=0.333..., got %.4f", got)
@@ -57,7 +57,7 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 	// First batch:
 	labels, probs := []float32{0, 1, 0, 1, 0, 1}, []float32{0.1, 0.1, 0.5, 0.5, 0.8, 0.8}
-	results := accExec.MustExec(labels, probs)
+	results := accExec.MustCall(labels, probs)
 	meanAccT := results[0]
 	meanAcc := meanAccT.Value().(float32)
 	assert.Equal(t, float32(2.0/6.0), meanAcc, "MeanBinaryAccuracy")
@@ -80,7 +80,7 @@ func TestNewMeanBinaryAccuracy(t *testing.T) {
 
 	// Second batch:
 	labels, probs = []float32{0, 0, 0, 1, 1, 1}, []float32{0.1, 0.4, 0.7, 0.8, 0.9, 0.09}
-	results = accExec.MustExec(labels, probs)
+	results = accExec.MustCall(labels, probs)
 	meanAccT = results[0]
 	meanAcc = meanAccT.Value().(float32)
 	assert.Equal(t, float32(6.0/12.0), meanAcc, "MeanBinaryAccuracy after batch #2")
@@ -98,7 +98,7 @@ func TestBinaryLogitsAccuracyGraph(t *testing.T) {
 	scope := model.NewStore()
 	accuracyExec := model.MustNewExec(manager, scope, takeFirstFn(BinaryLogitsAccuracyGraph))
 	labels, logits := []float32{0, 1, 0, 1, 0, 1}, []float32{-0.1, -0.1, 0, 0, 0.2, 10.0}
-	results := accuracyExec.MustExec(labels, logits)
+	results := accuracyExec.MustCall(labels, logits)
 	got, _ := results[0].Value().(float32)
 	assert.Equal(t, float32(2.0/6.0), got, "TestBinaryAccuracyGraph")
 }
@@ -113,7 +113,7 @@ func TestSparseCategoricalAccuracyGraph(t *testing.T) {
 			{-2, -1, -3},  // Correct, even if negative.
 			{100, 90, 80}, // Wrong even if positive.
 		}
-		results := accuracyExec.MustExec(labels, logits)
+		results := accuracyExec.MustCall(labels, logits)
 		got, _ := results[0].Value().(float32)
 		assert.Equal(t, float32(1.0/3.0), got, "TestSparseCategoricalAccuracyGraph")
 	}
@@ -132,7 +132,7 @@ func TestSparseCategoricalAccuracyGraph(t *testing.T) {
 			{-100, 20, 80}, // Disabled by mask.
 			{100, 90, 80},  // Wrong even if positive.
 		}
-		results := accuracyExec.MustExec(labels, mask, weights, logits)
+		results := accuracyExec.MustCall(labels, mask, weights, logits)
 		got, _ := results[0].Value().(float32)
 		assert.Equal(t, float32((2.0*1.0)/(1.0+2.0+0.5)), got, "TestSparseCategoricalAccuracyGraph[with mask/weights]")
 	}

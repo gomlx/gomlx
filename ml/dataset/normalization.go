@@ -83,7 +83,7 @@ func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, i
 				inputsIndex, batch.Shape())
 			return
 		}
-		err = exceptions.TryCatch[error](func() { updateValuesWithInput.MustExec(batch) })
+		err = exceptions.TryCatch[error](func() { updateValuesWithInput.MustCall(batch) })
 		if err != nil {
 			err = errors.WithMessagef(err, "while processing batch #%d of the dataset", batchNum)
 			return
@@ -110,7 +110,7 @@ func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, i
 				Square(mean))
 			stddev := Sqrt(variance)
 			return []*Node{mean, stddev}
-		}).MustExec()
+		}).MustCall()
 	})
 	if err != nil {
 		err = errors.WithMessagef(err, "while calculating the final mean/stddev from accumulated batch statistics")

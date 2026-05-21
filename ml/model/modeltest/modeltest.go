@@ -37,7 +37,7 @@ func RunTestGraphFn(t *testing.T, testName string, graphFn TestScopeGraphFn, wan
 	backend := testutil.BuildTestBackend()
 	exec := model.MustNewExec(backend, store, wrapperFn)
 	var inputsAndOutputs []*tensors.Tensor
-	require.NotPanicsf(t, func() { inputsAndOutputs = exec.MustExec() },
+	require.NotPanicsf(t, func() { inputsAndOutputs = exec.MustCall() },
 		"%s: failed to run graph", testName)
 	inputs := inputsAndOutputs[:numInputs]
 	outputs := inputsAndOutputs[numInputs:]

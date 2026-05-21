@@ -63,7 +63,7 @@ func TestModel(t *testing.T) {
 	}
 	fmt.Printf("One sample (batch) size is %s bytes\n", humanize.Bytes(totalSizeBytes))
 	require.NoError(t, err)
-	outputs := testGraphExec.MustExec(inputs)
+	outputs := testGraphExec.MustCall(inputs)
 	for ii, output := range outputs {
 		fmt.Printf("output #%d=%s\n", ii, output.Shape())
 	}

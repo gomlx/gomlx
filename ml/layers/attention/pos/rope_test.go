@@ -36,7 +36,7 @@ func TestRoPE(t *testing.T) {
 		}
 
 		startPos := []int32{0}
-		output := exec.MustExec(input, startPos)[0]
+		output := exec.MustCall(input, startPos)[0]
 		assert.Equal(t, dtypes.Float32, output.DType())
 		assert.Equal(t, []int{4, 8}, output.Shape().Dimensions)
 	})
@@ -56,7 +56,7 @@ func TestRoPE(t *testing.T) {
 		input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
 		startPos := []int32{5}
 
-		output := exec.MustExec(input, startPos)[0]
+		output := exec.MustCall(input, startPos)[0]
 		assert.Equal(t, []int{1, 8}, output.Shape().Dimensions)
 	})
 
@@ -78,7 +78,7 @@ func TestRoPE(t *testing.T) {
 		}
 		startPos := []int32{0}
 
-		output := exec.MustExec(input, startPos)[0]
+		output := exec.MustCall(input, startPos)[0]
 		assert.Equal(t, []int{2, 8}, output.Shape().Dimensions)
 	})
 
@@ -100,7 +100,7 @@ func TestRoPE(t *testing.T) {
 		}
 		startPos := []int32{0}
 
-		output := exec.MustExec(input, startPos)[0]
+		output := exec.MustCall(input, startPos)[0]
 		sum := output.Value().(float32)
 		assert.Greater(t, sum, float32(0.0))
 	})
@@ -124,7 +124,7 @@ func TestRoPE(t *testing.T) {
 				{0, 1, 0, 0, 0, 0, 0, 0},
 			}
 			startPos := []int32{0, 1} // Shape [2], cannot be squeezed to scalar
-			_ = exec.MustExec(input, startPos)[0]
+			_ = exec.MustCall(input, startPos)[0]
 		})
 	})
 }
@@ -151,7 +151,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		}
 		startPos := []int32{0}
 
-		output := exec.MustExec(input, startPos)[0]
+		output := exec.MustCall(input, startPos)[0]
 		// Shape should be preserved
 		assert.Equal(t, []int{2, 8}, output.Shape().Dimensions)
 	})
@@ -175,7 +175,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		}
 		startPos := []int32{0}
 
-		output := exec.MustExec(input, startPos)[0]
+		output := exec.MustCall(input, startPos)[0]
 		assert.Equal(t, dtypes.Float32, output.DType())
 		assert.Equal(t, []int{2, 8}, output.Shape().Dimensions)
 	})
@@ -196,7 +196,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
 		startPos := []int32{5}
 
-		output := exec.MustExec(input, startPos)[0]
+		output := exec.MustCall(input, startPos)[0]
 		assert.Equal(t, []int{1, 8}, output.Shape().Dimensions)
 	})
 
@@ -216,7 +216,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 
 			input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
 			startPos := []int32{0}
-			_ = exec.MustExec(input, startPos)[0]
+			_ = exec.MustCall(input, startPos)[0]
 		})
 	})
 
@@ -236,7 +236,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 
 			input := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8}}
 			startPos := []int32{0}
-			_ = exec.MustExec(input, startPos)[0]
+			_ = exec.MustCall(input, startPos)[0]
 		})
 	})
 
@@ -270,7 +270,7 @@ func TestRoPEWithCustomDim(t *testing.T) {
 		}
 		startPos := []int32{0}
 
-		output := exec.MustExec(input, startPos)[0]
+		output := exec.MustCall(input, startPos)[0]
 
 		// Output shape should be preserved: [2, 3, 8]
 		assert.Equal(t, []int{2, 3, 8}, output.Shape().Dimensions)
@@ -351,7 +351,7 @@ func TestApplyWithCosSin(t *testing.T) {
 		}
 		startPos := []int32{0}
 
-		outputs := exec.MustExec(input, startPos)
+		outputs := exec.MustCall(input, startPos)
 		ropeOut := outputs[0].Value().([][]float32)
 		cossinOut := outputs[1].Value().([][]float32)
 
@@ -390,7 +390,7 @@ func TestApplyWithCosSin(t *testing.T) {
 			{1, 0},
 		}
 
-		output := exec.MustExec(input, cosVals, sinVals)[0]
+		output := exec.MustCall(input, cosVals, sinVals)[0]
 		assert.Equal(t, []int{2, 4}, output.Shape().Dimensions)
 
 		// At position 0: cos=1, sin=0 -> no rotation, output = input
@@ -423,7 +423,7 @@ func TestApplyWithCosSin(t *testing.T) {
 		cosVals := [][]float32{{1, 1}}
 		sinVals := [][]float32{{0, 0}}
 
-		output := exec.MustExec(input, cosVals, sinVals)[0]
+		output := exec.MustCall(input, cosVals, sinVals)[0]
 		assert.Equal(t, []int{1, 6}, output.Shape().Dimensions)
 
 		// With cos=1, sin=0, rotation is identity. Pass-through dims should be unchanged.
@@ -472,7 +472,7 @@ func TestRoPEWithSeqAxis1(t *testing.T) {
 		}
 		startPos := []int32{0}
 
-		outputs := exec.MustExec(input, startPos)
+		outputs := exec.MustCall(input, startPos)
 		bshdOut := outputs[0].Value().([][][][]float32)
 		bhsdOut := outputs[1].Value().([][][][]float32)
 
@@ -508,7 +508,7 @@ func TestSequentialPositions(t *testing.T) {
 			return SequentialPositions(startPos.Graph(), startPos, 4)
 		})
 
-		output := exec.MustExec(int32(5))[0]
+		output := exec.MustCall(int32(5))[0]
 		assert.Equal(t, []int{4}, output.Shape().Dimensions)
 		assert.Equal(t, []int32{5, 6, 7, 8}, output.Value().([]int32))
 	})
@@ -522,7 +522,7 @@ func TestSequentialPositions(t *testing.T) {
 		})
 
 		// Each batch element at a different position (multi-client serving scenario)
-		output := exec.MustExec([]int32{5, 10, 100})[0]
+		output := exec.MustCall([]int32{5, 10, 100})[0]
 		assert.Equal(t, []int{3, 4}, output.Shape().Dimensions)
 
 		result := output.Value().([][]int32)
@@ -540,7 +540,7 @@ func TestSequentialPositions(t *testing.T) {
 		})
 
 		// Single element batch should be treated as scalar (backward compatible)
-		output := exec.MustExec([]int32{7})[0]
+		output := exec.MustCall([]int32{7})[0]
 		assert.Equal(t, []int{3}, output.Shape().Dimensions)
 		assert.Equal(t, []int32{7, 8, 9}, output.Value().([]int32))
 	})

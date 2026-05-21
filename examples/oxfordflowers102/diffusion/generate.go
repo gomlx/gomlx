@@ -437,7 +437,7 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 	for step := 0; step < g.numDiffusionSteps; step++ {
 		diffusionTime := 1.0 - float64(step)*stepSize
 		nextDiffusionTime := math.Max(diffusionTime-stepSize, 0)
-		parts := g.diffusionStepExec.MustExec(noisyImages, diffusionTime, nextDiffusionTime, g.flowerIds)
+		parts := g.diffusionStepExec.MustCall(noisyImages, diffusionTime, nextDiffusionTime, g.flowerIds)
 		if imagesBatch != nil {
 			imagesBatch.MustFinalizeAll() // Immediate release of (GPU) memory for intermediary results.
 		}
@@ -532,7 +532,7 @@ func (kg *KidGenerator) Eval() (metric *tensors.Tensor) {
 		if metric != nil {
 			metric.MustFinalizeAll()
 		}
-		metric = kg.evalExec.MustExec(generatedImages, datasetImages)[0]
+		metric = kg.evalExec.MustCall(generatedImages, datasetImages)[0]
 	}
 	if count == 0 {
 		exceptions.Panicf("evaluation dataset %s yielded no batches, no data to evaluate KID", kg.ds)

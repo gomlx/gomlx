@@ -573,7 +573,7 @@ func generateOne(
 
 	// Pad prompt and run prefill.
 	ids, mask, pos := padSequence(promptTokens, int32(padID), paddedLen)
-	prefillResults := prefillExec.MustExec(
+	prefillResults := prefillExec.MustCall(
 		[][]int64{ids}, [][]int64{mask}, [][]int64{pos}, int32(seqLen),
 	)
 
@@ -621,7 +621,7 @@ func generateOne(
 		}
 		decodeMask[paddedSize] = 1 // new token position
 
-		results := decodeExec.MustExec(
+		results := decodeExec.MustCall(
 			[][]int64{{int64(nextToken)}},
 			[][]int64{decodeMask},
 			[][]int64{{int64(realKVLen)}},
@@ -660,7 +660,7 @@ func growKVBuffer(backend compute.Backend, kv *tensors.Tensor, targetSeqLen int)
 		oldShape.Dimensions[0], oldShape.Dimensions[1],
 		oldShape.Dimensions[2], targetSeqLen, oldShape.Dimensions[4])
 	zeroTarget := tensors.FromShape(newShape)
-	return model.MustExecOnce(backend, nil,
+	return model.MustCallOnce(backend, nil,
 		func(_ *model.Scope, target, old *Node) *Node {
 			g := old.Graph()
 			return DynamicUpdateSlice(target, old, []*Node{
@@ -729,7 +729,7 @@ func generateWithoutKVCache(
 		targetLen := min(nextPow2(seqLen), maxSeqLen)
 		ids, mask, pos := padSequence(tokens, int32(padID), targetLen)
 
-		output := genExec.MustExec1([][]int64{ids}, [][]int64{mask}, [][]int64{pos}, int32(seqLen))
+		output := genExec.MustCall1([][]int64{ids}, [][]int64{mask}, [][]int64{pos}, int32(seqLen))
 
 		logits := tensors.MustCopyFlatData[float32](output)
 		nextToken := sampleToken(logits, *flagTemp, *flagTopK)

@@ -169,10 +169,10 @@ func MustNewExec[F ExecGraphFn](backend compute.Backend, graphFn F) *Exec {
 	return must.M1(NewExec(backend, graphFn))
 }
 
-// ExecOnce builds the graph and calls it with the given arguments and returns the one output.
+// CallOnce builds the graph and calls it with the given arguments and returns the one output.
 //
-// It's short for a call to MustNewExec, Exec.Exec and Exec.Finalize for functions that return only one output.
-func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, graphFn F, args ...any) (*tensors.Tensor, error) {
+// It's short for a call to MustNewExec, Exec.Call1 and Exec.Finalize for functions that return only one output.
+func CallOnce[F ExecGraphFnOneOutput](backend compute.Backend, graphFn F, args ...any) (*tensors.Tensor, error) {
 	e := MustNewExec(backend, graphFn)
 	defer e.Finalize()
 	results, err := e.Call(args...)
@@ -182,13 +182,20 @@ func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, graphFn F, args .
 	return results[0], nil
 }
 
-// ExecOnceN builds the graph and calls it with the given arguments and returns the various outputs.
+// ExecOnce is a deprecated alias for CallOnce.
 //
-// It's short for a call to MustNewExec, Exec.Exec and Exec.Finalize for functions that return only one output.
+// Deprecated: please use CallOnce instead.
+func ExecOnce[F ExecGraphFnOneOutput](backend compute.Backend, graphFn F, args ...any) (*tensors.Tensor, error) {
+	return CallOnce[F](backend, graphFn, args...)
+}
+
+// CallOnceN builds the graph and calls it with the given arguments and returns the various outputs.
+//
+// It's short for a call to MustNewExec, Exec.Call and Exec.Finalize for functions that return only one output.
 //
 // See ExecOnce for a more convenient version if you have only one output.
 // Also, see MustExecOnceN or MustExecOnce if you want it to panic on error.
-func ExecOnceN[F ExecGraphFn](backend compute.Backend, graphFn F, args ...any) ([]*tensors.Tensor, error) {
+func CallOnceN[F ExecGraphFn](backend compute.Backend, graphFn F, args ...any) ([]*tensors.Tensor, error) {
 	e := MustNewExec(backend, graphFn)
 	defer e.Finalize()
 	results, err := e.Call(args...)
@@ -196,6 +203,13 @@ func ExecOnceN[F ExecGraphFn](backend compute.Backend, graphFn F, args ...any) (
 		return nil, err
 	}
 	return results, nil
+}
+
+// ExecOnceN is a deprecated alias to CallOnceN.
+//
+// Deprecated: please use CallOnceN instead.
+func ExecOnceN[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F, args ...any) ([]*tensors.Tensor, error) {
+	return CallOnceN(backend, store, graphFn, args...)
 }
 
 // MustExecOnce builds the graph and calls it with the given arguments and returns the one output.

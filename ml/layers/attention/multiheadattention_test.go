@@ -61,7 +61,7 @@ func TestMultiHeadAttentionGraph(t *testing.T) {
 				WithOutputDim(9).DoneWithCoefficients()
 		})
 		// Pass a dummy input to trigger execution.
-		results := exec.MustExec(tensors.FromScalar(float32(0)))
+		results := exec.MustCall(tensors.FromScalar(float32(0)))
 		assert.EqualValues(t, []int{batchSize, 6, 1, 9}, results[0].Shape().Dimensions, "Higher-rank masked output shape")
 		assert.EqualValues(t, []int{batchSize, 6, 1, 2, 3, 4}, results[1].Shape().Dimensions, "Higher-rank masked coef shape")
 	}
@@ -127,7 +127,7 @@ func TestMultiHeadAttentionFusedPath(t *testing.T) {
 				output, _ := builder.DoneWithCoefficients()
 				return []*Node{output}
 			})
-			decomposedOutputs := decomposedExec.MustExec()
+			decomposedOutputs := decomposedExec.MustCall()
 
 			// Fused path (Done() will use fused when available).
 			fusedExec := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) []*Node {
@@ -140,7 +140,7 @@ func TestMultiHeadAttentionFusedPath(t *testing.T) {
 				output := builder.Done()
 				return []*Node{output}
 			})
-			fusedOutputs := fusedExec.MustExec()
+			fusedOutputs := fusedExec.MustCall()
 
 			// Compare outputs.
 			decomposedVal := decomposedOutputs[0].Value()
@@ -173,7 +173,7 @@ func TestMultiHeadAttentionWithRoPE(t *testing.T) {
 		{17, 18, 19, 20, 21, 22, 23, 24},
 		{25, 26, 27, 28, 29, 30, 31, 32}}}
 
-	output := exec.MustExec(input)[0]
+	output := exec.MustCall(input)[0]
 	assert.Equal(t, []int{1, 4, 8}, output.Shape().Dimensions)
 
 	// Run a second time with different sequence length to verify re-compilation
@@ -188,7 +188,7 @@ func TestMultiHeadAttentionWithRoPE(t *testing.T) {
 	input2 := [][][]float32{{{1, 2, 3, 4, 5, 6, 7, 8},
 		{9, 10, 11, 12, 13, 14, 15, 16}}}
 
-	output2 := exec2.MustExec(input2)[0]
+	output2 := exec2.MustCall(input2)[0]
 	assert.Equal(t, []int{1, 2, 8}, output2.Shape().Dimensions)
 }
 
@@ -208,7 +208,7 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 				{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}, {17, 18, 19, 20, 21, 22, 23, 24}},
 				{{25, 26, 27, 28, 29, 30, 31, 32}, {33, 34, 35, 36, 37, 38, 39, 40}, {41, 42, 43, 44, 45, 46, 47, 48}},
 			}
-			output := exec.MustExec(input)[0]
+			output := exec.MustCall(input)[0]
 			assert.Equal(t, []int{2, 3, 8}, output.Shape().Dimensions)
 		})
 
@@ -224,7 +224,7 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 			input := [][][]float32{
 				{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}, {17, 18, 19, 20, 21, 22, 23, 24}},
 			}
-			output := exec.MustExec(input)[0]
+			output := exec.MustCall(input)[0]
 			assert.Equal(t, []int{1, 3, 8}, output.Shape().Dimensions)
 		})
 
@@ -240,7 +240,7 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 			input := [][][]float32{
 				{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}, {17, 18, 19, 20, 21, 22, 23, 24}},
 			}
-			outputs := exec.MustExec(input)
+			outputs := exec.MustCall(input)
 			assert.Equal(t, []int{1, 3, 8}, outputs[0].Shape().Dimensions)
 			// coefficients: [batch, query_seq, num_heads, key_seq]
 			assert.Equal(t, []int{1, 3, 2, 3}, outputs[1].Shape().Dimensions)
@@ -260,7 +260,7 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 			input := [][][]float32{
 				{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}, {17, 18, 19, 20, 21, 22, 23, 24}},
 			}
-			output := exec.MustExec(input)[0]
+			output := exec.MustCall(input)[0]
 			assert.Equal(t, []int{1, 3, 8}, output.Shape().Dimensions)
 		})
 
@@ -293,7 +293,7 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 				}
 			})
 
-			output3ofN := execN.MustExec1(inputN, mask3)
+			output3ofN := execN.MustCall1(inputN, mask3)
 			fmt.Printf("output -- slice after the attention:\n%s\n", output3ofN)
 
 			// 2. exec for sequence 3 (slice of the original), without mask
@@ -305,7 +305,7 @@ func TestMultiHeadAttentionWithQKVProjection(t *testing.T) {
 					UseQKVProjection().
 					Done()
 			})
-			output3 := exec3.MustExec1(inputN)
+			output3 := exec3.MustCall1(inputN)
 			fmt.Printf("\noutput -- slice before the attention:\n%s\n", output3)
 
 			assert.InDeltaSlice(t,
@@ -338,7 +338,7 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 				}
 			}
 		}
-		output := exec.MustExec(input)[0]
+		output := exec.MustCall(input)[0]
 		// Output shape: [batch=2, seq=3, embed=16] (outputDim defaults to inputValueDim).
 		assert.Equal(t, []int{2, 3, 16}, output.Shape().Dimensions)
 	})
@@ -355,7 +355,7 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 		input := [][][]float32{
 			{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16}},
 		}
-		output := exec.MustExec(input)[0]
+		output := exec.MustCall(input)[0]
 		assert.Equal(t, []int{1, 2, 8}, output.Shape().Dimensions)
 	})
 
@@ -377,7 +377,7 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 				DoneWithCoefficients()
 			return []*Node{output}
 		})
-		decomposedOutputs := decomposedExec.MustExec()
+		decomposedOutputs := decomposedExec.MustCall()
 
 		fusedExec := model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) []*Node {
 			scope = scope.WithInitializer(initializer.One)
@@ -387,7 +387,7 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 				Done()
 			return []*Node{output}
 		})
-		fusedOutputs := fusedExec.MustExec()
+		fusedOutputs := fusedExec.MustCall()
 
 		require.Truef(t, xslices.SlicesInDelta(decomposedOutputs[0].Value(), fusedOutputs[0].Value(), 1e-4),
 			"Fused and decomposed paths produce different results for GQA.\nDecomposed: %v\nFused: %v",
@@ -407,7 +407,7 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 			{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16},
 				{17, 18, 19, 20, 21, 22, 23, 24}},
 		}
-		output := exec.MustExec(input)[0]
+		output := exec.MustCall(input)[0]
 		assert.Equal(t, []int{1, 3, 8}, output.Shape().Dimensions)
 	})
 
@@ -425,7 +425,7 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 			{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16},
 				{17, 18, 19, 20, 21, 22, 23, 24}, {25, 26, 27, 28, 29, 30, 31, 32}},
 		}
-		output := exec.MustExec(input)[0]
+		output := exec.MustCall(input)[0]
 		assert.Equal(t, []int{1, 4, 8}, output.Shape().Dimensions)
 	})
 
@@ -443,7 +443,7 @@ func TestMultiHeadAttentionGQA(t *testing.T) {
 			{{1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11, 12, 13, 14, 15, 16},
 				{17, 18, 19, 20, 21, 22, 23, 24}},
 		}
-		outputs := exec.MustExec(input)
+		outputs := exec.MustCall(input)
 		assert.Equal(t, []int{1, 3, 8}, outputs[0].Shape().Dimensions)
 		// Coefficients: [batch, seq, numHeads, seq] — numHeads=4, not numKVHeads=2.
 		assert.Equal(t, []int{1, 3, 4, 3}, outputs[1].Shape().Dimensions)
@@ -588,7 +588,7 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 			require.NoErrorf(t, err, "Failed datasets: %+v", err)
 			fmt.Printf("\nInput:\t%v\n", inputs[0].Value())
 			fmt.Printf("Label:\t%v\n", labels[0].Value())
-			results = inferenceExec.MustExec(inputs[0])
+			results = inferenceExec.MustCall(inputs[0])
 			tmp := results[0].Value().([][]float32)[0]
 			var rounded []int
 			for _, v := range tmp {

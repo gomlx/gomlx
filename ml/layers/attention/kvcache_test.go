@@ -33,7 +33,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		})
 
 		input := [][]float32{{1.0}}
-		result := exec.MustExec(input)[0]
+		result := exec.MustCall(input)[0]
 		assert.Equal(t, []int{batchSize, numHeads, maxSeqLen, headDim}, result.Shape().Dimensions)
 	})
 
@@ -65,7 +65,7 @@ func TestKVCacheFunctions(t *testing.T) {
 			{{13.0, 14.0, 15.0, 16.0}},
 		}}
 
-		result := exec.MustExec(int32(0), keys, values)[0]
+		result := exec.MustCall(int32(0), keys, values)[0]
 		// Verify the keys were written at position 0
 		cachedValues := result.Value().([][][][]float32)
 		assert.InDelta(t, 1.0, cachedValues[0][0][0][0], 0.01) // batch 0, head 0, pos 0, dim 0
@@ -94,7 +94,7 @@ func TestKVCacheFunctions(t *testing.T) {
 
 		keys1 := [][][][]float32{{{{1.0, 2.0, 3.0, 4.0}}, {{5.0, 6.0, 7.0, 8.0}}}}
 		values1 := [][][][]float32{{{{9.0, 10.0, 11.0, 12.0}}, {{13.0, 14.0, 15.0, 16.0}}}}
-		result1 := exec1.MustExec(int32(0), keys1, values1)[0]
+		result1 := exec1.MustCall(int32(0), keys1, values1)[0]
 		cached1 := result1.Value().([][][][]float32)
 		assert.InDelta(t, 1.0, cached1[0][0][0][0], 0.01)
 
@@ -109,7 +109,7 @@ func TestKVCacheFunctions(t *testing.T) {
 
 		keys2 := [][][][]float32{{{{2.0, 3.0, 4.0, 5.0}}, {{6.0, 7.0, 8.0, 9.0}}}}
 		values2 := [][][][]float32{{{{10.0, 11.0, 12.0, 13.0}}, {{14.0, 15.0, 16.0, 17.0}}}}
-		result2 := exec2.MustExec(int32(1), keys2, values2)[0]
+		result2 := exec2.MustCall(int32(1), keys2, values2)[0]
 		cached2 := result2.Value().([][][][]float32)
 		// Position 0 should still have first update
 		assert.InDelta(t, 1.0, cached2[0][0][0][0], 0.01)
@@ -147,7 +147,7 @@ func TestKVCacheFunctions(t *testing.T) {
 			{{{11.0, 12.0, 13.0, 14.0}}, {{15.0, 16.0, 17.0, 18.0}}},
 		}
 
-		result := exec.MustExec(int32(0), keys, values)[0]
+		result := exec.MustCall(int32(0), keys, values)[0]
 		cachedValues := result.Value().([][][][]float32)
 		// Check first element of each batch at position 0
 		assert.InDelta(t, 1.0, cachedValues[0][0][0][0], 0.01) // batch 0
@@ -183,7 +183,7 @@ func TestKVCacheFunctions(t *testing.T) {
 			{{13.0, 14.0, 15.0, 16.0}},
 		}}
 
-		result := exec.MustExec(int32(0), keys, values)[0]
+		result := exec.MustCall(int32(0), keys, values)[0]
 		assert.Equal(t, []int{batchSize, numHeads, maxSeqLen, headDim}, result.Shape().Dimensions)
 	})
 
@@ -217,7 +217,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		}
 
 		// Update cache
-		updateResult := updateExec.MustExec(int32(0), keys, values)[0]
+		updateResult := updateExec.MustCall(int32(0), keys, values)[0]
 		cached := updateResult.Value().([][][][]float32)
 		assert.InDelta(t, 1.0, cached[0][0][0][0], 0.01)
 
@@ -233,7 +233,7 @@ func TestKVCacheFunctions(t *testing.T) {
 			return cachedKeys
 		})
 
-		result := getExec.MustExec(int32(0))[0]
+		result := getExec.MustCall(int32(0))[0]
 		cachedAfterReset := result.Value().([][][][]float32)
 		// After reset, the value should be 0 (zero-initialized)
 		assert.InDelta(t, 0.0, cachedAfterReset[0][0][0][0], 0.01)
@@ -261,7 +261,7 @@ func TestKVCacheFunctions(t *testing.T) {
 		keys := [][][][]float32{{{{1.0, 2.0, 3.0, 4.0}}, {{5.0, 6.0, 7.0, 8.0}}}}
 		values := [][][][]float32{{{{9.0, 10.0, 11.0, 12.0}}, {{13.0, 14.0, 15.0, 16.0}}}}
 
-		result := exec.MustExec(int32(0), keys, values)[0]
+		result := exec.MustCall(int32(0), keys, values)[0]
 		assert.Equal(t, []int{batchSize, 1, 1, 1}, result.Shape().Dimensions)
 	})
 }
@@ -292,7 +292,7 @@ func TestKVCachePersistence(t *testing.T) {
 		return cachedKeys
 	})
 
-	outputs1 := exec1.MustExec(int32(0))
+	outputs1 := exec1.MustCall(int32(0))
 	cached1 := outputs1[0].Value().([][][][]float32)
 	assert.True(t, cached1[0][0][0][0] >= 10.0, "Expected non-zero value at position 0 after first update")
 	assert.True(t, cached1[0][0][2][0] >= 10.0, "Expected non-zero value at position 2 after first update")
@@ -311,7 +311,7 @@ func TestKVCachePersistence(t *testing.T) {
 		return cachedKeys
 	})
 
-	outputs2 := exec2.MustExec(int32(3))
+	outputs2 := exec2.MustCall(int32(3))
 	cached2 := outputs2[0].Value().([][][][]float32)
 	value2 := cached2[0][0][3][0] // batch=0, head=0, pos=3, dim=0
 	assert.InDelta(t, 100.0, value2, 0.01, "Expected value at position 3 after second update")
@@ -347,13 +347,13 @@ func TestKVCacheCircular(t *testing.T) {
 		}
 
 		// Fill cache with positions 0-3
-		exec.MustExec(int32(0), makeKeys(1.0), makeKeys(1.0))
-		exec.MustExec(int32(1), makeKeys(2.0), makeKeys(2.0))
-		exec.MustExec(int32(2), makeKeys(3.0), makeKeys(3.0))
-		exec.MustExec(int32(3), makeKeys(4.0), makeKeys(4.0))
+		exec.MustCall(int32(0), makeKeys(1.0), makeKeys(1.0))
+		exec.MustCall(int32(1), makeKeys(2.0), makeKeys(2.0))
+		exec.MustCall(int32(2), makeKeys(3.0), makeKeys(3.0))
+		exec.MustCall(int32(3), makeKeys(4.0), makeKeys(4.0))
 
 		// Position 4 should wrap to slot 0
-		results := exec.MustExec(int32(4), makeKeys(5.0), makeKeys(5.0))
+		results := exec.MustCall(int32(4), makeKeys(5.0), makeKeys(5.0))
 
 		cachedKeys := results[0].Value().([][][][]float32)
 		assert.InDelta(t, 5.0, cachedKeys[0][0][0][0], 0.01, "Slot 0 should have 5.0 (wrapped)")
@@ -388,7 +388,7 @@ func TestKVCacheCircular(t *testing.T) {
 		// Update at position 3 with 2 tokens:
 		//   - Token 0 (10.0) should go to slot 3
 		//   - Token 1 (20.0) should wrap to slot 0
-		results := exec.MustExec(int32(3), twoTokenKeys, twoTokenValues)
+		results := exec.MustCall(int32(3), twoTokenKeys, twoTokenValues)
 
 		cachedKeys := results[0].Value().([][][][]float32)
 		assert.InDelta(t, 20.0, cachedKeys[0][0][0][0], 0.01, "Slot 0 should have 20.0 (second token, wrapped)")

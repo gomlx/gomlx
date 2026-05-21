@@ -47,7 +47,7 @@ func testSimpleFunc(t *testing.T, name string, input any,
 		return fn(scope.WithInitializer(IotaP1Initializer), input)
 	})
 	var outputs []*tensors.Tensor
-	require.NotPanicsf(t, func() { outputs = exec.MustExec(input) }, "%s: failed to exec graph", name)
+	require.NotPanicsf(t, func() { outputs = exec.MustCall(input) }, "%s: failed to exec graph", name)
 	fmt.Printf("\t%s(%v) = %s\n", name, input, outputs[0].GoStr())
 	require.Truef(t, xslices.SlicesInDelta(outputs[0].Value(), want, xslices.Epsilon),
 		"%s(%v): want=%v, got=%v", name, input, want, outputs[0].GoStr())
@@ -61,7 +61,7 @@ func testSimpleFuncMany(t *testing.T, name string, inputs []any,
 		return fn(scope.WithInitializer(IotaP1Initializer), inputs)
 	})
 	var outputs []*tensors.Tensor
-	require.NotPanicsf(t, func() { outputs = exec.MustExec(inputs...) }, "%s: failed to exec graph", name)
+	require.NotPanicsf(t, func() { outputs = exec.MustCall(inputs...) }, "%s: failed to exec graph", name)
 	parts := make([]string, len(inputs))
 	for ii, input := range inputs {
 		parts[ii] = fmt.Sprintf("%v", input)
@@ -92,7 +92,7 @@ func TestDense(t *testing.T) {
 		return append([]*Node{sum, output}, gradients...)
 	})
 
-	results := exec.MustExec(input)
+	results := exec.MustCall(input)
 	for v := range store.IterVariables() {
 		fmt.Printf("\t%s=%v\n", v.Path(), v.MustValue())
 	}
@@ -188,7 +188,7 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 		if *flagPlot {
 			// Plot calibration of a point x.
 			calibration := func(x float64) float64 {
-				results := exec.MustExec(float32(x))
+				results := exec.MustCall(float32(x))
 				return float64(tensors.ToScalar[float32](results[1]))
 			}
 
@@ -198,7 +198,7 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 
 		// Continue with normal test, with fixed input values.
 		inputValues := []float32{-1, 5, 25, 50, 110}
-		results := exec.MustExec(inputValues)
+		results := exec.MustCall(inputValues)
 		fmt.Printf("\tkeypoints=%s\n", results[0])
 		got := results[1]
 		fmt.Printf("\tpwl=%s\n", got)
@@ -207,5 +207,3 @@ func TestPieceWiseLinearCalibration(t *testing.T) {
 			"Expected a log-like output, trimmed at the edges: got=%s, want=%v", got, want)
 	}
 }
-
-

@@ -64,7 +64,7 @@ func TestBeamSearchStep(t *testing.T) {
 		sequences := tensors.FromValue([][]int32{{1, 2, 3}, {1, 2, 4}})
 		beamScores := tensors.FromValue([]float32{0.0, -0.5})
 
-		results := exec.MustExec(logits, sequences, beamScores)
+		results := exec.MustCall(logits, sequences, beamScores)
 
 		nextSeqs := results[0]
 		nextScores := results[1]
@@ -101,7 +101,7 @@ func TestBeamSearchStep(t *testing.T) {
 		sequences := tensors.FromValue([][]int32{{1, 2, 3}, {1, 2, 4}})
 		beamScores := tensors.FromValue([]float32{0.0, 0.0})
 
-		results := exec.MustExec(logits, sequences, beamScores)
+		results := exec.MustCall(logits, sequences, beamScores)
 		isFinished := results[2]
 		assert.Equal(t, 1, isFinished.Rank())
 
@@ -133,7 +133,7 @@ func TestBeamSearchStep(t *testing.T) {
 		sequences := tensors.FromValue([][]int32{{1, 2, 3, 4, 5}, {1, 2, 4, 5, 6}})
 		beamScores := tensors.FromValue([]float32{0.0, 0.0})
 
-		results := exec.MustExec(logits, sequences, beamScores)
+		results := exec.MustCall(logits, sequences, beamScores)
 		nextSeqs := results[0]
 		isFinished := results[2]
 		assert.Equal(t, 6, nextSeqs.Shape().Dimensions[1])
@@ -173,7 +173,7 @@ func TestBeamSearchStep(t *testing.T) {
 		}
 		beamScores := tensors.FromValue(scoresData)
 
-		results := exec.MustExec(logits, sequences, beamScores)
+		results := exec.MustCall(logits, sequences, beamScores)
 
 		nextSeqs := results[0]
 		nextScores := results[1]
@@ -200,7 +200,7 @@ func TestApplyLengthPenalty(t *testing.T) {
 		})
 		scores := tensors.FromValue([]float32{-1.0, -2.0, -3.0, -4.0})
 		lengths := tensors.FromValue([]int32{5, 10, 15, 20})
-		result := exec.MustExec(scores, lengths)[0]
+		result := exec.MustCall(scores, lengths)[0]
 		got := result.Value().([]float32)
 		want := []float32{-1.0, -2.0, -3.0, -4.0}
 		for i := range want {
@@ -218,7 +218,7 @@ func TestApplyLengthPenalty(t *testing.T) {
 		})
 		scores := tensors.FromValue([]float32{-10.0, -20.0})
 		lengths := tensors.FromValue([]int32{4, 8})
-		result := exec.MustExec(scores, lengths)[0]
+		result := exec.MustCall(scores, lengths)[0]
 		got := result.Value().([]float32)
 		expected0 := (-10.0) / 8.0
 		expected1 := (-20.0) / 22.627417

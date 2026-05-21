@@ -50,7 +50,7 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 	key := query   // self-attention
 	value := query // self-attention
 
-	outputs := exec.MustExec(query, key, value)
+	outputs := exec.MustCall(query, key, value)
 	bhsdData := outputs[0].Value().([][][][]float32)
 	bshdData := outputs[1].Value().([][][][]float32)
 
@@ -84,7 +84,7 @@ func TestCore(t *testing.T) {
 		key := [][][][]float32{{{{1, 0}, {0, 1}}}}
 		value := [][][][]float32{{{{1, 2}, {3, 4}}}}
 
-		output := exec.MustExec(query, key, value)[0]
+		output := exec.MustCall(query, key, value)[0]
 		assert.Equal(t, []int{1, 1, 2, 2}, output.Shape().Dimensions)
 	})
 
@@ -106,7 +106,7 @@ func TestCore(t *testing.T) {
 		key := [][][][]float32{{{{5, 6}, {7, 8}}}}
 		value := [][][][]float32{{{{9, 10}, {11, 12}}}}
 
-		outputs := exec.MustExec(query, key, value)
+		outputs := exec.MustCall(query, key, value)
 		defaultData := outputs[0].Value().([][][][]float32)
 		explicitData := outputs[1].Value().([][][][]float32)
 
@@ -141,7 +141,7 @@ func TestCore(t *testing.T) {
 		// [batch=1, heads=1, q_seq=2, kv_seq=2]
 		mask := [][][][]float32{{{{0, -1e9}, {0, 0}}}}
 
-		output := exec.MustExec(query, key, value, mask)[0]
+		output := exec.MustCall(query, key, value, mask)[0]
 		outData := output.Value().([][][][]float32)
 
 		// Position 0 can only attend to position 0, so output[0] ~ value[0] = [10, 20]
@@ -169,7 +169,7 @@ func TestCore(t *testing.T) {
 		// Boolean causal mask: position 0 attends only to position 0
 		mask := [][][][]bool{{{{true, false}, {true, true}}}}
 
-		output := exec.MustExec(query, key, value, mask)[0]
+		output := exec.MustCall(query, key, value, mask)[0]
 		outData := output.Value().([][][][]float32)
 
 		// Position 0 can only attend to position 0, so output[0] ~ value[0] = [10, 20]
@@ -192,7 +192,7 @@ func TestCore(t *testing.T) {
 		key := [][][][]float32{{{{1, 0}, {0, 1}}}}
 		value := [][][][]float32{{{{1, 2}, {3, 4}}}}
 
-		outputs := exec.MustExec(query, key, value)
+		outputs := exec.MustCall(query, key, value)
 		output := outputs[0]
 		coefficients := outputs[1]
 
@@ -237,7 +237,7 @@ func TestCore(t *testing.T) {
 		// V: [batch=1, heads=1, seq=2, dim=2]
 		value := [][][][]float32{{{{10, 20}, {30, 40}}}}
 
-		outputs := exec.MustExec(query, key, value)
+		outputs := exec.MustCall(query, key, value)
 		fusedData := outputs[0].Value().([][][][]float32)
 		decomposedData := outputs[1].Value().([][][][]float32)
 		coeffData := outputs[2].Value().([][][][]float32)
@@ -294,7 +294,7 @@ func TestCore(t *testing.T) {
 		// V: [batch=1, seq=2, heads=1, dim=2]
 		value := [][][][]float32{{{{10, 20}}, {{30, 40}}}}
 
-		outputs := exec.MustExec(query, key, value)
+		outputs := exec.MustCall(query, key, value)
 		fusedData := outputs[0].Value().([][][][]float32)
 		decomposedData := outputs[1].Value().([][][][]float32)
 
@@ -334,7 +334,7 @@ func TestCore(t *testing.T) {
 		// Boolean causal mask: [1, 1, 2, 2] — broadcasts to both Q heads.
 		mask := [][][][]bool{{{{true, false}, {true, true}}}}
 
-		outputs := exec.MustExec(query, key, value, mask)
+		outputs := exec.MustCall(query, key, value, mask)
 		fusedData := outputs[0].Value().([][][][]float32)
 		decomposedData := outputs[1].Value().([][][][]float32)
 
@@ -371,7 +371,7 @@ func TestCore(t *testing.T) {
 		key := [][][][]float32{{{{1}, {1}}}}
 		value := [][][][]float32{{{{10}, {20}}}}
 
-		output := exec.MustExec(query, key, value)[0]
+		output := exec.MustCall(query, key, value)[0]
 		outData := output.Value().([][][][]float32)
 
 		// Position 0 can only see position 0 → output = 10

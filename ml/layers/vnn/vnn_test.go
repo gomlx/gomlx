@@ -30,7 +30,7 @@ func TestLinearLayer(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	store := model.NewStore()
 	store.SetRNGStateFromSeed(42)
-	y0 := model.MustExecOnce(backend, store, func(scope *model.Scope, g *Graph) *Node {
+	y0 := model.MustCallOnce(backend, store, func(scope *model.Scope, g *Graph) *Node {
 		pi2 := math.Pi * 2.0
 
 		// Random inputs and rotations:
@@ -73,7 +73,7 @@ func TestRelu(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				store, err := baseStore.Clone()
 				require.NoError(t, err)
-				outputs := model.MustExecOnceN(backend, store, func(scope *model.Scope, g *Graph) []*Node {
+				outputs := model.MustCallOnceN(backend, store, func(scope *model.Scope, g *Graph) []*Node {
 					pi2 := math.Pi * 2.0
 
 					// Random inputs and rotations:
@@ -115,7 +115,7 @@ func TestLayerNormalization(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	store := model.NewStore()
 	store.SetRNGStateFromSeed(42)
-	outputs := model.MustExecOnceN(backend, store, func(scope *model.Scope, g *Graph) []*Node {
+	outputs := model.MustCallOnceN(backend, store, func(scope *model.Scope, g *Graph) []*Node {
 		pi2 := math.Pi * 2.0
 
 		// Random inputs and rotations:
@@ -148,7 +148,7 @@ func TestVNN_Equivariant(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	store := model.NewStore()
 	store.SetRNGStateFromSeed(42)
-	rotDiff := model.MustExecOnce(backend, store, func(scope *model.Scope, g *Graph) *Node {
+	rotDiff := model.MustCallOnce(backend, store, func(scope *model.Scope, g *Graph) *Node {
 		pi2 := math.Pi * 2.0
 
 		// Random inputs and rotations:
@@ -278,7 +278,7 @@ func TestVNNTrain(t *testing.T) {
 	accuracy := lossAndMetrics[2].Value().(float32)
 	require.GreaterOrEqual(t, accuracy, float32(0.8), "VNN was not able to learn rotation invariant simple task, accuracy=%.1f%%.", accuracy*100.0)
 
-	sample := model.MustExecOnce(backend, store, func(scope *model.Scope, g *Graph) *Node {
+	sample := model.MustCallOnce(backend, store, func(scope *model.Scope, g *Graph) *Node {
 		return scope.RandomUniform(g, shapes.Make(dtypes.Float64))
 	})
 	fmt.Printf("Scope random sample: %s\n", sample.GoStr())

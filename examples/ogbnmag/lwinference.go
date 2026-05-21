@@ -42,12 +42,12 @@ func LayerWiseEvaluation(
 		klog.Infof("Layer-wise inference elapsed time (computation graph compilation): %s\n", elapsed)
 
 		start = time.Now()
-		predictionsT = exec.MustExec()[0]
+		predictionsT = exec.MustCall()[0]
 		elapsed = time.Since(start)
 		klog.Infof("Layer-wise inference elapsed time (execution): %s\n", elapsed)
 	} else {
 		// Just call inference.
-		predictionsT = exec.MustExec()[0]
+		predictionsT = exec.MustCall()[0]
 	}
 
 	predictions := predictionsT.Value().([]int16)
@@ -79,7 +79,7 @@ func BuildLayerWiseCustomMetricFn(
 	scope = scope
 	labels := tensors.MustCopyFlatData[int32](PapersLabels)
 	return func(plotter plot.Plotter, step float64) error {
-		predictions := exec.MustExec()[0].Value().([]int16)
+		predictions := exec.MustCall()[0].Value().([]int16)
 		train, validation, test := layerWiseCalculateAccuracies(predictions, labels)
 		accuracies := []float64{train, validation, test}
 		names := []string{"Train", "Validation", "Test"}

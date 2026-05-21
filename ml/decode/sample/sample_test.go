@@ -21,7 +21,7 @@ func TestGreedy(t *testing.T) {
 			{0, 0, 0, 0, 0, 10, 0, 0, 0, 0},
 			{0, 0, 0, 10, 0, 0, 0, 0, 0, 0},
 		}
-		tokens := exec.MustExec(logits)[0]
+		tokens := exec.MustCall(logits)[0]
 		assert.Equal(t, dtypes.Int32, tokens.DType())
 		assert.Equal(t, []int{2}, tokens.Shape().Dimensions)
 		data := tokens.Value().([]int32)
@@ -37,7 +37,7 @@ func TestTemperature(t *testing.T) {
 		scope := model.NewStore()
 		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, logits *Node) *Node { return Temperature(scope, logits, 1.0) })
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
-		tokens := exec.MustExec(logits)[0]
+		tokens := exec.MustCall(logits)[0]
 		assert.Equal(t, dtypes.Int32, tokens.DType())
 		data := tokens.Value().([]int32)
 		assert.GreaterOrEqual(t, data[0], int32(0))
@@ -61,7 +61,7 @@ func TestTopP(t *testing.T) {
 			{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 			{10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 		}
-		tokens := exec.MustExec(logits)[0]
+		tokens := exec.MustCall(logits)[0]
 
 		assert.Equal(t, dtypes.Int32, tokens.DType())
 		assert.Equal(t, []int{2}, tokens.Shape().Dimensions)
@@ -83,7 +83,7 @@ func TestTopP(t *testing.T) {
 		})
 
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
-		tokens := exec.MustExec(logits)[0]
+		tokens := exec.MustCall(logits)[0]
 
 		assert.Equal(t, dtypes.Int32, tokens.DType())
 		assert.Equal(t, []int{1}, tokens.Shape().Dimensions)
@@ -110,7 +110,7 @@ func TestTopKSample(t *testing.T) {
 			{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 			{10, 9, 8, 7, 6, 5, 4, 3, 2, 1},
 		}
-		tokens := exec.MustExec(logits)[0]
+		tokens := exec.MustCall(logits)[0]
 
 		assert.Equal(t, dtypes.Int32, tokens.DType())
 		assert.Equal(t, []int{2}, tokens.Shape().Dimensions)
@@ -133,7 +133,7 @@ func TestSampleWithStrategy(t *testing.T) {
 			return SampleWithStrategy(scope, logits, StrategyGreedy, 0, 0, 0)
 		})
 		logits := [][]float32{{0, 0, 0, 0, 0, 0, 0, 10, 0, 0}}
-		tokens := exec.MustExec(logits)[0]
+		tokens := exec.MustCall(logits)[0]
 		data := tokens.Value().([]int32)
 		assert.Equal(t, int32(7), data[0])
 	})
@@ -145,7 +145,7 @@ func TestSampleWithStrategy(t *testing.T) {
 			return SampleWithStrategy(scope, logits, StrategyTemperature, 0.8, 0, 0)
 		})
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
-		tokens := exec.MustExec(logits)[0]
+		tokens := exec.MustCall(logits)[0]
 		data := tokens.Value().([]int32)
 		assert.GreaterOrEqual(t, data[0], int32(0))
 		assert.Less(t, data[0], int32(10))
@@ -158,7 +158,7 @@ func TestSampleWithStrategy(t *testing.T) {
 			return SampleWithStrategy(scope, logits, StrategyTopK, 1.0, 3, 0)
 		})
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
-		tokens := exec.MustExec(logits)[0]
+		tokens := exec.MustCall(logits)[0]
 		data := tokens.Value().([]int32)
 		assert.GreaterOrEqual(t, data[0], int32(7))
 		assert.Less(t, data[0], int32(10))
@@ -171,7 +171,7 @@ func TestSampleWithStrategy(t *testing.T) {
 			return SampleWithStrategy(scope, logits, StrategyTopP, 1.0, 0, 0.8)
 		})
 		logits := [][]float32{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}
-		tokens := exec.MustExec(logits)[0]
+		tokens := exec.MustCall(logits)[0]
 		data := tokens.Value().([]int32)
 		assert.GreaterOrEqual(t, data[0], int32(5))
 		assert.Less(t, data[0], int32(10))

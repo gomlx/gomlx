@@ -49,7 +49,7 @@ func TestCheckpoints(t *testing.T) {
 		fmt.Printf("Checkpoint directory: %s\n", dir)
 		e := model.MustNewExec(backend, store, testGraphFn)
 		for ii := range 10 {
-			results := e.MustExec()
+			results := e.MustCall()
 			globalStep := tensors.ToScalar[float64](results[0])
 			assert.Equal(t, float64(ii)+1, globalStep, "LoopStep")
 			assert.NoError(t, checkpointHandler.Save(), "Saving checkpoint")
@@ -98,7 +98,7 @@ func TestCheckpoints(t *testing.T) {
 
 		// Re-execute testGraphFn: it should load global step at 10, increment and return it at 11.
 		e := model.MustNewExec(backend, store, testGraphFn)
-		results := e.MustExec()
+		results := e.MustCall()
 		globalStep := tensors.ToScalar[float64](results[0])
 		assert.Equal(t, 11.0, globalStep, "Re-loaded global step")
 		assert.NoError(t, checkpointHandler.Save(), "Saving checkpoint")
@@ -127,7 +127,7 @@ func TestCheckpoints(t *testing.T) {
 		v := root.GetVariable(optimizer.GlobalStepVariableName)
 		require.NoError(t, v.Shape().Check(dtypes.Int64))
 		e := model.MustNewExec(backend, store, testGraphFn)
-		results := e.MustExec()
+		results := e.MustCall()
 		globalStep := tensors.ToScalar[float64](results[0])
 		assert.Equal(t, 12.0, globalStep, "Re-loaded global step")
 	}
