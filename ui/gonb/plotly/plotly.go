@@ -122,7 +122,7 @@ func (pc *PlotConfig) WithBatchNormalizationAveragesUpdate(oneEpochDS train.Data
 	return pc
 }
 
-// Dynamic sets plot to be dynamically updated, and new data comes in. It's a no-op if not running in a GoNB notebook.
+// Dynamic sets plot to be dynamically updated as new data points are added. It's a no-op if not running in a GoNB notebook.
 //
 // It should be followed by a call to [ScheduleExponential] or [SchedulePeriodic] (or both) to schedule capturing
 // points to plot, and [WithCheckpoint] to save the captured points.

@@ -29,7 +29,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
@@ -51,12 +50,16 @@ func check(err error) {
 	klog.Fatalf("Fatal error: %+v", err)
 }
 
-// check1 reports and exits on error. Otherwise returns the value passed.
-func check1[T any](v T, err error) T {
+// must1 reports and exits on error. Otherwise returns the value passed.
+func must1[T any](v T, err error) T {
 	check(err)
 	return v
 }
 
+// createModelStore creates a model.Store and populate it with the hyperparameters
+// used in the model, along with their default values.
+//
+// The hyperparameters used here can then be set using the `-set` flag.
 func createModelStore() *model.Store {
 	store := model.NewStore()
 	store.SetParams(map[string]any{
@@ -141,7 +144,7 @@ func main() {
 	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseSettings(store, *settings))
+	paramsSet := must1(commandline.ParseSettings(store, *settings))
 	err := mainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet)
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
@@ -172,7 +175,7 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 	const keepCheckpoints = 3
 	if checkpointPath != "" {
 		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", keepCheckpoints)
-		checkpointHandler = check1(checkpoint.Build(store).
+		checkpointHandler = must1(checkpoint.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, "train_steps", "plots", "num_checkpoints")...).
@@ -286,13 +289,12 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if model.GetParamOr(scope, margaid.ParamPlots, false) {
+	if model.GetParamOr(scope, "plots", false) {
 		_ = plotly.New().
 			WithCheckpoint(checkpointHandler).
 			Dynamic().
 			WithDatasets(trainEvalDS, testEvalDS).
 			ScheduleExponential(loop, 200, 1.2).
-			WithBatchNormalizationAveragesUpdate(trainEvalDS)
 	}
 
 	// Train up to "train_steps".

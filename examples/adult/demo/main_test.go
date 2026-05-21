@@ -33,7 +33,7 @@ func TestMainFunc(t *testing.T) {
 	}
 	store := createModelStore()
 	store.SetParam("train_steps", 10)
-	paramsSet := check1(commandline.ParseSettings(store, *flagSettings))
+	paramsSet := must1(commandline.ParseSettings(store, *flagSettings))
 	err := mainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet)
 	require.NoError(t, err, "failed to train Adult model for 10 steps")
 }
