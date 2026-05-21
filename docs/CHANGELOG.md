@@ -56,7 +56,7 @@ And a few small renaming:
 - Package `context` -> `model`
 - `Scope` -> `Store` and `Scope`
 - `NewScope` -> `NewStore` (the only "global" one)
-- `Exec.Exec` -> `Exec.Call`, more inline with ML standards, and less stuttering.
+- `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
 - Using mostly `fullPath` instead of the split scope/key pairs.
 - Variables:
   - `Scope.VariableWithValueGraph` -> `Scope.VariableWithNodeValue`
@@ -68,7 +68,7 @@ And a few small renaming:
   so many functions in `train` and other packages can drop the `s *model.Scope` (or `s *model.Store`) parameter.
 
 ## Graph (github.com/gomlx/gomlx/core/graph):
-- `Exec.Exec` -> `Exec.Call` (no change in name, but `Exec` is gone).
+- `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
 
 ## Tensors (github.com/gomlx/gomlx/core/tensors):
 - Renamed `FromAnyValue` to `MustFromAnyValue` and added `FromAnyValue` returning `(tensor, error)`.
