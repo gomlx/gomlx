@@ -418,12 +418,12 @@ func (e *Exec) SetStore(store *Store) *Exec {
 
 // Exec parses the arguments and executes the graph.
 func (e *Exec) Exec(args ...any) ([]*tensors.Tensor, error) {
-	outputs, _, err := e.ExecWithGraph(args...)
+	outputs, _, err := e.CallWithGraph(args...)
 	return outputs, err
 }
 
-// ExecWithGraph is similar to Exec, but it also returns the computation graph used in the call.
-func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, err error) {
+// CallWithGraph is similar to Exec, but it also returns the computation graph used in the call.
+func (e *Exec) CallWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, err error) {
 	outputs, g, err = e.exec.CallWithGraph(args...)
 	if err != nil {
 		return nil, nil, err
@@ -448,6 +448,13 @@ func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, 
 		return nil, nil, err
 	}
 	return
+}
+
+// ExecWithGraph is similar to Exec, but it also returns the computation graph used in the call.
+//
+// Deprecated: please use CallWithGraph instead.
+func (e *Exec) ExecWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, err error) {
+	return e.CallWithGraph(args...)
 }
 
 // collectOutputs processes outputs for single-device execution.

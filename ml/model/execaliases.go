@@ -57,7 +57,7 @@ func MustNewExec[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F
 //
 // See also Exec.AggregateShards.
 func (e *Exec) DistributedExec(args ...any) ([]*dtensor.Tensor, error) {
-	shards, _, err := e.ExecWithGraph(args...)
+	shards, _, err := e.CallWithGraph(args...)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func (e *Exec) MustCall(args ...any) []*tensors.Tensor {
 // It panics with an informative error if something goes wrong.
 func (e *Exec) MustCallWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph) {
 	var err error
-	outputs, g, err = e.ExecWithGraph(args...)
+	outputs, g, err = e.CallWithGraph(args...)
 	if err != nil {
 		panic(err)
 	}
@@ -169,7 +169,7 @@ func MustCallOnce[F ExecGraphFnOneOutput](backend compute.Backend, store *Store,
 //
 // See Exec for more details.
 func (e *Exec) Call1(args ...any) (*tensors.Tensor, error) {
-	results, _, err := e.ExecWithGraph(args...)
+	results, _, err := e.CallWithGraph(args...)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func (e *Exec) Call1(args ...any) (*tensors.Tensor, error) {
 //
 // See Exec for more details.
 func (e *Exec) Call2(args ...any) (*tensors.Tensor, *tensors.Tensor, error) {
-	results, _, err := e.ExecWithGraph(args...)
+	results, _, err := e.CallWithGraph(args...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -201,7 +201,7 @@ func (e *Exec) Call2(args ...any) (*tensors.Tensor, *tensors.Tensor, error) {
 //
 // See Exec for more details.
 func (e *Exec) Call3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, error) {
-	results, _, err := e.ExecWithGraph(args...)
+	results, _, err := e.CallWithGraph(args...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -217,7 +217,7 @@ func (e *Exec) Call3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Te
 //
 // See Exec for more details.
 func (e *Exec) Call4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, *tensors.Tensor, error) {
-	results, _, err := e.ExecWithGraph(args...)
+	results, _, err := e.CallWithGraph(args...)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
