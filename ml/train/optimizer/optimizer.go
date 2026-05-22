@@ -112,9 +112,17 @@ const (
 
 // FromScope creates an optimizer from the scope (and its [model.Store]) hyperparameters.
 // See [ParamOptimizer]. The default is "adamw".
+//
+// Usually, an optimizer is always created at the root scope, consider using FromStore instead.
 func FromScope(scope *model.Scope) Interface {
 	optName := model.GetParamOr(scope, ParamOptimizer, "adamw")
 	return ByName(scope, optName)
+}
+
+// FromStore creates an optimizer from the store hyperparameters (at the root scope).
+// See [ParamOptimizer]. The default is "adamw".
+func FromStore(store *model.Store) Interface {
+	return FromScope(store.RootScope())
 }
 
 // ByName returns an optimizer given the name, or panics if one does not exist.
