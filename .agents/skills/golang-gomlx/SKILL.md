@@ -199,7 +199,7 @@ movingAccuracyMetric := metric.NewMovingAverageBinaryLogitsAccuracy("Moving Aver
 
 // Create a train.Trainer: orchestrates running the model, feeding results to the optimizer, evaluating metrics.
 trainer := train.NewTrainer(backend, store, Model, loss.BinaryCrossentropyLogits,
-	optimizer.FromScope(store.RootScope()),
+	optimizer.FromStore(store),
 	[]metric.Interface{movingAccuracyMetric}, // trainMetrics
 	[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 
