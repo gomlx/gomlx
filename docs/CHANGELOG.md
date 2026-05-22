@@ -66,6 +66,9 @@ And a few small renaming:
   - `Variable.ParameterName` because a private function in `checkpoint` package.
 - Added `model.GetStore()`: it returns the `model.Store` attached to the current graph (it accepts a node also),
   so many functions in `train` and other packages can drop the `s *model.Scope` (or `s *model.Store`) parameter.
+- (internal) Graph parameters as well as variable nodes associated to a graph are now stored in the `graphStore`,
+  which is attached to the Graph. This makes the separation cleaner, and they all get automatically GC'ed if
+  the Graph is destroyed (preventing some leaks).
 
 ## Graph (github.com/gomlx/gomlx/core/graph):
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
