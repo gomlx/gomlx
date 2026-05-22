@@ -103,7 +103,7 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 	scope = scope.In("model") // Convention scope used for model creation.
 	trainer := train.NewTrainer(Backend, store, modelFn,
 		loss.SparseCategoricalCrossEntropyLogits,
-		optimizer.FromScope(scope),
+		optimizer.FromStore(store),
 		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 

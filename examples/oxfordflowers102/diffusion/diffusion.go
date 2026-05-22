@@ -463,7 +463,7 @@ func (c *Config) BuildTrainingModelGraph() train.ModelFn {
 			lossName = model.GetParamOr(scope, "diffusion_loss", "mse")
 		}
 		scope.SetParam(loss.ParamLoss, lossName) // Needed for old models that used "diffusion_loss".
-		lossFn := check1(loss.LossFromScope(scope))
+		lossFn := must1(loss.LossFromScope(scope))
 		noisesLoss := lossFn([]*Node{noises}, []*Node{predictedNoises})
 		if !noisesLoss.IsScalar() {
 			noisesLoss = ReduceAllMean(noisesLoss)

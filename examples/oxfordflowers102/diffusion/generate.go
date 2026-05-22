@@ -61,7 +61,7 @@ func PlotImages(images []image.Image) {
 func ImagesToHtml(images []image.Image) string {
 	parts := make([]string, 0, len(images))
 	for _, img := range images {
-		imgSrc := check1(gonbui.EmbedImageAsPNGSrc(img))
+		imgSrc := must1(gonbui.EmbedImageAsPNGSrc(img))
 		parts = append(parts, fmt.Sprintf(`<img src="%s">`, imgSrc))
 	}
 	return fmt.Sprintf(
@@ -81,7 +81,7 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 		return
 	}
 	modelDir := c.Checkpoint.Dir()
-	entries := check1(os.ReadDir(modelDir))
+	entries := must1(os.ReadDir(modelDir))
 	var generatedFiles []string
 	var generateGlobalSteps []int
 	for _, entry := range entries {
@@ -94,7 +94,7 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 			continue
 		}
 		generatedFiles = append(generatedFiles, fileName)
-		generateGlobalSteps = append(generateGlobalSteps, check1(strconv.Atoi(nameMatches[1])))
+		generateGlobalSteps = append(generateGlobalSteps, must1(strconv.Atoi(nameMatches[1])))
 	}
 
 	if len(generatedFiles) == 0 {
@@ -106,7 +106,7 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 	if !animate {
 		// Simply display all images:
 		for ii, generatedFile := range generatedFiles {
-			imagesT := check1(tensors.Load(path.Join(modelDir, generatedFile)))
+			imagesT := must1(tensors.Load(path.Join(modelDir, generatedFile)))
 			images := timage.ToImage().MaxValue(255.0).Batch(imagesT)
 			images = images[:imagesPerSample]
 			gonbui.DisplayMarkdown(fmt.Sprintf("- global_step %d:\n", generateGlobalSteps[ii]))
@@ -130,16 +130,16 @@ func (c *Config) PlotModelEvolution(imagesPerSample int, animate bool) {
 		ImagesPerSample: imagesPerSample,
 	}
 	for ii, generatedFile := range generatedFiles {
-		imagesT := check1(tensors.Load(path.Join(modelDir, generatedFile)))
+		imagesT := must1(tensors.Load(path.Join(modelDir, generatedFile)))
 		images := timage.ToImage().MaxValue(255.0).Batch(imagesT)
 		images = images[:imagesPerSample]
 		params.Images[ii] = xslices.Map(images[:imagesPerSample], func(img image.Image) string {
 			//return fmt.Sprintf("timestep_%d", ii)
-			return check1(gonbui.EmbedImageAsPNGSrc(img))
+			return must1(gonbui.EmbedImageAsPNGSrc(img))
 		})
 	}
 
-	var jsTemplate = check1(template.New("PlotModelEvolution").Parse(`
+	var jsTemplate = must1(template.New("PlotModelEvolution").Parse(`
 	<canvas id="canvas_{{.Id}}" height="{{.Size}}px" width="{{.Width}}px"></canvas>
 	<script>
 	var canvas_{{.Id}} = document.getElementById("canvas_{{.Id}}");
@@ -215,8 +215,9 @@ func (c *Config) DisplayImagesAcrossDiffusionSteps(numImages int, numDiffusionSt
 			"DisplayImagesAcrossDiffusionSteps requires a model loaded from a checkpoint, see Config.AttachCheckpoint.",
 		)
 	}
-	scope := c.Scope
-	_ = scope.Store().ResetRNGState()
+	store := c.Store
+	scope := c.Store.RootScope()
+	_ = store.ResetRNGState()
 	noise := c.GenerateNoise(numImages)
 	flowerIds := c.GenerateFlowerIds(numImages)
 
@@ -316,8 +317,7 @@ func (c *Config) GenerateImagesOfFlowerType(
 	flowerType int32,
 	numDiffusionSteps int,
 ) (predictedImages *tensors.Tensor) {
-	scope := c.Scope
-	_ = scope.Store().ResetRNGState()
+	c.Store.ResetRNGState()
 	noise := c.GenerateNoise(numImages)
 	flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 	generator := c.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
@@ -373,16 +373,15 @@ func (c *Config) DropdownFlowerTypes(cacheKey string, numImages, numDiffusionSte
 
 // GenerateImagesOfAllFlowerTypes takes one random noise, and generate the flower for each of the 102 types.
 func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predictedImages *tensors.Tensor) {
-	scope := c.Scope
 	numImages := flowers.NumLabels
-	_ = scope.Store().ResetRNGState()
+	_ = c.Store.ResetRNGState()
 	imageSize := c.ImageSize
 	noise := MustNewExec(c.Backend, func(g *Graph) *Node {
 		state := RNGStateForGraph(g)
 		_, noise := RandomNormal(state, shapes.Make(c.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise
-	}).MustExec()[0]
+	}).MustCall1()
 	flowerIds := tensors.FromValue(xslices.Iota(int32(0), numImages))
 	generator := c.NewImagesGenerator(noise, flowerIds, numDiffusionSteps)
 	return generator.Generate()
@@ -392,7 +391,7 @@ func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predicte
 // Use it with NewImagesGenerator.
 type ImagesGenerator struct {
 	config            *Config
-	scope             *model.Scope
+	store             *model.Store
 	noise, flowerIds  *tensors.Tensor
 	numImages         int
 	numDiffusionSteps int
@@ -403,7 +402,6 @@ type ImagesGenerator struct {
 // NewImagesGenerator generates flowers given initial `noise` and `flowerIds`, in `numDiffusionSteps`.
 // Typically, 20 diffusion steps will suffice.
 func (c *Config) NewImagesGenerator(noise, flowerIds *tensors.Tensor, numDiffusionSteps int) *ImagesGenerator {
-	scope := c.Scope
 	if numDiffusionSteps <= 0 {
 		exceptions.Panicf("Expected numDiffusionSteps > 0, got %d", numDiffusionSteps)
 	}
@@ -415,12 +413,12 @@ func (c *Config) NewImagesGenerator(noise, flowerIds *tensors.Tensor, numDiffusi
 	}
 	return &ImagesGenerator{
 		config:            c,
-		scope:             scope,
+		store:             c.Store,
 		noise:             noise,
 		flowerIds:         flowerIds,
 		numImages:         numImages,
 		numDiffusionSteps: numDiffusionSteps,
-		diffusionStepExec: model.MustNewExec(c.Backend, scope.Store(), DenoiseStepGraph),
+		diffusionStepExec: model.MustNewExec(c.Backend, c.Store, DenoiseStepGraph),
 		denormalizerExec: MustNewExec(c.Backend, func(image *Node) *Node {
 			return c.DenormalizeImages(image)
 		}),

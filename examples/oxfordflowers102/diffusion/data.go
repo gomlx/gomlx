@@ -35,7 +35,7 @@ var (
 // See NewConfig.
 type Config struct {
 	Backend compute.Backend
-	Scope   *model.Scope // Usually, at the root scope.
+	Store   *model.Store
 
 	// DataDir is where the data is downloaded, and models are saved.
 	DataDir string
@@ -60,16 +60,17 @@ type Config struct {
 // NewConfig creates a configuration for most of the diffusion methods.
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseSettings).
-func NewConfig(backend compute.Backend, scope *model.Scope, dataDir string, paramsSet []string) *Config {
+func NewConfig(backend compute.Backend, store *model.Store, dataDir string, paramsSet []string) *Config {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
 		check(os.MkdirAll(dataDir, 0777))
 	}
-	dtype := check1(dtypes.DTypeString(
+	scope := store.RootScope()
+	dtype := must1(dtypes.DTypeString(
 		model.GetParamOr(scope, "dtype", "float32")))
 	cfg := &Config{
 		Backend:       backend,
-		Scope:         scope,
+		Store:         store,
 		DataDir:       dataDir,
 		ImageSize:     model.GetParamOr(scope, "image_size", 64),
 		BatchSize:     model.GetParamOr(scope, "batch_size", 64),
@@ -86,9 +87,9 @@ func NewConfig(backend compute.Backend, scope *model.Scope, dataDir string, para
 
 // CreateInMemoryDatasets returns a train and a validation InMemoryDataset.
 func (c *Config) CreateInMemoryDatasets() (trainDS, validationDS *dataset.InMemoryDataset) {
-	trainDS = check1(
+	trainDS = must1(
 		flowers.InMemoryDataset(c.Backend, c.DataDir, c.ImageSize, "train", PartitionSeed, ValidationFraction, 1.0))
-	validationDS = check1(
+	validationDS = must1(
 		flowers.InMemoryDataset(
 			c.Backend,
 			c.DataDir,
@@ -125,8 +126,8 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 	if err == nil {
 		// Load previously generated values.
 		dec := gob.NewDecoder(f)
-		mean = check1(tensors.GobDeserialize(dec))
-		stddev = check1(tensors.GobDeserialize(dec))
+		mean = must1(tensors.GobDeserialize(dec))
+		stddev = must1(tensors.GobDeserialize(dec))
 		check(f.Close())
 		normalizationMean, normalizationStdDev = mean, stddev
 		return
@@ -152,7 +153,7 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 	mean, stddev = normalizationMean, normalizationStdDev
 
 	// Save for future times.
-	f = check1(os.Create(fPath))
+	f = must1(os.Create(fPath))
 	enc := gob.NewEncoder(f)
 	check(mean.GobSerialize(enc))
 	check(stddev.GobSerialize(enc))

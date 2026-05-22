@@ -30,7 +30,8 @@ import (
 
 // TrainModel with a given config -- it includes the scope with hyperparameters.
 func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd bool, verbosity int) {
-	scope := config.Scope
+	store := config.Store
+	scope := store.RootScope()
 	paramsSet := config.ParamsSet
 	backend := config.Backend
 
@@ -46,11 +47,11 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 		klog.Exitf("A checkpoint directory name with --checkpoint is required for storing evolution of some samples, none given")
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintSettings(scope.Store()))
+		fmt.Println(commandline.SprintSettings(store))
 	}
 	if model.GetParamOr(scope, "rng_reset", true) {
 		// Reset RNG with some pseudo-random value.
-		_ = scope.Store().ResetRNGState()
+		_ = store.ResetRNGState()
 	}
 	if verbosity >= 1 {
 		// Enumerate parameters that were set.
@@ -64,7 +65,7 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 					fmt.Printf("\t%s=%v\n", name, value)
 				}
 			} else {
-				if value, found := scope.Store().Scope(pScope).GetParam(name); found {
+				if value, found := store.Scope(pScope).GetParam(name); found {
 					fmt.Printf("\tscope=%q %s=%v\n", pScope, name, value)
 				}
 			}
@@ -91,9 +92,8 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	trainer := train.NewTrainer(
-		backend, scope.Store(), BuildTrainComputation(config), customLoss,
-		optimizer.FromScope(scope),
+	trainer := train.NewTrainer(backend, store, BuildTrainComputation(config), customLoss,
+		optimizer.FromStore(store),
 		[]metric.Interface{}, // trainMetrics
 		[]metric.Interface{}) // evalMetrics
 	if config.NanLogger != nil {

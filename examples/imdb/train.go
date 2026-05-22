@@ -15,8 +15,8 @@ import (
 	"github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
-	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
@@ -211,7 +211,7 @@ func TrainWithStore(
 	}
 	trainer := train.NewTrainer(backend, store, modelFn,
 		theLoss,
-		optimizer.FromScope(scope),
+		optimizer.FromStore(store),
 		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 

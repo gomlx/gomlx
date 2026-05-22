@@ -32,7 +32,7 @@ func init() {
 
 func getTestConfig() *Config {
 	store := CreateModelStore()
-	paramsSet := check1(commandline.ParseSettings(store, *scopeSettings))
+	paramsSet := must1(commandline.ParseSettings(store, *scopeSettings))
 	backend := testutil.BuildTestBackend()
 	return NewConfig(backend, store.RootScope(), *flagDataDir, paramsSet)
 }

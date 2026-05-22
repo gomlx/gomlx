@@ -251,7 +251,7 @@ func newTrainer(backend compute.Backend, store *model.Store) *train.Trainer {
 	scope := store.RootScope()
 	trainer := train.NewTrainer(backend, store, MagModelGraph,
 		lossFn,
-		optimizer.FromScope(scope),               // Based on `scope.GetParam("optimizer")`.
+		optimizer.FromStore(store),               // Based on `scope.GetParam("optimizer")`.
 		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 	if NanLogger != nil {

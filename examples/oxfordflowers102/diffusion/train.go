@@ -53,11 +53,11 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 	if checkpointPath == "" {
 		return nil, noise, flowerIDs
 	}
-	numCheckpointsToKeep := model.GetParamOr(c.Scope, "num_checkpoints", 5)
+	numCheckpointsToKeep := model.GetRootParamOr(c.Store, "num_checkpoints", 5)
 	excludeParams := make([]string, 0, len(c.ParamsSet)+len(ParamsExcludedFromLoading))
 	excludeParams = append(excludeParams, c.ParamsSet...)
 	excludeParams = append(excludeParams, ParamsExcludedFromLoading...)
-	checkpointHandler = check1(checkpoint.Build(c.Scope.Store()).
+	checkpointHandler = must1(checkpoint.Build(c.Store).
 		DirFromBase(checkpointPath, c.DataDir).
 		Keep(numCheckpointsToKeep).
 		ExcludeParams(excludeParams...).
@@ -66,9 +66,8 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 	c.Checkpoint = checkpointHandler // Save in config.
 
 	// In case the loaded checkpoint has different values, we need to update the config accordingly.
-	c.DType = check1(dtypes.DTypeString(
-		model.GetParamOr(c.Scope, "dtype", "float32")))
-	c.ImageSize = model.GetParamOr(c.Scope, "image_size", 64)
+	c.DType = must1(dtypes.DTypeString(model.GetRootParamOr(c.Store, "dtype", "float32")))
+	c.ImageSize = model.GetRootParamOr(c.Store, "image_size", 64)
 
 	// Load/generate sampled noise/flowerIDs.
 	noisePath := path.Join(checkpointHandler.Dir(), NoiseSamplesFile)
@@ -86,7 +85,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 	}
 
 	// Create new noise and flower ids -- and save it for future training.
-	numSamples := model.GetParamOr(c.Scope, "samples_during_training", 64)
+	numSamples := model.GetRootParamOr(c.Store, "samples_during_training", 64)
 	noise = c.GenerateNoise(numSamples)
 	flowerIDs = c.GenerateFlowerIds(numSamples)
 	check(noise.Save(noisePath))
@@ -97,13 +96,12 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 // TrainWithStore with hyperparameters given in Store.
 // paramsSet enumerate the scope parameters that were set and should override values loaded from a checkpointHandler.
 func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
-	scope := store.RootScope()
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
 	backend := compute.MustNew()
 	if verbosity >= 1 {
 		fmt.Printf("Backend %q:\t%s\n", backend.Name(), backend.Description())
 	}
-	config := NewConfig(backend, scope, dataDir, paramsSet)
+	config := NewConfig(backend, store, dataDir, paramsSet)
 
 	// Checkpoints saving.
 	checkpointHandler, samplesNoise, samplesFlowerIds := config.AttachCheckpoint(checkpointPath)
@@ -111,11 +109,11 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 		klog.Exitf("A checkpoint directory name with --checkpoint is required, none given")
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintSettings(scope))
+		fmt.Println(commandline.SprintSettings(store))
 	}
-	if model.GetParamOr(scope, "rng_reset", true) {
+	if model.GetRootParamOr(store, "rng_reset", true) {
 		// Reset RNG.
-		_ = scope.Store().ResetRNGState()
+		_ = store.ResetRNGState()
 	}
 	if verbosity >= 1 {
 		for _, paramsPath := range paramsSet {
@@ -124,11 +122,11 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 				pScope = pScope[:len(pScope)-1]
 			}
 			if pScope == "" {
-				if value, found := scope.GetParam(name); found {
+				if value, found := store.GetParam(name); found {
 					fmt.Printf("\t%s=%v\n", name, value)
 				}
 			} else {
-				if value, found := scope.Store().Scope(pScope).GetParam(name); found {
+				if value, found := store.Scope(pScope).GetParam(name); found {
 					fmt.Printf("\tscope=%q %s=%v\n", pScope, name, value)
 				}
 			}
@@ -142,9 +140,9 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	trainEvalDS.BatchSize(config.EvalBatchSize, false)
 	validationDS.BatchSize(config.EvalBatchSize, false)
 	var trainDS train.Dataset
-	if model.GetParamOr(scope, "diffusion_balanced_dataset", false) {
+	if model.GetRootParamOr(store, "diffusion_balanced_dataset", false) {
 		fmt.Println("Using balanced datasets.")
-		balancedTrainDS := check1(flowers.NewBalancedDataset(config.Backend, config.DataDir, config.ImageSize))
+		balancedTrainDS := must1(flowers.NewBalancedDataset(config.Backend, config.DataDir, config.ImageSize))
 		trainDS = balancedTrainDS
 	} else {
 		trainDS = trainInMemoryDS
@@ -180,7 +178,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 			return predictions[3]
 		}, pprintLossFn)
 
-	useNanLogger := model.GetParamOr(scope, "nan_logger", false)
+	useNanLogger := model.GetRootParamOr(store, "nan_logger", false)
 	if useNanLogger {
 		nanLogger = nanlogger.New()
 	}
@@ -188,8 +186,10 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	trainer := train.NewTrainer(
-		backend, scope.Store(), config.BuildTrainingModelGraph(), customLoss,
-		optimizer.FromScope(scope),
+		backend, store,
+		config.BuildTrainingModelGraph(),
+		customLoss,
+		optimizer.FromStore(store),
 		[]metric.Interface{movingImagesLoss, movingNoiseLoss, movingMAE}, // trainMetrics
 		[]metric.Interface{meanImagesLoss, meanMAE})                      // evalMetrics
 	if nanLogger != nil {
@@ -206,7 +206,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 
 	// Checkpoint saving: every 3 minutes of training.
 	if checkpointHandler != nil {
-		period := check1(
+		period := must1(
 			time.ParseDuration(model.GetParamOr(scope, "checkpoint_frequency", "3m")))
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
@@ -217,7 +217,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
 	var plotter *plotly.PlotConfig
-	if model.GetParamOr(scope, plotly.ParamPlots, false) {
+	if model.GetRootParamOr(store, plotly.ParamPlots, false) {
 		plotter = plotly.New().
 			WithCheckpoint(checkpointHandler).
 			Dynamic().
@@ -227,14 +227,14 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 
 	generator := config.NewImagesGenerator(samplesNoise, samplesFlowerIds, 20)
 	var kid *KidGenerator
-	if model.GetParamOr(scope, "kid", false) {
+	if model.GetRootParamOr(store, "kid", false) {
 		kidDS := validationDS.Copy()
 		kidDS.Shuffle().BatchSize(config.EvalBatchSize, true)
 		kid = config.NewKidGenerator(kidDS, 5)
 	}
 
-	samplesFrequency := model.GetParamOr(scope, "samples_during_training_frequency", 200)
-	samplesFrequencyGrowth := model.GetParamOr(scope, "samples_during_training_frequency_growth", 1.2)
+	samplesFrequency := model.GetRootParamOr(store, "samples_during_training_frequency", 200)
+	samplesFrequencyGrowth := model.GetRootParamOr(store, "samples_during_training_frequency_growth", 1.2)
 	if plotter != nil {
 		train.ExponentialCallback(loop, samplesFrequency, samplesFrequencyGrowth, true,
 			"Monitor", 0, func(loop *train.Loop, metrics []*tensors.Tensor) error {
@@ -243,17 +243,17 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	}
 
 	// Loop for given number of steps.
-	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
+	numTrainSteps := model.GetRootParamOr(store, "train_steps", 0)
 	globalStep := int(optimizer.GetGlobalStep(store))
 	if globalStep < numTrainSteps {
-		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
+		_ = must1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if verbosity >= 1 {
 			fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
 				loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 		}
 
 		// Update batch normalization averages, if they are used.
-		if check1(norm.UpdateBatchNormAverages(trainer, trainEvalDS)) {
+		if must1(norm.UpdateBatchNormAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			if checkpointHandler != nil {
 				check(checkpointHandler.Save())
@@ -317,9 +317,9 @@ func TrainingMonitor(checkpointHandler *checkpoint.Handler, loop *train.Loop, me
 // DisplayTrainingPlots simply display the training plots of a model, without any training.
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseSettings).
-func DisplayTrainingPlots(scope *model.Scope, dataDir, checkpointPath string, paramsSet []string) {
+func DisplayTrainingPlots(store *model.Store, dataDir, checkpointPath string, paramsSet []string) {
 	backend := compute.MustNew()
-	config := NewConfig(backend, scope, dataDir, paramsSet)
+	config := NewConfig(backend, store, dataDir, paramsSet)
 	checkpointHandler, _, _ := config.AttachCheckpoint(checkpointPath)
 	if checkpointHandler == nil {
 		fmt.Printf("You must set --checkpoint='model_sub_dir'!")
@@ -338,7 +338,7 @@ func CompareModelPlots(dataDir string, modelNames ...string) {
 			modelPath = path.Join(dataDir, modelPath)
 		}
 		modelPath = path.Join(modelPath, stdplots.TrainingPlotFileName)
-		_ = check1(plots.PreloadFile(modelPath, func(metricName string) string {
+		_ = must1(plots.PreloadFile(modelPath, func(metricName string) string {
 			return fmt.Sprintf("[%s] %s", modelName, metricName)
 		}))
 	}
@@ -353,8 +353,8 @@ func check(err error) {
 	klog.Fatalf("Fatal error: %+v", err)
 }
 
-// check1 reports and exits on error. Otherwise returns the value passed.
-func check1[T any](v T, err error) T {
+// must1 reports and exits on error. Otherwise returns the value passed.
+func must1[T any](v T, err error) T {
 	check(err)
 	return v
 }

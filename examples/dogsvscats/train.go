@@ -13,9 +13,9 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
-	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
@@ -199,7 +199,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	backend := compute.MustNew()
 	var trainer *train.Trainer
-	theOptimizer := optimizer.FromScope(scope)
+	theOptimizer := optimizer.FromStore(store)
 	if !preTraining {
 		trainer = train.NewTrainer(backend, store, modelFn,
 			loss.BinaryCrossentropyLogits,

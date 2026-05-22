@@ -164,7 +164,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	trainer = train.NewTrainer(backend, store,
 		modelFn,
 		lossFn,
-		optimizer.FromScope(scope),
+		optimizer.FromStore(store),
 		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
 		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 
