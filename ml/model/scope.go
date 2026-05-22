@@ -314,6 +314,12 @@ func MustGetParam[T any](s *Scope, key string) T {
 	return v.Convert(typeOfT).Interface().(T)
 }
 
+// MustGetRootParam is like MustGetParam, but it uses the Store's root scope.
+// It panics if the parameter is not found, or if it is not of type T.
+func MustGetRootParam[T any](s *Store, key string) T {
+	return MustGetParam[T](s.RootScope(), key)
+}
+
 // GetParamOr either returns the value for the given param key in the scope `s`,
 // searching successively from the current scope back to the root scope ("/"), or if the
 // key is not found or the key is set to nil, it returns the given default value.
@@ -327,6 +333,11 @@ func GetParamOr[T any](s *Scope, key string, defaultValue T) T {
 		return value
 	}
 	return MustGetParam[T](s, key)
+}
+
+// GetRootParamOr works like GetParam but it assumes the root scope of the given Store.
+func GetRootParamOr[T any](s *Store, key string, defaultValue T) T {
+	return GetParamOr(s.RootScope(), key, defaultValue)
 }
 
 var textUnmarshalerType = reflect.TypeFor[encoding.TextUnmarshaler]()
