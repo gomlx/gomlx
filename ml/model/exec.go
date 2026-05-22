@@ -157,24 +157,21 @@ func (e *Exec) setSideParams(g *Graph, inputBuffers []compute.Buffer, donate []b
 
 // setSideParamsSingleDevice sets the side parameters for single-device execution.
 func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
-	graphId := g.GraphId()
+	gs := getGraphStore(g)
 	deviceAssignment := e.exec.DeviceAssignment()
 	deviceNum := compute.DeviceNum(0)
 	if len(deviceAssignment) > 0 {
 		deviceNum = deviceAssignment[0]
 	}
 
-	for _, v := range e.store.variables {
-		nodes, found := v.graphToNodes.Load(graphId)
-		if !found {
-			continue
-		}
+	for _, nodes := range gs.IterVariables() {
+		v := nodes.variable
 		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
 			return errors.Errorf("invalid paramNode for variable %q", v.Path())
 		}
 		handle := nodes.paramNode.GetParameterHandle()
 
-		if v.ChangedInGraph(g) {
+		if nodes.paramNode != nodes.valueNode {
 			// We donate the buffer, since we are getting a new one on the output.
 			value, err := v.Value()
 			if err != nil {
@@ -213,16 +210,13 @@ func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []compute.Buffer
 
 // setSideParamsDistributed sets the side parameters for distributed execution.
 func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []compute.Buffer, donate []bool) error {
-	graphId := g.GraphId()
+	gs := getGraphStore(g)
 	numDevices := e.exec.NumDevices()
 	numParams := g.NumParameters()
 	deviceAssignment := e.exec.DeviceAssignment()
 
-	for _, v := range e.store.variables {
-		nodes, found := v.graphToNodes.Load(graphId)
-		if !found {
-			continue
-		}
+	for _, nodes := range gs.IterVariables() {
+		v := nodes.variable
 		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
 			return errors.Errorf("invalid paramNode for variable %q", v.Path())
 		}
@@ -241,7 +235,7 @@ func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []compute.Buffer,
 			return errors.WithMessagef(err, "failed to get distributed value for variable %q", v.Path())
 		}
 		shards := dTensor.Shards()
-		changedInGraph := v.ChangedInGraph(g)
+		changedInGraph := nodes.paramNode != nodes.valueNode
 		if changedInGraph {
 			// Donate buffers since we'll get new ones on output.
 			for deviceIdx := range numDevices {

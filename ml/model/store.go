@@ -6,6 +6,7 @@ import (
 	"iter"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
@@ -396,7 +397,44 @@ func (s *Store) SetParams(keyValues map[string]any) {
 type graphState struct{}
 
 type graphStore struct {
-	params *scoped.Params
+	mu        sync.RWMutex
+	params    *scoped.Params
+	variables map[string]*variableNodes
+}
+
+func (gs *graphStore) getVariableNodes(v *Variable) (*variableNodes, bool) {
+	if gs == nil {
+		return nil, false
+	}
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	nodes, found := gs.variables[v.Path()]
+	return nodes, found
+}
+
+func (gs *graphStore) setVariableNodes(v *Variable, nodes *variableNodes) {
+	if gs == nil {
+		return
+	}
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	gs.variables[v.Path()] = nodes
+}
+
+// IterVariables returns an iterator over the variables registered in the graphStore.
+func (gs *graphStore) IterVariables() iter.Seq2[string, *variableNodes] {
+	return func(yield func(string, *variableNodes) bool) {
+		if gs == nil {
+			return
+		}
+		gs.mu.RLock()
+		defer gs.mu.RUnlock()
+		for path, nodes := range gs.variables {
+			if !yield(path, nodes) {
+				return
+			}
+		}
+	}
 }
 
 type graphStoreLink struct{}
@@ -419,15 +457,19 @@ func GetStore(g graph.GraphProvider) *Store {
 
 func newGraphStore() *graphStore {
 	return &graphStore{
-		params: scoped.New(ScopeSeparator),
+		params:    scoped.New(ScopeSeparator),
+		variables: make(map[string]*variableNodes),
 	}
 }
 
 // getGraphStore returns the graphStore attached to the graph.
+// If none exists, it automatically creates and attaches one.
 func getGraphStore(g *Graph) *graphStore {
 	state := g.State(graphState{})
 	if state == nil {
-		return nil
+		gs := newGraphStore()
+		g.AttachState(graphState{}, gs)
+		return gs
 	}
 	return state.(*graphStore)
 }

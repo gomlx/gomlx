@@ -9,7 +9,6 @@ import (
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
-	"github.com/gomlx/gomlx/support/xsync"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -56,9 +55,6 @@ type Variable struct {
 	// If nil, the variable is considered replicated (or local).
 	shardingSpec *distributed.ShardingSpec
 
-	// graphToNodes maps graph ids in which this variable was used to its parameter Node and
-	// its last value Node.
-	graphToNodes xsync.SyncMap[graph.GraphId, *variableNodes]
 }
 
 // CloneToStore Variable.
@@ -107,6 +103,7 @@ func valueToTensor(value any) (*tensors.Tensor, error) {
 // variableNodes is used to store the variable parameter node (fed to the graph) and current value Node for a given graph.
 // They can be different if the variable value is changed during the graph building with [Variable.SetNodeValue].
 type variableNodes struct {
+	variable             *Variable
 	paramNode, valueNode *Node
 }
 
@@ -439,14 +436,22 @@ func (v *Variable) DistributedValue() (*dtensor.Tensor, error) {
 // InUseByGraph returns whether the variable is currently in use by the given graph.
 func (v *Variable) InUseByGraph(g *Graph) bool {
 	v.AssertValid()
-	_, found := v.graphToNodes.Load(g.GraphId())
+	gs := getGraphStore(g)
+	if gs == nil {
+		return false
+	}
+	_, found := gs.getVariableNodes(v)
 	return found
 }
 
 // ChangedInGraph returns whether the variable is in use and was changed in the computation graph g.
 func (v *Variable) ChangedInGraph(g *Graph) bool {
 	v.AssertValid()
-	nodes, found := v.graphToNodes.Load(g.GraphId())
+	gs := getGraphStore(g)
+	if gs == nil {
+		return false
+	}
+	nodes, found := gs.getVariableNodes(v)
 	if !found {
 		return false
 	}
@@ -460,7 +465,8 @@ func (v *Variable) ChangedInGraph(g *Graph) bool {
 func (v *Variable) NodeValue(nodeOrGraph graph.GraphProvider) *Node {
 	v.AssertValid()
 	g := nodeOrGraph.Graph()
-	nodes, found := v.graphToNodes.Load(g.GraphId())
+	gs := getGraphStore(g)
+	nodes, found := gs.getVariableNodes(v)
 	if found {
 		return nodes.valueNode
 	}
@@ -495,14 +501,15 @@ func (v *Variable) SetNodeValue(value *Node) {
 	v.AssertValid()
 	g := value.Graph()
 	g.AssertValid()
-	nodes, found := v.graphToNodes.Load(g.GraphId())
+	gs := getGraphStore(g)
+	nodes, found := gs.getVariableNodes(v)
 	if !found {
 		// Creates a parameter node, as this includes the variable as in use for the graph.
 		_, err := v.paramNode(g)
 		if err != nil {
 			panic(err)
 		}
-		nodes, _ = v.graphToNodes.Load(g.GraphId())
+		nodes, _ = gs.getVariableNodes(v)
 	}
 	nodes.valueNode = value
 }
@@ -524,7 +531,8 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 	if err := g.CheckValid(); err != nil {
 		return nil, err
 	}
-	nodes, found := v.graphToNodes.Load(g.GraphId())
+	gs := getGraphStore(g)
+	nodes, found := gs.getVariableNodes(v)
 	if found {
 		return nodes.paramNode, nil
 	}
@@ -558,8 +566,8 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		// Default (None) strategy: standard parameter.
 		paramNode = graph.Parameter(g, paramName, v.shape)
 	}
-	nodes = &variableNodes{valueNode: paramNode, paramNode: paramNode}
-	v.graphToNodes.Store(g.GraphId(), nodes)
+	nodes = &variableNodes{variable: v, valueNode: paramNode, paramNode: paramNode}
+	gs.setVariableNodes(v, nodes)
 	return paramNode, nil
 }
 
@@ -596,7 +604,6 @@ func (v *Variable) Finalize() error {
 		}
 	}
 	v.shape = shapes.Invalid()
-	v.graphToNodes.Clear()
 	v.store = nil
 	return firstErr
 }
