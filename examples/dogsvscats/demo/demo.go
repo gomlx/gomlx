@@ -6,13 +6,15 @@
 //  2. With `demo --pre`: It will pre-generate augmented data for subsequent training: since it spends more time
 //     augmenting data than training, this is handy and accelerates training. But uses up lots of space (~13Gb with
 //     the default number of generated epochs).
-//  3. With `demo --train`: trains a CNN (convolutional neural network) model for "Dogs vs Cats".
+//  3. With `demo --train`: trains a CNN (convolutional neural network) model for "Dogs vs Cats" (default).
 package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/examples/dogsvscats"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -24,9 +26,11 @@ import (
 )
 
 var (
-	flagDataDir           = flag.String("data", "~/tmp/dogs_vs_cats", "Directory to cache downloaded dataset and save checkpoint.")
-	flagCheckpoint        = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
-	flagEval              = flag.Bool("eval", true, "Whether to evaluate trained model on test data in the end.")
+	flagTrain      = flag.Bool("train", true, "Train the model.")
+	flagDownload   = flag.Bool("download", false, "Download and pre-filter Cats & Dogs dataset.")
+	flagDataDir    = flag.String("data", "~/tmp/dogs_vs_cats", "Directory to cache downloaded dataset and save checkpoint.")
+	flagCheckpoint = flag.String("checkpoint", "", "Directory to save and load checkpoints from. If left empty, no checkpoints are created.")
+	flagEval       = flag.Bool("eval", true, "Whether to evaluate trained model on test data in the end.")
 
 	// Pre-Generation parameters:
 	flagPreGenerate  = flag.Bool("pre", false, "Pre-generate preprocessed image data to speed up training.")
@@ -38,18 +42,36 @@ func main() {
 	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseSettings(store, *settings))
+	paramsSet, err := commandline.ParseSettings(store, *settings)
+	if err != nil {
+		klog.Fatalf("Fatal error parsing settings: %+v", err)
+	}
 
-	// --force_original better set by
-	err := exceptions.TryCatch[error](func() {
+	backend := compute.MustNew()
+	fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
+	fmt.Println(commandline.SprintSettings(store))
+
+	err = exceptions.TryCatch[error](func() {
+		if *flagDownload {
+			*flagDataDir = fsutil.MustReplaceTildeInDir(*flagDataDir)
+			if !fsutil.MustFileExists(*flagDataDir) {
+				check(os.MkdirAll(*flagDataDir, 0777))
+			}
+			check(dogsvscats.Download(*flagDataDir))
+			check(dogsvscats.FilterValidImages(*flagDataDir))
+			klog.Infof("Data downloaded in %s", *flagDataDir)
+		}
 		if *flagPreGenerate {
 			preGenerate(store.RootScope(), *flagDataDir)
-		} else {
+		} else if *flagTrain {
 			dogsvscats.TrainWithStore(store, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet)
+		}
+		if !*flagDownload && !*flagPreGenerate && !*flagTrain {
+			klog.Info("exit: usage -download, -pre and/or -train, optional -data")
 		}
 	})
 	if err != nil {
-		klog.Errorf("Error:\n%+v", err)
+		klog.Fatalf("Error:\n%+v", err)
 	}
 }
 
@@ -71,10 +93,4 @@ func check(err error) {
 		return
 	}
 	klog.Fatalf("Fatal error: %+v", err)
-}
-
-// check1 reports and exits on error. Otherwise returns the value passed.
-func check1[T any](v T, err error) T {
-	check(err)
-	return v
 }
