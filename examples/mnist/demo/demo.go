@@ -35,15 +35,15 @@ import (
 // Example usage: go run demo.go -train -checkpoint=cnn_triplet_hard_01 -set="model=cnn;loss=triplet;triplet_loss_mining_strategy=hard;triplet_loss_margin=0.1"
 
 var (
-	flagTrain             = flag.Bool("train", true, "Flag to train")
-	flagDownload          = flag.Bool("download", false, "Flag to download")
-	flagDataDir           = flag.String("data", "~/work/mnist", "Directory to cache downloaded dataset.")
-	flagCheckpoint        = flag.String("checkpoint", "",
+	flagTrain      = flag.Bool("train", true, "Flag to train")
+	flagDownload   = flag.Bool("download", false, "Flag to download")
+	flagDataDir    = flag.String("data", "~/work/mnist", "Directory to cache downloaded dataset.")
+	flagCheckpoint = flag.String("checkpoint", "",
 		"Checkpoint directory from/to where to load/save the trained model. Path is relative to --data.")
 )
 
 func main() {
-	store := mnist.CreateModelStore()
+	store := mnist.CreateStore()
 	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
@@ -58,7 +58,7 @@ func main() {
 		klog.Infof("Data downloaded in %s", *flagDataDir)
 	}
 	if *flagTrain {
-		if err := mnist.TrainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet); err != nil {
+		if err := mnist.Train(store, *flagDataDir, *flagCheckpoint, paramsSet); err != nil {
 			klog.Fatal(err)
 		}
 	}

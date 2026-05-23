@@ -52,7 +52,7 @@ var excludeParams = []string{"data_dir", "train_steps", "num_checkpoints", "plot
 
 type ScopeFn func(scope *model.Scope) *model.Scope
 
-func CreateModelStore() *model.Store {
+func CreateStore() *model.Store {
 	store := model.NewStore()
 	_ = store.ResetRNGState()
 	store.SetParams(map[string]any{
@@ -116,8 +116,8 @@ func NewDatasetsConfigurationFromScope(scope *model.Scope, dataDir string) *Data
 	return config
 }
 
-// TrainWithStore based on configuration and flags.
-func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet []string) error {
+// Train based on configuration and flags.
+func Train(store *model.Store, dataDir, checkpointPath string, paramsSet []string) error {
 	scope := store.RootScope()
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
