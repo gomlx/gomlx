@@ -361,10 +361,6 @@ func ResetBatchNormWeights(backend compute.Backend, store *model.Store) error {
 			if err != nil {
 				return err
 			}
-			err = v.SetValue(zeros)
-			if err != nil {
-				return err
-			}
 		}
 	}
 	return nil
