@@ -275,7 +275,15 @@ func TestVNNTrain(t *testing.T) {
 
 	// We expect the VNN to fail to learn this function because it's not rotation-invariant.
 	// Accuracy should be around 50% (random guessing).
-	accuracy := lossAndMetrics[2].Value().(float32)
+	accuracyIdx := -1
+	for idx, m := range trainer.EvalMetrics() {
+		if m.ShortName() == "#acc" {
+			accuracyIdx = idx
+			break
+		}
+	}
+	require.GreaterOrEqual(t, accuracyIdx, 0, "Mean Accuracy metric not found")
+	accuracy := lossAndMetrics[accuracyIdx].Value().(float32)
 	require.GreaterOrEqual(t, accuracy, float32(0.8), "VNN was not able to learn rotation invariant simple task, accuracy=%.1f%%.", accuracy*100.0)
 
 	sample := model.MustCallOnce(backend, store, func(scope *model.Scope, g *Graph) *Node {
