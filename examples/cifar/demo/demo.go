@@ -6,7 +6,10 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"os"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/examples/cifar"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
@@ -16,6 +19,8 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
+	"github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"k8s.io/klog/v2"
@@ -24,6 +29,8 @@ import (
 )
 
 var (
+	flagTrain      = flag.Bool("train", true, "Train the model.")
+	flagDownload   = flag.Bool("download", false, "Download CIFAR-10 dataset.")
 	flagDataDir    = flag.String("data", "~/work/cifar", "Directory to cache downloaded and generated dataset files.")
 	flagEval       = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
 	flagVerbosity  = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
@@ -109,10 +116,34 @@ func main() {
 	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseSettings(store, *settings))
+	paramsSet, err := commandline.ParseSettings(store, *settings)
+	if err != nil {
+		klog.Fatalf("Fatal error parsing settings: %+v", err)
+	}
 
-	// Train.
-	cifar.TrainCifar10WithStore(store, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)
+	backend := compute.MustNew()
+	fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
+	fmt.Println(commandline.SprintSettings(store))
+
+	err = exceptions.TryCatch[error](func() {
+		if *flagDownload {
+			*flagDataDir = fsutil.MustReplaceTildeInDir(*flagDataDir)
+			if !fsutil.MustFileExists(*flagDataDir) {
+				check(os.MkdirAll(*flagDataDir, 0777))
+			}
+			check(cifar.DownloadCifar10(*flagDataDir))
+			klog.Infof("Data downloaded in %s", *flagDataDir)
+		}
+		if *flagTrain {
+			cifar.TrainCifar10WithStore(store, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)
+		}
+		if !*flagDownload && !*flagTrain {
+			klog.Info("exit: usage -download and/or -train, optional -data")
+		}
+	})
+	if err != nil {
+		klog.Fatalf("Error:\n%+v", err)
+	}
 }
 
 // check reports and exits on error.
