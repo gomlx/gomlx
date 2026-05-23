@@ -437,7 +437,7 @@ func AddL2Regularization(scope *model.Scope, amount *Node, values ...*Node) {
 		}
 	}
 	loss = Mul(loss, amount)
-	train.AddLoss(loss)
+	train.AddRegularizationLoss(loss)
 }
 
 // Normalize shifts and scales the input such that the mean becomes zero and the variance one.

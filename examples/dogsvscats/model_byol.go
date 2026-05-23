@@ -19,7 +19,7 @@ import (
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
-// byolModelEmbedding is the core of the BYOL ((Bootstrap Your Own Latent) model.
+// byolModelEmbedding is the core of the BYOL (Bootstrap Your Own Latent) model.
 // It's built twice, once for the "online" model once for the "target" model -- using scopes on different scopes.
 //
 // baseTrainable defines whether the base model should be trainable (set to false for the "target"
@@ -90,7 +90,10 @@ func ByolCnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 
 	byolReg := byolLoss(onlineProjection, targetProjection)
 	ReduceAllMean(Sqrt(byolReg)).SetLogged("byolReg")
-	train.AddLoss(MulScalar(byolReg, regularizationRate))
+
+	// This is the unsupervised loss BYOL uses to learn representations,
+	// semantically not a "regularization".
+	train.AddMainLoss(MulScalar(byolReg, regularizationRate))
 
 	// Update "target" model with moving average to the "online" model.
 	movingAverageRatio := model.GetParamOr(targetScope, "byol_target_update_ratio", 0.999)
@@ -161,5 +164,5 @@ func byolRegularizeToLengthOne(scope *model.Scope, projection *Node) {
 	ReduceAllMean(lengths).SetLogged("MeanLengthProjection")
 	regLength := Square(Sub(ScalarOne(g, dtype), lengths))
 	regLength = MulScalar(regLength, regLenOne)
-	train.AddLoss(regLength)
+	train.AddRegularizationLoss(regLength)
 }

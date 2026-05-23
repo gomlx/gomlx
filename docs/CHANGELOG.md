@@ -70,6 +70,13 @@ And a few small renaming:
   which is attached to the Graph. This makes the separation cleaner, and they all get automatically GC'ed if
   the Graph is destroyed (preventing some leaks).
 
+## Package `ml/train`: 
+- Clarification of main loss vs regularization loss in `ml/train`, added: 
+  - `AddMainLoss`/`GetMainLoss` to accumulate the main model losses; 
+  - `AddRegularizationLoss`/`GetRegularizationLoss` to accumulate regularization losses;
+  - `TotalLoss` to return their sum
+  - Older API marked as deprecated.
+
 ## Graph (github.com/gomlx/gomlx/core/graph):
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
 

@@ -58,7 +58,7 @@ func L2(amount float64) Regularizer {
 			}
 		}
 		regLoss = MulScalar(regLoss, amount)
-		train.AddLoss(regLoss)
+		train.AddRegularizationLoss(regLoss)
 	}
 }
 
@@ -85,7 +85,7 @@ func L1(amount float64) Regularizer {
 			}
 		}
 		regLoss = MulScalar(regLoss, amount)
-		train.AddLoss(regLoss)
+		train.AddRegularizationLoss(regLoss)
 
 		store := model.GetStore(g)
 		if store == nil {
@@ -172,6 +172,6 @@ func ConstantL1(amount float64) Regularizer {
 				regLoss = Add(l1, regLoss)
 			}
 		}
-		train.AddLoss(regLoss)
+		train.AddRegularizationLoss(regLoss)
 	}
 }
