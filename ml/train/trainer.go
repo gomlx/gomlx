@@ -193,7 +193,7 @@ func NewTrainer(backend compute.Backend, store *model.Store,
 	}
 
 	// Create a scope executor for TrainStep. Automatically include batch loss and moving average loss metrics.
-	numMetrics := len(trainMetrics) + 3
+	numMetrics := len(trainMetrics) + 2
 	lossAndMetrics := make([]metric.Interface, 0, numMetrics)
 	batchLossFn := func(_ *model.Scope, labels, predictions []*graph.Node) *graph.Node {
 		// Assume lossVar has already been set.
@@ -205,49 +205,32 @@ func NewTrainer(backend compute.Backend, store *model.Store,
 		}
 		return theLoss
 	}
-	lossNoRegularizationFn := func(scope *model.Scope, labels, predictions []*graph.Node) *graph.Node {
-		g := predictions[0].Graph()
-		theLoss := GetMainLoss(g)
-		if theLoss == nil {
-			return graph.ScalarZero(g, predictions[0].DType())
-		}
-		return theLoss
-	}
 	lossAndMetrics = append(
 		lossAndMetrics,
-		metric.NewBaseMetric("Batch Total Loss", "loss+", metric.LossMetricType, batchLossFn, nil),
+		metric.NewBaseMetric("Loss", "loss", metric.LossMetricType, batchLossFn, nil),
 	)
 	lossAndMetrics = append(
 		lossAndMetrics,
 		metric.NewExponentialMovingAverageMetric(
-			"Moving Average Total Loss",
-			"~loss+",
+			"Moving Average Loss",
+			"~loss",
 			metric.LossMetricType,
 			batchLossFn,
 			nil,
 			0.01,
 		),
 	)
-	if r.lossFn != nil {
-		lossAndMetrics = append(lossAndMetrics,
-			metric.NewExponentialMovingAverageMetric("Moving Average Loss (no-reg)", "~loss", metric.LossMetricType,
-				lossNoRegularizationFn, nil, 0.01))
-	}
 
 	lossAndMetrics = append(lossAndMetrics, trainMetrics...)
 	r.trainMetrics = lossAndMetrics
 
 	// Create a scope executor for EvalStep. Automatically include the mean loss metric as the first eval metric.
-	numMetrics = len(evalMetrics) + 2
+	numMetrics = len(evalMetrics) + 1
 	lossAndMetrics = make([]metric.Interface, 0, numMetrics)
 	lossAndMetrics = append(
 		lossAndMetrics,
-		metric.NewMeanMetric("Mean Total Loss", "#loss+", metric.LossMetricType, batchLossFn, nil),
+		metric.NewMeanMetric("Mean Loss", "#loss", metric.LossMetricType, batchLossFn, nil),
 	)
-	if r.lossFn != nil {
-		lossAndMetrics = append(lossAndMetrics, metric.NewMeanMetric("Mean Loss (no-reg)", "#loss", metric.LossMetricType,
-			lossNoRegularizationFn, nil))
-	}
 	lossAndMetrics = append(lossAndMetrics, evalMetrics...)
 	r.evalMetrics = lossAndMetrics
 	return r
@@ -266,6 +249,48 @@ func (r *Trainer) WithDeviceAssignment(deviceAssignment ...compute.DeviceNum) *T
 		return r
 	}
 	r.deviceAssignment = slices.Clone(deviceAssignment)
+	return r
+}
+
+// WithMainLossMetric configures the trainer to also include the "no-reg" loss metrics,
+// showing the model loss without regularization.
+func (r *Trainer) WithMainLossMetric() *Trainer {
+	lossNoRegularizationFn := func(scope *model.Scope, labels, predictions []*graph.Node) *graph.Node {
+		g := predictions[0].Graph()
+		theLoss := GetMainLoss(g)
+		if theLoss == nil {
+			return graph.ScalarZero(g, predictions[0].DType())
+		}
+		return theLoss
+	}
+
+	// Insert "Moving Average Loss (no-reg)" right after the first two loss metrics (Loss and Moving Average Loss)
+	hasMainLossMetric := false
+	for _, m := range r.trainMetrics {
+		if m.Name() == "Moving Average Loss (no-reg)" {
+			hasMainLossMetric = true
+			break
+		}
+	}
+	if !hasMainLossMetric {
+		var newTrainMetric metric.Interface = metric.NewExponentialMovingAverageMetric("Moving Average Loss (no-reg)", "~loss_no_reg", metric.LossMetricType,
+			lossNoRegularizationFn, nil, 0.01)
+		r.trainMetrics = slices.Insert(r.trainMetrics, 2, newTrainMetric)
+	}
+
+	// Insert "Mean Loss (no-reg)" right after the first evaluation metric (Mean Loss)
+	hasEvalMainLossMetric := false
+	for _, m := range r.evalMetrics {
+		if m.Name() == "Mean Loss (no-reg)" {
+			hasEvalMainLossMetric = true
+			break
+		}
+	}
+	if !hasEvalMainLossMetric {
+		var newEvalMetric metric.Interface = metric.NewMeanMetric("Mean Loss (no-reg)", "#loss_no_reg", metric.LossMetricType,
+			lossNoRegularizationFn, nil)
+		r.evalMetrics = slices.Insert(r.evalMetrics, 1, newEvalMetric)
+	}
 	return r
 }
 

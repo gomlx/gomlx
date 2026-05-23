@@ -74,8 +74,9 @@ And a few small renaming:
 - Clarification of main loss vs regularization loss in `ml/train`, added: 
   - `AddMainLoss`/`GetMainLoss` to accumulate the main model losses; 
   - `AddRegularizationLoss`/`GetRegularizationLoss` to accumulate regularization losses;
-  - `TotalLoss` to return their sum
+  - `TotalLoss` to return their sum.
   - Older API marked as deprecated.
+  - Changed default loss metrics behavior to only return the total loss by default (named "Loss" / "~loss"). Added `WithMainLossMetric()` method to include the "no-reg" metrics when requested.
 
 ## Graph (github.com/gomlx/gomlx/core/graph):
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
