@@ -26,7 +26,7 @@ import (
 )
 
 var (
-	flagVerbose       = flag.Bool("verbose", false, "Set to true to print more information.")
+	flagVerbosity     = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
 	flagEval          = flag.Bool("eval", false, "Set to true to run evaluation instead of training.")
 	flagSkipReport    = flag.Bool("skip_report", false, "Set to true to skip report of quality after training.")
 	flagSkipTrainEval = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
@@ -43,7 +43,7 @@ func createModelStore() *model.Store {
 	store.SetParams(map[string]any{
 		"checkpoint":         "",
 		"num_checkpoints":    3,
-		"train_steps":        0,
+		"train_steps":        1000,
 		"batch_size":         128,
 		"plots":              true,
 		paramWithReplacement: false,
@@ -114,13 +114,13 @@ func createModelStore() *model.Store {
 	return store
 }
 
-func SetTrainSteps(scope *model.Scope) {
-	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
+func SetTrainSteps(store *model.Store) {
+	numTrainSteps := model.GetParamOr(store.RootScope(), "train_steps", 0)
 	if numTrainSteps <= 0 {
 		stepsPerEpoch := mag.TrainSplit.Shape().Size()/mag.BatchSize + 1
 		numEpochs := 10 // Taken from TF-GNN OGBN-MAG notebook.
 		numTrainSteps = numEpochs * stepsPerEpoch
-		scope.SetParam("train_steps", numTrainSteps)
+		store.RootScope().SetParam("train_steps", numTrainSteps)
 	}
 	//cosineScheduleSteps := model.GetParamOr(scope, cosineschedule.ParamPeriodSteps, 0)
 	//if cosineScheduleSteps < 0 {
@@ -132,7 +132,6 @@ func main() {
 	// Init GoMLX manager and default model.
 	backend := compute.MustNew()
 	store := createModelStore()
-	scope := store.RootScope()
 
 	// Flags with scope settings.
 	settings := commandline.CreateSettingsFlag(store, "")
@@ -147,11 +146,11 @@ func main() {
 
 	// Parse hyperparameter settings.
 	paramsSet := check1(commandline.ParseSettings(store, *settings))
-	if *flagVerbose {
-		fmt.Println("Hyperparameters set:")
-		fmt.Println(commandline.SprintModifiedSettings(store, paramsSet))
+	if *flagVerbosity >= 1 {
+		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
+		fmt.Println(commandline.SprintSettings(store))
 	}
-	mag.BatchSize = model.GetParamOr(scope, "batch_size", 128)
+	mag.BatchSize = model.GetParamOr(store.RootScope(), "batch_size", 128)
 
 	//Early sanity checks.
 	if *flagCheckpoint == "" && *flagEval {
@@ -163,10 +162,10 @@ func main() {
 	start := time.Now()
 	check(mag.Download(*flagDataDir))
 	fmt.Printf("elapsed: %s\n", time.Since(start))
-	SetTrainSteps(scope) // Can only be set after mag data is loaded.
+	SetTrainSteps(store) // Can only be set after mag data is loaded.
 
 	// RunWithMap train / eval.
-	mag.WithReplacement = model.GetParamOr(scope, paramWithReplacement, false)
+	mag.WithReplacement = model.GetParamOr(store.RootScope(), paramWithReplacement, false)
 	var err error
 	if *flagEval {
 		err = mag.EvalWithStore(backend, store, *flagDataDir, *flagCheckpoint, *flagLayerWise, *flagSkipTrainEval)

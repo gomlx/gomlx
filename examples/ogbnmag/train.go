@@ -248,7 +248,6 @@ func newTrainer(backend compute.Backend, store *model.Store) *train.Trainer {
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	//NanLogger = nanlogger.New()
-	scope := store.RootScope()
 	trainer := train.NewTrainer(backend, store, MagModelGraph,
 		lossFn,
 		optimizer.FromStore(store),               // Based on `scope.GetParam("optimizer")`.
