@@ -7,11 +7,26 @@ import (
 	"os"
 	"testing"
 
+	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/stretchr/testify/require"
 )
+
+func TestListVariables(t *testing.T) {
+	store := model.NewStore()
+	s1 := store.Scope("scope1")
+	_ = s1.VariableWithValue("varA", tensors.FromScalar(1.0))
+	_ = s1.VariableWithValue("varB", tensors.FromScalar(2.0))
+	s2 := store.Scope("scope2")
+	_ = s2.VariableWithValue("varC", tensors.FromScalar(3.0))
+
+	// Ensure calling ListVariables doesn't panic and executes cleanly.
+	require.NotPanics(t, func() {
+		ListVariables(store.RootScope())
+	})
+}
 
 func TestPerturbVars(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "test_perturb")
