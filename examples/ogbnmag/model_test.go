@@ -11,10 +11,10 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/support/humanize"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/pbnjay/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,20 +40,20 @@ func TestModel(t *testing.T) {
 	checkMemory(t)
 
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	scope := model.NewStore().RootScope()
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")
-	UploadOgbnMagVariables(backend, ctx) // Uploads the Papers frozen embedding table.
+	UploadOgbnMagVariables(backend, scope.Store()) // Uploads the Papers frozen embedding table.
 
 	trainDS, _, _, _, err := MakeDatasets(*flagDataDir)
 	require.NoError(t, err, "failed to make datasets")
 
 	// Create graph function that will take a sampled sub-graph.
 	var spec any
-	testGraphFn := func(ctx *context.Context, inputs []*Node) []*Node {
-		return MagModelGraph(ctx, spec, inputs)
+	testGraphFn := func(scope *model.Scope, inputs []*Node) []*Node {
+		return MagModelGraph(scope, spec, inputs)
 	}
-	testGraphExec := context.MustNewExec(backend, ctx, testGraphFn)
+	testGraphExec := model.MustNewExec(backend, scope.Store(), testGraphFn)
 
 	var inputs []*tensors.Tensor
 	spec, inputs, _, err = trainDS.Yield()
@@ -63,7 +63,7 @@ func TestModel(t *testing.T) {
 	}
 	fmt.Printf("One sample (batch) size is %s bytes\n", humanize.Bytes(totalSizeBytes))
 	require.NoError(t, err)
-	outputs := testGraphExec.MustExec(inputs)
+	outputs := testGraphExec.MustCall(inputs)
 	for ii, output := range outputs {
 		fmt.Printf("output #%d=%s\n", ii, output.Shape())
 	}

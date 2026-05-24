@@ -3,11 +3,11 @@
 package inceptionv3
 
 import (
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors/images"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/train/metric"
+	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
 // KidMetric returns a metric that takes a generated image and a label image and returns a
@@ -36,9 +36,9 @@ import (
 //     Passed to `PreprocessImage` function.
 //
 // Note: `images` refers to package `github.com/gomlx/gomlx/core/tensors/images`.
-func KidMetric(dataDir string, kidImageSize int, maxImageValue float64, channelsConfig images.ChannelsAxisConfig) metrics.Interface {
+func KidMetric(dataDir string, kidImageSize int, maxImageValue float64, channelsConfig images.ChannelsAxisConfig) metric.Interface {
 	builder := NewKidBuilder(dataDir, kidImageSize, maxImageValue, channelsConfig)
-	return metrics.NewMeanMetric("Kernel Inception Distance", "KID", "KID", builder.BuildGraph, nil)
+	return metric.NewMeanMetric("Kernel Inception Distance", "KID", "KID", builder.BuildGraph, nil)
 }
 
 // KidBuilder builds the graph to calculate [Kernel Inception Distance (KID)](https://arxiv.org/abs/1801.01401) between
@@ -83,7 +83,7 @@ func NewKidBuilder(dataDir string, kidImageSize int, maxImageValue float64, chan
 //
 // It returns a scalar with the mean distance of the images provided in labels and predictions.
 // The images
-func (builder *KidBuilder) BuildGraph(ctx *context.Context, labels, predictions []*Node) (output *Node) {
+func (builder *KidBuilder) BuildGraph(scope *model.Scope, labels, predictions []*Node) (output *Node) {
 	// Sanity checking:
 	g := predictions[0].Graph()
 	dtype := predictions[0].DType()
@@ -129,10 +129,10 @@ func (builder *KidBuilder) BuildGraph(ctx *context.Context, labels, predictions 
 	}
 
 	// Apply InceptionV3 model to each image.
-	ctx = ctx.In("kid_metric").Checked(false)
 	var features [2]*Node
 	for imgIdx := range imagesPair {
-		features[imgIdx] = BuildGraph(ctx, imagesPair[imgIdx]).
+		s := scope.At("kid_metric")
+		features[imgIdx] = BuildGraph(s, imagesPair[imgIdx]).
 			SetPooling(MeanPooling).ClassificationTop(false).PreTrained(builder.dataDir).
 			ChannelsAxis(builder.channelsConfig).Trainable(false).Done()
 	}

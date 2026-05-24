@@ -4,11 +4,12 @@ package main
 
 import (
 	"flag"
+	"fmt"
 
 	"github.com/gomlx/compute"
 	fm "github.com/gomlx/gomlx/examples/FlowMatching"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
 
@@ -16,10 +17,10 @@ import (
 )
 
 var (
-	flagDataDir    = flag.String("data", "~/work/oxfordflowers102", "Directory to cache downloaded and generated dataset files.")
-	flagEval       = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
-	flagVerbosity  = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
-	flagCheckpoint = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
+	flagDataDir           = flag.String("data", "~/work/oxfordflowers102", "Directory to cache downloaded and generated dataset files.")
+	flagEval              = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
+	flagVerbosity         = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
+	flagCheckpoint        = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 )
 
 var (
@@ -27,12 +28,16 @@ var (
 )
 
 func main() {
-	ctx := fm.CreateDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	store := fm.CreateStore()
+	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
-	config := diffusion.NewConfig(backend, ctx, *flagDataDir, paramsSet)
+	paramsSet := check1(commandline.ParseSettings(store, *settings))
+	if *flagVerbosity >= 1 {
+		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
+		fmt.Println(commandline.SprintSettings(store))
+	}
+	config := diffusion.NewConfig(backend, store, *flagDataDir, paramsSet)
 	err := exceptions.TryCatch[error](func() {
 		fm.TrainModel(config, *flagCheckpoint, *flagEval, *flagVerbosity)
 	})

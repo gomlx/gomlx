@@ -18,11 +18,11 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/datasets"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/core/tensors"
+	timage "github.com/gomlx/gomlx/core/tensors/images"
+	"github.com/gomlx/gomlx/ml/dataset"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 )
 
@@ -225,7 +225,7 @@ func (ds *Dataset) Reset() {
 // images, if they are not yet downloaded.
 func InMemoryDataset(backend compute.Backend, baseDir string, imageSize int, name string,
 	partitionSeed int64, partitionFrom, partitionTo float64) (
-	inMemoryDataset *datasets.InMemoryDataset, err error) {
+	inMemoryDataset *dataset.InMemoryDataset, err error) {
 	deviceNum := compute.DeviceNum(0)
 	var f *os.File
 	if baseDir != "" {
@@ -242,7 +242,7 @@ func InMemoryDataset(backend compute.Backend, baseDir string, imageSize int, nam
 		if err == nil {
 			// Reads from cached file.
 			dec := gob.NewDecoder(f)
-			inMemoryDataset, err = datasets.GobDeserializeInMemoryToDevice(backend, deviceNum, dec)
+			inMemoryDataset, err = dataset.GobDeserializeInMemoryToDevice(backend, deviceNum, dec)
 			_ = f.Close()
 			return
 		}
@@ -269,7 +269,7 @@ func InMemoryDataset(backend compute.Backend, baseDir string, imageSize int, nam
 	start := time.Now()
 	fmt.Printf("Creating InMemoryDataset for %q with images cropped and scaled to %dx%d...\n", name, imageSize, imageSize)
 	ds := NewDataset(dtypes.Uint8, imageSize).Partition(partitionSeed, partitionFrom, partitionTo)
-	inMemoryDataset, err = datasets.InMemory(backend, datasets.Parallel(ds), false)
+	inMemoryDataset, err = dataset.InMemory(backend, dataset.Parallel(ds), false)
 	elapsed := time.Since(start)
 	fmt.Printf("\t- %s to process dataset.\n", elapsed)
 	if err != nil {

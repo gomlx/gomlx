@@ -11,14 +11,14 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/datasets"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/ml/train/losses"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/dataset"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/loss"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
 
@@ -83,9 +83,9 @@ func buildExamples(
 }
 
 // modelGraph builds graph that returns predictions for inputs.
-func modelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func modelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	_ = spec
-	logits := layers.Dense(ctx, inputs[0], true, 1)
+	logits := layers.Dense(scope, inputs[0], true, 1)
 	return []*Node{logits}
 }
 
@@ -113,54 +113,47 @@ func main() {
 	inputs, labels := buildExamples(backend, trueCoefficients, trueBias, *flagNumExamples, *flagNoise)
 	fmt.Printf("Training data (inputs, labels): (%s, %s)\n\n", inputs.Shape(), labels.Shape())
 
-	// Create an in-memory dataset from the tensors.
-	dataset := check1(datasets.InMemoryFromData(backend, "linear dataset", []any{inputs}, []any{labels})).
+	// Create an in-memory ds from the tensors.
+	ds := must1(dataset.InMemoryFromData(backend, "linear dataset", []any{inputs}, []any{labels})).
 		Infinite(true).Shuffle().BatchSize(*flagNumExamples, false)
-	// dataset := &Dataset{"training", []*tensors.Tensor{inputs}, []*tensors.Tensor{labels}}
 
-	// Creates Context with learned weights and bias.
-	ctx := context.New()
-	ctx.SetParam(optimizers.ParamLearningRate, *flagLearningRate)
+	// Creates Scope with learned weights and bias.
+	store := model.NewStore()
+	store.SetParam(optimizer.ParamLearningRate, *flagLearningRate)
 
 	// train.Trainer executes a training step.
-	trainer := train.NewTrainer(backend, ctx, modelGraph,
-		losses.MeanSquaredError,
-		optimizers.StochasticGradientDescent().Done(),
+	trainer := train.NewTrainer(backend, store, modelGraph,
+		loss.MeanSquaredError,
+		optimizer.StochasticGradientDescent().Done(),
 		nil, nil) // trainMetrics, evalMetrics
 
 	loop := train.NewLoop(trainer)
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Loop for the given number of steps.
-	_, err := loop.RunSteps(dataset, *flagNumSteps)
+	_, err := loop.RunSteps(ds, *flagNumSteps)
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
 	}
 
 	// Print learned coefficients and bias -- from the weights in the dense layer.
 	fmt.Println()
-	coefVar, biasVar := ctx.GetVariableByScopeAndName(
-		"/dense",
-		"weights",
-	), ctx.GetVariableByScopeAndName(
-		"/dense",
-		"biases",
-	)
+	coefVar, biasVar := store.GetVariable("/dense/weights"), store.GetVariable("/dense/biases")
 	learnedCoef, learnedBias := coefVar.MustValue(), biasVar.MustValue()
 	fmt.Printf("Learned coefficients: %0.5v\n", learnedCoef.Value())
 	fmt.Printf("Learned bias: %0.5v\n", learnedBias.Value())
 }
 
-// check reports and exits on error.
-func check(err error) {
+// must reports and exits on error.
+func must(err error) {
 	if err == nil {
 		return
 	}
 	klog.Fatalf("Fatal error: %+v", err)
 }
 
-// check1 reports and exits on error. Otherwise returns the value passed.
-func check1[T any](v T, err error) T {
-	check(err)
+// must1 reports and exits on error. Otherwise returns the value passed.
+func must1[T any](v T, err error) T {
+	must(err)
 	return v
 }

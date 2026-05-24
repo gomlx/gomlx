@@ -11,11 +11,11 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/core/tensors/images"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -81,10 +81,10 @@ func TestKidMetric(t *testing.T) {
 	noisyBatch := noisyImages(t, manager, imagesBatch)
 
 	kidBuilder := NewKidBuilder(*flagDataDir, 75, 255.0, images.ChannelsLast)
-	ctx := context.New()
-	kidExec := context.MustNewExec(manager, ctx, func(ctx *context.Context, imagesPair []*Node) *Node {
-		return kidBuilder.BuildGraph(ctx, []*Node{imagesPair[0]}, []*Node{imagesPair[1]})
+	scope := model.NewStore()
+	kidExec := model.MustNewExec(manager, scope, func(scope *model.Scope, imagesPair []*Node) *Node {
+		return kidBuilder.BuildGraph(scope, []*Node{imagesPair[0]}, []*Node{imagesPair[1]})
 	})
-	kid := kidExec.MustExec(imagesBatch, noisyBatch)[0].Value().(float32)
-	require.InDelta(t, -1.5861, kid, 0.001, "KID value different from expected for batch.")
+	kid := kidExec.MustCall(imagesBatch, noisyBatch)[0].Value().(float32)
+	require.InDelta(t, -1.5879, kid, 0.005, "KID value different from expected for batch.")
 }

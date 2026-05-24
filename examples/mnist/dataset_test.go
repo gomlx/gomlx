@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/gomlx/gomlx/support/fsutil"
+	"github.com/gomlx/gomlx/support/testutil"
 
 	_ "github.com/gomlx/gomlx/backends/default"
 )

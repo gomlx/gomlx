@@ -10,12 +10,12 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/gobackend"
 	"github.com/gomlx/compute/support/humanize"
-	"github.com/gomlx/gomlx/backends/simplego"
+	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/internal/must"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 )
 
 var (
@@ -27,9 +27,9 @@ var (
 			"Only variables that are both trainable and float are modified.")
 )
 
-// ListVariables list the variables of a model, with their shape and MAV (max absolute value), RMS (root-mean-square) and MaxAV (max absolute value) values.
-func ListVariables(ctx *context.Context) {
-	fmt.Println(titleStyle.Render(fmt.Sprintf("Variables in scope %q", ctx.Scope())))
+// ListVariables list the variables of a model under the given scope, with their shape and MAV (max absolute value), RMS (root-mean-square) and MaxAV (max absolute value) values.
+func ListVariables(scope *model.Scope) {
+	fmt.Println(titleStyle.Render(fmt.Sprintf("Variables in scope %q", scope.Scope())))
 	metricsFn := MustNewExec(compute.MustNew(), func(x *Node) (mav, rms, maxAV *Node) {
 		x = ConvertDType(x, dtypes.Float64)
 		mav = ReduceAllMean(Abs(x))
@@ -40,17 +40,17 @@ func ListVariables(ctx *context.Context) {
 	table := newPlainTable(true)
 	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "Scalar/MAV", "RMS", "MaxAV")
 	var rows [][]string
-	ctx.EnumerateVariablesInScope(func(v *context.Variable) {
+	for v := range scope.IterVariables() {
 		if !v.IsValid() {
 			rows = append(rows, []string{v.Scope(), v.Name(), "<invalid>", "", "", "", "", ""})
-			return
+			continue
 		}
 		shape := v.Shape()
 		var mav, rms, maxAV string
 		if shape.Size() == 1 {
 			mav = fmt.Sprintf("%8v", must.M1(v.Value()).Value())
 		} else if shape.DType.IsFloat() {
-			metrics := metricsFn.MustExec(must.M1(v.Value()))
+			metrics := metricsFn.MustCall(must.M1(v.Value()))
 			mav = fmt.Sprintf("%.3g", metrics[0].Value().(float64))
 			rms = fmt.Sprintf("%.3g", metrics[1].Value().(float64))
 			maxAV = fmt.Sprintf("%.3g", metrics[2].Value().(float64))
@@ -61,7 +61,7 @@ func ListVariables(ctx *context.Context) {
 			humanize.Bytes(shape.ByteSize()),
 			mav, rms, maxAV,
 		})
-	})
+	}
 	slices.SortFunc(rows, func(a, b []string) int {
 		cmp := strings.Compare(a[0], b[0])
 		if cmp != 0 {
@@ -83,19 +83,17 @@ func ListVariables(ctx *context.Context) {
 
 // DeleteVars on the given scopes.
 func DeleteVars(checkpointPath string, scopes ...string) {
-	ctx := context.New()
-	checkpoint := must.M1(checkpoints.Build(ctx).
+	store := model.NewStore()
+	checkpointHandler := must.M1(checkpoint.Build(store).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
-	var varsToDelete []*context.Variable
-	for _, scope := range scopes {
-		if scope == "" {
+	var varsToDelete []*model.Variable
+	for _, scopePath := range scopes {
+		if scopePath == "" {
 			continue
 		}
-		scopePrefix := scope + context.ScopeSeparator
-		for v := range ctx.IterVariables() {
-			if v.Scope() == scope || strings.HasPrefix(v.Scope(), scopePrefix) {
-				varsToDelete = append(varsToDelete, v)
-			}
+		scope := store.Scope(scopePath)
+		for v := range scope.IterVariables() {
+			varsToDelete = append(varsToDelete, v)
 		}
 	}
 	if len(varsToDelete) == 0 {
@@ -103,26 +101,26 @@ func DeleteVars(checkpointPath string, scopes ...string) {
 		return
 	}
 	for _, v := range varsToDelete {
-		ctx.DeleteVariable(v.Scope(), v.Name())
+		store.DeleteVariable(v.Path())
 	}
-	must.M(checkpoint.Save())
+	must.M(checkpointHandler.Save())
 	fmt.Printf("%d deleted vars under scopes %v, new checkpoint saved.\n", len(varsToDelete), scopes)
 }
 
 func PerturbVars(checkpointPath string, x float64) {
-	backend := must.M1(simplego.New(""))
-	ctx := context.New()
-	checkpoint := must.M1(checkpoints.Build(ctx).
+	backend := must.M1(gobackend.New(""))
+	scope := model.NewStore()
+	checkpointHandler := must.M1(checkpoint.Build(scope).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
 	var numUpdates int
-	for v := range ctx.IterVariables() {
+	for v := range scope.IterVariables() {
 		if !v.Trainable || !(v.DType().IsFloat() || v.DType().IsComplex()) {
 			continue
 		}
-		newValue := context.MustExecOnce(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
-			value := v.ValueGraph(g)
+		newValue := model.MustCallOnce(backend, scope, func(scope *model.Scope, g *Graph) *Node {
+			value := v.NodeValue(g)
 			// Perturbation from -1 to 1
-			perturbation := OneMinus(MulScalar(ctx.RandomUniform(g, value.Shape()), 2))
+			perturbation := OneMinus(MulScalar(scope.RandomUniform(g, value.Shape()), 2))
 			perturbation = MulScalar(perturbation, x) // [-x, +x], -perturb=x
 			perturbation = OnePlus(perturbation)      // [1-x, 1+x]
 			return Mul(value, perturbation)
@@ -130,6 +128,6 @@ func PerturbVars(checkpointPath string, x float64) {
 		v.SetValue(newValue)
 		numUpdates++
 	}
-	must.M(checkpoint.Save())
+	must.M(checkpointHandler.Save())
 	fmt.Printf("%d variables updated new checkpoint saved.\n", numUpdates)
 }

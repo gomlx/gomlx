@@ -114,8 +114,8 @@ git clone https://github.com/gomlx/go-huggingface.git
 ln "./gomlx/examples/tutorial/tutorial.ipynb" "${HOME}/"
 ln "./gomlx/examples/tutorial/"*.jpg "${HOME}/"
 cd gomlx
-go work init && go work use . ./examples ./cmd/gomlx_checkpoints ../onnx-gomlx ../go-huggingface ../go-xla
-go install ./cmd/gomlx_checkpoints && gomlx_checkpoints -help
+go work init && go work use . ./examples ./cmd/gomlx_checkpointss ../onnx-gomlx ../go-huggingface ../go-xla
+go install ./cmd/gomlx_checkpointss && gomlx_checkpointss -help
 go test ./types/... ./graph/... ./ml/... ./backends/...
 go build ./examples/... ./models/...
 

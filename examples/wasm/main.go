@@ -2,7 +2,7 @@
 
 //go:build js && wasm
 
-// WASM demo for GoMLX using the pure Go backend (simplego).
+// WASM demo for GoMLX using the pure Go backend.
 // Compiles to WebAssembly and runs tensor computations in the browser.
 package main
 
@@ -13,9 +13,9 @@ import (
 	"syscall/js"
 
 	"github.com/gomlx/compute"
-	_ "github.com/gomlx/gomlx/backends/simplego"
-	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
+	_ "github.com/gomlx/compute/gobackend"
+	"github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
 )
 
 // Element IDs in the HTML page.

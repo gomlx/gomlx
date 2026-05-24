@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
 
@@ -21,8 +21,8 @@ var (
 )
 
 func init() {
-	ctx := CreateDefaultContext()
-	flagSettings = commandline.CreateContextSettingsFlag(ctx, "")
+	store := CreateModelStore()
+	flagSettings = commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
@@ -36,10 +36,10 @@ func TestTrain(t *testing.T) {
 		t.Skip("skipping testing in short mode")
 		return
 	}
-	ctx := CreateDefaultContext()
-	ctx.SetParam("train_steps", 10)
-	ctx.SetParam("plots", false)
-	ctx.SetParam(layers.ParamNormalization, "layer")
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *flagSettings))
-	TrainModel(ctx, *flagDataDir, "", false, paramsSet)
+	store := CreateModelStore()
+	store.SetParam("train_steps", 10)
+	store.SetParam("plots", false)
+	store.SetParam(layers.ParamNormalization, "layer")
+	paramsSet := check1(commandline.ParseSettings(store, *flagSettings))
+	TrainWithStore(store, *flagDataDir, "", false, paramsSet)
 }

@@ -43,11 +43,11 @@ var (
 )
 
 func main() {
-	ctx := mnist.CreateDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	store := mnist.CreateStore()
+	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet, err := commandline.ParseContextSettings(ctx, *settings)
+	paramsSet, err := commandline.ParseSettings(store, *settings)
 	if err != nil {
 		klog.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func main() {
 		klog.Infof("Data downloaded in %s", *flagDataDir)
 	}
 	if *flagTrain {
-		if err := mnist.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet); err != nil {
+		if err := mnist.Train(store, *flagDataDir, *flagCheckpoint, paramsSet); err != nil {
 			klog.Fatal(err)
 		}
 	}

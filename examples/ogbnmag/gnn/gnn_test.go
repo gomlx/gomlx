@@ -8,14 +8,14 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/graphtest"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/graph/graphtest"
+	"github.com/gomlx/gomlx/ml/model"
 )
 
 func TestPoolMessagesWithFixedShape(t *testing.T) {
-	ctx := context.New()
-	ctx.SetParam(ParamPoolingType, "sum|max")
+	scope := model.NewStore().RootScope()
+	scope.SetParam(ParamPoolingType, "sum|max")
 	graphtest.RunTestGraphFn(
 		t, "poolMessagesWithFixedShape()",
 		func(g *Graph) (inputs, outputs []*Node) {
@@ -24,8 +24,8 @@ func TestPoolMessagesWithFixedShape(t *testing.T) {
 				{false, false, false}})
 			x := IotaFull(g, shapes.Make(dtypes.Float32, append(mask.Shape().Dimensions, 5)...))
 			degree := Const(g, [][]float32{{10}, {7}})
-			outputNoDegree := poolMessagesWithFixedShape(ctx, x, mask, nil)
-			outputWithDegree := poolMessagesWithFixedShape(ctx, x, mask, degree)
+			outputNoDegree := poolMessagesWithFixedShape(scope, x, mask, nil)
+			outputWithDegree := poolMessagesWithFixedShape(scope, x, mask, degree)
 			inputs = []*Node{x, mask}
 			outputs = []*Node{outputNoDegree, outputWithDegree}
 			return
@@ -42,8 +42,8 @@ func TestPoolMessagesWithFixedShape(t *testing.T) {
 }
 
 func TestPoolMessagesWithAdjacency(t *testing.T) {
-	ctx := context.New()
-	ctx.SetParam(ParamPoolingType, "sum|mean")
+	scope := model.NewStore().RootScope()
+	scope.SetParam(ParamPoolingType, "sum|mean")
 	graphtest.RunTestGraphFn(
 		t, "poolMessagesWithAdjacency()",
 		func(g *Graph) (inputs, outputs []*Node) {
@@ -57,8 +57,8 @@ func TestPoolMessagesWithAdjacency(t *testing.T) {
 			targetSize := 4
 
 			degree := Const(g, [][]float32{{1}, {1000}, {10}, {100}})
-			outputNoDegree := poolMessagesWithAdjacency(ctx, source, edgesSource, edgesTarget, targetSize, nil)
-			outputWithDegree := poolMessagesWithAdjacency(ctx, source, edgesSource, edgesTarget, targetSize, degree)
+			outputNoDegree := poolMessagesWithAdjacency(scope, source, edgesSource, edgesTarget, targetSize, nil)
+			outputWithDegree := poolMessagesWithAdjacency(scope, source, edgesSource, edgesTarget, targetSize, degree)
 			inputs = []*Node{source, edgesSource, edgesTarget, degree}
 			outputs = []*Node{outputNoDegree, outputWithDegree}
 			return

@@ -9,7 +9,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/examples/imdb"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/ui/commandline"
 
 	"k8s.io/klog/v2"
@@ -19,20 +19,20 @@ import (
 const DType = dtypes.Float32
 
 var (
-	flagDataDir    = flag.String("data", "~/tmp/imdb", "Directory to cache downloaded and generated dataset files.")
-	flagEval       = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
-	flagVerbosity  = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
-	flagCheckpoint = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
+	flagDataDir           = flag.String("data", "~/tmp/imdb", "Directory to cache downloaded and generated dataset files.")
+	flagEval              = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
+	flagVerbosity         = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
+	flagCheckpoint        = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 )
 
 func main() {
-	ctx := imdb.CreateDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	store := imdb.CreateModelStore()
+	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet := check1(commandline.ParseSettings(store, *settings))
 	err := exceptions.TryCatch[error](func() {
-		imdb.TrainModel(ctx, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
+		imdb.TrainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
 	})
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)

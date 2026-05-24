@@ -10,16 +10,16 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/ml/train/losses"
-	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/layers/norm"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/loss"
+	"github.com/gomlx/gomlx/ml/train/metric"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/pkg/errors"
@@ -33,7 +33,7 @@ var (
 	// C10ValidModels is the list of model types supported.
 	C10ValidModels = []string{"fnn", "kan", "cnn"}
 
-	// ParamsExcludedFromSaving is the list of parameters (see CreateDefaultContext) that shouldn't be saved
+	// ParamsExcludedFromSaving is the list of parameters (see CreateDefaultScope) that shouldn't be saved
 	// along on the models checkpoints, and may be overwritten in further training sessions.
 	ParamsExcludedFromSaving = []string{
 		"data_dir", "train_steps", "num_checkpoints", "plots",
@@ -43,8 +43,9 @@ var (
 // Backend is created once and reused if train is called multiple times.
 var Backend compute.Backend
 
-// TrainCifar10Model with hyperparameters given in ctx.
-func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
+// TrainCifar10WithStore with hyperparameters given in store.
+func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
+	scope := store.RootScope()
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
@@ -62,49 +63,49 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	}
 
 	// Create datasets used for training and evaluation.
-	batchSize := context.GetParamOr(ctx, "batch_size", int(0))
+	batchSize := model.GetParamOr(scope, "batch_size", int(0))
 	if batchSize <= 0 {
 		exceptions.Panicf("Batch size must be > 0 (maybe it was not set?): %d", batchSize)
 	}
-	evalBatchSize := context.GetParamOr(ctx, "eval_batch_size", int(0))
+	evalBatchSize := model.GetParamOr(scope, "eval_batch_size", int(0))
 	if evalBatchSize <= 0 {
 		evalBatchSize = batchSize
 	}
 	trainDS, trainEvalDS, testEvalDS := CreateDatasets(Backend, dataDir, batchSize, evalBatchSize)
 
 	// Checkpoints saving.
-	var checkpoint *checkpoints.Handler
+	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
-		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
-		checkpoint = check1(checkpoints.Build(ctx).
+		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 3)
+		checkpointHandler = check1(checkpoint.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, ParamsExcludedFromSaving...)...).
 			Done())
-		fmt.Printf("Checkpointing model to %q\n", checkpoint.Dir())
+		fmt.Printf("Checkpointing model to %q\n", checkpointHandler.Dir())
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintContextSettings(ctx))
+		fmt.Println(commandline.SprintSettings(store))
 	}
 
 	// Select model graph building function.
-	modelFn, err := SelectModelFn(ctx)
+	modelFn, err := SelectModelFn(scope)
 	if err != nil {
 		panic(err)
 	}
 
 	// Metrics we are interested.
-	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
+	meanAccuracyMetric := metric.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metric.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	ctx = ctx.In("model") // Convention scope used for model creation.
-	trainer := train.NewTrainer(Backend, ctx, modelFn,
-		losses.SparseCategoricalCrossEntropyLogits,
-		optimizers.FromContext(ctx),
-		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+	scope = scope.In("model") // Convention scope used for model creation.
+	trainer := train.NewTrainer(Backend, store, modelFn,
+		loss.SparseCategoricalCrossEntropyLogits,
+		optimizer.FromStore(store),
+		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
@@ -113,19 +114,19 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	}
 
 	// Checkpoint saving: every 3 minutes of training.
-	if checkpoint != nil {
+	if checkpointHandler != nil {
 		period := time.Minute * 3
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				return checkpoint.Save()
+				return checkpointHandler.Save()
 			})
 	}
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if context.GetParamOr(ctx, plotly.ParamPlots, false) {
+	if model.GetParamOr(scope, plotly.ParamPlots, false) {
 		_ = plotly.New().
-			WithCheckpoint(checkpoint).
+			WithCheckpoint(checkpointHandler).
 			Dynamic().
 			WithDatasets(trainEvalDS, testEvalDS).
 			ScheduleExponential(loop, 200, 1.2).
@@ -133,11 +134,8 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	}
 
 	// Loop for given number of steps.
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(ctx))
-	if globalStep > 0 {
-		trainer.SetContext(ctx.Reuse())
-	}
+	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
+	globalStep := int(optimizer.GetGlobalStep(store))
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if verbosity >= 1 {
@@ -146,12 +144,12 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 		}
 
 		// Update batch normalization averages, if they are used.
-		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
+		if check1(norm.UpdateBatchNormAverages(trainer, trainEvalDS)) {
 			if verbosity >= 1 {
 				fmt.Println("\tUpdated batch normalization mean/variances averages.")
 			}
-			if checkpoint != nil {
-				check(checkpoint.Save())
+			if checkpointHandler != nil {
+				check(checkpointHandler.Save())
 			}
 		}
 
@@ -169,10 +167,10 @@ func TrainCifar10Model(ctx *context.Context, dataDir, checkpointPath string, eva
 	}
 }
 
-// SelectModelFn based on hyperparameter "model" in Context.
-func SelectModelFn(ctx *context.Context) (modelFn train.ModelFn, err error) {
+// SelectModelFn based on hyperparameter "model" in Scope.
+func SelectModelFn(scope *model.Scope) (modelFn train.ModelFn, err error) {
 	modelFn = C10PlainModelGraph // Handles all models except CNN.
-	modelType := context.GetParamOr(ctx, "model", C10ValidModels[0])
+	modelType := model.GetParamOr(scope, "model", C10ValidModels[0])
 	if slices.Index(C10ValidModels, modelType) == -1 {
 		return nil, errors.Errorf("Parameter \"model\" must take one value from %v, got %q", C10ValidModels, modelType)
 	}

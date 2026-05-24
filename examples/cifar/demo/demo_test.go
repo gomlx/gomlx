@@ -20,15 +20,15 @@ var (
 
 func init() {
 	klog.InitFlags(nil)
-	ctx := createDefaultContext()
-	flagSettings = commandline.CreateContextSettingsFlag(ctx, "")
+	store := createModelStore()
+	flagSettings = commandline.CreateSettingsFlag(store, "")
 	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
 		check(os.Setenv(compute.ConfigEnvVar, "xla:cpu"))
 	}
 }
 
-// TestDemo trains the model for 10 steps, not generating any checkpoints.
+// TestDemo trains the model for 10 steps, not generating any checkpoint.
 //
 // Still it has to download the training data, and it will use the flag *flagDataDir (--data)
 // as the location to store the training data.
@@ -44,8 +44,8 @@ func TestDemo(t *testing.T) {
 	muDemo.Lock()
 	defer muDemo.Unlock()
 
-	ctx := createDefaultContext()
-	ctx.SetParam("train_steps", 10) // Only 10 steps.
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *flagSettings))
-	cifar.TrainCifar10Model(ctx, *flagDataDir, "", true, 1, paramsSet)
+	store := createModelStore()
+	store.SetParam("train_steps", 10) // Only 10 steps.
+	paramsSet := check1(commandline.ParseSettings(store, *flagSettings))
+	cifar.TrainCifar10WithStore(store, *flagDataDir, "", true, 1, paramsSet)
 }

@@ -17,14 +17,14 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/downloader"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	mldata "github.com/gomlx/gomlx/ml/dataset"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
+	. "github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 )
 
@@ -479,29 +479,29 @@ var (
 // it can be used by models.
 //
 // They will be stored under the "ogbnmag" scope.
-func UploadOgbnMagVariables(backend compute.Backend, ctx *context.Context) *context.Context {
-	ctxMag := ctx.InAbsPath(OgbnMagVariablesScope)
+func UploadOgbnMagVariables(backend compute.Backend, store *model.Store) *model.Store {
+	magScope := store.Scope(OgbnMagVariablesScope)
 	for name, tPtr := range OgbnMagVariablesRef {
 		if *tPtr == nil {
-			Panicf("trying to upload OgbnMagVariablesRef to context before calling Download()")
+			Panicf("trying to upload OgbnMagVariablesRef to scope before calling Download()")
 		}
-		v := ctxMag.VariableWithValue(name, *tPtr)
+		v := magScope.VariableWithValue(name, *tPtr)
 		v.Trainable = false
 	}
-	convertPapersEmbeddings(backend, ctx) // Convert to the selected dtype.
-	return ctx
+	convertPapersEmbeddings(backend, store) // Convert to the selected dtype.
+	return store
 }
 
 // ExcludeOgbnMagVariablesFromSave marks the OGBN-MAG variables as not to be saved by the given `checkpoint`.
-// Since they are read separately and are constant, no need to repeat them at every checkpoint.
-func ExcludeOgbnMagVariablesFromSave(ctx *context.Context, checkpoint *checkpoints.Handler) {
-	ctxMag := ctx.InAbsPath(OgbnMagVariablesScope)
+// Since they are read separately and are constant, no need to repeat them at every checkpointHandler.
+func ExcludeOgbnMagVariablesFromSave(store *model.Store, checkpointHandler *checkpoint.Handler) {
+	scopeMag := store.Scope(OgbnMagVariablesScope)
 	for name := range OgbnMagVariablesRef {
-		v := ctxMag.GetVariable(name)
+		v := scopeMag.GetVariable(name)
 		if v == nil {
-			Panicf("OGBN-MAG variable %q not found in context!?", name)
+			Panicf("OGBN-MAG variable %q not found in scope!?", name)
 		}
-		checkpoint.ExcludeVarsFromSaving(v)
+		checkpointHandler.ExcludeVarsFromSaving(v)
 	}
 }
 

@@ -21,9 +21,9 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/go-huggingface/hub"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/model"
 	onnxparser "github.com/gomlx/onnx-gomlx/onnx/parser"
 	"github.com/janpfeifer/must"
 	"k8s.io/klog/v2"
@@ -76,9 +76,9 @@ func main() {
 	onnxPath := must.M1(repo.DownloadFile("onnx/model.onnx"))
 	onnxModel := must.M1(onnxparser.ParseFile(onnxPath))
 
-	// Create context and load model weights
-	ctx := context.New()
-	must.M(onnxModel.VariablesToContext(ctx))
+	// Create scope and load model weights
+	scope := model.NewStore().RootScope()
+	must.M(onnxModel.VariablesToScope(scope))
 
 	// Create backend
 	backend := must.M1(compute.New())
@@ -105,11 +105,11 @@ func main() {
 	}
 
 	// Run inference with argmax and softmax computed in the graph
-	outputs := context.MustExecOnceN(
-		backend, ctx,
-		func(ctx *context.Context, inputs []*Node) []*Node {
+	outputs := model.MustCallOnceN(
+		backend, scope.Store(),
+		func(scope *model.Scope, inputs []*Node) []*Node {
 			g := inputs[0].Graph()
-			logits := onnxModel.CallGraph(ctx, g,
+			logits := onnxModel.CallGraph(scope, g,
 				map[string]*Node{
 					"input_ids":      inputs[0],
 					"attention_mask": inputs[1],

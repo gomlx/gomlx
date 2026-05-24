@@ -11,22 +11,22 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/pkg/ml/datasets"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
-	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/ml/train/losses"
-	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/dataset"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activation"
+	"github.com/gomlx/gomlx/ml/layers/fnn"
+	"github.com/gomlx/gomlx/ml/layers/norm"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/loss"
+	"github.com/gomlx/gomlx/ml/train/metric"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
+	"github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"k8s.io/klog/v2"
@@ -40,7 +40,7 @@ var (
 		"transformer": TransformerModelGraph,
 	}
 
-	// ParamsExcludedFromLoading is the list of parameters (see CreateDefaultContext) that shouldn't be saved
+	// ParamsExcludedFromLoading is the list of parameters (see CreateDefaultScope) that shouldn't be saved
 	// along on the models checkpoints, and may be overwritten in further training sessions.
 	ParamsExcludedFromLoading = []string{
 		"data_dir", "train_steps", "num_checkpoints", "plots",
@@ -50,11 +50,10 @@ var (
 // DType used in the mode.
 var DType = dtypes.Float32
 
-// CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
-func CreateDefaultContext() *context.Context {
-	ctx := context.New()
-	ctx.ResetRNGState()
-	ctx.SetParams(map[string]any{
+// CreateModelStore sets the store with default hyperparameters to use with TrainWithStore.
+func CreateModelStore() *model.Store {
+	store := model.NewStore()
+	store.SetParams(map[string]any{
 		// Model type to use
 		"model":           "bow", // One of the listed in ValidModels: the user can also inject (in ValidModels) new custom models.
 		"train_steps":     5000,
@@ -79,23 +78,23 @@ func CreateDefaultContext() *context.Context {
 		// draw the plot with Plotly.
 		//
 		// From the command-line, an easy way to monitor the metrics being generated during the training of a model
-		// is using the gomlx_checkpoints tool:
+		// is using the gomlx_checkpointss tool:
 		//
-		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
+		//	$ gomlx_checkpointss --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
 		plotly.ParamPlots: true,
 
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "layer",
 
-		optimizers.ParamOptimizer:       "adamw",
-		optimizers.ParamLearningRate:    1e-4,
-		optimizers.ParamAdamEpsilon:     1e-7,
-		optimizers.ParamAdamDType:       "",
+		optimizer.ParamOptimizer:        "adamw",
+		optimizer.ParamLearningRate:     1e-4,
+		optimizer.ParamAdamEpsilon:      1e-7,
+		optimizer.ParamAdamDType:        "",
 		cosineschedule.ParamPeriodSteps: 0,
-		activations.ParamActivation:     "",
+		activation.ParamActivation:      "",
 		layers.ParamDropoutRate:         0.1,
-		regularizers.ParamL2:            0.0,
-		regularizers.ParamL1:            0.0,
+		regularizer.ParamL2:             0.0,
+		regularizer.ParamL1:             0.0,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 2,
@@ -116,17 +115,18 @@ func CreateDefaultContext() *context.Context {
 		"transformer_att_key_size":   8,    // Dimension of the Key/Query attention embedding.
 		"transformer_dropout_rate":   -1.0, // Set to 0.0 for no dropout. If < 0 it falls back to layers.ParamDropoutRate.
 	})
-	return ctx
+	return store
 }
 
-// TrainModel with hyperparameters given in ctx.
-func TrainModel(
-	ctx *context.Context,
+// TrainWithStore with hyperparameters given in store.
+func TrainWithStore(
+	store *model.Store,
 	dataDir, checkpointPath string,
 	paramsSet []string,
 	evaluateOnEnd bool,
 	verbosity int,
 ) {
+	scope := store.RootScope()
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
@@ -134,10 +134,10 @@ func TrainModel(
 	}
 
 	// Imdb data preparation.
-	IncludeSeparators = context.GetParamOr(ctx, "imdb_include_separators", false)
+	IncludeSeparators = model.GetParamOr(scope, "imdb_include_separators", false)
 	check(Download(dataDir))
-	imdbUseUnsupervised := context.GetParamOr(ctx, "imdb_use_unsupervised", false)
-	imdbMaskWordTaskWeight := context.GetParamOr(ctx, "imdb_mask_word_task_weight", 0.0)
+	imdbUseUnsupervised := model.GetParamOr(scope, "imdb_use_unsupervised", false)
+	imdbMaskWordTaskWeight := model.GetParamOr(scope, "imdb_mask_word_task_weight", 0.0)
 	if imdbUseUnsupervised && imdbMaskWordTaskWeight <= 0 {
 		exceptions.Panicf(
 			`Parameter "imdb_use_unsupervised" is only useful together with parameter "imdb_mask_word_task" (=%g) > 0.0`,
@@ -152,16 +152,16 @@ func TrainModel(
 	}
 
 	// Create datasets used for training and evaluation.
-	batchSize := context.GetParamOr(ctx, "batch_size", int(0))
+	batchSize := model.GetParamOr(scope, "batch_size", int(0))
 	if batchSize <= 0 {
 		exceptions.Panicf("Batch size must be > 0 (maybe it was not set?): %d", batchSize)
 	}
-	evalBatchSize := context.GetParamOr(ctx, "eval_batch_size", int(0))
+	evalBatchSize := model.GetParamOr(scope, "eval_batch_size", int(0))
 	if evalBatchSize <= 0 {
 		evalBatchSize = batchSize
 	}
 	var trainDS, trainEvalDS, testEvalDS train.Dataset
-	maxLen := context.GetParamOr(ctx, "imdb_content_max_len", 200)
+	maxLen := model.GetParamOr(scope, "imdb_content_max_len", 200)
 	if imdbUseUnsupervised {
 		trainDS = NewUnsupervisedDataset("unsupervised-train", maxLen, batchSize, true).Shuffle()
 	} else {
@@ -171,27 +171,27 @@ func TrainModel(
 	testEvalDS = NewDataset("test-eval", TypeTest, maxLen, batchSize, false)
 
 	// Parallelize generation of batches.
-	trainDS = datasets.Parallel(trainDS)
-	trainEvalDS = datasets.Parallel(trainEvalDS)
-	testEvalDS = datasets.Parallel(testEvalDS)
+	trainDS = dataset.Parallel(trainDS)
+	trainEvalDS = dataset.Parallel(trainEvalDS)
+	testEvalDS = dataset.Parallel(testEvalDS)
 
 	// Checkpoints saving.
-	var checkpoint *checkpoints.Handler
+	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
-		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
-		checkpoint = check1(checkpoints.Build(ctx).
+		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 3)
+		checkpointHandler = check1(checkpoint.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, ParamsExcludedFromLoading...)...).
 			Done())
-		fmt.Printf("Checkpoint: %q\n", checkpoint.Dir())
+		fmt.Printf("Checkpoint: %q\n", checkpointHandler.Dir())
 	}
 	if verbosity >= 2 {
-		fmt.Println(commandline.SprintContextSettings(ctx))
+		fmt.Println(commandline.SprintSettings(store))
 	}
 
 	// Select model graph building function.
-	modelType := context.GetParamOr(ctx, "model", "bow")
+	modelType := model.GetParamOr(scope, "model", "bow")
 	modelFn, found := ValidModels[modelType]
 	if !found {
 		exceptions.Panicf("Parameter \"model\" must take one value from %v, got %q", xslices.Keys(ValidModels), modelType)
@@ -199,21 +199,21 @@ func TrainModel(
 	fmt.Printf("Model: %s\n", modelType)
 
 	// Metrics we are interested.
-	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
+	meanAccuracyMetric := metric.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metric.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	ctx = ctx.In("model") // Convention scope used for model creation.
-	var loss train.LossFn
+	scope = scope.In("model") // Convention scope used for model creation.
+	var theLoss train.LossFn
 	if !imdbUseUnsupervised {
-		loss = losses.BinaryCrossentropyLogits
+		theLoss = loss.BinaryCrossentropyLogits
 	}
-	trainer := train.NewTrainer(backend, ctx, modelFn,
-		loss,
-		optimizers.FromContext(ctx),
-		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+	trainer := train.NewTrainer(backend, store, modelFn,
+		theLoss,
+		optimizer.FromStore(store),
+		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 
 	// Use standard training loop.
 	loop := train.NewLoop(trainer)
@@ -222,19 +222,19 @@ func TrainModel(
 	}
 
 	// Checkpoint saving: every 3 minutes of training.
-	if checkpoint != nil {
+	if checkpointHandler != nil {
 		period := time.Minute * 3
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				return checkpoint.Save()
+				return checkpointHandler.Save()
 			})
 	}
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if context.GetParamOr(ctx, plotly.ParamPlots, false) {
+	if model.GetParamOr(scope, plotly.ParamPlots, false) {
 		_ = plotly.New().
-			WithCheckpoint(checkpoint).
+			WithCheckpoint(checkpointHandler).
 			Dynamic().
 			WithDatasets(trainEvalDS, testEvalDS).
 			ScheduleExponential(loop, 200, 1.2).
@@ -242,11 +242,8 @@ func TrainModel(
 	}
 
 	// Loop for given number of steps.
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(ctx))
-	if globalStep > 0 {
-		trainer.SetContext(ctx.Reuse())
-	}
+	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
+	globalStep := int(optimizer.GetGlobalStep(store))
 	if globalStep < numTrainSteps {
 		_ = check1(loop.RunSteps(trainDS, numTrainSteps-globalStep))
 		if verbosity >= 1 {
@@ -255,10 +252,10 @@ func TrainModel(
 		}
 
 		// Update batch normalization averages, if they are used.
-		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
+		if check1(norm.UpdateBatchNormAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
-			if checkpoint != nil {
-				check(checkpoint.Save())
+			if checkpointHandler != nil {
+				check(checkpointHandler.Save())
 			}
 		}
 

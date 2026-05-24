@@ -6,16 +6,21 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"os"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/examples/cifar"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
-	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
-	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activation"
+	"github.com/gomlx/gomlx/ml/layers/fnn"
+	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
+	"github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"k8s.io/klog/v2"
@@ -24,17 +29,19 @@ import (
 )
 
 var (
+	flagTrain      = flag.Bool("train", true, "Train the model.")
+	flagDownload   = flag.Bool("download", false, "Download CIFAR-10 dataset.")
 	flagDataDir    = flag.String("data", "~/work/cifar", "Directory to cache downloaded and generated dataset files.")
 	flagEval       = flag.Bool("eval", true, "Whether to evaluate the model on the validation data in the end.")
 	flagVerbosity  = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
 	flagCheckpoint = flag.String("checkpoint", "", "Directory save and load checkpoints from. If left empty, no checkpoints are created.")
 )
 
-// createDefaultContext sets the context with default hyperparameters
-func createDefaultContext() *context.Context {
-	ctx := context.New()
-	ctx.ResetRNGState()
-	ctx.SetParams(map[string]any{
+// createModelStore sets the store with default hyperparameters
+func createModelStore() *model.Store {
+	store := model.NewStore()
+	store.ResetRNGState()
+	store.SetParams(map[string]any{
 		// Model type to use
 		"model":           cifar.C10ValidModels[0],
 		"checkpoint":      "",
@@ -51,23 +58,23 @@ func createDefaultContext() *context.Context {
 		// draw the plot with Plotly.
 		//
 		// From the command-line, an easy way to monitor the metrics being generated during the training of a model
-		// is using the gomlx_checkpoints tool:
+		// is using the gomlx_checkpointss tool:
 		//
-		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
+		//	$ gomlx_checkpointss --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
 		plotly.ParamPlots: true,
 
 		// "normalization" is overridden by "fnn_normalization" if set.
 		layers.ParamNormalization: "none",
 
-		optimizers.ParamOptimizer:       "adamw",
-		optimizers.ParamLearningRate:    1e-4,
-		optimizers.ParamAdamEpsilon:     1e-7,
-		optimizers.ParamAdamDType:       "",
+		optimizer.ParamOptimizer:        "adamw",
+		optimizer.ParamLearningRate:     1e-4,
+		optimizer.ParamAdamEpsilon:      1e-7,
+		optimizer.ParamAdamDType:        "",
 		cosineschedule.ParamPeriodSteps: 0,
-		activations.ParamActivation:     "swish",
+		activation.ParamActivation:      "swish",
 		layers.ParamDropoutRate:         0.0,
-		regularizers.ParamL2:            0.0, // 1e-5,
-		regularizers.ParamL1:            0.0, // 1e-5,
+		regularizer.ParamL2:             0.0, // 1e-5,
+		regularizer.ParamL1:             0.0, // 1e-5,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 8,
@@ -100,19 +107,43 @@ func createDefaultContext() *context.Context {
 		// CNN model
 		cifar.ParamCNNNormalization: "batch",
 	})
-	return ctx
+	return store
 }
 
 func main() {
-	// Flags with context settings.
-	ctx := createDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	// Flags with scope settings.
+	store := createModelStore()
+	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
+	paramsSet, err := commandline.ParseSettings(store, *settings)
+	if err != nil {
+		klog.Fatalf("Fatal error parsing settings: %+v", err)
+	}
 
-	// Train.
-	cifar.TrainCifar10Model(ctx, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)
+	backend := compute.MustNew()
+	fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
+	fmt.Println(commandline.SprintSettings(store))
+
+	err = exceptions.TryCatch[error](func() {
+		if *flagDownload {
+			*flagDataDir = fsutil.MustReplaceTildeInDir(*flagDataDir)
+			if !fsutil.MustFileExists(*flagDataDir) {
+				check(os.MkdirAll(*flagDataDir, 0777))
+			}
+			check(cifar.DownloadCifar10(*flagDataDir))
+			klog.Infof("Data downloaded in %s", *flagDataDir)
+		}
+		if *flagTrain {
+			cifar.TrainCifar10WithStore(store, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)
+		}
+		if !*flagDownload && !*flagTrain {
+			klog.Info("exit: usage -download and/or -train, optional -data")
+		}
+	})
+	if err != nil {
+		klog.Fatalf("Error:\n%+v", err)
+	}
 }
 
 // check reports and exits on error.

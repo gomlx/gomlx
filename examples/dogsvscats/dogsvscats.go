@@ -25,10 +25,10 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/core/tensors"
+	timage "github.com/gomlx/gomlx/core/tensors/images"
 	"github.com/gomlx/gomlx/examples/downloader"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	timage "github.com/gomlx/gomlx/pkg/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/train"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
 
@@ -457,7 +457,7 @@ func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err erro
 		// No paired image.
 		inputs = []*tensors.Tensor{ds.toTensor.Batch(images), tensors.FromValue(indices)}
 	}
-	labels = []*tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(labelsAsTypes, ds.dtype))}
+	labels = []*tensors.Tensor{tensors.MustFromAnyValue(shapes.CastAsDType(labelsAsTypes, ds.dtype))}
 	return
 }
 
@@ -811,7 +811,7 @@ func (pds *PreGeneratedDataset) Yield() (spec any, inputs, labels []*tensors.Ten
 		for ii := 0; ii < pds.batchSize; ii++ {
 			pds.labelsAsTypes[ii] = DogOrCat(pds.buffer[ii*entrySize])
 		}
-		labels = []*tensors.Tensor{tensors.FromAnyValue(shapes.CastAsDType(pds.labelsAsTypes, pds.dtype))}
+		labels = []*tensors.Tensor{tensors.MustFromAnyValue(shapes.CastAsDType(pds.labelsAsTypes, pds.dtype))}
 		var t, pairT *tensors.Tensor
 		switch pds.dtype {
 		case dtypes.Float32:

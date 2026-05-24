@@ -10,15 +10,15 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/graph/nanlogger"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/datasets"
+	"github.com/gomlx/gomlx/ml/dataset"
+	"github.com/gomlx/gomlx/ml/model"
 
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
 )
@@ -35,19 +35,19 @@ var (
 // See NewConfig.
 type Config struct {
 	Backend compute.Backend
-	Context *context.Context // Usually, at the root scope.
+	Store   *model.Store
 
 	// DataDir is where the data is downloaded, and models are saved.
 	DataDir string
 
-	// ParamsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
+	// ParamsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseSettings).
 	ParamsSet []string
 
 	DType                               dtypes.DType
 	ImageSize, BatchSize, EvalBatchSize int
 
 	// Checkpoint if one has been attached. See Config.AttachCheckpoint.
-	Checkpoint *checkpoints.Handler
+	Checkpoint *checkpoint.Handler
 
 	// NanLogger is enabled by setting the hyperparameter "nan_logger=true".
 	NanLogger *nanlogger.NanLogger
@@ -59,25 +59,26 @@ type Config struct {
 
 // NewConfig creates a configuration for most of the diffusion methods.
 //
-// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseContextSettings).
-func NewConfig(backend compute.Backend, ctx *context.Context, dataDir string, paramsSet []string) *Config {
+// paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseSettings).
+func NewConfig(backend compute.Backend, store *model.Store, dataDir string, paramsSet []string) *Config {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
 		check(os.MkdirAll(dataDir, 0777))
 	}
-	dtype := check1(dtypes.DTypeString(
-		context.GetParamOr(ctx, "dtype", "float32")))
+	scope := store.RootScope()
+	dtype := must1(dtypes.DTypeString(
+		model.GetParamOr(scope, "dtype", "float32")))
 	cfg := &Config{
 		Backend:       backend,
-		Context:       ctx,
+		Store:         store,
 		DataDir:       dataDir,
-		ImageSize:     context.GetParamOr(ctx, "image_size", 64),
-		BatchSize:     context.GetParamOr(ctx, "batch_size", 64),
-		EvalBatchSize: context.GetParamOr(ctx, "eval_batch_size", 128),
+		ImageSize:     model.GetParamOr(scope, "image_size", 64),
+		BatchSize:     model.GetParamOr(scope, "batch_size", 64),
+		EvalBatchSize: model.GetParamOr(scope, "eval_batch_size", 128),
 		DType:         dtype,
 		ParamsSet:     paramsSet,
 	}
-	useNanLogger := context.GetParamOr(ctx, "nan_logger", false)
+	useNanLogger := model.GetParamOr(scope, "nan_logger", false)
 	if useNanLogger {
 		cfg.NanLogger = nanlogger.New()
 	}
@@ -85,10 +86,10 @@ func NewConfig(backend compute.Backend, ctx *context.Context, dataDir string, pa
 }
 
 // CreateInMemoryDatasets returns a train and a validation InMemoryDataset.
-func (c *Config) CreateInMemoryDatasets() (trainDS, validationDS *datasets.InMemoryDataset) {
-	trainDS = check1(
+func (c *Config) CreateInMemoryDatasets() (trainDS, validationDS *dataset.InMemoryDataset) {
+	trainDS = must1(
 		flowers.InMemoryDataset(c.Backend, c.DataDir, c.ImageSize, "train", PartitionSeed, ValidationFraction, 1.0))
-	validationDS = check1(
+	validationDS = must1(
 		flowers.InMemoryDataset(
 			c.Backend,
 			c.DataDir,
@@ -125,8 +126,8 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 	if err == nil {
 		// Load previously generated values.
 		dec := gob.NewDecoder(f)
-		mean = check1(tensors.GobDeserialize(dec))
-		stddev = check1(tensors.GobDeserialize(dec))
+		mean = must1(tensors.GobDeserialize(dec))
+		stddev = must1(tensors.GobDeserialize(dec))
 		check(f.Close())
 		normalizationMean, normalizationStdDev = mean, stddev
 		return
@@ -137,22 +138,22 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 
 	trainDS, _ := c.CreateInMemoryDatasets()
 	trainDS.BatchSize(128, false)
-	ds := datasets.MapWithGraphFn(
+	ds := dataset.MapWithGraphFn(
 		c.Backend,
 		nil,
 		trainDS,
-		func(ctx *context.Context, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
+		func(scope *model.Scope, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
 			images := c.PreprocessImages(inputs[0], false)
 			return []*Node{images}, labels
 		},
 	)
 	var err2 error
-	normalizationMean, normalizationStdDev, err2 = datasets.Normalization(c.Backend, ds, 0, -1) // mean/stddev for each channel (axis=-1) separately.
+	normalizationMean, normalizationStdDev, err2 = dataset.Normalization(c.Backend, ds, 0, -1) // mean/stddev for each channel (axis=-1) separately.
 	check(err2)
 	mean, stddev = normalizationMean, normalizationStdDev
 
 	// Save for future times.
-	f = check1(os.Create(fPath))
+	f = must1(os.Create(fPath))
 	enc := gob.NewEncoder(f)
 	check(mean.GobSerialize(enc))
 	check(stddev.GobSerialize(enc))
@@ -181,7 +182,7 @@ func (c *Config) PreprocessImages(images *Node, normalize bool) *Node {
 
 	images = Div(
 		Sub(images, mean),
-		datasets.ReplaceZerosByOnes(stddev))
+		dataset.ReplaceZerosByOnes(stddev))
 	images = ConvertDType(images, c.DType)
 	c.NanLogger.TraceFirstNaN(images, "PreprocessImages:"+c.DType.String())
 	return images
@@ -197,7 +198,7 @@ func (c *Config) DenormalizeImages(images *Node) *Node {
 	stddev := Const(g, stddevT)
 
 	images = Add(
-		Mul(images, datasets.ReplaceZerosByOnes(stddev)),
+		Mul(images, dataset.ReplaceZerosByOnes(stddev)),
 		mean)
 	images = ClipScalar(images, 0.0, 255.0)
 	return images

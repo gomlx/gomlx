@@ -7,8 +7,8 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/erkkah/margaid v0.3.0
 	github.com/gomlx/bsplines v0.2.0
-	github.com/gomlx/compute v0.0.0-20260513142435-475f5b6f6389
-	github.com/gomlx/go-xla v0.2.3-0.20260514042410-b0d15c4ac4cb
+	github.com/gomlx/compute v0.0.0-20260524093418-b10c8ba83d44
+	github.com/gomlx/go-xla v0.2.3-0.20260524093650-6aca7d194c8b
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.3
@@ -17,6 +17,7 @@ require (
 	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
+	golang.org/x/tools v0.44.0
 	gonum.org/v1/plot v0.15.2
 	k8s.io/klog/v2 v2.140.0
 )
@@ -61,7 +62,6 @@ require (
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/term v0.40.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
-	golang.org/x/tools v0.44.0 // indirect
 	gonum.org/v1/gonum v0.16.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

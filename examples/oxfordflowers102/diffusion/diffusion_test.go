@@ -10,8 +10,8 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/humanize"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/stretchr/testify/assert"
 
@@ -22,46 +22,46 @@ var (
 	flagDataDir = flag.String("data", "~/work/oxfordflowers102", "Directory to cache downloaded and generated dataset files.")
 
 	// -set flag content
-	ctxSettings *string
+	scopeSettings *string
 )
 
 func init() {
-	ctx := CreateDefaultContext()
-	ctxSettings = commandline.CreateContextSettingsFlag(ctx, "")
+	store := CreateModelStore()
+	scopeSettings = commandline.CreateSettingsFlag(store, "")
 }
 
 func getTestConfig() *Config {
-	ctx := CreateDefaultContext()
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *ctxSettings))
+	store := CreateModelStore()
+	paramsSet := must1(commandline.ParseSettings(store, *scopeSettings))
 	backend := testutil.BuildTestBackend()
-	return NewConfig(backend, ctx, *flagDataDir, paramsSet)
+	return NewConfig(backend, store, *flagDataDir, paramsSet)
 }
 
 func TestUNetModelGraph(t *testing.T) {
 	config := getTestConfig()
-	ctx := config.Context
+	scope := config.Store.RootScope()
 	g := NewGraph(config.Backend, "test")
 
 	numExamples := 5
 	noisyImages := Zeros(g, shapes.Make(config.DType, numExamples, 64, 64, 3))
 	flowerIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	fmt.Printf("  noisyImages.shape:\t%s\n", noisyImages.Shape())
-	filtered := UNetModelGraph(ctx, nil, noisyImages, Ones(g, shapes.Make(config.DType, numExamples, 1, 1, 1)), flowerIds)
+	filtered := UNetModelGraph(scope, nil, noisyImages, Ones(g, shapes.Make(config.DType, numExamples, 1, 1, 1)), flowerIds)
 	assert.True(t, noisyImages.Shape().Equal(filtered.Shape()), "Filtered images after UNetModelGraph should have the same shape as its input images")
 	fmt.Printf("     filtered.shape:\t%s\n", filtered.Shape())
-	fmt.Printf("U-Net Model #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf(" U-Net Model memory:\t%s\n", humanize.Bytes(ctx.ByteSize()))
+	fmt.Printf("U-Net Model #params:\t%d\n", scope.NumParameters())
+	fmt.Printf(" U-Net Model memory:\t%s\n", humanize.Bytes(scope.ByteSize()))
 }
 
 // getZeroPredictions calls the model with some placeholder images.
 // This can be used to check the predictions shape and also as a side effect to create
-// the variables in the context `Context`.
+// the variables in the scope `Scope`.
 func getZeroPredictions(config *Config, g *Graph, numExamples int) []*Node {
 	images := Zeros(g, shapes.Make(config.DType, numExamples, config.ImageSize, config.ImageSize, 3))
 	imageIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	flowerIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	modelFn := config.BuildTrainingModelGraph()
-	return modelFn(config.Context, nil, []*Node{images, imageIds, flowerIds})
+	return modelFn(config.Store.RootScope(), nil, []*Node{images, imageIds, flowerIds})
 }
 
 func TestTrainingModelGraph(t *testing.T) {
@@ -72,7 +72,7 @@ func TestTrainingModelGraph(t *testing.T) {
 
 	config := getTestConfig()
 	config.NoNormalization = true
-	ctx := config.Context
+	scope := config.Store.RootScope()
 	g := NewGraph(config.Backend, "test")
 
 	numExamples := 5
@@ -80,11 +80,11 @@ func TestTrainingModelGraph(t *testing.T) {
 	predictedImages, loss := predictions[0], predictions[1]
 	assert.NoError(t, predictedImages.Shape().CheckDims(numExamples, config.ImageSize, config.ImageSize, 3))
 	assert.True(t, loss.Shape().IsScalar(), "Loss must be scalar.")
-	assert.Greater(t, ctx.NumParameters(), 0, "No context parameters created!?")
+	assert.Greater(t, scope.NumParameters(), 0, "No scope parameters created!?")
 	fmt.Printf("predictedImages.shape:\t%s\n", predictions[0].Shape())
 	fmt.Printf("           loss.shape:\t%s\n", predictions[1].Shape())
-	fmt.Printf("        Model #params:\t%d\n", ctx.NumParameters())
-	fmt.Printf("         Model memory:\t%s\n", humanize.Bytes(ctx.ByteSize()))
+	fmt.Printf("        Model #params:\t%d\n", scope.NumParameters())
+	fmt.Printf("         Model memory:\t%s\n", humanize.Bytes(scope.ByteSize()))
 }
 
 func TestImagesGenerator(t *testing.T) {
@@ -100,7 +100,7 @@ func TestImagesGenerator(t *testing.T) {
 	config.NoNormalization = true
 	g := NewGraph(config.Backend, "test")
 
-	// Context.RNGStateReset() --> to truly randomize each run uncomment this.
+	// Scope.RNGStateReset() --> to truly randomize each run uncomment this.
 	_ = getZeroPredictions(config, g, 2) // Batch size won't matter, we only call this to create the model weights.
 	noise := config.GenerateNoise(numImages)
 	flowerIds := config.GenerateFlowerIds(numImages)

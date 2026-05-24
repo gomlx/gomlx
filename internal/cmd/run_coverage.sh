@@ -4,7 +4,7 @@ set -e
 # 1. Define the packages we want to MEASURE coverage for.
 # Use full import paths.
 TARGET_MODULE="github.com/gomlx/gomlx"
-PACKAGE_COVERAGE="${TARGET_MODULE}/pkg/...,${TARGET_MODULE}/backends/..."
+PACKAGE_COVERAGE="${TARGET_MODULE}/ml/...,${TARGET_MODULE}/core/...,${TARGET_MODULE}/support/..."
 
 # File to accumulate coverage data
 COV_FINAL="docs/coverage.out"
@@ -18,14 +18,16 @@ echo "mode: atomic" > "${COV_RAW}"
 # This forces all sub-modules to use the LOCAL version of the root module,
 # fixing the "file not found" error caused by version mismatch.
 echo "🛠️  Setting up temporary workspace..."
-go work init
-# Find all directories with go.mod and add them to the workspace
-find . -name "go.mod" -print0 | xargs -0 -n1 dirname | xargs go work use
+if [[ ! -e "go.work" ]] ; then
+    go work init
+    # Find all directories with go.mod and add them to the workspace
+    find . -name "go.mod" -print0 | xargs -0 -n1 dirname | xargs go work use
 
-# Ensure we clean up the go.work file even if the script fails/exits
-trap 'rm -f go.work go.work.sum' EXIT
+    # Ensure we clean up the go.work file even if the script fails/exits
+    trap 'rm -f go.work go.work.sum' EXIT
+fi
+
 # ---------------------------------------
-
 echo "🔍 Finding modules to test..."
 # We search for directories containing go.mod
 find . -name "go.mod" -print0 | while IFS= read -r -d '' mod_file; do
@@ -41,12 +43,12 @@ find . -name "go.mod" -print0 | while IFS= read -r -d '' mod_file; do
     
     # If the directory is ".", run standard local tests
     if [ "$dir" == "." ]; then
-        go test -cover -coverpkg="${PACKAGE_COVERAGE}" \
+        go test -p=1 -cover -coverpkg="${PACKAGE_COVERAGE}" \
             -coverprofile="${COV_TMP}" ./... -test.count=1
     else
         # Run tests for the sub-module from the root
         # This keeps the workspace context active.
-        go test -cover -coverpkg="${PACKAGE_COVERAGE}" \
+        go test -p=1 -cover -coverpkg="${PACKAGE_COVERAGE}" \
             -coverprofile="${COV_TMP}" ./"$dir"/... -test.count=1
     fi
 

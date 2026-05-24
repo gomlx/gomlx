@@ -12,10 +12,10 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/examples/inceptionv3"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/datasets"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/ml/dataset"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/support/fsutil"
 )
 
 // This file implements high level tasks: pre-generating augment dataset.
@@ -100,25 +100,25 @@ var (
 
 )
 
-// NewPreprocessingConfigurationFromContext create a preprocessing configuration based on hyperparameters
-// set in the context.
+// NewPreprocessingConfigurationFromScope create a preprocessing configuration based on hyperparameters
+// set in the model.
 //
 // Notice some configuration parameters depends on the model type ("model" hyperparameter): "inception" has a
 // specific size, "byol" model requires image pairs.
-func NewPreprocessingConfigurationFromContext(ctx *context.Context, dataDir string) *PreprocessingConfiguration {
+func NewPreprocessingConfigurationFromScope(scope *model.Scope, dataDir string) *PreprocessingConfiguration {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
-	modelType := context.GetParamOr(ctx, "model", "")
+	modelType := model.GetParamOr(scope, "model", "")
 	config := &PreprocessingConfiguration{}
 	*config = *DefaultConfig
 	config.DataDir = dataDir
-	config.BatchSize = context.GetParamOr(ctx, "batch_size", 0)
-	config.EvalBatchSize = context.GetParamOr(ctx, "eval_batch_size", 0)
-	config.AngleStdDev = context.GetParamOr(ctx, "augmentation_angle_stddev", 0.0)
-	config.FlipRandomly = context.GetParamOr(ctx, "augmentation_random_flips", false)
+	config.BatchSize = model.GetParamOr(scope, "batch_size", 0)
+	config.EvalBatchSize = model.GetParamOr(scope, "eval_batch_size", 0)
+	config.AngleStdDev = model.GetParamOr(scope, "augmentation_angle_stddev", 0.0)
+	config.FlipRandomly = model.GetParamOr(scope, "augmentation_random_flips", false)
 	if modelType == "inception" {
 		config.ModelImageSize = inceptionv3.MinimumImageSize
 	}
-	config.ForceOriginal = context.GetParamOr(ctx, "augmentation_force_original", false)
+	config.ForceOriginal = model.GetParamOr(scope, "augmentation_force_original", false)
 	config.UseParallelism = true
 	config.BufferSize = 100
 	config.YieldImagePairs = modelType == "byol"
@@ -240,13 +240,13 @@ func CreateDatasets(config *PreprocessingConfiguration) (trainDS, trainEvalDS, v
 	// Read tensors in parallel:
 	if config.UseParallelism {
 		if trainDS != nil {
-			trainDS = datasets.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
+			trainDS = dataset.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
 		}
 		if trainEvalDS != nil {
-			trainEvalDS = datasets.CustomParallel(trainEvalDS).Buffer(config.BufferSize).Start()
+			trainEvalDS = dataset.CustomParallel(trainEvalDS).Buffer(config.BufferSize).Start()
 		}
 		if validationEvalDS != nil {
-			validationEvalDS = datasets.CustomParallel(validationEvalDS).Buffer(config.BufferSize).Start()
+			validationEvalDS = dataset.CustomParallel(validationEvalDS).Buffer(config.BufferSize).Start()
 		}
 	}
 

@@ -12,18 +12,18 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/ml/train/losses"
-	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/graph/nanlogger"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/loss"
+	"github.com/gomlx/gomlx/ml/train/metric"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
+	. "github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
@@ -38,7 +38,7 @@ var (
 	// The default is 10.
 	ParamNumCheckpoints = "num_checkpoints"
 
-	// ParamReuseKernels context parameter configs whether the kernels for similar sampling rules will be reused.
+	// ParamReuseKernels scope parameter configures whether the kernels for similar sampling rules will be reused.
 	ParamReuseKernels = "mag_reuse_kernels"
 
 	// ParamIdentitySubSeeds controls whether to use an IdentitySubSeed, to allow more sharing of the kernel.
@@ -60,15 +60,15 @@ func progressBarSpacing() {
 
 // InitTrainingSchedule initializes custom scheduled training.
 // It's enabled with the hyperparameter "scheduled_training".
-func InitTrainingSchedule(ctx *context.Context) {
+func InitTrainingSchedule(scope *model.Scope) {
 	// Start with split points frozen.
-	ctx.SetParam(kan.ParamDiscreteSplitPointsFrozen, true)
+	scope.SetParam(kan.ParamDiscreteSplitPointsFrozen, true)
 }
 
 // TrainingSchedule is used to control hyperparameters during training.
 // The parameters fromStep and toStep are the starting and final global_steps of training.
 // It's enabled with the hyperparameter "scheduled_training".
-func TrainingSchedule(ctx *context.Context, fromStep, toStep int) train.OnStepFn {
+func TrainingSchedule(scope *model.Scope, fromStep, toStep int) train.OnStepFn {
 	percentageToStep := func(pct int) int {
 		return pct * (fromStep + toStep) / 100
 	}
@@ -81,17 +81,17 @@ func TrainingSchedule(ctx *context.Context, fromStep, toStep int) train.OnStepFn
 			loop.Trainer.ResetComputationGraphs()
 
 			fmt.Println("\tTrain split_points, smoothness_schedule=none")
-			ctx.SetParam(kan.ParamDiscreteSplitPointsFrozen, false)
-			ctx.SetParam(kan.ParamDiscreteSoftnessSchedule, "none")
-			ctx.EnumerateVariables(func(v *context.Variable) {
+			scope.SetParam(kan.ParamDiscreteSplitPointsFrozen, false)
+			scope.SetParam(kan.ParamDiscreteSoftnessSchedule, "none")
+			for v := range scope.IterVariables() {
 				if v.Name() == "kan_discrete_split_points" {
 					v.Trainable = true
 				} else if slices.Index([]string{"kan_discrete_control_points", "embeddings", "weights", "biases"}, v.Name()) != -1 {
 					v.Trainable = true
 				} else if v.Trainable {
-					fmt.Printf("\t\t%q trainable\n", v.ScopeAndName())
+					fmt.Printf("\t\t%q trainable\n", v.Path())
 				}
-			})
+			}
 			progressBarSpacing()
 
 		} else if loop.LoopStep == splitPointsEnd {
@@ -100,14 +100,14 @@ func TrainingSchedule(ctx *context.Context, fromStep, toStep int) train.OnStepFn
 			loop.Trainer.ResetComputationGraphs()
 
 			fmt.Println("\tTrain control_points, freeze split_points, , smoothness_schedule=exponential")
-			ctx.SetParam(kan.ParamDiscreteSoftnessSchedule, "exponential")
-			ctx.EnumerateVariables(func(v *context.Variable) {
+			scope.SetParam(kan.ParamDiscreteSoftnessSchedule, "exponential")
+			for v := range scope.IterVariables() {
 				if v.Name() == "kan_discrete_split_points" {
 					v.Trainable = false
 				} else if slices.Index([]string{"kan_discrete_control_points", "embeddings", "weights", "biases"}, v.Name()) != -1 {
 					v.Trainable = true
 				}
-			})
+			}
 			progressBarSpacing()
 
 		}
@@ -115,31 +115,32 @@ func TrainingSchedule(ctx *context.Context, fromStep, toStep int) train.OnStepFn
 	}
 }
 
-// Train GNN model based on configuration in `ctx`.
-func Train(
+// TrainWithStore GNN model based on configuration in `store`.
+func TrainWithStore(
 	backend compute.Backend,
-	ctx *context.Context,
+	store *model.Store,
 	dataDir, checkpointPath string,
 	layerWiseEval, report bool,
 	paramsSet []string,
 ) error {
+	scope := store.RootScope()
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
-	ReuseShareableKernels = context.GetParamOr(ctx, ParamReuseKernels, true)
-	IdentitySubSeeds = context.GetParamOr(ctx, ParamIdentitySubSeeds, true)
+	ReuseShareableKernels = model.GetParamOr(scope, ParamReuseKernels, true)
+	IdentitySubSeeds = model.GetParamOr(scope, ParamIdentitySubSeeds, true)
 
 	trainDS, trainEvalDS, validEvalDS, testEvalDS, err := MakeDatasets(dataDir)
 	_ = testEvalDS
 	if err != nil {
 		return err
 	}
-	UploadOgbnMagVariables(backend, ctx)
+	UploadOgbnMagVariables(backend, store)
 
 	// Checkpoint: it loads if already exists, and it will save as we train.
-	var checkpoint *checkpoints.Handler
+	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
-		numCheckpointsToKeep := context.GetParamOr(ctx, ParamNumCheckpoints, 5)
+		numCheckpointsToKeep := model.GetParamOr(scope, ParamNumCheckpoints, 5)
 		var err error
-		checkpoint, err = checkpoints.Build(ctx).
+		checkpointHandler, err = checkpoint.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(paramsSet...).
@@ -148,45 +149,45 @@ func Train(
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
 		}
-		ExcludeOgbnMagVariablesFromSave(ctx, checkpoint)
+		ExcludeOgbnMagVariablesFromSave(store, checkpointHandler)
 	}
 
 	// Create trainer and loop.
-	trainer := newTrainer(backend, ctx)
+	trainer := newTrainer(backend, store)
 	loop := train.NewLoop(trainer)
 	commandline.ProgressbarStyle = progressbar.ThemeUnicode
 	commandline.AttachProgressBar(loop)
 
 	// Attach a checkpoint: checkpoint every 1 minute of training.
-	if checkpoint != nil {
+	if checkpointHandler != nil {
 		period := time.Minute * 3
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				return checkpoint.Save()
+				return checkpointHandler.Save()
 			})
 	}
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
 	var plots *plotly.PlotConfig
-	usePlots := context.GetParamOr(ctx, margaid.ParamPlots, false)
+	usePlots := model.GetParamOr(scope, margaid.ParamPlots, false)
 	if usePlots {
 		stepsPerEpoch := TrainSplit.Shape().Size()/BatchSize + 1
-		plots = plotly.New().WithCheckpoint(checkpoint).Dynamic().
+		plots = plotly.New().WithCheckpoint(checkpointHandler).Dynamic().
 			ScheduleExponential(loop, 200, 1.2).
 			ScheduleEveryNSteps(loop, stepsPerEpoch)
 		if layerWiseEval {
 			magSampler := check1(NewSampler(dataDir))
 			layerWiseStrategy := NewSamplerStrategy(magSampler, 1, nil)
-			plots = plots.WithCustomMetricFn(BuildLayerWiseCustomMetricFn(backend, ctx, layerWiseStrategy))
+			plots = plots.WithCustomMetricFn(BuildLayerWiseCustomMetricFn(backend, scope, layerWiseStrategy))
 		} else {
 			plots = plots.WithDatasets(trainEvalDS, validEvalDS)
 		}
 	}
 
 	// Loop for given number of steps
-	trainSteps := context.GetParamOr(ctx, "train_steps", 100)
-	globalStep := int(optimizers.GetGlobalStep(ctx))
+	trainSteps := model.GetParamOr(scope, "train_steps", 100)
+	globalStep := int(optimizer.GetGlobalStep(scope))
 	if trainSteps <= globalStep {
 		fmt.Printf("> training already reached target train_steps=%d. To train further, set a number additional "+
 			"to current global step. Use Eval to get reading on current performance.\n", trainSteps)
@@ -194,16 +195,15 @@ func Train(
 	}
 	if globalStep != 0 {
 		fmt.Printf("> restarting training from global_step=%d (training until %d)\n", globalStep, trainSteps)
-		ctx = ctx.Reuse()
 	}
 
 	// Set up scheduled training.
-	if context.GetParamOr(ctx, "scheduled_training", false) {
-		InitTrainingSchedule(ctx)
+	if model.GetParamOr(scope, "scheduled_training", false) {
+		InitTrainingSchedule(scope)
 		loop.OnStep(
 			"TrainingSchedule",
 			0,
-			TrainingSchedule(ctx, globalStep, trainSteps),
+			TrainingSchedule(scope, globalStep, trainSteps),
 		) // register custom TrainingSchedule
 	}
 
@@ -211,9 +211,11 @@ func Train(
 	fmt.Println("Compiling graph... (once it's done, training immediately starts)")
 	_, err = loop.RunSteps(trainDS, trainSteps-globalStep)
 	// Save checkpoint at end of training (even if training failed)
-	err2 := checkpoint.Save()
-	if err2 != nil {
-		klog.Errorf("Failed to save final checkpoint in %q: %+v", checkpointPath, err2)
+	if checkpointHandler != nil {
+		err2 := checkpointHandler.Save()
+		if err2 != nil {
+			klog.Errorf("Failed to save final checkpoint in %q: %+v", checkpointPath, err2)
+		}
 	}
 	fmt.Printf("\t[Step %d] median train step: %s\n", loop.LoopStep, loop.MedianTrainStepDuration())
 
@@ -225,7 +227,7 @@ func Train(
 	// Finally, print an evaluation on train and test datasets.
 	if report {
 		fmt.Println()
-		err = evalWithContext(backend, ctx, dataDir, layerWiseEval, false)
+		err = evalWithModelStore(backend, store, dataDir, layerWiseEval, false)
 		if err != nil {
 			return errors.WithMessage(err, "while reporting eval")
 		}
@@ -235,50 +237,52 @@ func Train(
 
 var NanLogger *nanlogger.NanLogger
 
-func newTrainer(backend compute.Backend, ctx *context.Context) *train.Trainer {
+func newTrainer(backend compute.Backend, store *model.Store) *train.Trainer {
 	// Loss: multi-class classification problem.
-	lossFn := losses.SparseCategoricalCrossEntropyLogits
+	lossFn := loss.SparseCategoricalCrossEntropyLogits
 
 	// Metrics we are interested.
-	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
+	meanAccuracyMetric := metric.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metric.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	//NanLogger = nanlogger.New()
-	trainer := train.NewTrainer(backend, ctx, MagModelGraph,
+	trainer := train.NewTrainer(backend, store, MagModelGraph,
 		lossFn,
-		optimizers.FromContext(ctx), // Based on `ctx.GetParam("optimizer")`.
-		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
-	NanLogger.AttachToTrainer(trainer)
+		optimizer.FromStore(store),               // Based on `scope.GetParam("optimizer")`.
+		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
+	if NanLogger != nil {
+		NanLogger.AttachToTrainer(trainer)
+	}
 	return trainer
 }
 
-func Eval(
+func EvalWithStore(
 	backend compute.Backend,
-	ctx *context.Context,
+	store *model.Store,
 	dataDir, checkpointPath string,
 	layerWise, skipTrain bool,
 ) error {
-	_, err := checkpoints.Build(ctx).DirFromBase(checkpointPath, dataDir).Done()
+	_, err := checkpoint.Build(store).DirFromBase(checkpointPath, dataDir).Done()
 	if err != nil {
 		return errors.WithMessagef(err, "while loading checkpoint from %q", checkpointPath)
 	}
 
 	// Model stats:
-	globalStep := optimizers.GetGlobalStep(ctx)
+	globalStep := optimizer.GetGlobalStep(store)
 	fmt.Printf("Model in %q trained for %d steps.\n", checkpointPath, globalStep)
 
 	// Upload OGBN-MAG variables -- and possibly convert them.
-	_ = UploadOgbnMagVariables(backend, ctx)
+	_ = UploadOgbnMagVariables(backend, store)
 
-	return evalWithContext(backend, ctx, dataDir, layerWise, skipTrain)
+	return evalWithModelStore(backend, store, dataDir, layerWise, skipTrain)
 }
 
-func evalWithContext(backend compute.Backend, ctx *context.Context, baseDir string, layerWise, skipTrain bool) error {
+func evalWithModelStore(backend compute.Backend, store *model.Store, baseDir string, layerWise, skipTrain bool) error {
 	if layerWise {
-		return evalLayerWise(backend, ctx, baseDir)
+		return evalLayerWise(backend, store, baseDir)
 	}
 
 	// Evaluate on various datasets.
@@ -288,16 +292,16 @@ func evalWithContext(backend compute.Backend, ctx *context.Context, baseDir stri
 	check(err)
 
 	if skipTrain {
-		return evalSampled(backend, ctx, validEvalDS, testEvalDS)
+		return evalSampled(backend, store, validEvalDS, testEvalDS)
 	} else {
-		return evalSampled(backend, ctx, trainEvalDS, validEvalDS, testEvalDS)
+		return evalSampled(backend, store, trainEvalDS, validEvalDS, testEvalDS)
 	}
 }
 
-// evalSampled evaluates GNN model based on configuration in `ctx` using sampled sub-graphs.
-func evalSampled(backend compute.Backend, ctx *context.Context, datasets ...train.Dataset) error {
+// evalSampled evaluates GNN model based on configuration in `scope` using sampled sub-graphs.
+func evalSampled(backend compute.Backend, store *model.Store, datasets ...train.Dataset) error {
 	// Evaluation on the various eval datasets.
-	trainer := newTrainer(backend, ctx)
+	trainer := newTrainer(backend, store)
 	for _, ds := range datasets {
 		start := time.Now()
 		err := commandline.ReportEval(trainer, ds)
@@ -310,15 +314,16 @@ func evalSampled(backend compute.Backend, ctx *context.Context, datasets ...trai
 	return nil
 }
 
-// evalLayerWise evaluates GNN model based on configuration in `ctx` using layer-wise inference.
-func evalLayerWise(backend compute.Backend, ctx *context.Context, baseDir string) error {
+// evalLayerWise evaluates GNN model based on configuration in `scope` using layer-wise inference.
+func evalLayerWise(backend compute.Backend, store *model.Store, baseDir string) error {
+	scope := store.RootScope()
 	// Create the OGBN-MAG strategy, used by the layer-wise inference: batch-size is irrelevant.
 	magSampler, err := NewSampler(baseDir)
 	if err != nil {
 		return err
 	}
 	magStrategy := NewSamplerStrategy(magSampler, 1, nil)
-	trainAcc, validationAcc, testAcc := LayerWiseEvaluation(backend, ctx, magStrategy)
+	trainAcc, validationAcc, testAcc := LayerWiseEvaluation(backend, scope, magStrategy)
 	fmt.Printf("Train Accuracy:     \t%.2f%%\n", 100*trainAcc)
 	fmt.Printf("Validation Accuracy:\t%.2f%%\n", 100*validationAcc)
 	fmt.Printf("Test Accuracy:      \t%.2f%%\n", 100*testAcc)
@@ -328,9 +333,9 @@ func evalLayerWise(backend compute.Backend, ctx *context.Context, baseDir string
 	return nil
 }
 
-// getDType returns the dtype selected in the context hyperparameters.
-func getDType(ctx *context.Context) dtypes.DType {
-	dtypeStr := context.GetParamOr(ctx, ParamDType, "float32")
+// getDType returns the dtype selected in the scope hyperparameters.
+func getDType(scope *model.Scope) dtypes.DType {
+	dtypeStr := model.GetParamOr(scope, ParamDType, "float32")
 	switch dtypeStr {
 	case "float32":
 		return dtypes.Float32
@@ -349,15 +354,16 @@ func getDType(ctx *context.Context) dtypes.DType {
 // convertPaperEmbeddings converts the "PapersEmbeddings" variable to the selected dtype, if needed.
 //
 // One should be careful not to save the converted values -- ideally, the values are saved in the original Float32.
-func convertPapersEmbeddings(backend compute.Backend, ctx *context.Context) {
-	dtype := getDType(ctx)
+func convertPapersEmbeddings(backend compute.Backend, store *model.Store) {
+	scope := store.RootScope()
+	dtype := getDType(scope)
 	dtypeEmbed := dtype
 	if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {
 		// See comment on model.go, in function FeaturePreprocessing.
 		dtypeEmbed = dtypes.Float32
 	}
 
-	papersVar := ctx.GetVariableByScopeAndName(OgbnMagVariablesScope, "PapersEmbeddings")
+	papersVar := scope.Store().GetVariable(model.JoinPath(OgbnMagVariablesScope, "PapersEmbeddings"))
 	if papersVar == nil || papersVar.MustValue() == nil {
 		Panicf("Cannot convert papers embeddings if variable \"PapersEmbeddings\" is not set yet")
 		panic(nil) // Clear lint warning.
@@ -367,10 +373,10 @@ func convertPapersEmbeddings(backend compute.Backend, ctx *context.Context) {
 		return
 	}
 
-	e := context.MustNewExec(backend, ctx, func(ctx *context.Context, g *Graph) *Node {
-		return ConvertDType(papersVar.ValueGraph(g), dtype)
+	e := model.MustNewExec(backend, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
+		return ConvertDType(papersVar.NodeValue(g), dtype)
 	})
-	converted := e.MustExec()[0]
+	converted := e.MustCall()[0]
 	// We don't want to destroy the unconverted values in case we need them again (it happens in tests).
 	check(papersVar.SetValuePreservingOld(converted))
 	klog.V(1).Infof("Converted papers embeddings to %s: new shape is %s", dtype, papersVar.Shape())

@@ -4,11 +4,18 @@
 package scoped
 
 import (
+	"iter"
 	"maps"
 	"strings"
 
 	"github.com/gomlx/compute/support/xslices"
 )
+
+// ParamValue is returned by Params.Iter()
+type ParamValue struct {
+	Scope, Key string
+	Value      any
+}
 
 // Params provides a mapping from string to any data type that is "scoped":
 //
@@ -98,13 +105,24 @@ func (p *Params) Get(scope, key string) (value any, found bool) {
 // Enumerate enumerates all parameters stored in the scopedParams structure and calls the given closure with
 // them.
 func (p *Params) Enumerate(fn func(scope, key string, value any)) {
-	scopes := xslices.SortedKeys(p.scopeToMap)
-	for _, scope := range scopes {
-		keyValues := p.scopeToMap[scope]
-		keys := xslices.SortedKeys(keyValues)
-		for _, key := range keys {
-			value := keyValues[key]
-			fn(scope, key, value)
+	for pValue := range p.Iter() {
+		fn(pValue.Scope, pValue.Key, pValue.Value)
+	}
+}
+
+// Iter returns an iterator over all parameters.
+func (p *Params) Iter() iter.Seq[ParamValue] {
+	return func(yield func(ParamValue) bool) {
+		scopes := xslices.SortedKeys(p.scopeToMap)
+		for _, scope := range scopes {
+			keyValues := p.scopeToMap[scope]
+			keys := xslices.SortedKeys(keyValues)
+			for _, key := range keys {
+				value := keyValues[key]
+				if !yield(ParamValue{Scope: scope, Key: key, Value: value}) {
+					return
+				}
+			}
 		}
 	}
 }

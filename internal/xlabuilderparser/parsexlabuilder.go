@@ -20,8 +20,8 @@ import (
 	"sync"
 
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/sets"
 	"k8s.io/klog/v2"
 )
 
@@ -185,7 +185,7 @@ func (e *NodeTextExtractor) Get(node ast.Node) string {
 var FunctionsBlackList = sets.MakeWith("Parameter", "ScalarZero", "ScalarOne", "PopulationCount")
 
 // EnumerateStandardOpsFunctions calls callback for every "standard" op declaring function of the xlaBuilder package AST,
-// that can be automatically converted to a backends.Backend API, and implemented in the xla.Backend.
+// that can be automatically converted to a compute.Backend API, and implemented in the xla.Backend.
 func EnumerateStandardOpsFunctions(extractor *NodeTextExtractor, xlaBuilderPkg *ast.Package, callback func(funcDecl *ast.FuncDecl)) {
 	EnumerateFunctions(xlaBuilderPkg, func(funcDecl *ast.FuncDecl) {
 		if funcDecl.Recv != nil {

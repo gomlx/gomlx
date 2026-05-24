@@ -14,8 +14,8 @@ import (
 
 	"github.com/gomlx/compute/support/backendparser"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
-	"github.com/gomlx/gomlx/pkg/support/sets"
+	"github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/support/sets"
 	"k8s.io/klog/v2"
 )
 
@@ -72,10 +72,10 @@ var (
 	// methodsExcluded from generating and even from having a NodeType.
 	// These are utility methods, not part of building a graph.
 	methodsExcluded = sets.MakeWith(
-		"Name", "Compile", "OpShape",
+		"Name", "Builder", "Compile", "OpShape",
 		"DeviceAssignment", "DistributedSPMD", "DistributedAutoSharding",
 		"Main", "NewFunction", "Return", "Closure", "Parent",
-		"Call", "If", "Sort", "While")
+		"Call", "If", "Sort", "While", "Shape")
 
 	// methodsNoGradient will add a stop gradient to the node.
 	methodsNoGradient = sets.MakeWith(

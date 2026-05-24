@@ -14,23 +14,21 @@ import (
 	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/gomlx/examples/adult"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/pkg/ml/datasets"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
-	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
-	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/ml/train/losses"
-	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/ml/dataset"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activation"
+	"github.com/gomlx/gomlx/ml/layers/fnn"
+	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/loss"
+	"github.com/gomlx/gomlx/ml/train/metric"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
-	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
@@ -52,15 +50,19 @@ func check(err error) {
 	klog.Fatalf("Fatal error: %+v", err)
 }
 
-// check1 reports and exits on error. Otherwise returns the value passed.
-func check1[T any](v T, err error) T {
+// must1 reports and exits on error. Otherwise returns the value passed.
+func must1[T any](v T, err error) T {
 	check(err)
 	return v
 }
 
-func createDefaultContext() *context.Context {
-	ctx := context.New()
-	ctx.SetParams(map[string]any{
+// createModelStore creates a model.Store and populate it with the hyperparameters
+// used in the model, along with their default values.
+//
+// The hyperparameters used here can then be set using the `-set` flag.
+func createModelStore() *model.Store {
+	store := model.NewStore()
+	store.SetParams(map[string]any{
 		// Number of steps to take during training.
 		"train_steps": 5000,
 		"batch_size":  128,
@@ -69,20 +71,20 @@ func createDefaultContext() *context.Context {
 		// draw the plot with Plotly.
 		//
 		// From the command-line, an easy way to monitor the metrics being generated during the training of a model
-		// is using the gomlx_checkpoints tool:
+		// is using the gomlx_checkpointss tool:
 		//
-		//	$ gomlx_checkpoints -metrics -metrics_labels -metrics_types=accuracy --metrics_names='E(bat)/#loss,E(tes)/#loss' -loop=3s fnn
+		//	$ gomlx_checkpointss -metrics -metrics_labels -metrics_types=accuracy --metrics_names='E(bat)/#loss,E(tes)/#loss' -loop=3s fnn
 		"plots": true,
 
-		optimizers.ParamOptimizer:       "adam",
-		optimizers.ParamLearningRate:    0.001,
-		optimizers.ParamAdamEpsilon:     1e-7,
-		optimizers.ParamAdamDType:       "",
+		optimizer.ParamOptimizer:        "adam",
+		optimizer.ParamLearningRate:     0.001,
+		optimizer.ParamAdamEpsilon:      1e-7,
+		optimizer.ParamAdamDType:        "",
 		cosineschedule.ParamPeriodSteps: 0,
-		activations.ParamActivation:     "sigmoid",
+		activation.ParamActivation:      "sigmoid",
 		layers.ParamDropoutRate:         0.0,
-		regularizers.ParamL2:            1e-5,
-		regularizers.ParamL1:            1e-5,
+		regularizer.ParamL2:             1e-5,
+		regularizer.ParamL1:             1e-5,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 1,
@@ -105,14 +107,14 @@ func createDefaultContext() *context.Context {
 		kan.ParamDiscreteSplitPointsTrainable: true,
 		kan.ParamResidual:                     true,
 	})
-	return ctx
+	return store
 }
 
 var (
 	flagDataDir = flag.String("data", "~/work/uci-adult",
 		"Directory to save and load downloaded and generated dataset files.")
 	flagCheckpoint = flag.String("checkpoint", "", "Checkpoint subdirectory under the --data directory. "+
-		"If empty does not use checkpoints. If absolute path, use that instead.")
+		"If empty does not use checkpoint. If absolute path, use that instead.")
 	flagForceDownload = flag.Bool("force_download", false, "Force re-download of Adult dataset files.")
 
 	flagNumQuantiles = flag.Int("quantiles", 100,
@@ -137,19 +139,20 @@ var (
 )
 
 func main() {
-	// Flags with context settings.
-	ctx := createDefaultContext()
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	// Flags with scope settings.
+	store := createModelStore()
+	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
-	err := mainWithContext(ctx, *flagDataDir, *flagCheckpoint, paramsSet)
+	paramsSet := must1(commandline.ParseSettings(store, *settings))
+	err := mainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet)
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
 	}
 }
 
-func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
+func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet []string) error {
+	scope := store.RootScope()
 	backend := compute.MustNew()
 	numDevices := backend.NumDevices()
 	if *flagNumDevices > 0 {
@@ -164,15 +167,15 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if *flagVerbosity >= 1 {
 		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
-		fmt.Println(commandline.SprintContextSettings(ctx))
+		fmt.Println(commandline.SprintSettings(store))
 	}
 
 	// Checkpoints loading (and saving)
-	var checkpoint *checkpoints.Handler
+	var checkpointHandler *checkpoint.Handler
 	const keepCheckpoints = 3
 	if checkpointPath != "" {
-		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", keepCheckpoints)
-		checkpoint = check1(checkpoints.Build(ctx).
+		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", keepCheckpoints)
+		checkpointHandler = must1(checkpoint.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, "train_steps", "plots", "num_checkpoints")...).
@@ -191,7 +194,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	}
 
 	// Batch size: it is affected by the distributed execution..
-	batchSize := context.GetParamOr(ctx, "batch_size", 128)
+	batchSize := model.GetParamOr(scope, "batch_size", 128)
 	shardedBatchSize := batchSize
 	if *flagDistributed {
 		if numDevices < 2 {
@@ -232,17 +235,17 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 		inputShardingSpecs := []*distributed.ShardingSpec{shardingSpec}
 		labelsShardingSpecs := []*distributed.ShardingSpec{shardingSpec}
 		var deviceAssignment []compute.DeviceNum // nil, the default assignment will be used.
-		trainDS, err = datasets.NewDistributedAccumulator(
+		trainDS, err = dataset.NewDistributedAccumulator(
 			backend, trainDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
 		if err != nil {
 			return err
 		}
-		trainEvalDS, err = datasets.NewDistributedAccumulator(
+		trainEvalDS, err = dataset.NewDistributedAccumulator(
 			backend, trainEvalDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
 		if err != nil {
 			return err
 		}
-		testEvalDS, err = datasets.NewDistributedAccumulator(
+		testEvalDS, err = dataset.NewDistributedAccumulator(
 			backend, testEvalDS, strategy, inputShardingSpecs, labelsShardingSpecs, deviceAssignment)
 		if err != nil {
 			return err
@@ -254,7 +257,7 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 		// Distributed datasets already prefetch on device, so we don't need to do it here.
 		if !*flagDistributed {
 			var err error
-			trainDS, err = datasets.NewOnDevice(backend, trainDS, false, *flagPrefetchOnDevice, compute.DeviceNum(0))
+			trainDS, err = dataset.NewOnDevice(backend, trainDS, false, *flagPrefetchOnDevice, compute.DeviceNum(0))
 			if err != nil {
 				return err
 			}
@@ -262,16 +265,16 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	}
 
 	// Metrics we are interested.
-	meanAccuracyMetric := metrics.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy",
+	meanAccuracyMetric := metric.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metric.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy",
 		"~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	trainer := train.NewTrainer(backend, ctx, Model, losses.BinaryCrossentropyLogits,
-		optimizers.FromContext(ctx),
-		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+	trainer := train.NewTrainer(backend, store, Model, loss.BinaryCrossentropyLogits,
+		optimizer.FromStore(store),
+		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 
 	// Use a standard training loop, with a progress bar.
 	loop := train.NewLoop(trainer)
@@ -279,19 +282,16 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Attach a checkpoint saver at every minute of training.
-	if checkpoint != nil {
+	if checkpointHandler != nil {
 		period := time.Minute * 1
-		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
-			func(loop *train.Loop, metrics []*tensors.Tensor) error {
-				return checkpoint.Save()
-			})
+		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100, checkpointHandler.SaveOnStepFn)
 	}
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if context.GetParamOr(ctx, margaid.ParamPlots, false) {
+	if model.GetParamOr(scope, "plots", false) {
 		_ = plotly.New().
-			WithCheckpoint(checkpoint).
+			WithCheckpoint(checkpointHandler).
 			Dynamic().
 			WithDatasets(trainEvalDS, testEvalDS).
 			ScheduleExponential(loop, 200, 1.2).
@@ -299,8 +299,8 @@ func mainWithContext(ctx *context.Context, dataDir, checkpointPath string, param
 	}
 
 	// Train up to "train_steps".
-	trainSteps := context.GetParamOr(ctx, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(ctx))
+	trainSteps := model.GetParamOr(scope, "train_steps", 0)
+	globalStep := int(optimizer.GetGlobalStep(scope))
 	if globalStep != 0 {
 		fmt.Printf("- Restarting training from global step %d\n", globalStep)
 	}

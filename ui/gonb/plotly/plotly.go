@@ -2,9 +2,9 @@
 
 // Package plotly uses GoNB plotly support (`github.com/janpfeifer/gonb/gonbui/plotly`) to plot both
 // on dynamic plots while training or to quickly plot the results of a previously
-// saved plot results in a checkpoints directory.
+// saved plot results in a checkpoint directory.
 //
-// In either case, it allows adding baseline plots of previous checkpoints.
+// In either case, it allows adding baseline plots of previous checkpoint.
 //
 // The advantage of `plotly` over `margaid` plots is that it uses JavaScript to make the plot interactive (it displays
 // information on mouse hover).
@@ -23,12 +23,12 @@ import (
 	grob "github.com/MetalBlueberry/go-plotly/generated/v2.34.0/graph_objects"
 	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gomlx/ui/plots"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/support/fsutil"
+	"github.com/gomlx/gomlx/support/sets"
+	"github.com/gomlx/gomlx/ui/plot"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/janpfeifer/gonb/gonbui/dom"
 	gonbplotly "github.com/janpfeifer/gonb/gonbui/plotly"
@@ -70,7 +70,7 @@ type PlotConfig struct {
 	// lastStepCollected that metrics was collected.
 	lastStepCollected int
 
-	customMetricFn plots.CustomMetricFn
+	customMetricFn plot.CustomMetricFn
 
 	// finalPlot indicates whether the final plot has already been drawn.
 	scheduledFinalPlot, finalPlot bool
@@ -78,7 +78,7 @@ type PlotConfig struct {
 	// filePath where to save data points to. Only used if not empty.
 	enablePointsWriting bool
 	filePath            string
-	fileWriter          chan<- plots.Point
+	fileWriter          chan<- plot.Point
 	errFileWriter       <-chan error
 }
 
@@ -87,11 +87,11 @@ type PlotConfig struct {
 // This is used when configuring the train.Loop, and a typical use example, triggered by a "plots" parameter,
 // might look like:
 //
-//	usePlots := context.GetParamOr(ctx, plotly.ParamPlots, false)
+//	usePlots := model.GetParamOr(scope, plotly.ParamPlots, false)
 //	...
 //	if usePlots {
 //		_ = plotly.New().
-//			WithCheckpoint(checkpoint).
+//			WithCheckpoint(checkpointHandler).
 //			Dynamic().
 //			WithDatasets(evalOnTrainDS, evalOnTestDS).
 //			ScheduleExponential(loop, 200, 1.2).
@@ -122,7 +122,7 @@ func (pc *PlotConfig) WithBatchNormalizationAveragesUpdate(oneEpochDS train.Data
 	return pc
 }
 
-// Dynamic sets plot to be dynamically updated, and new data comes in. It's a no-op if not running in a GoNB notebook.
+// Dynamic sets plot to be dynamically updated as new data points are added. It's a no-op if not running in a GoNB notebook.
 //
 // It should be followed by a call to [ScheduleExponential] or [SchedulePeriodic] (or both) to schedule capturing
 // points to plot, and [WithCheckpoint] to save the captured points.
@@ -176,7 +176,7 @@ func (pc *PlotConfig) ScheduleEveryNSteps(loop *train.Loop, n int) *PlotConfig {
 // Only one function can be registered. Set to nil to reset.
 //
 // It returns itself to allow cascading configuration method calls.
-func (pc *PlotConfig) WithCustomMetricFn(fn plots.CustomMetricFn) *PlotConfig {
+func (pc *PlotConfig) WithCustomMetricFn(fn plot.CustomMetricFn) *PlotConfig {
 	pc.customMetricFn = fn
 	return pc
 }
@@ -197,7 +197,7 @@ func (pc *PlotConfig) addMetrics(loop *train.Loop, metrics []*tensors.Tensor) er
 		}
 	}
 
-	return plots.AddTrainAndEvalMetrics(pc, loop, metrics, pc.EvalDatasets, pc.batchNormAveragesDS)
+	return plot.AddTrainAndEvalMetrics(pc, loop, metrics, pc.EvalDatasets, pc.batchNormAveragesDS)
 }
 
 // attachOnEnd registers a final call to DynamicPlot when training finishes. After that, no more dynamic plots
@@ -227,17 +227,17 @@ func (pc *PlotConfig) attachOnEnd(loop *train.Loop) {
 // but with the downside of potentially having I/O issues reported asynchronously.
 //
 // It returns itself to allow cascading configuration method calls.
-func (pc *PlotConfig) WithCheckpoint(checkpoint *checkpoints.Handler) *PlotConfig {
-	if checkpoint == nil {
+func (pc *PlotConfig) WithCheckpoint(checkpointHandler *checkpoint.Handler) *PlotConfig {
+	if checkpointHandler == nil {
 		return pc
 	}
-	checkpointDir := checkpoint.Dir()
+	checkpointDir := checkpointHandler.Dir()
 
 	// Ignore errors while loading: maybe nothing was written yet.
 	_ = pc.LoadCheckpointData(checkpointDir)
 	checkpointDir = fsutil.MustReplaceTildeInDir(checkpointDir)
-	filePath := path.Join(checkpointDir, plots.TrainingPlotFileName)
-	pc.fileWriter, pc.errFileWriter = plots.CreatePointsWriter(filePath)
+	filePath := path.Join(checkpointDir, plot.TrainingPlotFileName)
+	pc.fileWriter, pc.errFileWriter = plot.CreatePointsWriter(filePath)
 	pc.enablePointsWriting = true
 	return pc
 }
@@ -255,12 +255,12 @@ func (pc *PlotConfig) stopWriting() {
 	}
 }
 
-// PointFilter can change any [plots.Point] arbitrarily. If it returns false means the point should be dropped.
-type PointFilter func(p *plots.Point) bool
+// PointFilter can change any [plot.Point] arbitrarily. If it returns false means the point should be dropped.
+type PointFilter func(p *plot.Point) bool
 
 // LoadCheckpointData loads plotting data from a checkpoint path.
 // Notice this only works if the model was trained with plotting, with the metrics saved into the file
-// `training_plot_points.json` ([plots.TrainingPlotFileName]).
+// `training_plot_points.json` ([plot.TrainingPlotFileName]).
 // Notice that if `dataDirOrFile` is a file, it reads from that instead.
 //
 // The `filters` are an optional list of filters to apply (in order) to each of the points read: it allows points
@@ -275,11 +275,11 @@ func (pc *PlotConfig) LoadCheckpointData(dataDirOrFile string, filters ...PointF
 	if err != nil {
 		return errors.Wrapf(err, "plotly.LoadCheckpointData(%q) cannot stat the file", dataDirOrFile)
 	}
-	var points []plots.Point
+	var points []plot.Point
 	if fi.IsDir() {
-		points, err = plots.LoadPointsFromCheckpoint(dataDirOrFile)
+		points, err = plot.LoadPointsFromCheckpoint(dataDirOrFile)
 	} else {
-		points, err = plots.LoadPoints(dataDirOrFile)
+		points, err = plot.LoadPoints(dataDirOrFile)
 	}
 	if err != nil {
 		return errors.WithMessagef(err, "plotly.LoadCheckpointData(%q) failed to load points", dataDirOrFile)
@@ -310,7 +310,7 @@ nextPoint:
 //
 // Usually not called directly, instead use [LoadCheckpointData] or [Dynamic], which will attach to a
 // training loop and call this automatically.
-func (pc *PlotConfig) AddPoint(pt plots.Point) {
+func (pc *PlotConfig) AddPoint(pt plot.Point) {
 	if math.IsNaN(pt.Value) || math.IsInf(pt.Value, 0) || math.IsNaN(pt.Step) || math.IsInf(pt.Step, 0) {
 		// Ignore invalid points.
 		return

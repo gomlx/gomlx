@@ -7,13 +7,13 @@ import (
 	"io"
 	"testing"
 
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	mldata "github.com/gomlx/gomlx/pkg/ml/datasets"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	mldata "github.com/gomlx/gomlx/ml/dataset"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/support/sets"
+	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,10 +22,10 @@ func TestDatasets(t *testing.T) {
 		t.Skip("Skipping long-running test.")
 	}
 	backend := testutil.BuildTestBackend()
-	ctx := context.New()
+	scope := model.NewStore().RootScope()
 	err := Download(*flagDataDir)
 	require.NoError(t, err, "failed to download OGBN-MAG dataset")
-	UploadOgbnMagVariables(backend, ctx) // Uploads the Papers frozen embedding table.
+	UploadOgbnMagVariables(backend, scope.Store()) // Uploads the Papers frozen embedding table.
 
 	_, trainDS, validDS, testDS, err := MakeDatasets(*flagDataDir)
 	require.NoError(t, err, "failed to make datasets")

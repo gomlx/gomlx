@@ -3,25 +3,25 @@
 package imdb
 
 import (
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
-	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/attention"
+	"github.com/gomlx/gomlx/ml/layers/fnn"
+	"github.com/gomlx/gomlx/ml/model"
 )
 
 // TransformerModelGraph is the part of the model that takes the word/token embeddings to a transformed
 // embedding through attention ready to be pooled and read out.
-func TransformerModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+func TransformerModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	_ = spec
 	tokens := inputs[0]
-	maskWordTaskWeight := context.GetParamOr(ctx, "imdb_mask_word_task_weight", 0.0)
+	maskWordTaskWeight := model.GetParamOr(scope, "imdb_mask_word_task_weight", 0.0)
 	useMaskWordTask := maskWordTaskWeight > 0
 	if useMaskWordTask {
 		// Select word to mask and replace with <masked> token.
 	}
 
-	embed, mask := EmbedTokensGraph(ctx, tokens)
+	embed, mask := EmbedTokensGraph(scope, tokens)
 
 	//g := embed.Graph()
 	//dtype := embed.DType()
@@ -30,11 +30,11 @@ func TransformerModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 	contentLen := embed.Shape().Dimensions[1]
 	//embedSize := embed.Shape().Dimensions[2]
 
-	maxAttentionLen := context.GetParamOr(ctx, "transformer_max_att_len", 200)
+	maxAttentionLen := model.GetParamOr(scope, "transformer_max_att_len", 200)
 	var newEmbed *Node
 	if maxAttentionLen >= contentLen {
 		// Full attention, the normal way.
-		newEmbed = TransformerLayers(ctx.In("transformer"), embed, mask)
+		newEmbed = TransformerLayers(scope.In("transformer"), embed, mask)
 		embed = Add(embed, newEmbed)
 	} else {
 		// Split embedding in multiple split embeddings and apply transformer in each of them.
@@ -50,8 +50,8 @@ func TransformerModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 			// part = x[:, sequenceFrom:sequenceTo, :]
 			part := Slice(embed, AxisRange(), AxisRange(sequenceFrom, sequenceTo), AxisRange())
 			partMask := Slice(mask, AxisRange(), AxisRange(sequenceFrom, sequenceTo))
-			// Checked(false) -> to reuse "transformer" scope (same weights on every slice).
-			part = TransformerLayers(ctx.In("transformer").Checked(false), part, partMask)
+			// At("transformer") -> to reuse "transformer" scope (same weights on every slice).
+			part = TransformerLayers(scope.At("transformer"), part, partMask)
 			if newEmbed == nil {
 				newEmbed = part
 			} else {
@@ -69,9 +69,9 @@ func TransformerModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 	if useMaskWordTask {
 		// Add "masked word" task loss.
 		/*
-			MaskedWordTaskGraph(ctx.In("masked_word_task"), tokens, embed, mask,
+			MaskedWordTaskGraph(scope.In("masked_word_task"), tokens, embed, mask,
 				func(input, mask *Node) *Node {
-					return TransformerLayers(ctx.In("transformer").Reuse(), input, mask)
+					return TransformerLayers(scope.In("transformer").Reuse(), input, mask)
 				})
 		*/
 	}
@@ -79,22 +79,22 @@ func TransformerModelGraph(ctx *context.Context, spec any, inputs []*Node) []*No
 	// Take the max over the content length, and put an FNN on top.
 	// Shape transformation: [batch_size, content_len, embed_size] -> [batch_size, embed_size]
 	logits := ReduceMax(embed, 1)
-	logits = fnn.New(ctx, logits, 1).Done()
+	logits = fnn.New(scope, logits, 1).Done()
 	logits.AssertDims(batchSize, 1)
 	return []*Node{logits}
 }
 
 // TransformerLayers builds the stacked transformer layers for the model.
-func TransformerLayers(ctx *context.Context, embed, mask *Node) *Node {
+func TransformerLayers(scope *model.Scope, embed, mask *Node) *Node {
 	g := embed.Graph()
 	shape := embed.Shape()
 	dtype := embed.DType()
 	embedSize := shape.Dimensions[2]
 
 	// Dropout.
-	dropoutRate := context.GetParamOr(ctx, "transformer_dropout_rate", -1.0)
+	dropoutRate := model.GetParamOr(scope, "transformer_dropout_rate", -1.0)
 	if dropoutRate < 0 {
-		dropoutRate = context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+		dropoutRate = model.GetParamOr(scope, layers.ParamDropoutRate, 0.0)
 	}
 	var dropoutNode *Node
 	if dropoutRate > 0.0 {
@@ -106,35 +106,35 @@ func TransformerLayers(ctx *context.Context, embed, mask *Node) *Node {
 	// Shape: [1, maxLen, embedSize]
 	posEmbedShape := shape.Clone()
 	posEmbedShape.Dimensions[0] = 1
-	posEmbedVar := ctx.VariableWithShape("positional", posEmbedShape)
-	posEmbed := posEmbedVar.ValueGraph(g)
+	posEmbedVar := scope.VariableWithShape("positional", posEmbedShape)
+	posEmbed := posEmbedVar.NodeValue(g)
 	embed = Add(embed, posEmbed) // Just add the embeddings, seems to work well.
 
 	// Add the requested number of attention layers.
-	numAttLayers := context.GetParamOr(ctx, "transformer_num_att_layers", 1)
-	numAttHeads := context.GetParamOr(ctx, "transformer_num_att_heads", 2)
-	attKeySize := context.GetParamOr(ctx, "transformer_att_key_size", 8)
+	numAttLayers := model.GetParamOr(scope, "transformer_num_att_layers", 1)
+	numAttHeads := model.GetParamOr(scope, "transformer_num_att_heads", 2)
+	attKeySize := model.GetParamOr(scope, "transformer_att_key_size", 8)
 	for layerNum := range numAttLayers {
 		// Each layer in its own scope.
-		ctx := ctx.Inf("%03d_attention_layer", layerNum)
+		scope := scope.In("%03d_attention_layer", layerNum)
 		residual := embed
-		embed = attention.MultiHeadAttention(ctx.In("000_attention"), embed, embed, embed, numAttHeads, attKeySize).
+		embed = attention.MultiHeadAttention(scope.In("000_attention"), embed, embed, embed, numAttHeads, attKeySize).
 			WithKeyMask(mask).WithQueryMask(mask).
 			WithOutputDim(embedSize).
 			WithValueHeadDim(embedSize).Done()
 		if dropoutNode != nil {
-			embed = layers.Dropout(ctx.In("001_dropout"), embed, dropoutNode)
+			embed = layers.Dropout(scope.In("001_dropout"), embed, dropoutNode)
 		}
-		embed = NormalizeSequence(ctx.In("002_normalization"), embed)
+		embed = NormalizeSequence(scope.In("002_normalization"), embed)
 		attentionOutput := embed
 
 		// Transformers recipe: 2 dense layers after attention.
-		embed = fnn.New(ctx.In("003_fnn"), embed, embedSize).NumHiddenLayers(1, embedSize).Done()
+		embed = fnn.New(scope.In("003_fnn"), embed, embedSize).NumHiddenLayers(1, embedSize).Done()
 		if dropoutNode != nil {
-			embed = layers.Dropout(ctx.In("004_dropout"), embed, dropoutNode)
+			embed = layers.Dropout(scope.In("004_dropout"), embed, dropoutNode)
 		}
 		embed = Add(embed, attentionOutput)
-		embed = NormalizeSequence(ctx.In("005_normalization"), embed)
+		embed = NormalizeSequence(scope.In("005_normalization"), embed)
 
 		// Residual connection:
 		if layerNum > 0 {
@@ -146,7 +146,7 @@ func TransformerLayers(ctx *context.Context, embed, mask *Node) *Node {
 
 /*
 // MaskedWordTaskGraph builds the computation graph for the predicting a hidden word unsupervised task.
-func MaskedWordTaskGraph(ctx *context.Context, tokens, embed, mask *Node,
+func MaskedWordTaskGraph(scope *model.Scope, tokens, embed, mask *Node,
 	transformerFn func(input, mask *Node) *Node) {
 	g := embed.Graph()
 	batchSize := embed.Shape().Dimensions[0]
@@ -160,7 +160,7 @@ func MaskedWordTaskGraph(ctx *context.Context, tokens, embed, mask *Node,
 	//seqSize.SetLogged("0. seqSize")
 
 	// choice: shape=[batch_size]
-	choice := ctx.RandomUniform(g, seqSize.Shape())
+	choice := scope.RandomUniform(g, seqSize.Shape())
 	choice = Mul(seqSize, choice)
 	choice = ConvertDType(choice, dtypes.Int64)
 	//choice.SetLogged("1. choice")
@@ -179,7 +179,7 @@ func MaskedWordTaskGraph(ctx *context.Context, tokens, embed, mask *Node,
 	// wordMaskedEmbed: shape=[batch_size, seq_size, embedding_dim]
 	// It will differ from embed only in chosen masked word position, for which it
 	// takes some learned embedding to represent a masked word.
-	maskedWordEmbeddingVar := ctx.VariableWithShape("masked_embedding", shapes.Make(DType, 1, 1, embedDim))
+	maskedWordEmbeddingVar := scope.VariableWithShape("masked_embedding", shapes.Make(DType, 1, 1, embedDim))
 	maskedWordEmbedding := maskedWordEmbeddingVar.ValueGraph(g)
 	maskedWordEmbedding = BroadcastToShape(maskedWordEmbedding, embed.Shape())
 	embedWithMaskedWord := Where(wordMask, embed, maskedWordEmbedding)
@@ -199,41 +199,41 @@ func MaskedWordTaskGraph(ctx *context.Context, tokens, embed, mask *Node,
 	}
 
 	{
-		ctx := ctx.In("output_dense_0")
+		scope := scope.In("output_dense_0")
 		if *flagDropoutRate > 0 {
-			logits = layers.Dropout(ctx.In("dropout"), logits, dropoutRate)
+			logits = layers.Dropout(scope.In("dropout"), logits, dropoutRate)
 		}
-		logits = layers.DenseWithBias(ctx, logits, *flagNumNodes)
-		logits = Normalize(ctx, logits)
+		logits = layers.DenseWithBias(scope, logits, *flagNumNodes)
+		logits = Normalize(scope, logits)
 	}
 	for ii := 1; ii < *flagNumHiddenLayers; ii++ {
-		ctx := ctx.In(fmt.Sprintf("output_dense_%d", ii))
+		scope := scope.In("output_dense_%d", ii)
 		residual := logits
 		// Add layer with residual connection.
 		if *flagDropoutRate > 0 {
-			logits = layers.Dropout(ctx.In("dropout"), logits, dropoutRate)
+			logits = layers.Dropout(scope.In("dropout"), logits, dropoutRate)
 		}
 		logits = Tanh(logits)
-		logits = layers.DenseWithBias(ctx, logits, *flagNumNodes)
-		logits = Normalize(ctx, logits)
+		logits = layers.DenseWithBias(scope, logits, *flagNumNodes)
+		logits = Normalize(scope, logits)
 		logits = Add(logits, residual)
 	}
 
 	// Final logits layer with dimension `[batch, vocabulary_size]`
 	{
-		ctx := ctx.In("readout")
+		scope := scope.In("readout")
 		if *flagDropoutRate > 0 {
-			logits = layers.Dropout(ctx.In("dropout"), logits, dropoutRate)
+			logits = layers.Dropout(scope.In("dropout"), logits, dropoutRate)
 		}
 		logits = Tanh(logits)
 
-		logits = layers.DenseWithBias(ctx, logits, vocabSize)
+		logits = layers.DenseWithBias(scope, logits, vocabSize)
 	}
 
 	// Calculate loss associated to prediction of masked word.
-	loss := losses.SparseCategoricalCrossEntropyLogits([]*Node{wordToken}, []*Node{logits})
-	loss = ReduceAllMean(loss)
-	loss = MulScalar(loss, *flagMaskWordTask)
-	train.AddLoss(ctx, loss)
+	theLoss := losses.SparseCategoricalCrossEntropyLogits([]*Node{wordToken}, []*Node{logits})
+	theLoss = ReduceAllMean(theLoss)
+	theLoss = MulScalar(theLoss, *flagMaskWordTask)
+	train.AddLoss(theLoss)
 }
 */

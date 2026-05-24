@@ -18,9 +18,9 @@ import (
 	"strings"
 
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
-	"github.com/gomlx/gomlx/pkg/support/sets"
-	"github.com/gomlx/gomlx/ui/plots"
+	"github.com/gomlx/gomlx/support/fsutil"
+	"github.com/gomlx/gomlx/support/sets"
+	"github.com/gomlx/gomlx/ui/plot"
 	"github.com/janpfeifer/gonb/gonbui/plotly"
 	"github.com/pkg/errors"
 
@@ -31,7 +31,7 @@ import (
 var (
 	flagPlot = flag.Bool("plot", false,
 		fmt.Sprintf("Plots the metrics collected for plotting in file %q. "+
-			"You can control which metrics to plot with -metrics_names and -metrics_types", plots.TrainingPlotFileName))
+			"You can control which metrics to plot with -metrics_names and -metrics_types", plot.TrainingPlotFileName))
 	flagBrowser    = flag.Bool("browser", true, "Opens the generated plots file in the default browser.")
 	flagPlotOutput = flag.String("plot_output", "", "File to generate HTML file with plots. "+
 		"**It is relative to the first dataset directory given**. "+
@@ -64,7 +64,7 @@ type plotLineInfo struct {
 // It returns one plotLineInfo per model x metric of the given metric type.
 //
 // The returned values and steps are sorted by steps.
-func createPlotLines(metricType string, modelNames []string, metricsOrder map[ModelNameAndMetric]int, points [][]plots.Point, modelNamesToIndex map[string]int) []*plotLineInfo {
+func createPlotLines(metricType string, modelNames []string, metricsOrder map[ModelNameAndMetric]int, points [][]plot.Point, modelNamesToIndex map[string]int) []*plotLineInfo {
 	var lines []*plotLineInfo
 	for modelIdx, modelPoints := range points {
 		modelName := modelNames[modelIdx]
@@ -135,7 +135,7 @@ func createPlotLines(metricType string, modelNames []string, metricsOrder map[Mo
 }
 
 // BuildPlots from the models' metrics points.
-func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[ModelNameAndMetric]int, points [][]plots.Point) {
+func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[ModelNameAndMetric]int, points [][]plot.Point) {
 	metricTypes := createSortedMetricTypes(metricsOrder)
 	numPlots := len(metricTypes)
 	modelNamesToIndex := make(map[string]int)

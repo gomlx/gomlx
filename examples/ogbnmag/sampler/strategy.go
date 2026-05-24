@@ -9,8 +9,8 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	. "github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/core/tensors"
+	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
 // Strategy is created by [Sampler]. A [Sampler] can create multiple [Strategy]s, a typical
@@ -156,7 +156,7 @@ type ValueMask[T any] struct {
 //
 // Example 2: usage in a model that is fed the output of a [sampler.Dataset]:
 //
-//	func MyModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
+//	func MyModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 //		strategy := spec.(*Sampler.Strategy)
 //		graphSample, _ := strategy.MapInputsToStates(inputs)
 //		Seeds, mask := graphSample["Seeds"].Value, graphSample["Seeds"].Mask

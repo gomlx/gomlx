@@ -59,18 +59,25 @@ and error messages are useful (always with a stack-trace) and try to make it eas
 
 ## 🔮 Upcoming Features & Plans 🔮
 
-**Large API and package re-organization: `backends` moved to `github.com/gomlx/compute` repository!**
+**Large API and package re-organization coming soon in v0.28 release:**
 
-Already in branch `main`:
+- `backends` moved to `github.com/gomlx/compute` repository!
+  - Packages `backends`, `dtypes`, `shapes` and `distributed` moved to `github.com/gomlx/compute`.
+  - The _"go"_ backend is now implemented in `github.com/gomlx/compute/gobackend` (it's been greatly improved as well).
+  - The _"xla"_ backend is now implemented in `github.com/gomlx/go-xla/compute/xla`.
+- Removed `pkg/` prefix from the the top level packages (no need with `internal/` special handling).
+- The `context.Context` variable container redesigned (and simplified) into `model.Store` (the container)
+  the `model.Scope` (a pointer to a `Store` with the current scope).
 
-* The _"go"_ backend is now implemented in `github.com/gomlx/compute/gobackend` -- it's been reorganized, and greatly simplified to read.
-* Many support packages also moved `github.com/gomlx/compute`.
+See more details in the our [CHANGELOG](docs/CHANGELOG.md), including how to use `cmd/convert_v0.28`, 
+a tool that facilitates the changes needed to move to the new API -- details in the [CHANGELOG](docs/CHANGELOG.md).
 
-Upcoming features planned for the next release (v0.28.0):
+**Upcoming features for the upcoming v0.28.0 release:**
 
-* (Optional) Dynamic shapes support for GoMLX -- the XLA backend still only supports static shapes.
-* More SIMD improvements for the Go backend (now in repo `github.com/gomlx/compute/gobackend`), we should expect great speedups.
-* (Tentative) Redesign of the `Context` object, using normal Go structs.
+* Dynamic shapes support for GoMLX: **alpha**/**experimental**, only for the Go backend (XLA only supports static shapes).
+  But it will allow more efficient and padding-free (sometimes) models with Go. It also opens up better support
+  for ONNXRuntime backend (a goal for after the v0.28 release).  
+* Improvements and some SIMD support for the Go backend (now in repo `github.com/gomlx/compute/gobackend`).
 
 ## 🗺️ Overview
 
@@ -111,19 +118,39 @@ tokenizer.
 
 ### Backends
 
-GoMLX is a friendly "intermediary ML API", that hosts a common API and a library of ML layers and such. But per-se it doesn't execute any computation: it relies on different backends to compile and execute the computation on very different hardware.
+GoMLX is a friendly "intermediary ML API", that hosts a common API and a library
+of ML layers and such. But per-se it doesn't execute any computation: it relies
+on different backends to compile and execute the computation on very different
+hardware.
 
-There is a common backend interface (currently in `github.com/gomlx/gomlx/backends`, but it will soon go to its own repo), and 3 different implementations:
+The supporting backend package must always be included in a GoMLX program, and the
+default backends (`xla` and `go`) are included if you import:
+
+```
+import _ "github.com/gomlx/gomlx/backends/default"
+```
+
+`GOMLX_BACKEND` environment variable (e.g. `export GOMLX_BACKEND=xla:cuda` or
+`export GOMLX_BACKEND=xla:cpu` In runtime, it will pick the faster available to
+you, but you can specify which backend to use by setting or `export
+GOMLX_BACKEND=go`).
+
+There is a common `compute.Backend` interface defined in
+[`github.com/gomlx/compute`](https://github.com/gomlx/compute). And there are 3
+different implementations (more planed in the future):
 
    1. **`xla`**: [OpenXLA](https://github.com/openxla/xla) backend for CPUs, GPUs, and TPUs. State-of-the-art as these things go, but only static-shape.
-      For linux/amd64, linux/arm64 (CPU) and darwin/arm64 (CPU) for now. Using the [go-xla](https://github.com/gomlx/go-xla) Go version of the APIs.
-   2. **`go`**: a pure Go backend (no C/C++ dependencies): slower but very portable (compiles to WASM/Windows/etc.): 
-      * SIMD support is underway (see [SIMD for Go](https://github.com/golang/go/issues/73787) and under-development [go-highway](https://github.com/ajroetker/go-highway)); 
+      For linux/amd64, linux/arm64 (CPU) and darwin/arm64 (CPU) for now. The Go API is defined under the [go-xla](https://github.com/gomlx/go-xla) project,
+      in `github.com/gomlx/go-xla/compute/xla`. It is included by default.
+   2. **`go`**: a pure Go backend (no C/C++ dependencies), implemented in `github.com/gomlx/gomlx/compute/gobackend`, but included by default.
+      It is slower than XLA but very portable (compiles to WASM/Windows/etc.).
+      * Some SIMD support: for AVX-2/AVX-512 for MatMul (not other operations yet). 
+        See [SIMD for Go](https://github.com/golang/go/issues/73787) and [go-highway](https://github.com/ajroetker/go-highway)(under development); 
       * **🚀 NEW 🚀**: added support for some **fused operations** and for some types of quantization, greatly improving performance
         in some cases.
       * See also [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
       * Dynamic shape support planned (maybe mid-2026).
-   3. **🚀 NEW 🚀** **[go-darwinml](https://github.com/gomlx/go-darwinml)**: Go bindings to Apple's CoreML supporting Metal acceleration, MLX, and any backend DarwinOS related. 
+   3. **🚀 NEW, Alpha 🚀** **[go-darwinml](https://github.com/gomlx/go-darwinml)**: Go bindings to Apple's CoreML supporting Metal acceleration, MLX, and any backend DarwinOS related. 
 
 ### Highlights
 
@@ -131,7 +158,7 @@ There is a common backend interface (currently in `github.com/gomlx/gomlx/backen
   but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
 * [Docker "gomlx_jupyterlab"](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab) with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
 * Autodiff: automatic differentiation—only gradients for now, no jacobian.
-* Context: automatic variable management for ML models.
+* Scope: automatic variable management for ML models.
 * ML layers library with some of the most popular machine learning "layers": FFN layers,  
   various activation functions, layer and batch normalization, convolutions, pooling, dropout, Multi-Head-Attention
   (for transformer layers), LSTM, KAN (B-Splines, [GR-KAN/KAT networks](https://arxiv.org/abs/2409.10594), Discrete-KAN, PiecewiseLinear KAN),
@@ -141,16 +168,16 @@ There is a common backend interface (currently in `github.com/gomlx/gomlx/backen
 * Training library, with some pretty-printing. Including plots for Jupyter notebook, using [GoNB, a Go Kernel](https://github.com/janpfeifer/gonb).
   * Also, various debugging tools: collecting values for particular nodes for plotting, simply logging  the value
     of nodes during training, stack-trace of the code where nodes are created.
-* `gomlx_checkpoints`, the command line tool to inspect checkpoints of train(-ing) models, **generate plots**
+* `gomlx_checkpoints`, the command line tool to inspect checkpoint of train(-ing) models, **generate plots**
   with loss and arbitrary evaluation metrics using Plotly.
   See [example of training session](https://gomlx.github.io/gomlx/notebooks/gomlx_checkpoints_plot_example.html),
   with the effects of a learning rate change during the training.
   It also allows plotting different models together, to compare their evolution.
-* SGD and Adam (AdamW and Adamax) optimizers.
+* SGD and Adam (AdamW and Adamax) optimizer.
 * Various losses and metrics.
 * Pre-Trained models to use: InceptionV3 (image model), many more from HuggingFace using [onnx-gomlx](https://github.com/gomlx/onnx-gomlx).
   See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace. 
-* Read Numpy arrays into GoMLX tensors -- see package `github.com/gomlx/gomlx/pkg/core/tensors/numpy`.
+* Read Numpy arrays into GoMLX tensors -- see package `github.com/gomlx/gomlx/core/tensors/numpy`.
 * (**Experimental**) Support static linking of PJRT: slower to build the Go program, but deploying it doesn't require installing a PJRT plugin in the machine you are deploying it. It requires you to compile your own static PJRT plugin from XLA sources.
   Use `go build --tags=pjrt_cpu_static` or include `import _ "github.com/gomlx/gomlx/backends/xla/cpu/static"`.
 * **Auto-installation of XLA PJRT plugins** (for CPU, GPU and TPUs; Linux and Macs)
@@ -191,8 +218,7 @@ there is no need to install anything.
 
 The easiest to start playing with it, it's just [pulling the docker image](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
 that includes **GoMLX** + [JupyterLab](https://jupyterlab.readthedocs.io/) + [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter) and 
-[Nvidia's CUDA runtime](https://hub.docker.com/layers/nvidia/cuda/11.8.0-cudnn8-runtime-ubuntu22.04/images/sha256-08aed54a213b52e9cb658760b6d985db2f4c5f7e8f11ac45ec66b5c746237823?context=explore)
-(for optional support of GPU) pre-installed -- it is ~5Gb to download.
+Nvidia's CUDA runtime (for optional support of GPU) pre-installed -- it is ~5Gb to download.
 
 From a directory you want to make visible in Jupyter, do:
 > For GPU support add the flag `--gpus all` to the `docker run` command bellow.
@@ -290,7 +316,7 @@ without linking GoMLX -- it will save a little executable size.
     `go` (_SimpleGo_) backends. If you add `-tags=noxla` to the compiler it won't include the XLA backend.
   - `import _ "github.com/gomlx/gomlx/backends/simplego"` to include only `go` (no C++ dependencies)
   - `import _ "github.com/gomlx/gomlx/backends/xla"` to import only XLA.
-- **Where are AI context files for (Gemini/Claude Code/Conductor, etc.)**
+- **Where are AI context files for (Gemini, Claude, SKILLS.md, etc.)**
   - To prevent cluttering the root folder of the project, they are all moved to the `.agents/` directory and also included in the `.gitignore`. This way
     one can simply symbolic link whichever AI configuration file they use to the root directory of their local copy to use them.
 

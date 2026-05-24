@@ -15,8 +15,8 @@
 // and take points at an exponential rate (starting at 100 time steps, and increasing steps at 1.1x rate).
 //
 //	plots = margaid.New(1024, 400, trainEvalDS, validationDS)
-//	if checkpoint != nil {
-//		_, err := plots.WithFile(path.Join(checkpoint.Dir(), TrainingPlotFileName))
+//	if checkpointHandler != nil {
+//		_, err := plots.WithFile(path.Join(checkpointHandler.Dir(), TrainingPlotFileName))
 //		AssertNoError(err)
 //	}
 //	plots.DynamicUpdates()
@@ -35,9 +35,9 @@ import (
 
 	mg "github.com/erkkah/margaid"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	stdplots "github.com/gomlx/gomlx/ui/plots"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/train"
+	stdplots "github.com/gomlx/gomlx/ui/plot"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"

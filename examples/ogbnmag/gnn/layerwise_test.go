@@ -8,13 +8,13 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
 	samplerPkg "github.com/gomlx/gomlx/examples/ogbnmag/sampler"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activation"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -166,11 +166,11 @@ func createDenseTestStateGraphLayerWise(
 	return graphStates, edges
 }
 
-func setMinimalTestParams(ctx *context.Context) {
-	ctx.SetParams(map[string]any{
-		layers.ParamDropoutRate:     0.0,
-		activations.ParamActivation: "none", // No activation, to make math simpler.
-		layers.ParamNormalization:   "none",
+func setMinimalTestParams(scope *model.Scope) {
+	scope.SetParams(map[string]any{
+		layers.ParamDropoutRate:    0.0,
+		activation.ParamActivation: "none", // No activation, to make math simpler.
+		layers.ParamNormalization:  "none",
 
 		ParamEdgeDropoutRate:       0.0,
 		ParamNumGraphUpdates:       1, // gnn_num_messages
@@ -181,15 +181,15 @@ func setMinimalTestParams(ctx *context.Context) {
 		ParamUpdateNumHiddenLayers: 0,
 		ParamMessageDim:            1, // 128 or 256 will work better, but takes way more time
 		ParamStateDim:              1, // 128 or 256 will work better, but takes way more time
-		ParamUseRootAsContext:      false,
+		ParamUseRootAsScope:        false,
 	})
 }
 
-func setCommonTestParams(ctx *context.Context) {
-	ctx.SetParams(map[string]any{
-		layers.ParamDropoutRate:     0.0,
-		activations.ParamActivation: "swish",
-		layers.ParamNormalization:   "layer",
+func setCommonTestParams(scope *model.Scope) {
+	scope.SetParams(map[string]any{
+		layers.ParamDropoutRate:    0.0,
+		activation.ParamActivation: "swish",
+		layers.ParamNormalization:  "layer",
 
 		ParamEdgeDropoutRate:       0.0,
 		ParamNumGraphUpdates:       3, // gnn_num_messages
@@ -200,7 +200,7 @@ func setCommonTestParams(ctx *context.Context) {
 		ParamUpdateNumHiddenLayers: 2,
 		ParamMessageDim:            8,
 		ParamStateDim:              8,
-		ParamUseRootAsContext:      false,
+		ParamUseRootAsScope:        false,
 	})
 }
 
@@ -210,34 +210,35 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	withCitation := false
 	manager := testutil.BuildTestBackend()
 	_, strategy := createDenseTestStrategy(withCitation)
-	ctx := context.New()
-	setMinimalTestParams(ctx)
+	store := model.NewStore()
+	scope := store.RootScope()
+	setMinimalTestParams(scope)
 	// Set weights to fixed values, that makes it easier to interpret:
 	{
-		ctx := ctx.InAbsPath("/model/graph_update_0/gnn:authors/conv/message/dense")
-		_ = ctx.VariableWithValue("weights", tensors.FromValue([][]float32{{1.0}}))
-		_ = ctx.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
+		s := store.Scope("/model/graph_update_0/gnn:authors/conv/message/dense")
+		_ = s.VariableWithValue("weights", tensors.FromValue([][]float32{{1.0}}))
+		_ = s.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
 	}
 	{
-		ctx := ctx.InAbsPath("/model/graph_update_0/gnn:seeds/update/dense")
-		_ = ctx.VariableWithValue("weights", tensors.FromValue([][]float32{{1000.0}, {1.0}}))
-		_ = ctx.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
+		s := store.Scope("/model/graph_update_0/gnn:seeds/update/dense")
+		_ = s.VariableWithValue("weights", tensors.FromValue([][]float32{{1000.0}, {1.0}}))
+		_ = s.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
 	}
 	{
-		ctx := ctx.InAbsPath("/model/readout/gnn:seeds/dense")
-		_ = ctx.VariableWithValue("weights", tensors.FromValue([][]float32{{1.0}}))
-		_ = ctx.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
+		s := store.Scope("/model/readout/gnn:seeds/dense")
+		_ = s.VariableWithValue("weights", tensors.FromValue([][]float32{{1.0}}))
+		_ = s.VariableWithValue("biases", tensors.FromValue([]float32{0.0}))
 	}
 
 	// Normal GNN executor.
-	execGnn := context.MustNewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+	execGnn := model.MustNewExec(manager, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
 		graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
-		NodePrediction(ctx.In("model"), strategy, graphStates)
+		NodePrediction(scope.In("model"), strategy, graphStates)
 		return graphStates["seeds"].Value
 	})
 
 	// For each paper: paperIdx (residual connection) + 1000*paperIdx + 0.025*paperIdx + (0+1+2+3+4)/1000
-	logits := execGnn.MustExec()[0]
+	logits := execGnn.MustCall()[0]
 	fmt.Printf("\tGNN seeds states: %s\n", logits)
 	//want := [][]float32{{0.010}, {1001.035}, {2002.060}, {3003.085}, {4004.110}, {5005.135}, {6006.160}, {7007.185}, {8008.210}, {9009.235}}
 	want := [][]float32{{0.02}, {2002.07}, {4004.12}, {6006.17}, {8008.22}, {10010.27},
@@ -246,20 +247,20 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 
 	// Uncomment to list variables used in model.
 	/*
-		ctx.EnumerateVariables(func(v *context.Variable) {
+		scope.EnumerateVariables(func(v *model.Variable) {
 			fmt.Printf("\t%s=%s\n", v.GetParameterName(), v.Value())
 		})
 	*/
 
 	// Layer-Wise Inference: should return the same values.
-	lw, err := LayerWiseGNN(ctx, strategy)
+	lw, err := LayerWiseGNN(scope, strategy)
 	require.NoError(t, err)
-	execLayerWise := context.MustNewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+	execLayerWise := model.MustNewExec(manager, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
 		graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
-		lw.NodePrediction(ctx.In("model"), graphStates, edges)
+		lw.NodePrediction(scope.In("model"), graphStates, edges)
 		return graphStates["seeds"]
 	})
-	logits = execLayerWise.MustExec()[0]
+	logits = execLayerWise.MustCall()[0]
 	fmt.Printf("\tLayerWiseGNN seeds states: %s\n", logits)
 	require.Equal(t, want, logits.Value())
 }
@@ -271,35 +272,36 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		fmt.Printf("\nwithCitation=%v:\n", withCitation)
 		manager := testutil.BuildTestBackend()
 		_, strategy := createDenseTestStrategy(withCitation)
-		ctx := context.New()
-		setCommonTestParams(ctx)
+		store := model.NewStore()
+		scope := store.RootScope()
+		setCommonTestParams(scope)
 
 		// Normal GNN executor.
-		execGnn := context.MustNewExec(manager, ctx, func(ctx *context.Context, g *Graph) *Node {
+		execGnn := model.MustNewExec(manager, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
 			graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
-			NodePrediction(ctx, strategy, graphStates)
+			NodePrediction(scope, strategy, graphStates)
 			return graphStates["seeds"].Value
 		})
 
-		sampledLogits := execGnn.MustExec()[0]
+		sampledLogits := execGnn.MustCall()[0]
 		fmt.Printf("\tGNN seeds states: %s\n", sampledLogits.GoStr())
 
 		// Uncomment to list variables used in model.
 		/*
-			ctx.EnumerateVariables(func(v *context.Variable) {
+			scope.EnumerateVariables(func(v *model.Variable) {
 				fmt.Printf("\t%s=%s\n", v.GetParameterName(), v.Value())
 			})
 		*/
 
 		// Layer-Wise Inference: should return the same values.
-		lw, err := LayerWiseGNN(ctx, strategy)
+		lw, err := LayerWiseGNN(scope, strategy)
 		require.NoError(t, err)
-		execLayerWise := context.MustNewExec(manager, ctx.Reuse(), func(ctx *context.Context, g *Graph) *Node {
+		execLayerWise := model.MustNewExec(manager, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
 			graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
-			lw.NodePrediction(ctx, graphStates, edges)
+			lw.NodePrediction(scope, graphStates, edges)
 			return graphStates["seeds"]
 		})
-		lwLogits := execLayerWise.MustExec()[0]
+		lwLogits := execLayerWise.MustCall()[0]
 		fmt.Printf("\tLayerWiseGNN seeds states: %s\n", lwLogits.GoStr())
 		require.True(t, sampledLogits.InDelta(lwLogits, 1e-4))
 	}

@@ -11,14 +11,14 @@ import (
 	"github.com/gomlx/compute"
 	mag "github.com/gomlx/gomlx/examples/ogbnmag"
 	"github.com/gomlx/gomlx/examples/ogbnmag/gnn"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
-	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activation"
+	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
 
@@ -26,24 +26,24 @@ import (
 )
 
 var (
-	flagVerbose       = flag.Bool("verbose", false, "Set to true to print more information.")
+	flagVerbosity     = flag.Int("verbosity", 1, "Level of verbosity, the higher the more verbose.")
 	flagEval          = flag.Bool("eval", false, "Set to true to run evaluation instead of training.")
 	flagSkipReport    = flag.Bool("skip_report", false, "Set to true to skip report of quality after training.")
 	flagSkipTrainEval = flag.Bool("skip_train_eval", false, "Set to true to skip evaluation on training data, which takes longer.")
 	flagDataDir       = flag.String("data", "~/work/ogbnmag", "Directory to cache downloaded and generated dataset files.")
-	flagCheckpoint    = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoints.")
+	flagCheckpoint    = flag.String("checkpoint", "", "Checkpoint subdirectory under --data directory. If empty does not use checkpoint.")
 	flagLayerWise     = flag.Bool("layerwise", true, "Whether to use Layer-Wise inference for evaluation -- default is true.")
 )
 
 const paramWithReplacement = "mag_with_replacement"
 
-func createDefaultContext() *context.Context {
-	ctx := context.New()
-	ctx.ResetRNGState()
-	ctx.SetParams(map[string]any{
+func createModelStore() *model.Store {
+	store := model.NewStore()
+	store.ResetRNGState()
+	store.SetParams(map[string]any{
 		"checkpoint":         "",
 		"num_checkpoints":    3,
-		"train_steps":        0,
+		"train_steps":        1000,
 		"batch_size":         128,
 		"plots":              true,
 		paramWithReplacement: false,
@@ -79,18 +79,18 @@ func createDefaultContext() *context.Context {
 		kan.ParamPWLSplitPointsTrainable: false,
 
 		// Optimizer parameters.
-		optimizers.ParamOptimizer:           "adamw",
-		optimizers.ParamLearningRate:        0.001,
+		optimizer.ParamOptimizer:            "adamw",
+		optimizer.ParamLearningRate:         0.001,
 		cosineschedule.ParamPeriodSteps:     -1, // If set to -1, does automatic setting of CosineScheduleSteps to train_steps.
 		cosineschedule.ParamMinLearningRate: 0.0,
-		optimizers.ParamClipStepByValue:     0.0,
-		optimizers.ParamAdamEpsilon:         1e-7,
-		optimizers.ParamAdamDType:           "float32",
-		optimizers.ParamClipNaN:             false,
+		optimizer.ParamClipStepByValue:      0.0,
+		optimizer.ParamAdamEpsilon:          1e-7,
+		optimizer.ParamAdamDType:            "float32",
+		optimizer.ParamClipNaN:              false,
 
-		regularizers.ParamL2:        1e-5,
-		layers.ParamDropoutRate:     0.2,
-		activations.ParamActivation: "swish",
+		regularizer.ParamL2:        1e-5,
+		layers.ParamDropoutRate:    0.2,
+		activation.ParamActivation: "swish",
 
 		gnn.ParamEdgeDropoutRate:       0.0,
 		gnn.ParamNumGraphUpdates:       6, // gnn_num_messages
@@ -101,7 +101,7 @@ func createDefaultContext() *context.Context {
 		gnn.ParamUpdateNumHiddenLayers: 0,
 		gnn.ParamMessageDim:            32, // 128 or 256 will work better, but takes way more time
 		gnn.ParamStateDim:              32, // 128 or 256 will work better, but takes way more time
-		gnn.ParamUseRootAsContext:      false,
+		gnn.ParamUseRootAsScope:        false,
 		gnn.ParamNoKanForLayers:        "",
 
 		mag.ParamEmbedDropoutRate:     0.0,
@@ -110,31 +110,31 @@ func createDefaultContext() *context.Context {
 		mag.ParamIdentitySubSeeds:     true,
 		mag.ParamDType:                "float32",
 	})
-	ctx.In("readout").SetParam(gnn.ParamUpdateNumHiddenLayers, 2)
-	return ctx
+	store.Scope("readout").SetParam(gnn.ParamUpdateNumHiddenLayers, 2)
+	return store
 }
 
-func SetTrainSteps(ctx *context.Context) {
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
+func SetTrainSteps(store *model.Store) {
+	numTrainSteps := model.GetParamOr(store.RootScope(), "train_steps", 0)
 	if numTrainSteps <= 0 {
 		stepsPerEpoch := mag.TrainSplit.Shape().Size()/mag.BatchSize + 1
 		numEpochs := 10 // Taken from TF-GNN OGBN-MAG notebook.
 		numTrainSteps = numEpochs * stepsPerEpoch
-		ctx.SetParam("train_steps", numTrainSteps)
+		store.RootScope().SetParam("train_steps", numTrainSteps)
 	}
-	//cosineScheduleSteps := context.GetParamOr(ctx, cosineschedule.ParamPeriodSteps, 0)
+	//cosineScheduleSteps := model.GetParamOr(scope, cosineschedule.ParamPeriodSteps, 0)
 	//if cosineScheduleSteps < 0 {
-	//	ctx.SetParam(cosineschedule.ParamPeriodSteps, numTrainSteps/(-cosineScheduleSteps))
+	//	scope.SetParam(cosineschedule.ParamPeriodSteps, numTrainSteps/(-cosineScheduleSteps))
 	//}
 }
 
 func main() {
-	// Init GoMLX manager and default context.
+	// Init GoMLX manager and default model.
 	backend := compute.MustNew()
-	ctx := createDefaultContext()
+	store := createModelStore()
 
-	// Flags with context settings.
-	settings := commandline.CreateContextSettingsFlag(ctx, "")
+	// Flags with scope settings.
+	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
 
@@ -145,12 +145,12 @@ func main() {
 	}
 
 	// Parse hyperparameter settings.
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *settings))
-	if *flagVerbose {
-		fmt.Println("Hyperparameters set:")
-		fmt.Println(commandline.SprintModifiedContextSettings(ctx, paramsSet))
+	paramsSet := check1(commandline.ParseSettings(store, *settings))
+	if *flagVerbosity >= 1 {
+		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
+		fmt.Println(commandline.SprintSettings(store))
 	}
-	mag.BatchSize = context.GetParamOr(ctx, "batch_size", 128)
+	mag.BatchSize = model.GetParamOr(store.RootScope(), "batch_size", 128)
 
 	//Early sanity checks.
 	if *flagCheckpoint == "" && *flagEval {
@@ -162,20 +162,20 @@ func main() {
 	start := time.Now()
 	check(mag.Download(*flagDataDir))
 	fmt.Printf("elapsed: %s\n", time.Since(start))
-	SetTrainSteps(ctx) // Can only be set after mag data is loaded.
+	SetTrainSteps(store) // Can only be set after mag data is loaded.
 
 	// RunWithMap train / eval.
-	mag.WithReplacement = context.GetParamOr(ctx, paramWithReplacement, false)
+	mag.WithReplacement = model.GetParamOr(store.RootScope(), paramWithReplacement, false)
 	var err error
 	if *flagEval {
-		err = mag.Eval(backend, ctx, *flagDataDir, *flagCheckpoint, *flagLayerWise, *flagSkipTrainEval)
+		err = mag.EvalWithStore(backend, store, *flagDataDir, *flagCheckpoint, *flagLayerWise, *flagSkipTrainEval)
 	} else {
 		if mag.WithReplacement {
 			fmt.Println("Training dataset with replacement")
 		}
 
 		// Train.
-		err = mag.Train(backend, ctx, *flagDataDir, *flagCheckpoint, *flagLayerWise, !*flagSkipReport, paramsSet)
+		err = mag.TrainWithStore(backend, store, *flagDataDir, *flagCheckpoint, *flagLayerWise, !*flagSkipReport, paramsSet)
 	}
 	if err != nil {
 		fmt.Printf("%+v\n", err)

@@ -18,8 +18,8 @@ var (
 )
 
 func init() {
-	ctx := createDefaultContext()
-	flagSettings = commandline.CreateContextSettingsFlag(ctx, "")
+	store := createModelStore()
+	flagSettings = commandline.CreateSettingsFlag(store, "")
 	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
 		check(os.Setenv(compute.ConfigEnvVar, "xla:cpu"))
@@ -31,9 +31,9 @@ func TestMainFunc(t *testing.T) {
 		t.Skip("skipping testing in short mode")
 		return
 	}
-	ctx := createDefaultContext()
-	ctx.SetParam("train_steps", 10)
-	paramsSet := check1(commandline.ParseContextSettings(ctx, *flagSettings))
-	err := mainWithContext(ctx, *flagDataDir, *flagCheckpoint, paramsSet)
+	store := createModelStore()
+	store.SetParam("train_steps", 10)
+	paramsSet := must1(commandline.ParseSettings(store, *flagSettings))
+	err := mainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet)
 	require.NoError(t, err, "failed to train Adult model for 10 steps")
 }

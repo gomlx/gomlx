@@ -7,9 +7,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,19 +19,19 @@ func TestPerturbVars(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Create context and add variable.
-	ctx := context.New()
-	_ = ctx.VariableWithValue("test_var", tensors.FromScalarAndDimensions(1.0, 100, 100))
-	checkpoint, err := checkpoints.Build(ctx).Dir(tmpDir).Keep(-1).Done()
+	scope := model.NewStore()
+	_ = scope.VariableWithValue("test_var", tensors.FromScalarAndDimensions(1.0, 100, 100))
+	checkpointHandler, err := checkpoint.Build(scope).Dir(tmpDir).Keep(-1).Done()
 	require.NoError(t, err)
-	require.NoError(t, checkpoint.Save())
+	require.NoError(t, checkpointHandler.Save())
 
 	// Perturb variables.
 	const perturbAmount = 0.1
 	PerturbVars(tmpDir, perturbAmount)
 
 	// Load and check perturbed values.
-	newCtx := context.New()
-	_, err = checkpoints.Build(newCtx).Dir(tmpDir).Immediate().Done()
+	newCtx := model.NewStore()
+	_, err = checkpoint.Build(newCtx).Dir(tmpDir).Immediate().Done()
 	require.NoError(t, err)
 	perturbedT, err := newCtx.GetVariable("test_var").Value()
 	require.NoError(t, err)

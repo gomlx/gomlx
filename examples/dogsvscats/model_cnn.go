@@ -5,33 +5,33 @@ package dogsvscats
 // This file implements the baseline CNN model, including the FNN layers on top.
 
 import (
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activation"
+	"github.com/gomlx/gomlx/ml/layers/norm"
+	"github.com/gomlx/gomlx/ml/layers/fnn"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/support/exceptions"
 )
 
 // CnnModelGraph builds the CNN model for our demo.
 // It returns the logit, not the predictions, which works with most losses.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
-func CnnModelGraph(ctx *context.Context, spec any, inputs []*Node) []*Node {
-	ctx = ctx.In("model") // Create the model by default under the "/model" scope.
-	embeddings := CnnEmbeddings(ctx, inputs[0])
-	logit := fnn.New(ctx.In("readout"), embeddings, 1).NumHiddenLayers(0, 0).Done()
+func CnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
+	scope = scope.In("model") // Create the model by default under the "/model" scope.
+	embeddings := CnnEmbeddings(scope, inputs[0])
+	logit := fnn.New(scope.In("readout"), embeddings, 1).NumHiddenLayers(0, 0).Done()
 	return []*Node{logit}
 }
 
-func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
+func CnnEmbeddings(scope *model.Scope, images *Node) *Node {
 	batchSize := images.Shape().Dimensions[0]
-	numConvolutions := context.GetParamOr(ctx, "cnn_num_layers", 5)
+	numConvolutions := model.GetParamOr(scope, "cnn_num_layers", 5)
 
 	// Dropout.
-	dropoutRate := context.GetParamOr(ctx, "cnn_dropout_rate", -1.0)
+	dropoutRate := model.GetParamOr(scope, "cnn_dropout_rate", -1.0)
 	if dropoutRate < 0 {
-		dropoutRate = context.GetParamOr(ctx, layers.ParamDropoutRate, 0.0)
+		dropoutRate = model.GetParamOr(scope, layers.ParamDropoutRate, 0.0)
 	}
 	var dropoutNode *Node
 	if dropoutRate > 0.0 {
@@ -42,17 +42,17 @@ func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
 	logits := images
 	imgSize := logits.Shape().Dimensions[1]
 	for convIdx := range numConvolutions {
-		ctx := ctx.Inf("%03d_conv", convIdx)
+		scope := scope.In("%03d_conv", convIdx)
 		if convIdx > 0 {
-			logits = normalizeImage(ctx, logits)
+			logits = normalizeImage(scope, logits)
 		}
 		for repeat := range 2 {
-			ctx := ctx.Inf("repeat_%02d", repeat)
+			scope := scope.In("repeat_%02d", repeat)
 			residual := logits
-			logits = layers.Convolution(ctx, logits).Channels(numChannels).KernelSize(3).PadSame().Done()
-			logits = activations.ApplyFromContext(ctx, logits)
+			logits = layers.Convolution(scope, logits).Channels(numChannels).KernelSize(3).PadSame().Done()
+			logits = activation.ApplyFromScope(scope, logits)
 			if dropoutNode != nil {
-				logits = layers.Dropout(ctx, logits, dropoutNode)
+				logits = layers.Dropout(scope, logits, dropoutNode)
 			}
 			if residual.Shape().Equal(logits.Shape()) {
 				logits = Add(logits, residual)
@@ -68,23 +68,23 @@ func CnnEmbeddings(ctx *context.Context, images *Node) *Node {
 
 	// Flatten the resulting image, and treat the convolved values as tabular.
 	logits = Reshape(logits, batchSize, -1)
-	return fnn.New(ctx.Inf("%03d_fnn", numConvolutions), logits, context.GetParamOr(ctx, "cnn_embeddings_size", 128)).Done()
+	return fnn.New(scope.In("%03d_fnn", numConvolutions), logits, model.GetParamOr(scope, "cnn_embeddings_size", 128)).Done()
 }
 
-func normalizeImage(ctx *context.Context, x *Node) *Node {
+func normalizeImage(scope *model.Scope, x *Node) *Node {
 	x.AssertRank(4) // [batch_size, width, height, depth]
-	norm := context.GetParamOr(ctx, "cnn_normalization", "")
-	if norm == "" {
-		context.GetParamOr(ctx, layers.ParamNormalization, "")
+	normType := model.GetParamOr(scope, "cnn_normalization", "")
+	if normType == "" {
+		normType = model.GetParamOr(scope, layers.ParamNormalization, "")
 	}
-	switch norm {
+	switch normType {
 	case "layer":
-		return layers.LayerNormalization(ctx, x, 1, 2).ScaleNormalization(false).Done()
+		return norm.LayerNorm(scope, x, 1, 2).ScaleNormalization(false).Done()
 	case "batch":
-		return batchnorm.New(ctx, x, -1).Done()
+		return norm.BatchNorm(scope, x, -1).Done()
 	case "none", "":
 		return x
 	}
-	exceptions.Panicf("invalid normalization selected %q -- valid values are batch, layer, none", norm)
+	exceptions.Panicf("invalid normalization selected %q -- valid values are batch, layer, none", normType)
 	return nil
 }

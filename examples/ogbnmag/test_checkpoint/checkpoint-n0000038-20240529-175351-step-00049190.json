@@ -104,7 +104,7 @@
 		},
 		{
 			"Scope": "/",
-			"Key": "gnn_use_root_as_context",
+			"Key": "gnn_use_root_as_scope",
 			"Value": false,
 			"ValueType": "bool"
 		},

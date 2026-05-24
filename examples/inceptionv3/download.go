@@ -8,7 +8,7 @@ import (
 
 	"github.com/gomlx/gomlx/examples/downloader"
 	"github.com/gomlx/gomlx/examples/inceptionv3/hdf5"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/support/fsutil"
 )
 
 const (

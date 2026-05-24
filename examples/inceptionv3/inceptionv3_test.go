@@ -11,11 +11,11 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/core/tensors/images"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/core/tensors/images"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -46,11 +46,11 @@ func TestBuildGraph(t *testing.T) {
 	require.NoError(t, DownloadAndUnpackWeights(*flagDataDir))
 
 	// InceptionV3 classification.
-	ctx := context.New()
-	inceptionV3Exec := context.MustNewExec(backend, ctx, func(ctx *context.Context, img *Node) *Node {
+	scope := model.NewStore()
+	inceptionV3Exec := model.MustNewExec(backend, scope, func(scope *model.Scope, img *Node) *Node {
 		img = InsertAxes(img, 0) // Add batch dimension
 		img = PreprocessImage(img, 255.0, images.ChannelsLast)
-		output := BuildGraph(ctx, img).
+		output := BuildGraph(scope, img).
 			PreTrained(*flagDataDir).
 			ClassificationTop(true).
 			WithAliases(true).
@@ -67,7 +67,7 @@ func TestBuildGraph(t *testing.T) {
 		require.True(t, g.GetNodeByAlias("/inceptionV3/conv_093/output") != nil)
 		return output
 	})
-	predictionT := inceptionV3Exec.MustExec(imgT)[0]
+	predictionT := inceptionV3Exec.MustCall(imgT)[0]
 	prediction := predictionT.Value().([][]float32)[0] // The last [0] takes the first element of the batch of 1.
 
 	// Compare with the expected result:

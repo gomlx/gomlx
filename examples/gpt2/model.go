@@ -13,15 +13,16 @@ import (
 	"github.com/gomlx/go-huggingface/models/safetensors"
 	"github.com/gomlx/go-huggingface/tokenizers/api"
 	"github.com/gomlx/go-huggingface/tokenizers/hftokenizer"
-	. "github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/decode/sample"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gomlx/pkg/ml/layers/attention"
-	"github.com/gomlx/gomlx/pkg/ml/layers/attention/pos"
-	"github.com/gomlx/gomlx/pkg/ml/model/transformer"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/decode/sample"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activation"
+	"github.com/gomlx/gomlx/ml/layers/attention"
+	"github.com/gomlx/gomlx/ml/layers/attention/pos"
+	"github.com/gomlx/gomlx/ml/layers/norm"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/zoo/transformer"
 )
 
 // GPT2Config holds the architecture configuration for GPT-2.
@@ -57,77 +58,77 @@ func DefaultGPT2Config() GPT2Config {
 
 // GPT2Model represents a loaded GPT-2 model ready for inference.
 type GPT2Model struct {
-	backend compute.Backend
-	ctx     *context.Context
-	config  GPT2Config
-	model   *transformer.Model
+	backend          compute.Backend
+	scope            *model.Scope
+	config           GPT2Config
+	transformerModel *transformer.Model
 
 	// Single cached exec for all token generations
-	tokenExec *context.Exec
+	tokenExec *model.Exec
 }
 
 // forwardGPT2 implements GPT-2's forward pass with pre-norm architecture.
-func (m *GPT2Model) forwardGPT2(ctx *context.Context, tokens *Node, position *Node) *Node {
-	model := m.model
+func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node) *Node {
+	tm := m.transformerModel
 	g := tokens.Graph()
 	currentSeqLen := tokens.Shape().Dimensions[1]
 
 	// Token + positional embeddings
-	embedded := layers.Embedding(ctx.In("token_embed"), tokens, model.DType, model.VocabSize, model.EmbedDim)
+	embedded := layers.Embedding(scope.In("token_embed"), tokens, tm.DType, tm.VocabSize, tm.EmbedDim)
 	if embedded.Rank() == 2 {
 		embedded = ExpandDims(embedded, 1)
 	}
 
-	posEmbedFull := ctx.In("pos_embed").VariableWithShape("embeddings",
-		shapes.Make(model.DType, model.MaxPosEmbed, model.EmbedDim)).ValueGraph(g)
+	posEmbedFull := scope.In("pos_embed").VariableWithShape("embeddings",
+		shapes.Make(tm.DType, tm.MaxPosEmbed, tm.EmbedDim)).NodeValue(g)
 	posScalar := Squeeze(ConvertDType(position, dtypes.Int32))
-	posEmbed := DynamicSlice(posEmbedFull, []*Node{posScalar, Const(g, int32(0))}, []int{currentSeqLen, model.EmbedDim})
+	posEmbed := DynamicSlice(posEmbedFull, []*Node{posScalar, Const(g, int32(0))}, []int{currentSeqLen, tm.EmbedDim})
 	posEmbed = BroadcastToShape(ExpandDims(posEmbed, 0), embedded.Shape())
 	x := Add(embedded, posEmbed)
 
 	// Transformer layers (pre-norm architecture)
-	for layer := 0; layer < model.NumLayers; layer++ {
-		layerCtx := ctx.In(fmt.Sprintf("layer_%d", layer))
+	for layer := range tm.NumLayers {
+		layerScope := scope.In("layer_%d", layer)
 
 		// Pre-attention LayerNorm
-		attnInput := layers.LayerNormalization(layerCtx.In("norm1"), x, -1).
+		attnInput := norm.LayerNorm(layerScope.In("norm1"), x, -1).
 			Epsilon(m.config.NormEps).Done()
 
 		// Self-attention with KV cache
-		attn := attention.SelfAttention(layerCtx.In("attn"), attnInput, model.NumHeads, model.HeadDim).
-			WithKVCache(model.MaxPosEmbed, position).
+		attn := attention.SelfAttention(layerScope.In("attn"), attnInput, tm.NumHeads, tm.HeadDim).
+			WithKVCache(tm.MaxPosEmbed, position).
 			UseProjectionBias(true).
 			WithCausalMask(true).
 			Done()
 		x = Add(x, attn)
 
 		// Pre-MLP LayerNorm
-		ffInput := layers.LayerNormalization(layerCtx.In("norm2"), x, -1).
+		ffInput := norm.LayerNorm(layerScope.In("norm2"), x, -1).
 			Epsilon(m.config.NormEps).Done()
 
 		// Feed-forward network
-		ff := layers.Dense(layerCtx.In("ff1"), ffInput, true, model.FFNDim)
-		ff = activations.Gelu(ff)
-		ff = layers.Dense(layerCtx.In("ff2"), ff, true, model.EmbedDim)
+		ff := layers.Dense(layerScope.In("ff1"), ffInput, true, tm.FFNDim)
+		ff = activation.Gelu(ff)
+		ff = layers.Dense(layerScope.In("ff2"), ff, true, tm.EmbedDim)
 		x = Add(x, ff)
 	}
 
 	// Final layer norm
-	x = layers.LayerNormalization(ctx.In("final_norm"), x, -1).
+	x = norm.LayerNorm(scope.In("final_norm"), x, -1).
 		Epsilon(m.config.NormEps).Done()
 
 	// Output projection
-	return layers.Dense(ctx.In("output"), x, false, model.VocabSize)
+	return layers.Dense(scope.In("output"), x, false, tm.VocabSize)
 }
 
 // LoadGPT2 loads the GPT-2 model from the given HuggingFace repository.
 func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenizer, error) {
 	config := DefaultGPT2Config()
 
-	// Create context for model parameters and load them.
-	ctx := context.New()
+	// Create scope for model parameters and load them.
+	scope := model.NewStore().RootScope()
 	fmt.Println("Loading checkpoint weights...")
-	if err := loadCheckpoint(backend, ctx, repo); err != nil {
+	if err := loadCheckpoint(backend, scope, repo); err != nil {
 		fmt.Printf("Warning: Failed to load checkpoint: %v\n", err)
 		fmt.Println("Continuing with random initialization...")
 	} else {
@@ -135,7 +136,7 @@ func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenize
 	}
 
 	// GPT2 uses a learned embedding:
-	posEmbedder := pos.NewLearned(ctx, config.MaxPosEmbed, config.HiddenSize)
+	posEmbedder := pos.NewLearned(scope, config.MaxPosEmbed, config.HiddenSize)
 
 	// Build the transformer model and wrap it in our GPT2Model.
 	transformerModel := transformer.New(
@@ -149,26 +150,26 @@ func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenize
 		WithMaxPosEmbed(config.MaxPosEmbed).
 		WithDType(config.DType).
 		WithPositionalEncoder(posEmbedder)
-	model := &GPT2Model{
-		backend: backend,
-		ctx:     ctx,
-		config:  config,
-		model:   transformerModel,
+	gpt2Model := &GPT2Model{
+		backend:          backend,
+		scope:            scope,
+		config:           config,
+		transformerModel: transformerModel,
 	}
 
 	// Create the generation exec once during loading (saves JIT compilation on first Generate call)
 	var err error
-	model.tokenExec, err = context.NewExec(backend, ctx.Reuse(),
-		func(ctx *context.Context, tokens *Node, position *Node) *Node {
-			logits := model.forwardGPT2(ctx, tokens, position)
+	gpt2Model.tokenExec, err = model.NewExec(backend, scope.Store(),
+		func(scope *model.Scope, tokens *Node, position *Node) *Node {
+			logits := gpt2Model.forwardGPT2(scope, tokens, position)
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 			lastLogits = Squeeze(lastLogits, 1)
 			return sample.SampleWithStrategy(
-				ctx, lastLogits,
-				model.config.Strategy,
-				model.config.Temperature,
-				model.config.TopK,
-				model.config.TopP,
+				scope, lastLogits,
+				gpt2Model.config.Strategy,
+				gpt2Model.config.Temperature,
+				gpt2Model.config.TopK,
+				gpt2Model.config.TopP,
 			)
 		})
 	if err != nil {
@@ -181,7 +182,7 @@ func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenize
 		return nil, nil, fmt.Errorf("failed to load tokenizer: %w", err)
 	}
 
-	return model, tokenizer, nil
+	return gpt2Model, tokenizer, nil
 }
 
 // GenerationConfig holds parameters for text generation.
@@ -262,7 +263,7 @@ func (m *GPT2Model) Generate(
 }
 
 // loadCheckpoint loads model weights from the HuggingFace repository.
-func loadCheckpoint(backend compute.Backend, ctx *context.Context, repo *hub.Repo) error {
+func loadCheckpoint(backend compute.Backend, scope *model.Scope, repo *hub.Repo) error {
 	// Get repo info for validation (includes SafeTensorsInfo)
 	info := repo.Info()
 	if info != nil && info.SafeTensors.Total > 0 {
@@ -285,8 +286,8 @@ func loadCheckpoint(backend compute.Backend, ctx *context.Context, repo *hub.Rep
 			continue
 		}
 
-		// Set variable in context
-		if err := setContextVariableFromTensor(ctx, scopePath, varName, tensorAndName.Tensor); err != nil {
+		// Set variable in scope
+		if err := setScopeVariableFromTensor(scope, scopePath, varName, tensorAndName.Tensor); err != nil {
 			fmt.Printf("Warning: failed to load %s -> %s/%s: %v\n",
 				tensorAndName.Name, strings.Join(scopePath, "/"), varName, err)
 			continue
@@ -300,7 +301,7 @@ func loadCheckpoint(backend compute.Backend, ctx *context.Context, repo *hub.Rep
 			tTransposed := tensors.FromShape(transposedShape)
 			transposeFloat32Tensor(tensorAndName.Tensor, tTransposed)
 
-			if err := setContextVariableFromTensor(ctx, []string{"output", "dense"}, "weights", tTransposed); err != nil {
+			if err := setScopeVariableFromTensor(scope, []string{"output", "dense"}, "weights", tTransposed); err != nil {
 				fmt.Printf("Warning: failed to set tied output weights: %v\n", err)
 			}
 		}
@@ -317,7 +318,7 @@ func loadCheckpoint(backend compute.Backend, ctx *context.Context, repo *hub.Rep
 	return nil
 }
 
-// mapTensorName maps safetensors tensor names to GoMLX context variable names
+// mapTensorName maps safetensors tensor names to GoMLX scope variable names
 // DistilGPT-2/GPT-2 format: transformer.wte.weight, transformer.h.{N}.attn.c_attn.weight, etc.
 // GoMLX format: token_embed/embeddings, layer_{N}/attn/..., etc.
 func mapTensorName(safetensorsName string) (scopePath []string, varName string, ok bool) {
@@ -384,32 +385,32 @@ func mapTensorName(safetensorsName string) (scopePath []string, varName string, 
 	return nil, "", false
 }
 
-// setContextVariableFromTensor sets a variable in the context from a tensor
-func setContextVariableFromTensor(ctx *context.Context, scopePath []string, varName string, t *tensors.Tensor) error {
+// setScopeVariableFromTensor sets a variable in the scope from a tensor
+func setScopeVariableFromTensor(scope *model.Scope, scopePath []string, varName string, t *tensors.Tensor) error {
 	// Check if this is a fused QKV weight that needs splitting
 	if len(scopePath) >= 3 && scopePath[len(scopePath)-1] == "_fused_qkv" {
-		return splitAndSetQKV(ctx, scopePath, varName, t)
+		return splitAndSetQKV(scope, scopePath, varName, t)
 	}
 
 	// Normal case: set single variable
-	scopeCtx := ctx
-	for _, scope := range scopePath {
-		scopeCtx = scopeCtx.In(scope)
+	scopeScope := scope
+	for _, s := range scopePath {
+		scopeScope = scopeScope.In("%s", s)
 	}
 
-	scopeCtx.VariableWithValue(varName, t)
+	scopeScope.VariableWithValue(varName, t)
 	return nil
 }
 
 // splitAndSetQKV splits fused QKV weights/biases into separate Q, K, V tensors
-func splitAndSetQKV(ctx *context.Context, scopePath []string, varName string, t *tensors.Tensor) error {
+func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *tensors.Tensor) error {
 	// Get the actual scope without "_fused_qkv"
 	baseScopePath := scopePath[:len(scopePath)-1]
-	baseCtx := ctx
-	for _, scope := range baseScopePath {
-		baseCtx = baseCtx.In(scope)
+	baseScope := scope
+	for _, s := range baseScopePath {
+		baseScope = baseScope.In("%s", s)
 	}
-	baseCtx = baseCtx.In("MultiHeadAttention")
+	baseScope = baseScope.In("MultiHeadAttention")
 
 	shape := t.Shape().Dimensions
 	var flatData []float32
@@ -449,9 +450,9 @@ func splitAndSetQKV(ctx *context.Context, scopePath []string, varName string, t 
 			}
 		}
 
-		baseCtx.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, hiddenSize, numHeads, headDim))
-		baseCtx.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, hiddenSize, numHeads, headDim))
-		baseCtx.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, hiddenSize, numHeads, headDim))
+		baseScope.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, hiddenSize, numHeads, headDim))
+		baseScope.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, hiddenSize, numHeads, headDim))
+		baseScope.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, hiddenSize, numHeads, headDim))
 	} else if len(shape) == 1 {
 		// Bias vector: [3*hiddenSize]
 		totalSize := shape[0]
@@ -476,9 +477,9 @@ func splitAndSetQKV(ctx *context.Context, scopePath []string, varName string, t 
 			}
 		}
 
-		baseCtx.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, numHeads, headDim))
-		baseCtx.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, numHeads, headDim))
-		baseCtx.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, numHeads, headDim))
+		baseScope.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, numHeads, headDim))
+		baseScope.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, numHeads, headDim))
+		baseScope.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, numHeads, headDim))
 	} else {
 		return fmt.Errorf("unexpected shape for fused QKV: %v", shape)
 	}

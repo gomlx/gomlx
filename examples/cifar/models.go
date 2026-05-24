@@ -3,33 +3,33 @@
 package cifar
 
 import (
-	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/pkg/ml/layers/fnn"
-	"github.com/gomlx/gomlx/pkg/ml/layers/kan"
-	"github.com/gomlx/gomlx/pkg/support/exceptions"
+	"github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activation"
+	"github.com/gomlx/gomlx/ml/layers/norm"
+	"github.com/gomlx/gomlx/ml/layers/fnn"
+	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/support/exceptions"
 )
 
 // C10PlainModelGraph implements train.ModelFn, and returns the logit Node, given the input image.
 // It's a basic FNN (Feedforward Neural Network), so no convolutions. It is meant only as an example.
-func C10PlainModelGraph(ctx *context.Context, spec any, inputs []*graph.Node) []*graph.Node {
+func C10PlainModelGraph(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
 	batchedImages := inputs[0]
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := graph.Reshape(batchedImages, batchSize, -1)
 	numClasses := len(C10Labels)
-	modelType := context.GetParamOr(ctx, "model", C10ValidModels[0])
+	modelType := model.GetParamOr(scope, "model", C10ValidModels[0])
 	if modelType == "kan" {
-		// Configuration of the KAN layer(s) use the context hyperparameters.
+		// Configuration of the KAN layer(s) use the scope hyperparameters.
 		// Re-scale logits to be from -1.0 to 1.0.
 		logits = graph.AddScalar(graph.MulScalar(logits, 2), -1)
 		//graph.ReduceMean(graph.ReduceVariance(logits, -1)).SetLogged("Mean input variance of the examples")
-		logits = kan.New(ctx, logits, numClasses).Done()
+		logits = kan.New(scope, logits, numClasses).Done()
 	} else {
-		// Configuration of the FNN layer(s) use the context hyperparameters.
-		logits = fnn.New(ctx, logits, numClasses).Done()
+		// Configuration of the FNN layer(s) use the scope hyperparameters.
+		logits = fnn.New(scope, logits, numClasses).Done()
 	}
 	logits.AssertDims(batchSize, numClasses)
 	return []*graph.Node{logits}
@@ -37,19 +37,19 @@ func C10PlainModelGraph(ctx *context.Context, spec any, inputs []*graph.Node) []
 
 const ParamCNNNormalization = "cnn_normalization"
 
-func normalizeCNN(ctx *context.Context, logits *graph.Node) *graph.Node {
-	normalizationType := context.GetParamOr(ctx, ParamCNNNormalization, "none")
+func normalizeCNN(scope *model.Scope, logits *graph.Node) *graph.Node {
+	normalizationType := model.GetParamOr(scope, ParamCNNNormalization, "none")
 	switch normalizationType {
 	case "layer":
 		if logits.Rank() == 2 {
-			return layers.LayerNormalization(ctx, logits, -1).Done()
+			return norm.LayerNorm(scope, logits, -1).Done()
 		} else if logits.Rank() == 4 {
-			return layers.LayerNormalization(ctx, logits, 2, 3).Done()
+			return norm.LayerNorm(scope, logits, 2, 3).Done()
 		} else {
 			return logits
 		}
 	case "batch":
-		return batchnorm.New(ctx, logits, -1).Done()
+		return norm.BatchNorm(scope, logits, -1).Done()
 	case "none", "":
 		return logits
 	default:
@@ -64,7 +64,7 @@ func normalizeCNN(ctx *context.Context, logits *graph.Node) *graph.Node {
 // This is modeled after the Keras example in Kaggle:
 // https://www.kaggle.com/code/ektasharma/simple-cifar10-cnn-keras-code-with-88-accuracy
 // (Thanks @ektasharma)
-func C10ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*graph.Node) []*graph.Node {
+func C10ConvolutionModelGraph(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
 	batchedImages := inputs[0]
 	g := batchedImages.Graph()
 	dtype := batchedImages.DType()
@@ -72,54 +72,54 @@ func C10ConvolutionModelGraph(ctx *context.Context, spec any, inputs []*graph.No
 	logits := batchedImages
 
 	layerIdx := 0
-	nextCtx := func(name string) *context.Context {
-		newCtx := ctx.Inf("%03d_%s", layerIdx, name)
+	nextScope := func(name string) *model.Scope {
+		newScope := scope.In("%03d_%s", layerIdx, name)
 		layerIdx++
-		return newCtx
+		return newScope
 	}
 
-	logits = layers.Convolution(nextCtx("conv"), logits).Channels(32).KernelSize(3).PadSame().Done()
+	logits = layers.Convolution(nextScope("conv"), logits).Channels(32).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 32, 32, 32)
-	logits = activations.Relu(logits)
-	logits = normalizeCNN(nextCtx("norm"), logits)
-	logits = layers.Convolution(nextCtx("conv"), logits).Channels(32).KernelSize(3).PadSame().Done()
-	logits = activations.Relu(logits)
-	logits = normalizeCNN(nextCtx("norm"), logits)
+	logits = activation.Relu(logits)
+	logits = normalizeCNN(nextScope("norm"), logits)
+	logits = layers.Convolution(nextScope("conv"), logits).Channels(32).KernelSize(3).PadSame().Done()
+	logits = activation.Relu(logits)
+	logits = normalizeCNN(nextScope("norm"), logits)
 	logits = graph.MaxPool(logits).Window(2).Done()
-	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, graph.Scalar(g, dtype, 0.3), true)
+	logits = layers.DropoutNormalize(nextScope("dropout"), logits, graph.Scalar(g, dtype, 0.3), true)
 	logits.AssertDims(batchSize, 16, 16, 32)
 
-	logits = layers.Convolution(nextCtx("conv"), logits).Channels(64).KernelSize(3).PadSame().Done()
+	logits = layers.Convolution(nextScope("conv"), logits).Channels(64).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 16, 16, 64)
-	logits = activations.Relu(logits)
-	logits = normalizeCNN(nextCtx("norm"), logits)
-	logits = layers.Convolution(nextCtx("conv"), logits).Channels(64).KernelSize(3).PadSame().Done()
+	logits = activation.Relu(logits)
+	logits = normalizeCNN(nextScope("norm"), logits)
+	logits = layers.Convolution(nextScope("conv"), logits).Channels(64).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 16, 16, 64)
-	logits = activations.Relu(logits)
-	logits = normalizeCNN(nextCtx("norm"), logits)
+	logits = activation.Relu(logits)
+	logits = normalizeCNN(nextScope("norm"), logits)
 	logits = graph.MaxPool(logits).Window(2).Done()
-	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, graph.Scalar(g, dtype, 0.5), true)
+	logits = layers.DropoutNormalize(nextScope("dropout"), logits, graph.Scalar(g, dtype, 0.5), true)
 	logits.AssertDims(batchSize, 8, 8, 64)
 
-	logits = layers.Convolution(nextCtx("conv"), logits).Channels(128).KernelSize(3).PadSame().Done()
+	logits = layers.Convolution(nextScope("conv"), logits).Channels(128).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 8, 8, 128)
-	logits = activations.Relu(logits)
-	logits = normalizeCNN(nextCtx("norm"), logits)
-	logits = layers.Convolution(nextCtx("conv"), logits).Channels(128).KernelSize(3).PadSame().Done()
+	logits = activation.Relu(logits)
+	logits = normalizeCNN(nextScope("norm"), logits)
+	logits = layers.Convolution(nextScope("conv"), logits).Channels(128).KernelSize(3).PadSame().Done()
 	logits.AssertDims(batchSize, 8, 8, 128)
-	logits = activations.Relu(logits)
-	logits = normalizeCNN(nextCtx("norm"), logits)
+	logits = activation.Relu(logits)
+	logits = normalizeCNN(nextScope("norm"), logits)
 	logits = graph.MaxPool(logits).Window(2).Done()
-	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, graph.Scalar(g, dtype, 0.5), true)
+	logits = layers.DropoutNormalize(nextScope("dropout"), logits, graph.Scalar(g, dtype, 0.5), true)
 	logits.AssertDims(batchSize, 4, 4, 128)
 
 	// Flatten logits, and we can use the usual FNN/KAN.
 	logits = graph.Reshape(logits, batchSize, -1)
-	logits = layers.Dense(nextCtx("dense"), logits, true, 128)
-	logits = activations.Relu(logits)
-	logits = normalizeCNN(nextCtx("norm"), logits)
-	logits = layers.DropoutNormalize(nextCtx("dropout"), logits, graph.Scalar(g, dtype, 0.5), true)
+	logits = layers.Dense(nextScope("dense"), logits, true, 128)
+	logits = activation.Relu(logits)
+	logits = normalizeCNN(nextScope("norm"), logits)
+	logits = layers.DropoutNormalize(nextScope("dropout"), logits, graph.Scalar(g, dtype, 0.5), true)
 	numClasses := len(C10Labels)
-	logits = layers.Dense(nextCtx("dense"), logits, true, numClasses)
+	logits = layers.Dense(nextScope("dense"), logits, true, numClasses)
 	return []*graph.Node{logits}
 }

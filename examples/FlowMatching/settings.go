@@ -3,25 +3,25 @@
 package fm
 
 import (
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/pkg/ml/train/losses"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activation"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/train/loss"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 )
 
-// CreateDefaultContext sets the context with default hyperparameters to use with TrainModel.
-func CreateDefaultContext() *context.Context {
-	ctx := context.New()
-	ctx.ResetRNGState()
-	ctx.SetParams(map[string]any{
+// CreateStore sets the store with default hyperparameters to use with TrainModel.
+func CreateStore() *model.Store {
+	store := model.NewStore()
+	store.ResetRNGState()
+	store.SetParams(map[string]any{
 		// Model type to use
-		"train_steps":          300_000,
+		"train_steps":          1000,
 		"num_checkpoints":      5,
-		"checkpoint_frequency": "3m", // How often to save checkpoints. Default to 3 minutes. See time.ParseDuration.
+		"checkpoint_frequency": "3m", // How often to save checkpoint. Default to 3 minutes. See time.ParseDuration.
 
 		// batch_size for training.
 		"batch_size": 32,
@@ -55,12 +55,12 @@ func CreateDefaultContext() *context.Context {
 		// Flow Matching settings:
 
 		// Loss
-		"diffusion_loss":                         "mse", // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
-		losses.ParamHuberLossDelta:               0.2,   // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
-		losses.ParamAdaptivePowerLossNear:        2.0,
-		losses.ParamAdaptivePowerLossFar:         1.0,
-		losses.ParamAdaptivePowerLossMiddleDelta: 0.2,
-		losses.ParamAdaptivePowerLossSharpness:   1.0,
+		"diffusion_loss":                       "mse", // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error) or "huber".
+		loss.ParamHuberLossDelta:               0.2,   // If "huber" loss is selected, this is the delta, after which the loss becomes linear.
+		loss.ParamAdaptivePowerLossNear:        2.0,
+		loss.ParamAdaptivePowerLossFar:         1.0,
+		loss.ParamAdaptivePowerLossMiddleDelta: 0.2,
+		loss.ParamAdaptivePowerLossSharpness:   1.0,
 
 		// Re-using diffusion model:
 		"diffusion_balanced_dataset": false, // Enable training on a balanced dataset: batch_size=102, one example per flower type.
@@ -86,22 +86,22 @@ func CreateDefaultContext() *context.Context {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "layer",
 
-		optimizers.ParamOptimizer:        "adam",
-		optimizers.ParamAdamEpsilon:      1e-7,
-		optimizers.ParamAdamDType:        "float32",
-		optimizers.ParamAdamWeightDecay:  1e-4,
-		optimizers.ParamClipStepByValue:  0.0,
-		optimizers.ParamClipNaN:          false,
+		optimizer.ParamOptimizer:         "adam",
+		optimizer.ParamAdamEpsilon:       1e-7,
+		optimizer.ParamAdamDType:         "float32",
+		optimizer.ParamAdamWeightDecay:   1e-4,
+		optimizer.ParamClipStepByValue:   0.0,
+		optimizer.ParamClipNaN:           false,
 		cosineschedule.ParamPeriodSteps:  0,
-		activations.ParamActivation:      "swish",
+		activation.ParamActivation:       "swish",
 		layers.ParamDropoutRate:          0.15,
 		layers.ParamDropBlockProbability: 0.0,
 		layers.ParamDropBlockSize:        3,
 		"droppath_prob":                  0.0,
-		regularizers.ParamL2:             0.0,
-		regularizers.ParamL1:             0.0,
+		regularizer.ParamL2:              0.0,
+		regularizer.ParamL1:              0.0,
 
-		optimizers.ParamLearningRate:        1e-3,
+		optimizer.ParamLearningRate:         1e-3,
 		cosineschedule.ParamPeriodSteps:     0, // Enabled if > 0, it sets the period of the cosine schedule. Typically, the same value as 'train_steps'.
 		cosineschedule.ParamMinLearningRate: 1e-5,
 
@@ -109,10 +109,10 @@ func CreateDefaultContext() *context.Context {
 		// draw the plot with Plotly.
 		//
 		// From the command-line, an easy way to monitor the metrics being generated during the training of a model
-		// is using the gomlx_checkpoints tool:
+		// is using the gomlx_checkpointss tool:
 		//
-		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
+		//	$ gomlx_checkpointss --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
 		plotly.ParamPlots: true,
 	})
-	return ctx
+	return store
 }

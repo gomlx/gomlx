@@ -2,6 +2,17 @@
 
   This document tracks feature development, ownership, and priorities.
 
+
+ ---
+## v0.28 TODOs
+
+- `ml/initializer` -> `model/initializer`
+- `ml/checkpoint` -> `model/checkpoint`
+- Move other `pkg/ml/...` to `ml/...`
+- Fix examples and notebooks.
+- Create basic documentation in https://github.com/gomlx/gomlx.github.io.
+- `cmd/gomlx_checkpoints`: listing variables, change color (white/gray) when scope changes, as opposed to alternating at every row.
+
   ---
 
   ## Status Legend
@@ -27,15 +38,19 @@
   ## [MODEL-1] HuggingFace Transformer Import (safetensors direct)
 
   - **DRI:** _unassigned_
-  - **Status:** `ready`
+  - **Status:** `partially done`
   - **Priority:** `P0`
   - **Area:** `pkg/ml/model/transformer`
   - **Depends on:** GRAPH-1
   - **Description:** Import generic transformer architectures directly from safetensors without ONNX.
   - **Definition of Done:**
-    - Load at least 2 transformer families (e.g., GPT-style, BERT-style)
+    - Load at various transformer of different families (e.g., GPT-style, BERT-style, Gemma-style, Qwen-style, etc.)
     - Weights load successfully from safetensors
     - Minimal documentation of supported architecture subset
+  - **Current State: **
+    - Gemma3 style seems to work for 2 models (BAI, KaLM-Gemma3).
+    - Loading safetensors model works.
+    - Basic transformer model import works (github.com/gomlx/go-huggingface/model/transformer)
 
   ---
 
@@ -72,7 +87,7 @@
   - **DRI:** _unassigned_
   - **Status:** idea
   - **Priority:** P1
-  - **Description:** Add recent ML layers, optimizers, regularizers.
+  - **Description:** Add recent ML layers, optimizer, regularizers.
   - **Definition of Done:**
     - Continuous: there will always be new papers.
     - For each new contribution:
@@ -128,8 +143,14 @@
   - **Target:** v0.28.0
   - **Links:** PR #306
   - **Definition of Done:**
-    - Input-dependent shapes supported
+    - Input-dependent shapes supported in the `compute.Backend` API and in the Go backend implementation.
+      - Including named axes for those that have a dynamic dimension.
     - Full shape inference test coverage
+    - Examples with Go backend.
+  - **Current State:**
+    - Basic support in github.com/gomlx/compute added.
+    - `compute/shapes` updated with definitions.
+    - Limited support in `compute/gobackend` added.
 
   ---
 
@@ -153,8 +174,9 @@
   - **Target:** v0.28.0
   - **Depends on:** GRAPH-1
   - **Definition of Done:**
-    - Named axis abstraction
-    - Symbolic inference working in transformer example
+    - Named axes accept expressions (e.g.: `2*batchSize`, `FeatureDim+128`, etc.)
+    - Symbolic inference in graph building working according.
+    - Resolution during execution working accordingly
 
   ---
 
@@ -162,7 +184,7 @@
 
   ---
 
-  ## [BACKEND-2] SimpleGo Backend – SIMD Support (Go 1.26+)
+  ## [BACKEND-2] Go Backend – SIMD Support (Go 1.26+)
 
   - **DRI:** _unassigned_
   - **Status:** `in-progress`
@@ -171,18 +193,23 @@
   - **Depends on:** Go 1.26, go-highway
   - **Definition of Done:**
     - Supporting AVX-2, AVX-512 and Arm64 NEON (with C/Assembly tranliteration).
+    - MatMul, binary ops, unary ops main fused ops (softmax, gelu, sigmoid, dense&activation, etc.)
     - Benchmark comparison
+  - **Current State:**
+    - MatMul already supports AVX-2 and AVX-512.
 
   ---
 
-  ## [BACKEND-3] ONNX Export API
+  ## [BACKEND-3] ONNX Backend And Export API
 
   - **DRI:** _unassigned_
   - **Status:** idea
   - **Priority:** P1
   - **Description:** Save GoMLX graph as ONNX model.
   - **Definition of Done:**
+    - Inference and training using ONNX Runtime.
     - `Save()` API for the ONNX backend.
+    - Dynamic shapes support via ONNX.
     - Model validated with ONNX runtime
 
   ---
@@ -241,12 +268,12 @@
 
   ---
 
-  ## [API-1] Replace Context with Plain Go Struct + Annotations
+  ## [API-1] Replace Scope with Plain Go Struct + Annotations
 
   - **DRI:** _unassigned_
   - **Status:** idea
   - **Priority:** P1
-  - **Description:** Replace Context object with struct-based annotated config.
+  - **Description:** Replace Scope object with struct-based annotated config.
   - **Definition of Done:**
     - RFC document
     - Reflection-based prototype
@@ -260,11 +287,13 @@
 
   ## [MAINT-1] Code Cleanup & Refactoring Pass
 
-  - **DRI:** _unassigned_
-  - **Status:** ready
-  - **Priority:** P2
+  - **DRI:** janpfeifer
+  - **Status:** in-progress, ETA v0.28.0.
+  - **Priority:** P1
   - **Definition of Done:**
     - Remove deprecated APIs
+    - Redesign `github.com/gomlx/gomlx/ml/context`.
+    - Fix API bad naming (inconsistencies) across the repo.
     - Improve test coverage
 
   ---

@@ -28,20 +28,20 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/gomlx/pkg/core/graph/nanlogger"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/pkg/ml/layers"
-	"github.com/gomlx/gomlx/pkg/ml/layers/activations"
-	"github.com/gomlx/gomlx/pkg/ml/layers/batchnorm"
-	"github.com/gomlx/gomlx/pkg/ml/layers/regularizers"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/ml/train/losses"
-	"github.com/gomlx/gomlx/pkg/ml/train/metrics"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers/cosineschedule"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/core/graph/nanlogger"
+	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/activation"
+	"github.com/gomlx/gomlx/ml/layers/norm"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/loss"
+	"github.com/gomlx/gomlx/ml/train/metric"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
+	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
+	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 )
@@ -50,12 +50,12 @@ var ModelList = []string{"linear", "cnn"}
 
 var excludeParams = []string{"data_dir", "train_steps", "num_checkpoints", "plots"}
 
-type ContextFn func(ctx *context.Context) *context.Context
+type ScopeFn func(scope *model.Scope) *model.Scope
 
-func CreateDefaultContext() *context.Context {
-	ctx := context.New()
-	_ = ctx.ResetRNGState()
-	ctx.SetParams(map[string]any{
+func CreateStore() *model.Store {
+	store := model.NewStore()
+	_ = store.ResetRNGState()
+	store.SetParams(map[string]any{
 		// Model type to use
 		"model":           "linear",
 		"loss":            "sparse_cross_logits",
@@ -75,49 +75,50 @@ func CreateDefaultContext() *context.Context {
 		// draw the plot with Plotly.
 		//
 		// From the command-line, an easy way to monitor the metrics being generated during the training of a model
-		// is using the gomlx_checkpoints tool:
+		// is using the gomlx_checkpointss tool:
 		//
-		//	$ gomlx_checkpoints --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
+		//	$ gomlx_checkpointss --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
 		plotly.ParamPlots: false,
 
-		optimizers.ParamOptimizer:       "adamw",
-		optimizers.ParamLearningRate:    1e-4,
-		optimizers.ParamAdamEpsilon:     1e-7,
-		optimizers.ParamAdamDType:       "",
+		optimizer.ParamOptimizer:        "adamw",
+		optimizer.ParamLearningRate:     1e-4,
+		optimizer.ParamAdamEpsilon:      1e-7,
+		optimizer.ParamAdamDType:        "",
 		cosineschedule.ParamPeriodSteps: 0,
-		activations.ParamActivation:     "relu",
+		activation.ParamActivation:      "relu",
 		layers.ParamDropoutRate:         0.5,
-		regularizers.ParamL2:            0.0,
-		regularizers.ParamL1:            0.0,
+		regularizer.ParamL2:             0.0,
+		regularizer.ParamL1:             0.0,
 
 		// CNN
 		"cnn_dropout_rate":  0.5,
 		"cnn_normalization": "layer", // "layer" or "batch".
 
 		// Triplet
-		losses.ParamTripletLossPairwiseDistanceMetric: "L2",
-		losses.ParamTripletLossMiningStrategy:         "Hard",
-		losses.ParamTripletLossMargin:                 0.5,
+		loss.ParamTripletLossPairwiseDistanceMetric: "L2",
+		loss.ParamTripletLossMiningStrategy:         "Hard",
+		loss.ParamTripletLossMargin:                 0.5,
 	})
-	return ctx
+	return store
 }
 
-// NewDatasetsConfigurationFromContext create a preprocessing configuration based on hyperparameters
-// set in the context.
-func NewDatasetsConfigurationFromContext(ctx *context.Context, dataDir string) *DatasetsConfiguration {
+// NewDatasetsConfigurationFromScope create a preprocessing configuration based on hyperparameters
+// set in the model.
+func NewDatasetsConfigurationFromScope(scope *model.Scope, dataDir string) *DatasetsConfiguration {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	config := &DatasetsConfiguration{}
 	config.DataDir = dataDir
-	config.BatchSize = context.GetParamOr(ctx, "batch_size", 0)
-	config.EvalBatchSize = context.GetParamOr(ctx, "eval_batch_size", 0)
+	config.BatchSize = model.GetParamOr(scope, "batch_size", 0)
+	config.EvalBatchSize = model.GetParamOr(scope, "eval_batch_size", 0)
 	config.UseParallelism = true
 	config.BufferSize = 100
 	config.Dtype = dtypes.Float32
 	return config
 }
 
-// TrainModel based on configuration and flags.
-func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet []string) error {
+// Train based on configuration and flags.
+func Train(store *model.Store, dataDir, checkpointPath string, paramsSet []string) error {
+	scope := store.RootScope()
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
 		if err := os.MkdirAll(dataDir, 0777); err != nil {
@@ -125,7 +126,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		}
 	}
 
-	modelType := context.GetParamOr(ctx, "model", "")
+	modelType := model.GetParamOr(scope, "model", "")
 	var modelFn train.ModelFn
 	switch modelType {
 	case "linear":
@@ -141,7 +142,7 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	backend := compute.MustNew()
 	fmt.Printf("Backend %s: %s\n", backend.Name(), backend.Description())
 
-	lossFn, err := losses.LossFromContext(ctx)
+	lossFn, err := loss.LossFromScope(scope)
 	if err != nil {
 		return err
 	}
@@ -150,26 +151,25 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 		return err
 	}
 
-	dsConfig := NewDatasetsConfigurationFromContext(ctx, dataDir)
+	dsConfig := NewDatasetsConfigurationFromScope(scope, dataDir)
 	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(backend, dsConfig)
 
 	// Metrics we are interested in.
-	meanAccuracyMetric := metrics.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
-	movingAccuracyMetric := metrics.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
+	meanAccuracyMetric := metric.NewSparseCategoricalAccuracy("Mean Accuracy", "#acc")
+	movingAccuracyMetric := metric.NewMovingAverageSparseCategoricalAccuracy("Moving Average Accuracy", "~acc", 0.01)
 
 	// Create a train.Trainer: this object will orchestrate running the modelType, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
 	var trainer *train.Trainer
-	optimizer := optimizers.FromContext(ctx)
-	trainer = train.NewTrainer(backend, ctx,
+	trainer = train.NewTrainer(backend, store,
 		modelFn,
 		lossFn,
-		optimizer,
-		[]metrics.Interface{movingAccuracyMetric}, // trainMetrics
-		[]metrics.Interface{meanAccuracyMetric})   // evalMetrics
+		optimizer.FromStore(store),
+		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+		[]metric.Interface{meanAccuracyMetric})   // evalMetrics
 
 	// Debugging.
-	if context.GetParamOr(ctx, "nan_logger", false) {
+	if model.GetParamOr(scope, "nan_logger", false) {
 		nanlogger.New().AttachToTrainer(trainer)
 	}
 
@@ -178,10 +178,10 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 
 	// Checkpoints saving.
-	var checkpoint *checkpoints.Handler
+	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
-		numCheckpointsToKeep := context.GetParamOr(ctx, "num_checkpoints", 3)
-		checkpoint, err = checkpoints.Build(ctx).
+		numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 3)
+		checkpointHandler, err = checkpoint.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			Keep(numCheckpointsToKeep).
 			ExcludeParams(append(paramsSet, excludeParams...)...).
@@ -190,20 +190,20 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 			return errors.WithMessagef(err, "failed to create/load checkpoint %s, from data directory %s",
 				checkpointPath, dataDir)
 		}
-		fmt.Printf("\t- checkpoint in %s\n", checkpoint.Dir())
+		fmt.Printf("\t- checkpoint in %s\n", checkpointHandler.Dir())
 		period := time.Minute * 1
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				fmt.Printf("\n\t- saving checkpoint@%d\n", loop.LoopStep)
-				return checkpoint.Save()
+				return checkpointHandler.Save()
 			})
 	}
 
 	// Attach Plotly plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	if context.GetParamOr(ctx, plotly.ParamPlots, false) {
+	if model.GetParamOr(scope, plotly.ParamPlots, false) {
 		_ = plotly.New().
-			WithCheckpoint(checkpoint).
+			WithCheckpoint(checkpointHandler).
 			Dynamic().
 			WithDatasets(trainEvalDS, validationEvalDS).
 			ScheduleExponential(loop, 10, 1.2).
@@ -211,11 +211,10 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 	}
 
 	// Loop for a given number of steps.
-	numTrainSteps := context.GetParamOr(ctx, "train_steps", 0)
-	globalStep := int(optimizers.GetGlobalStep(ctx))
+	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
+	globalStep := int(optimizer.GetGlobalStep(scope))
 	if globalStep > 0 {
 		fmt.Printf("\t- restarting from global step %d\n", globalStep)
-		trainer.SetContext(ctx.Reuse())
 	}
 	if globalStep < numTrainSteps {
 		_, err = loop.RunSteps(trainDS, numTrainSteps-globalStep)
@@ -226,10 +225,10 @@ func TrainModel(ctx *context.Context, dataDir, checkpointPath string, paramsSet 
 			loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
 
 		// Update batch normalization averages, if they are used.
-		if check1(batchnorm.UpdateAverages(trainer, trainEvalDS)) {
+		if check1(norm.UpdateBatchNormAverages(trainer, trainEvalDS)) {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
-			if checkpoint != nil {
-				if err := checkpoint.Save(); err != nil {
+			if checkpointHandler != nil {
+				if err := checkpointHandler.Save(); err != nil {
 					return errors.WithMessage(err, "save checkpoint")
 				}
 			}

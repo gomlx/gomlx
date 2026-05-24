@@ -16,9 +16,9 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/ml/context"
-	"github.com/gomlx/gomlx/pkg/ml/context/checkpoints"
-	"github.com/gomlx/gomlx/pkg/ml/train/optimizers"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/checkpoint"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"k8s.io/klog/v2"
 
 	_ "github.com/gomlx/gomlx/backends/default"
@@ -51,7 +51,7 @@ func main() {
 		pf("\n\t$ gomlx_checkpoints [flags...] <checkpoint_path> [<checkpoint_path2> ...]\n" +
 			"\ngomlx_checkpoints reports back on model size (and memory) usage (--summary), individual variables shapes and sizes (--vars), " +
 			"hyperparameters used with the model (--params) or metrics collected during model training (--metrics, --metrics_labels).\n" +
-			"\n\t<checkpoint_path> is the path of a checkpoint directory used to save a GoMLX model (see package github.com/gomlx/gomlx/pkg/ml/context/checkpoints)\n" +
+			"\n\t<checkpoint_path> is the path of a checkpoint directory used to save a GoMLX model (see package github.com/gomlx/gomlx/ml/model/checkpoints)\n" +
 			"\tSome flags support more than one checkpoint, which can be used to compare models.\n\n" +
 			"Flags:\n\n")
 		flag.PrintDefaults()
@@ -108,20 +108,20 @@ var (
 
 func Reports(checkpointPaths []string) {
 	numCheckpoints := len(checkpointPaths)
-	ctxs := make([]*context.Context, 0, len(checkpointPaths))
-	scopedCtxs := make([]*context.Context, 0, len(checkpointPaths))
+	stores := make([]*model.Store, 0, len(checkpointPaths))
+	scopes := make([]*model.Scope, 0, len(checkpointPaths))
 	for _, checkpointPath := range checkpointPaths {
-		ctx := context.New()
+		store := model.NewStore()
 		if *flagSummary || *flagParams || *flagVars {
-			_ = must.M1(checkpoints.Build(ctx).
+			_ = must.M1(checkpoint.Build(store).
 				Dir(checkpointPath).Immediate().Done())
 		}
-		scopedCtx := ctx
+		scope := store.RootScope()
 		if *flagScope != "" {
-			scopedCtx = ctx.InAbsPath(*flagScope)
+			scope = store.Scope(*flagScope)
 		}
-		ctxs = append(ctxs, ctx)
-		scopedCtxs = append(scopedCtxs, scopedCtx)
+		stores = append(stores, store)
+		scopes = append(scopes, scope)
 	}
 	var names []string
 	if numCheckpoints == 1 {
@@ -131,10 +131,10 @@ func Reports(checkpointPaths []string) {
 	}
 
 	if *flagSummary {
-		Summary(ctxs, scopedCtxs, names)
+		Summary(stores, scopes, names)
 	}
 	if *flagParams {
-		Params(ctxs, scopedCtxs, names)
+		Params(stores, scopes, names)
 	}
 	if *flagMetrics || *flagMetricsLabels || *flagPlot {
 		metrics(checkpointPaths, names)
@@ -143,16 +143,16 @@ func Reports(checkpointPaths []string) {
 		if numCheckpoints > 1 {
 			klog.Fatalf("More than one checkpoint not supported for --vars")
 		}
-		ListVariables(scopedCtxs[0])
+		ListVariables(scopes[0])
 	}
 
 }
 
 func Backup(checkpointPath string) {
-	ctx := context.New()
-	checkpoint := must.M1(checkpoints.Build(ctx).
+	store := model.NewStore()
+	checkpointHandler := must.M1(checkpoint.Build(store).
 		Dir(checkpointPath).Keep(-1).Immediate().Done())
-	must.M(checkpoint.Backup())
-	globalStep := optimizers.GetGlobalStep(ctx)
-	fmt.Printf("Backup of latest checkpoint (global step %d) successful, see %q.\n", globalStep, path.Join(checkpoint.Dir(), checkpoints.BackupDir))
+	must.M(checkpointHandler.Backup())
+	globalStep := optimizer.GetGlobalStep(store)
+	fmt.Printf("Backup of latest checkpoint (global step %d) successful, see %q.\n", globalStep, path.Join(checkpointHandler.Dir(), checkpoint.BackupDir))
 }

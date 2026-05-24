@@ -6,9 +6,9 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/gomlx/gomlx/pkg/ml/datasets"
-	"github.com/gomlx/gomlx/pkg/ml/train"
-	"github.com/gomlx/gomlx/pkg/support/fsutil"
+	"github.com/gomlx/gomlx/ml/dataset"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/support/fsutil"
 
 	"io"
 	"path"
@@ -65,7 +65,7 @@ func BenchmarkDataset(b *testing.B) {
 			}
 			b.Run(name, func(b *testing.B) {
 				if useParallelism {
-					ds = datasets.CustomParallel(ds).Buffer(10).Start()
+					ds = dataset.CustomParallel(ds).Buffer(10).Start()
 				}
 				for ii := 0; ii < b.N; ii++ {
 					_, _, _, err := ds.Yield()

@@ -22,10 +22,10 @@ import (
 	"github.com/gomlx/compute/support/humanize"
 	"github.com/gomlx/compute/support/sets"
 	"github.com/gomlx/compute/support/xslices"
+	"github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/internal/must"
-	"github.com/gomlx/gomlx/pkg/core/graph"
-	"github.com/gomlx/gomlx/pkg/core/tensors"
-	"github.com/gomlx/gomlx/pkg/support/testutil"
+	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/muesli/termenv"
 	"k8s.io/klog/v2"
@@ -289,14 +289,10 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 					layout = "Transposed"
 				}
 			}
-<<<<<<< HEAD
-=======
 			if *flagPerfLayout != "" && strings.ToLower(layout) != strings.ToLower(*flagPerfLayout) {
 				// Only run if the layout matches the flag (or is not specified).
 				continue
 			}
-
->>>>>>> 8d31b28e67efcc6bb8f2f94664c90937259af7a4
 			for _, dtype := range dtypesToTest {
 				if filterDTypes && !dtypesToRun.Has(dtype.String()) {
 					continue
@@ -371,7 +367,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				warmUpStartTime := time.Now()
 
 				for numRuns := 0; time.Since(warmUpStartTime) < *flagPerfMinWarmupDuration || numRuns < minWarmupRuns; numRuns++ {
-					output := testExec.MustExec(lhsTensor, rhsTensor)[0]
+					output := testExec.MustCall(lhsTensor, rhsTensor)[0]
 					output.MustFinalizeAll()
 				}
 
@@ -379,7 +375,7 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				startTime := time.Now()
 				var numRuns int
 				for numRuns < *flagPerfMinRuns || time.Since(startTime) < *flagPerfDuration {
-					output := testExec.MustExec(lhsTensor, rhsTensor)[0]
+					output := testExec.MustCall(lhsTensor, rhsTensor)[0]
 					output.MustFinalizeAll()
 					numRuns++
 				}
