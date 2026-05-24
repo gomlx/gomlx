@@ -5,7 +5,7 @@ go 1.26
 require (
 	github.com/MetalBlueberry/go-plotly v0.7.0
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/gomlx/compute v0.0.0-20260513142435-475f5b6f6389
+	github.com/gomlx/compute v0.0.0-20260524093418-b10c8ba83d44
 	github.com/gomlx/gomlx v0.27.4-0.20260520163422-81059f0b44b1
 	github.com/janpfeifer/gonb v0.11.3
 	github.com/pkg/errors v0.9.1
