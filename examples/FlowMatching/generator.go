@@ -91,7 +91,7 @@ func MidPointODEStep(scope *model.Scope, noisyImages, flowerIds, startTime, endT
 // Use it with NewImagesGenerator.
 type ImagesGenerator struct {
 	config           *diffusion.Config
-	scope            *model.Scope
+	store            *model.Store
 	noise, flowerIds *tensors.Tensor
 	numImages        int
 	numSteps         int
@@ -101,7 +101,7 @@ type ImagesGenerator struct {
 
 // NewImagesGenerator generates flowers given initial `noise` and `flowerIds`, in `numSteps`.
 func NewImagesGenerator(cfg *diffusion.Config, noise, flowerIds *tensors.Tensor, numSteps int) *ImagesGenerator {
-	scope := cfg.Scope
+	store := cfg.Store
 	if numSteps <= 0 {
 		exceptions.Panicf("Expected numSteps > 0, got %d", numSteps)
 	}
@@ -113,12 +113,12 @@ func NewImagesGenerator(cfg *diffusion.Config, noise, flowerIds *tensors.Tensor,
 	}
 	return &ImagesGenerator{
 		config:    cfg,
-		scope:     scope,
+		store:     store,
 		noise:     noise,
 		flowerIds: flowerIds,
 		numImages: numImages,
 		numSteps:  numSteps,
-		stepExec:  model.MustNewExec(cfg.Backend, scope.Store(), MidPointODEStep),
+		stepExec:  model.MustNewExec(cfg.Backend, store, MidPointODEStep),
 		denormalizerExec: MustNewExec(cfg.Backend, func(image *Node) *Node {
 			return cfg.DenormalizeImages(image)
 		}),
@@ -371,8 +371,8 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 		exceptions.Panicf("DisplayImagesAcrossDiffusionSteps requires a model loaded from a checkpoint, see " +
 			"Config.AttachCheckpoint.")
 	}
-	scope := cfg.Scope
-	_ = scope.Store().ResetRNGState()
+	store := cfg.Store
+	_ = store.ResetRNGState()
 	noise := cfg.GenerateNoise(numImages)
 	flowerIds := cfg.GenerateFlowerIds(numImages)
 
@@ -381,8 +381,8 @@ func DisplayImagesAcrossTime(cfg *diffusion.Config, numImages int, numSteps int,
 
 	fmt.Printf("DisplayImagesAcrossDiffusionSteps(%d images, %d steps): noise.shape=%s\n",
 		numImages, numSteps, noise.Shape())
-	fmt.Printf("\tModel #params:\t%d\n", scope.NumParameters())
-	fmt.Printf("\t Model memory:\t%s\n", humanize.Bytes(scope.ByteSize()))
+	fmt.Printf("\tModel #params:\t%d\n", store.NumParameters())
+	fmt.Printf("\t Model memory:\t%s\n", humanize.Bytes(store.ByteSize()))
 	for ii, generatedImage := range generatedImages {
 		gonbui.DisplayHTMLF("<p>%.2f%% Transformed</p>", generationTimes[ii]*100.0)
 		PlotImagesTensor(generatedImage)
@@ -472,8 +472,7 @@ func GenerateImagesOfFlowerType(
 	flowerType int32,
 	numDiffusionSteps int,
 ) (predictedImages *tensors.Tensor) {
-	scope := cfg.Scope
-	_ = scope.Store().ResetRNGState()
+	_ = cfg.Store.ResetRNGState()
 	noise := cfg.GenerateNoise(numImages)
 	flowerIds := tensors.FromValue(xslices.SliceWithValue(numImages, flowerType))
 	generator := NewImagesGenerator(cfg, noise, flowerIds, numDiffusionSteps)
@@ -539,9 +538,8 @@ func DropdownFlowerTypes(
 //
 // paramsSet are hyperparameters overridden, that it should not load from the checkpoint (see commandline.ParseSettings).
 func GenerateImagesOfAllFlowerTypes(cfg *diffusion.Config, numDiffusionSteps int) (predictedImages *tensors.Tensor) {
-	scope := cfg.Scope
 	numImages := flowers.NumLabels
-	_ = scope.Store().ResetRNGState()
+	_ = cfg.Store.ResetRNGState()
 	imageSize := cfg.ImageSize
 	noise := MustNewExec(cfg.Backend, func(g *Graph) *Node {
 		state := RNGStateForGraph(g)
@@ -557,7 +555,7 @@ func GenerateImagesOfAllFlowerTypes(cfg *diffusion.Config, numDiffusionSteps int
 // KidGenerator generates the [Kernel Inception Distance (KID)](https://arxiv.org/abs/1801.01401) metric.
 type KidGenerator struct {
 	config           *diffusion.Config
-	scopeInceptionV3 *model.Scope
+	storeInceptionV3 *model.Store
 	ds               train.Dataset
 	generator        *ImagesGenerator
 	kid              metric.Interface
@@ -573,14 +571,15 @@ func NewKidGenerator(cfg *diffusion.Config, evalDS train.Dataset, numDiffusionSt
 	flowerIds := cfg.GenerateFlowerIds(cfg.EvalBatchSize)
 	i3Path := path.Join(cfg.DataDir, "inceptionV3")
 	must.M(inceptionv3.DownloadAndUnpackWeights(i3Path))
+	storeInceptionV3 := model.NewStore()
 	kg := &KidGenerator{
 		config:           cfg,
-		scopeInceptionV3: model.NewStore().RootScope(),
+		storeInceptionV3: storeInceptionV3,
 		ds:               evalDS,
 		generator:        NewImagesGenerator(cfg, noise, flowerIds, numDiffusionStep),
 		kid:              inceptionv3.KidMetric(i3Path, inceptionv3.MinimumImageSize, 255.0, timage.ChannelsLast),
 	}
-	kg.evalExec = model.MustNewExec(cfg.Backend, kg.scopeInceptionV3.Store(), kg.EvalStepGraph)
+	kg.evalExec = model.MustNewExec(cfg.Backend, storeInceptionV3, kg.EvalStepGraph)
 	return kg
 }
 
@@ -597,7 +596,7 @@ func (kg *KidGenerator) EvalStepGraph(scope *model.Scope, allImages []*Node) (me
 
 func (kg *KidGenerator) Eval() (metric *tensors.Tensor) {
 	kg.ds.Reset()
-	kg.kid.Reset(kg.scopeInceptionV3)
+	kg.kid.Reset(kg.storeInceptionV3.RootScope())
 	generatedImages := kg.generator.Generate()
 	count := 0
 	for {

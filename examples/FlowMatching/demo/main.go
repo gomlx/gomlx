@@ -4,6 +4,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 
 	"github.com/gomlx/compute"
 	fm "github.com/gomlx/gomlx/examples/FlowMatching"
@@ -27,12 +28,16 @@ var (
 )
 
 func main() {
-	scope := fm.CreateDefaultScope()
-	settings := commandline.CreateSettingsFlag(scope.Store(), "")
+	store := fm.CreateStore()
+	settings := commandline.CreateSettingsFlag(store, "")
 	klog.InitFlags(nil)
 	flag.Parse()
-	paramsSet := check1(commandline.ParseSettings(scope.Store(), *settings))
-	config := diffusion.NewConfig(backend, scope, *flagDataDir, paramsSet)
+	paramsSet := check1(commandline.ParseSettings(store, *settings))
+	if *flagVerbosity >= 1 {
+		fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
+		fmt.Println(commandline.SprintSettings(store))
+	}
+	config := diffusion.NewConfig(backend, store, *flagDataDir, paramsSet)
 	err := exceptions.TryCatch[error](func() {
 		fm.TrainModel(config, *flagCheckpoint, *flagEval, *flagVerbosity)
 	})

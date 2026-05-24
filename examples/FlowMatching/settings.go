@@ -13,14 +13,13 @@ import (
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 )
 
-// CreateDefaultScope sets the scope with default hyperparameters to use with TrainModel.
-func CreateDefaultScope() *model.Scope {
+// CreateStore sets the store with default hyperparameters to use with TrainModel.
+func CreateStore() *model.Store {
 	store := model.NewStore()
 	store.ResetRNGState()
-	scope := store.RootScope()
-	scope.SetParams(map[string]any{
+	store.SetParams(map[string]any{
 		// Model type to use
-		"train_steps":          300_000,
+		"train_steps":          1000,
 		"num_checkpoints":      5,
 		"checkpoint_frequency": "3m", // How often to save checkpoint. Default to 3 minutes. See time.ParseDuration.
 
@@ -115,5 +114,5 @@ func CreateDefaultScope() *model.Scope {
 		//	$ gomlx_checkpointss --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
 		plotly.ParamPlots: true,
 	})
-	return scope
+	return store
 }
