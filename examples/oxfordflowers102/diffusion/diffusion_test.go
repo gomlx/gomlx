@@ -34,12 +34,12 @@ func getTestConfig() *Config {
 	store := CreateModelStore()
 	paramsSet := must1(commandline.ParseSettings(store, *scopeSettings))
 	backend := testutil.BuildTestBackend()
-	return NewConfig(backend, store.RootScope(), *flagDataDir, paramsSet)
+	return NewConfig(backend, store, *flagDataDir, paramsSet)
 }
 
 func TestUNetModelGraph(t *testing.T) {
 	config := getTestConfig()
-	scope := config.Scope
+	scope := config.Store.RootScope()
 	g := NewGraph(config.Backend, "test")
 
 	numExamples := 5
@@ -61,7 +61,7 @@ func getZeroPredictions(config *Config, g *Graph, numExamples int) []*Node {
 	imageIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	flowerIds := Zeros(g, shapes.Make(dtypes.Int32, numExamples))
 	modelFn := config.BuildTrainingModelGraph()
-	return modelFn(config.Scope, nil, []*Node{images, imageIds, flowerIds})
+	return modelFn(config.Store.RootScope(), nil, []*Node{images, imageIds, flowerIds})
 }
 
 func TestTrainingModelGraph(t *testing.T) {
@@ -72,7 +72,7 @@ func TestTrainingModelGraph(t *testing.T) {
 
 	config := getTestConfig()
 	config.NoNormalization = true
-	scope := config.Scope
+	scope := config.Store.RootScope()
 	g := NewGraph(config.Backend, "test")
 
 	numExamples := 5

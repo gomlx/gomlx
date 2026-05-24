@@ -403,7 +403,7 @@ func Denoise(scope *model.Scope, noisyImages, signalRatios, noiseRatios, flowerI
 		emaScope := scope.In("ema").WithInitializer(initializer.Zero)
 		newPrefixScope := emaScope.Scope()
 		// Enumerate the variables we care about, under the UNet model:
-		for v := range scope.In(UNetModelScope).IterVariables() {
+		for v := range scope.Shared(UNetModelScope).IterVariables() {
 			if !strings.HasPrefix(v.Scope(), prefixScope) {
 				exceptions.Panicf("unxpected variable %q in scope %q", v.Name(), v.Scope())
 			}

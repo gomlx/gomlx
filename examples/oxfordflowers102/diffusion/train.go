@@ -51,6 +51,9 @@ const (
 func (c *Config) AttachCheckpoint(checkpointPath string) (
 	checkpointHandler *checkpoint.Handler, noise, flowerIDs *tensors.Tensor) {
 	if checkpointPath == "" {
+		numSamples := model.GetRootParamOr(c.Store, "samples_during_training", 64)
+		noise = c.GenerateNoise(numSamples)
+		flowerIDs = c.GenerateFlowerIds(numSamples)
 		return nil, noise, flowerIDs
 	}
 	numCheckpointsToKeep := model.GetRootParamOr(c.Store, "num_checkpoints", 5)
@@ -105,9 +108,6 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 
 	// Checkpoints saving.
 	checkpointHandler, samplesNoise, samplesFlowerIds := config.AttachCheckpoint(checkpointPath)
-	if samplesNoise == nil {
-		klog.Exitf("A checkpoint directory name with --checkpoint is required, none given")
-	}
 	if verbosity >= 2 {
 		fmt.Println(commandline.SprintSettings(store))
 	}
@@ -207,7 +207,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSe
 	// Checkpoint saving: every 3 minutes of training.
 	if checkpointHandler != nil {
 		period := must1(
-			time.ParseDuration(model.GetParamOr(scope, "checkpoint_frequency", "3m")))
+			time.ParseDuration(model.GetRootParamOr(store, "checkpoint_frequency", "3m")))
 		train.PeriodicCallback(loop, period, true, "saving checkpoint", 100,
 			func(loop *train.Loop, metrics []*tensors.Tensor) error {
 				return checkpointHandler.Save()
