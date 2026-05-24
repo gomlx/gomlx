@@ -37,8 +37,6 @@ func ListVariables(scope *model.Scope) {
 		maxAV = ReduceAllMax(Abs(x))
 		return
 	}).SetMaxCache(-1)
-	table := newPlainTable(true)
-	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "Scalar/MAV", "RMS", "MaxAV")
 	var rows [][]string
 	for v := range scope.IterVariables() {
 		if !v.IsValid() {
@@ -69,6 +67,22 @@ func ListVariables(scope *model.Scope) {
 		}
 		return strings.Compare(a[1], b[1])
 	})
+	rowAlt := make([]bool, len(rows))
+	var lastScope string
+	var isEven bool
+	for i, row := range rows {
+		scope := row[0]
+		if i == 0 {
+			lastScope = scope
+			isEven = false
+		} else if scope != lastScope {
+			lastScope = scope
+			isEven = !isEven
+		}
+		rowAlt[i] = isEven
+	}
+	table := newPlainTableWithRowAlt(true, rowAlt)
+	table.Headers("Scope", "Name", "Shape", "Size", "Bytes", "Scalar/MAV", "RMS", "MaxAV")
 	for _, row := range rows {
 		table.Row(row...)
 	}

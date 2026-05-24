@@ -25,6 +25,35 @@ func newPlainTable(withHeader bool, alignments ...lipgloss.Position) *lgtable.Ta
 	return t.Table
 }
 
+func newPlainTableWithRowAlt(withHeader bool, rowAlt []bool, alignments ...lipgloss.Position) *lgtable.Table {
+	return lgtable.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
+		StyleFunc(func(row, col int) (s lipgloss.Style) {
+			if row < 0 {
+				s = headerRowStyle
+				return
+			}
+			isEven := false
+			if row < len(rowAlt) {
+				isEven = rowAlt[row]
+			}
+			if isEven {
+				s = evenRowStyle
+			} else {
+				s = oddRowStyle
+			}
+			alignment := lipgloss.Left
+			if col < len(alignments) {
+				alignment = alignments[col]
+			} else if len(alignments) > 0 {
+				alignment = alignments[len(alignments)-1]
+			}
+			s = s.Align(alignment)
+			return
+		})
+}
+
 type TableWithReds struct {
 	Table *lgtable.Table
 	Count int
