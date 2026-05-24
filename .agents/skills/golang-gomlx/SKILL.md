@@ -210,7 +210,7 @@ loop := train.NewLoop(trainer)
 commandline.AttachProgressBar(loop)
 
 // Get hyperparameters and run the training loop
-trainSteps := model.GetParamOr(store.RootScope(), "train_steps", 1000)
+trainSteps := model.GetRootParamOr(store, "train_steps", 1000)
 _, err := loop.RunToGlobalStep(trainDS, trainSteps)
 if err != nil {
 	return err
