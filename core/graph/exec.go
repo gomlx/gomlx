@@ -154,6 +154,9 @@ type Exec struct {
 	// simultaneously before any of them insert into the cache.
 	maxCacheSize int
 
+	// dynamicAxes specifies the names of the axes that should be dynamic for each input parameter.
+	dynamicAxes [][]string
+
 	// setSideParams for graphs that take them.
 	setSideParams SideParamsFn
 	loggerFn      LoggerFn
@@ -238,6 +241,34 @@ func NewExec[F ExecGraphFn](backend compute.Backend, graphFn F) (*Exec, error) {
 // It returns a reference to itself so calls can be cascaded.
 func (e *Exec) WithName(name string) *Exec {
 	e.name = name
+	return e
+}
+
+// WithDynamicAxes sets the names of the axes that should be treated as dynamic for each input parameter.
+// Any axis that is dynamic must have a non-empty name (e.g., "batch"). Static axes should have an empty string ("").
+// The rank of each input parameter must match the length of its corresponding axisNames slice.
+//
+// By marking an axis as dynamic, the computation graph will be compiled once with a symbolic size (e.g., shapes.DynamicDim)
+// for that dimension. During subsequent executions, the actual size of the dynamic dimension is resolved dynamically
+// from the shape of the execution inputs, avoiding expensive graph re-compilations for different input shapes.
+//
+// Example:
+//
+//	exec, err := graph.NewExec(backend, func(x *graph.Node) *graph.Node {
+//	    return graph.Add(x, x)
+//	})
+//	// Configure the first input parameter (x) to have a dynamic dimension on axis 0, named "batch".
+//	// The second axis (axis 1) of x is static, so we pass "" for it.
+//	exec.WithDynamicAxes([]string{"batch", ""})
+//
+//	// exec can now be run with inputs of different batch sizes without triggering JIT re-compilation:
+//	res1 := exec.MustExec(tensors.MustFromAnyValue(matrixOf32x512)) // batch=32
+//	res2 := exec.MustExec(tensors.MustFromAnyValue(matrixOf64x512)) // batch=64 (re-uses compiled graph)
+func (e *Exec) WithDynamicAxes(axisNames ...[]string) *Exec {
+	e.dynamicAxes = make([][]string, len(axisNames))
+	for i, names := range axisNames {
+		e.dynamicAxes[i] = slices.Clone(names)
+	}
 	return e
 }
 
@@ -862,12 +893,55 @@ func (e *Exec) lockedFindPending(argsShapes []shapes.Shape) *pendingCompilation 
 	return nil
 }
 
+// makeTemplateShapes maps concrete execution input shapes to dynamic shape templates
+// based on the dynamic axes configured with WithDynamicAxes.
+func (e *Exec) makeTemplateShapes(concreteShapes []shapes.Shape) ([]shapes.Shape, error) {
+	if len(e.dynamicAxes) == 0 {
+		return concreteShapes, nil
+	}
+	numDevices := e.numDevices
+	if numDevices == 0 {
+		numDevices = 1
+	}
+	argsPerDevice := len(concreteShapes) / numDevices
+	templateShapes := make([]shapes.Shape, len(concreteShapes))
+	for devIdx := range numDevices {
+		for argIdx := range argsPerDevice {
+			concreteIdx := devIdx*argsPerDevice + argIdx
+			shape := concreteShapes[concreteIdx]
+			if argIdx < len(e.dynamicAxes) && len(e.dynamicAxes[argIdx]) > 0 {
+				axisNames := e.dynamicAxes[argIdx]
+				if len(axisNames) != shape.Rank() {
+					return nil, errors.Errorf("Exec.WithDynamicAxes: rank mismatch for argument %d: expected rank %d (from dynamic axes), got %d (from input shape %s)", argIdx, len(axisNames), shape.Rank(), shape)
+				}
+				dims := make([]int, shape.Rank())
+				for axis, name := range axisNames {
+					if name != "" {
+						dims[axis] = shapes.DynamicDim
+					} else {
+						dims[axis] = shape.Dimensions[axis]
+					}
+				}
+				templateShapes[concreteIdx] = shapes.MakeDynamic(shape.DType, dims, axisNames)
+			} else {
+				templateShapes[concreteIdx] = shape
+			}
+		}
+	}
+	return templateShapes, nil
+}
+
 // findOrCreateGraph returns the graph for the given arguments shapes: either
 // from cache, by waiting on an in-flight compilation, or by creating a new one.
 //
 // Compilation happens outside cacheMu so that concurrent callers compiling
 // different shapes can proceed in parallel.
 func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) (*execGraphCacheEntry, error) {
+	templateShapes, err := e.makeTemplateShapes(argsShapes)
+	if err != nil {
+		return nil, err
+	}
+
 	e.cacheMu.Lock()
 
 	if e.finalized {
@@ -876,13 +950,13 @@ func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) (*execGraphCacheEntr
 	}
 
 	// Fast path: already in cache.
-	if entry := e.lockedFindInCache(argsShapes); entry != nil {
+	if entry := e.lockedFindInCache(templateShapes); entry != nil {
 		e.cacheMu.Unlock()
 		return entry, nil
 	}
 
 	// Check for in-flight compilation of the same shapes.
-	if pc := e.lockedFindPending(argsShapes); pc != nil {
+	if pc := e.lockedFindPending(templateShapes); pc != nil {
 		e.cacheMu.Unlock()
 		<-pc.done // Wait for compilation to finish.
 		if pc.err != nil {
@@ -898,13 +972,13 @@ func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) (*execGraphCacheEntr
 	}
 
 	// No cache hit and no in-flight compilation — start one.
-	pc := &pendingCompilation{argsShapes: argsShapes, done: make(chan struct{})}
+	pc := &pendingCompilation{argsShapes: templateShapes, done: make(chan struct{})}
 	e.pending = append(e.pending, pc)
 	cacheIndex := len(e.cache) + len(e.pending)
 	e.cacheMu.Unlock()
 
 	// Build and compile outside the lock.
-	entry, err := e.buildAndCompileGraph(argsShapes, cacheIndex)
+	entry, err := e.buildAndCompileGraph(templateShapes, cacheIndex)
 	pc.entry = entry
 	pc.err = err
 

@@ -388,6 +388,32 @@ func (e *Exec) WithName(name string) *Exec {
 	return e
 }
 
+// WithDynamicAxes sets the names of the axes that should be treated as dynamic for each input parameter.
+// Any axis that is dynamic must have a non-empty name (e.g., "batch"). Static axes should have an empty string ("").
+// The rank of each input parameter must match the length of its corresponding axisNames slice.
+//
+// By marking an axis as dynamic, the computation graph will be compiled once with a symbolic size (e.g., shapes.DynamicDim)
+// for that dimension. During subsequent executions, the actual size of the dynamic dimension is resolved dynamically
+// from the shape of the execution inputs, avoiding expensive graph re-compilations for different input shapes.
+//
+// Example:
+//
+//	// Create a model executor with a store, taking x as input
+//	exec, err := model.NewExec(backend, store, func(s *model.Scope, x *graph.Node) *graph.Node {
+//	    // Build layers (e.g., dense layer, etc.) using scope
+//	    return layers.Dense(s, x, 10)
+//	})
+//	// Configure the first input parameter (x) to have a dynamic dimension on axis 0, named "batch".
+//	exec.WithDynamicAxes([]string{"batch", ""})
+//
+//	// exec can now be run with inputs of different batch sizes:
+//	res1 := exec.MustExec(tensors.MustFromAnyValue(matrixOf32x512)) // batch=32
+//	res2 := exec.MustExec(tensors.MustFromAnyValue(matrixOf64x512)) // batch=64 (re-uses compiled graph)
+func (e *Exec) WithDynamicAxes(axisNames ...[]string) *Exec {
+	e.exec.WithDynamicAxes(axisNames...)
+	return e
+}
+
 // Name returns the Exec name.
 func (e *Exec) Name() string {
 	return e.exec.Name()

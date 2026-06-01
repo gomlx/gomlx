@@ -9,6 +9,7 @@ import (
 
 	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/gobackend"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -173,6 +174,41 @@ func TestExec(t *testing.T) {
 		counterVar := scope.GetVariable("/counter")
 		require.NotNil(t, counterVar)
 		require.Equal(t, int64(2), tensors.ToScalar[int64](counterVar.MustValue()))
+	})
+
+	t.Run("DynamicShapes", func(t *testing.T) {
+		// Use simple Go backend
+		simpleBackend, err := gobackend.New("")
+		require.NoError(t, err)
+
+		store := model.NewStore()
+		store.SetParam(model.ParamInitialSeed, int64(42))
+
+		// Function that defines variables and performs a dense-bias operation with dynamic shape.
+		// Input shape is [batch, 3], output is [batch, 2].
+		exec, err := model.NewExec(simpleBackend, store, func(scope *model.Scope, x *Node) *Node {
+			return denseWithBias(scope.In("dense"), x, 2)
+		})
+		require.NoError(t, err)
+		exec.WithDynamicAxes([]string{"batch", ""})
+
+		// Run with batch=2
+		x2 := [][]float64{{1, 2, 3}, {4, 5, 6}}
+		out2, err := exec.Exec(x2)
+		require.NoError(t, err)
+		require.Len(t, out2, 1)
+		val2 := out2[0].Value().([][]float64)
+		assert.Equal(t, 2, len(val2))
+		assert.Equal(t, 2, len(val2[0]))
+
+		// Run with batch=3
+		x3 := [][]float64{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}}
+		out3, err := exec.Exec(x3)
+		require.NoError(t, err)
+		require.Len(t, out3, 1)
+		val3 := out3[0].Value().([][]float64)
+		assert.Equal(t, 3, len(val3))
+		assert.Equal(t, 2, len(val3[0]))
 	})
 }
 

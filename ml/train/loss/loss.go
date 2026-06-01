@@ -150,6 +150,35 @@ func LossFromScope(scope *model.Scope) (LossFn, error) {
 	}
 }
 
+// MakeShapeLike constructs a shape similar to template but with a different dtype and dimensions.
+// If any dimension in dims is dynamic (negative), or if template is dynamic, the returned shape is dynamic,
+// and it will attempt to preserve the axis names from the template.
+func MakeShapeLike(dtype dtypes.DType, template shapes.Shape, dims ...int) shapes.Shape {
+	isDynamic := false
+	for _, d := range dims {
+		if d < 0 {
+			isDynamic = true
+		}
+	}
+	if isDynamic {
+		// Extract axis names. If template rank matches, we use its axis names.
+		var axisNames []string
+		if template.Rank() == len(dims) {
+			axisNames = template.AxisNames
+		} else {
+			// Try to align names from template to dims
+			axisNames = make([]string, len(dims))
+			for i := range dims {
+				if i < template.Rank() {
+					axisNames[i] = template.AxisName(i)
+				}
+			}
+		}
+		return shapes.MakeDynamic(dtype, dims, axisNames)
+	}
+	return shapes.Make(dtype, dims...)
+}
+
 // CheckExtraLabelsForWeightsAndMask takes the remainder labels tensor slice (so without the actual labels values)
 // and separates a mask (bool) and weights (float), which can be provided in any order.
 //
@@ -162,7 +191,7 @@ func LossFromScope(scope *model.Scope) (LossFn, error) {
 //
 // This function is used by the loss implementations to help handle mask and weights extra label tensors.
 func CheckExtraLabelsForWeightsAndMask(weightsShape shapes.Shape, labels []*Node) (weights, mask *Node) {
-	maskShape := shapes.Make(dtypes.Bool, weightsShape.Dimensions...)
+	maskShape := MakeShapeLike(dtypes.Bool, weightsShape, weightsShape.Dimensions...)
 	for ii, extra := range labels {
 		if mask == nil && extra.Shape().Equal(maskShape) {
 			mask = extra
@@ -198,7 +227,7 @@ func MeanSquaredError(labels, predictions []*Node) (loss *Node) {
 	loss = Mul(loss, loss)
 
 	// Factor in weights and mask.
-	weightsShape := shapes.Make(labels0.DType(), labels0.Shape().Dimensions[:1]...)
+	weightsShape := MakeShapeLike(labels0.DType(), labels0.Shape(), labels0.Shape().Dimensions[:1]...)
 	weights, mask := CheckExtraLabelsForWeightsAndMask(weightsShape, labels[1:])
 	if weights != nil {
 		loss = Mul(loss, weights)
@@ -391,7 +420,7 @@ func categoricalCrossEntropyLogitsImpl(labels, logits *Node, extras []*Node) *No
 		Panicf("labels(%s) and logits(%s) must have the same shapes", shape, logits.Shape())
 	}
 
-	weightsShape := shapes.Make(logits.DType(), labels.Shape().Dimensions[:labels.Rank()-1]...)
+	weightsShape := MakeShapeLike(logits.DType(), labels.Shape(), labels.Shape().Dimensions[:labels.Rank()-1]...)
 	weights, mask := CheckExtraLabelsForWeightsAndMask(weightsShape, extras)
 
 	var expandedMask *Node
@@ -442,7 +471,7 @@ func CategoricalCrossEntropy(labels, predictions []*Node) *Node {
 	loss := ReduceSum(Neg(Mul(labels0, Log(predictions0))), -1)
 
 	// Factor in weights and mask.
-	weightsShape := shapes.Make(predictions[0].DType(), labels[0].Shape().Dimensions[:labels[0].Rank()-1]...)
+	weightsShape := MakeShapeLike(predictions[0].DType(), labels[0].Shape(), labels[0].Shape().Dimensions[:labels[0].Rank()-1]...)
 	weights, mask := CheckExtraLabelsForWeightsAndMask(weightsShape, labels[1:])
 	if weights != nil {
 		loss = Mul(loss, weights)
