@@ -138,7 +138,7 @@ func Ones(g *Graph, shape shapes.Shape) *Node {
 	if scalar == nil {
 		return nil
 	}
-	return BroadcastPrefix(scalar, shape.Dimensions...)
+	return BroadcastToShape(scalar, shape)
 }
 
 // ZerosLike returns a tensor with the same shape of x, filled with 0's.
@@ -153,7 +153,7 @@ func ZerosLike(x *Node) *Node {
 // It also works for booleans, so it can create a tensor filled with false values.
 func Zeros(g *Graph, shape shapes.Shape) *Node {
 	g.AssertBuilding()
-	return BroadcastPrefix(ScalarZero(g, shape.DType), shape.Dimensions...)
+	return BroadcastToShape(ScalarZero(g, shape.DType), shape)
 }
 
 // OneMinus returns (1-x).

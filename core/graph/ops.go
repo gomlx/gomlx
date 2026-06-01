@@ -443,7 +443,16 @@ func BroadcastPrefix(x *Node, prefixDims ...int) *Node {
 	for i := range shape.Rank() {
 		broadcastAxes[i] = i + len(prefixDims)
 	}
-	outputShape := shapes.Make(x.DType(), newDims...)
+	axisNames := make([]string, len(newDims))
+	for i, dim := range newDims {
+		if i >= len(prefixDims) {
+			axisNames[i] = shape.AxisName(i - len(prefixDims))
+		}
+		if dim == shapes.DynamicDim && axisNames[i] == "" {
+			axisNames[i] = "dynamic_prefix"
+		}
+	}
+	outputShape := shapes.MakeDynamic(x.DType(), newDims, axisNames)
 	return backendBroadcastInDim(x, outputShape, broadcastAxes)
 }
 
@@ -515,7 +524,23 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 		}
 	}
 
-	return backendBroadcastInDim(x, shapes.Make(x.DType(), newDimensions...), preservedAxes)
+	axisNames := make([]string, len(newDimensions))
+	if !x.Shape().IsScalar() {
+		axisInX := 0
+		for axis := range newDimensions {
+			if !expandedSet.Has(axis) {
+				axisNames[axis] = x.Shape().AxisName(axisInX)
+				axisInX++
+			}
+		}
+	}
+	for axis, dim := range newDimensions {
+		if dim == shapes.DynamicDim && axisNames[axis] == "" {
+			axisNames[axis] = "dynamic_expanded"
+		}
+	}
+	outputShape := shapes.MakeDynamic(x.DType(), newDimensions, axisNames)
+	return backendBroadcastInDim(x, outputShape, preservedAxes)
 }
 
 // BroadcastToShape broadcasts x to the given shape.
@@ -583,7 +608,27 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 // See also the equivalent BroadcastToShape.
 func BroadcastToDims(x *Node, dimensions ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
-	shape := shapes.Make(x.DType(), dimensions...)
+	var shape shapes.Shape
+	isDynamic := false
+	for _, dim := range dimensions {
+		if dim < 0 {
+			isDynamic = true
+		}
+	}
+	if isDynamic {
+		axisNames := make([]string, len(dimensions))
+		for i := range dimensions {
+			if i < x.Rank() {
+				axisNames[i] = x.Shape().AxisName(i)
+			}
+			if dimensions[i] == shapes.DynamicDim && axisNames[i] == "" {
+				axisNames[i] = "dynamic_broadcast"
+			}
+		}
+		shape = shapes.MakeDynamic(x.DType(), dimensions, axisNames)
+	} else {
+		shape = shapes.Make(x.DType(), dimensions...)
+	}
 	if x.Shape().IsScalar() && shape.IsScalar() {
 		// Assume nothing to do.
 		return x
@@ -796,14 +841,27 @@ func InsertAxes(x *Node, beforeAxes ...int) *Node {
 	slices.Sort(beforeAxes)
 
 	// Create new target shape.
-	toShape := shapes.Shape{DType: x.DType(), Dimensions: make([]int, toRank)}
+	toShape := shapes.Shape{
+		DType:      x.DType(),
+		Dimensions: make([]int, toRank),
+	}
+	hasNames := x.Shape().AxisNames != nil || x.Shape().IsDynamic()
+	if hasNames {
+		toShape.AxisNames = make([]string, toRank)
+	}
 	iiOriginal, iiNewAxes := 0, 0
 	for ii := range toShape.Dimensions {
 		if iiNewAxes < len(beforeAxes) && beforeAxes[iiNewAxes] <= iiOriginal || iiOriginal == fromRank {
 			toShape.Dimensions[ii] = 1
+			if hasNames {
+				toShape.AxisNames[ii] = ""
+			}
 			iiNewAxes += 1
 		} else {
 			toShape.Dimensions[ii] = x.Shape().Dimensions[iiOriginal]
+			if hasNames {
+				toShape.AxisNames[ii] = x.Shape().AxisName(iiOriginal)
+			}
 			iiOriginal += 1
 		}
 	}
@@ -857,14 +915,27 @@ func ExpandAxes(x *Node, newAxes ...int) *Node {
 	}
 
 	// Create new target shape.
-	toShape := shapes.Shape{DType: x.DType(), Dimensions: make([]int, toRank)}
+	toShape := shapes.Shape{
+		DType:      x.DType(),
+		Dimensions: make([]int, toRank),
+	}
+	hasNames := x.Shape().AxisNames != nil || x.Shape().IsDynamic()
+	if hasNames {
+		toShape.AxisNames = make([]string, toRank)
+	}
 	iiOriginal, iiNewAxes := 0, 0
 	for axis := range toShape.Dimensions {
 		if iiNewAxes < len(adjustedNewAxes) && adjustedNewAxes[iiNewAxes] == axis {
 			toShape.Dimensions[axis] = 1
+			if hasNames {
+				toShape.AxisNames[axis] = ""
+			}
 			iiNewAxes += 1
 		} else {
 			toShape.Dimensions[axis] = x.Shape().Dimensions[iiOriginal]
+			if hasNames {
+				toShape.AxisNames[axis] = x.Shape().AxisName(iiOriginal)
+			}
 			iiOriginal += 1
 		}
 	}
@@ -1041,6 +1112,25 @@ func MaskedReduceAllSum(x, mask *Node) *Node {
 func ReduceMean(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	sum := ReduceSum(x, reduceAxes...)
+	if x.Shape().IsDynamic() {
+		var count *Node
+		adjustedAxes := adjustAxesToRank(x.Rank(), reduceAxes, "reduceAxes")
+		if len(adjustedAxes) == 0 {
+			adjustedAxes = make([]int, x.Rank())
+			for i := range x.Rank() {
+				adjustedAxes[i] = i
+			}
+		}
+		for _, axis := range adjustedAxes {
+			dimSize := DynamicDimensionSize(x, axis)
+			if count == nil {
+				count = dimSize
+			} else {
+				count = Mul(count, dimSize)
+			}
+		}
+		return Div(sum, ConvertType(count, sum.DType()))
+	}
 	denominator := x.Shape().Size() / sum.Shape().Size()
 	return MulScalar(sum, 1.0/float64(denominator))
 }

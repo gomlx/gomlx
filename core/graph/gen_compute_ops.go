@@ -53,6 +53,8 @@ const (
 	NodeTypeCos
 	NodeTypeDiv
 	NodeTypeDotGeneral
+	NodeTypeDynamicDimensionSize
+	NodeTypeDynamicShape
 	NodeTypeDynamicSlice
 	NodeTypeDynamicUpdateSlice
 	NodeTypeEqual
@@ -1367,6 +1369,93 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 		config:             config,
 	}
 	result, err := g.currentFunc.backendFunc.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes, inputs.config)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsDynamicDimensionSize holds the inputs used for the call to compute.DynamicDimensionSize.
+type nodeInputsDynamicDimensionSize struct {
+	operand *Node
+	axis    int
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsDynamicDimensionSize) Type() NodeType {
+	return NodeTypeDynamicDimensionSize
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsDynamicDimensionSize) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], axis=%v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.axis,
+	)
+}
+
+// DynamicDimensionSize returns the dimension of the given axis of the operand as a dynamic scalar value.
+// This is only supported by backends that support dynamic shapes (see Capabilities.DynamicAxes).
+func DynamicDimensionSize(operand *Node, axis int) (
+	node *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsDynamicDimensionSize{
+		operand: operand,
+		axis:    axis,
+	}
+	result, err := g.currentFunc.backendFunc.DynamicDimensionSize(operand.outputOps[0], inputs.axis)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsDynamicShape holds the inputs used for the call to compute.DynamicShape.
+type nodeInputsDynamicShape struct {
+	operand *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsDynamicShape) Type() NodeType {
+	return NodeTypeDynamicShape
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsDynamicShape) String() string {
+	return fmt.Sprintf("%s(operand=[#%d])",
+		ni.Type(),
+		ni.operand.Id(),
+	)
+}
+
+// DynamicShape returns the shape of the operand as a dynamic value.
+// This is only supported by backends that support dynamic shapes (see Capabilities.DynamicAxes).
+func DynamicShape(operand *Node) (
+	node *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsDynamicShape{
+		operand: operand,
+	}
+	result, err := g.currentFunc.backendFunc.DynamicShape(operand.outputOps[0])
 	if err != nil {
 		panic(err)
 	}

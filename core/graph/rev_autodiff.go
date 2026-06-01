@@ -450,6 +450,8 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeFFT:                vjpForSingleOutput(fftVJP),
 	NodeTypeDynamicSlice:       vjpForSingleOutput(dynamicSliceVJP),
 	NodeTypeDynamicUpdateSlice: vjpForSingleOutput(dynamicUpdateSliceVJP),
+	NodeTypeDynamicDimensionSize: vjpForSingleOutput(zeroVJP),
+	NodeTypeDynamicShape:         vjpForSingleOutput(zeroVJP),
 }
 
 // nilVJP returns no gradient, for functions without any inputNodes.
