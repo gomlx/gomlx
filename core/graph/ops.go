@@ -529,7 +529,47 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 // This is equivalent to BroadcastToDims(x, shape.Dimensions...).
 func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 	_ = validateBuildingGraphFromInputs(x)
-	return BroadcastToDims(x, shape.Dimensions...)
+	xShape := x.Shape()
+	if xShape.Rank() > shape.Rank() {
+		exceptions.Panicf("BroadcastToShape: rank mismatch: x shape %s has rank %d, target shape %s has rank %d",
+			xShape, xShape.Rank(), shape, shape.Rank())
+	}
+	
+	resultAxisNames := make([]string, shape.Rank())
+	for i := range shape.Rank() {
+		if i < xShape.Rank() {
+			xDim := xShape.Dimensions[i]
+			targetDim := shape.Dimensions[i]
+			if xDim != targetDim && xDim != 1 {
+				exceptions.Panicf("BroadcastToShape: incompatible dimensions at axis %d: x has %d, target has %d (shapes %s vs %s)",
+					i, xDim, targetDim, xShape, shape)
+			}
+			unified, err := shapes.UnifyAxisName(xShape.AxisName(i), shape.AxisName(i))
+			if err != nil {
+				exceptions.Panicf("BroadcastToShape: incompatible axis names at axis %d: %v", i, err)
+			}
+			resultAxisNames[i] = unified
+		} else {
+			resultAxisNames[i] = shape.AxisName(i)
+		}
+	}
+	
+	outShape := shapes.MakeDynamic(x.DType(), shape.Dimensions, resultAxisNames)
+	if xShape.IsScalar() && outShape.IsScalar() {
+		return x
+	}
+	var node *Node
+	if xShape.IsScalar() {
+		node = backendBroadcastInDim(x, outShape, nil)
+	} else {
+		broadcastDims := make([]int, xShape.Rank())
+		for ii := range xShape.Rank() {
+			broadcastDims[ii] = ii
+		}
+		node = backendBroadcastInDim(x, outShape, broadcastDims)
+	}
+	node.outputShapes[0] = outShape
+	return node
 }
 
 // BroadcastToDims broadcasts x to the given dimensions.
@@ -671,6 +711,38 @@ func Reshape(x *Node, dimensions ...int) *Node {
 	return backendReshape(x, dimensions...)
 }
 
+// dynamicSizesEqual returns true if two shapes have the same total size,
+// supporting shapes with named dynamic dimensions.
+func dynamicSizesEqual(s1, s2 shapes.Shape) bool {
+	p1 := 1
+	var dynNames1 []string
+	for i, dim := range s1.Dimensions {
+		if dim == shapes.DynamicDim {
+			dynNames1 = append(dynNames1, s1.AxisName(i))
+		} else {
+			p1 *= dim
+		}
+	}
+
+	p2 := 1
+	var dynNames2 []string
+	for i, dim := range s2.Dimensions {
+		if dim == shapes.DynamicDim {
+			dynNames2 = append(dynNames2, s2.AxisName(i))
+		} else {
+			p2 *= dim
+		}
+	}
+
+	if p1 != p2 {
+		return false
+	}
+
+	slices.Sort(dynNames1)
+	slices.Sort(dynNames2)
+	return slices.Equal(dynNames1, dynNames2)
+}
+
 // ReshapeWithShape reshapes x to the dimensions given by shape.
 // Total size cannot change, neither the DType is allowed to change.
 // Conceptually, this is a limited form of "shape casting."
@@ -680,16 +752,16 @@ func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 		exceptions.Panicf("cannot change dtype (from %s to %s) with ReshapeWithShape",
 			x.DType(), shape.DType)
 	}
-	if shape.Size() != x.Shape().Size() {
+	if !dynamicSizesEqual(x.Shape(), shape) {
 		exceptions.Panicf(
-			"shapes (x.shape=%s, shape=%s) have different total sizes (from %d to %d), reshape not possible",
+			"shapes (x.shape=%s, shape=%s) have different total sizes, reshape not possible",
 			x.Shape(),
 			shape,
-			x.Shape().Size(),
-			shape.Size(),
 		)
 	}
-	return backendReshape(x, shape.Dimensions...)
+	node := backendReshape(x, shape.Dimensions...)
+	node.outputShapes[0] = shape.Clone()
+	return node
 }
 
 // InsertAxes expands x creating new axes just before the axes given -- beforeAxes points to positions on the original
