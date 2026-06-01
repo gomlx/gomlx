@@ -92,6 +92,9 @@ type Trainer struct {
 	// BatchNormAverages data
 	batchNormStepExecMap map[any]*model.Exec
 
+	inputsDynamicAxes [][]string
+	labelsDynamicAxes [][]string
+
 	// onExecCreationHandlers are hooks called during executor creation.
 	onExecCreationHandlers []OnExecFn
 }
@@ -359,6 +362,44 @@ func (r *Trainer) WithMaxExecutors(maxExecutors int) *Trainer {
 	return r
 }
 
+// WithInputsDynamicAxes configures the dynamic axes for the model inputs.
+// Each slice in the axisNames parameter corresponds to an input parameter of the model graph.
+//
+// By marking an axis as dynamic, the computation graph will be compiled once with a symbolic size (e.g., shapes.DynamicDim)
+// for that dimension. During subsequent executions, the actual size of the dynamic dimension is resolved dynamically
+// from the shape of the execution inputs, avoiding expensive graph re-compilations for different input shapes.
+//
+// Dynamic axes configuration must be set before any training or evaluation step is executed, otherwise
+// it will have no effect on already created executors.
+//
+// Example usage:
+//
+//	trainer := train.NewTrainer(backend, store, modelFn, lossFn, opt, nil, nil).
+//		WithInputsDynamicAxes([]string{"batch", ""})
+func (r *Trainer) WithInputsDynamicAxes(axisNames ...[]string) *Trainer {
+	r.inputsDynamicAxes = axisNames
+	return r
+}
+
+// WithLabelsDynamicAxes configures the dynamic axes for the model labels.
+// Each slice in the axisNames parameter corresponds to a label parameter of the model graph.
+//
+// By marking an axis as dynamic, the computation graph will be compiled once with a symbolic size (e.g., shapes.DynamicDim)
+// for that dimension. During subsequent executions, the actual size of the dynamic dimension is resolved dynamically
+// from the shape of the execution inputs, avoiding expensive graph re-compilations for different input shapes.
+//
+// Dynamic axes configuration must be set before any training or evaluation step is executed, otherwise
+// it will have no effect on already created executors.
+//
+// Example usage:
+//
+//	trainer := train.NewTrainer(backend, store, modelFn, lossFn, opt, nil, nil).
+//		WithLabelsDynamicAxes([]string{"batch"})
+func (r *Trainer) WithLabelsDynamicAxes(axisNames ...[]string) *Trainer {
+	r.labelsDynamicAxes = axisNames
+	return r
+}
+
 // TrainMetrics returns the train metrics objects (not the actual values just the objects
 // that implement them).
 func (r *Trainer) TrainMetrics() []metric.Interface { return r.trainMetrics }
@@ -393,11 +434,30 @@ func (r *Trainer) createExecutor(spec any, inputsLen, labelsLen int,
 			labels := inputsAndLabels[inputsLen:]
 			return graphFn(spec, scope, inputs, labels)
 		})
-	if r.deviceAssignment != nil {
-		exec = exec.WithDeviceAssignment(r.deviceAssignment)
-	}
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to create executor for spec %+v", spec)
+	}
+
+	var combinedAxes [][]string
+	if len(r.inputsDynamicAxes) > 0 || len(r.labelsDynamicAxes) > 0 {
+		combinedAxes = make([][]string, inputsLen+labelsLen)
+		for i := 0; i < inputsLen; i++ {
+			if i < len(r.inputsDynamicAxes) {
+				combinedAxes[i] = r.inputsDynamicAxes[i]
+			}
+		}
+		for i := 0; i < labelsLen; i++ {
+			if i < len(r.labelsDynamicAxes) {
+				combinedAxes[inputsLen+i] = r.labelsDynamicAxes[i]
+			}
+		}
+	}
+	if len(combinedAxes) > 0 {
+		exec.WithDynamicAxes(combinedAxes...)
+	}
+
+	if r.deviceAssignment != nil {
+		exec = exec.WithDeviceAssignment(r.deviceAssignment)
 	}
 	return exec.WithName(trainerName), nil
 }

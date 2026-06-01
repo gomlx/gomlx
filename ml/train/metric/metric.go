@@ -475,7 +475,7 @@ func SparseCategoricalAccuracyGraph(_ *model.Scope, labels, logits []*Node) *Nod
 	}
 
 	// Weights and masks: checks whether either are defined.
-	weightsShape := shapes.Make(logitsDType, logits0.Shape().Dimensions[:logits0.Rank()-1]...)
+	weightsShape := loss.MakeShapeLike(logitsDType, logits0.Shape(), logits0.Shape().Dimensions[:logits0.Rank()-1]...)
 	weights, mask := loss.CheckExtraLabelsForWeightsAndMask(weightsShape, labels[1:])
 	modelChoices := ArgMax(logits0, -1, labelsDType)
 	correctExamples := ConvertDType(
