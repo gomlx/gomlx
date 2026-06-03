@@ -332,3 +332,76 @@ func TestExecUnusedInput(t *testing.T) {
 	_, err = unusedInputFn.Call(0)
 	require.NoError(t, err)
 }
+
+func TestExecWrappers(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+
+	t.Run("OneOutput", func(t *testing.T) {
+		graphFn := func(x *Node) *Node {
+			return AddScalar(x, 1)
+		}
+		exec1, err := NewExec1(backend, graphFn)
+		require.NoError(t, err)
+
+		res, err := exec1.Call(1.0)
+		require.NoError(t, err)
+		assert.Equal(t, 2.0, res.Value())
+
+		resMust := exec1.MustCall(2.0)
+		assert.Equal(t, 3.0, resMust.Value())
+
+		// Test MustNewExec1 as well.
+		exec1Must := MustNewExec1(backend, graphFn)
+		assert.Equal(t, 5.0, exec1Must.MustCall(4.0).Value())
+	})
+
+	t.Run("TwoOutputs", func(t *testing.T) {
+		graphFn := func(x *Node) (*Node, *Node) {
+			return AddScalar(x, 1), AddScalar(x, 2)
+		}
+		exec2, err := NewExec2(backend, graphFn)
+		require.NoError(t, err)
+
+		r1, r2, err := exec2.Call(1.0)
+		require.NoError(t, err)
+		assert.Equal(t, 2.0, r1.Value())
+		assert.Equal(t, 3.0, r2.Value())
+
+		r1Must, r2Must := exec2.MustCall(2.0)
+		assert.Equal(t, 3.0, r1Must.Value())
+		assert.Equal(t, 4.0, r2Must.Value())
+
+		// Test MustNewExec2 as well.
+		exec2Must := MustNewExec2(backend, graphFn)
+		mr1, mr2 := exec2Must.MustCall(4.0)
+		assert.Equal(t, 5.0, mr1.Value())
+		assert.Equal(t, 6.0, mr2.Value())
+	})
+
+	t.Run("ThreeOutputs", func(t *testing.T) {
+		graphFn := func(x *Node) (*Node, *Node, *Node) {
+			return AddScalar(x, 1), AddScalar(x, 2), AddScalar(x, 3)
+		}
+		exec3, err := NewExec3(backend, graphFn)
+		require.NoError(t, err)
+
+		r1, r2, r3, err := exec3.Call(1.0)
+		require.NoError(t, err)
+		assert.Equal(t, 2.0, r1.Value())
+		assert.Equal(t, 3.0, r2.Value())
+		assert.Equal(t, 4.0, r3.Value())
+
+		r1Must, r2Must, r3Must := exec3.MustCall(2.0)
+		assert.Equal(t, 3.0, r1Must.Value())
+		assert.Equal(t, 4.0, r2Must.Value())
+		assert.Equal(t, 5.0, r3Must.Value())
+
+		// Test MustNewExec3 as well.
+		exec3Must := MustNewExec3(backend, graphFn)
+		mr1, mr2, mr3 := exec3Must.MustCall(4.0)
+		assert.Equal(t, 5.0, mr1.Value())
+		assert.Equal(t, 6.0, mr2.Value())
+		assert.Equal(t, 7.0, mr3.Value())
+	})
+}
+

@@ -489,3 +489,103 @@ func (e *Exec) MustExec3(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensor
 func (e *Exec) MustExec4(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
 	return e.MustCall4(args...)
 }
+
+// ExecOneOutput is a wrapper around Exec for graphs that return exactly one output.
+type ExecOneOutput struct {
+	*Exec
+}
+
+// Call executes the computation with the given arguments and returns one output.
+//
+// It returns an error if the graph doesn't return exactly one output.
+func (e *ExecOneOutput) Call(args ...any) (*tensors.Tensor, error) {
+	return e.Call1(args...)
+}
+
+// MustCall executes the graph with the given arguments and returns one output.
+//
+// It panics on errors or if the graph doesn't return exactly one output.
+func (e *ExecOneOutput) MustCall(args ...any) *tensors.Tensor {
+	return e.MustCall1(args...)
+}
+
+// ExecTwoOutputs is a wrapper around Exec for graphs that return exactly two outputs.
+type ExecTwoOutputs struct {
+	*Exec
+}
+
+// Call executes the computation with the given arguments and returns two outputs.
+//
+// It returns an error if the graph doesn't return exactly two outputs.
+func (e *ExecTwoOutputs) Call(args ...any) (*tensors.Tensor, *tensors.Tensor, error) {
+	return e.Call2(args...)
+}
+
+// MustCall executes the graph with the given arguments and returns two outputs.
+//
+// It panics on errors or if the graph doesn't return exactly two outputs.
+func (e *ExecTwoOutputs) MustCall(args ...any) (*tensors.Tensor, *tensors.Tensor) {
+	return e.MustCall2(args...)
+}
+
+// ExecThreeOutputs is a wrapper around Exec for graphs that return exactly three outputs.
+type ExecThreeOutputs struct {
+	*Exec
+}
+
+// Call executes the computation with the given arguments and returns three outputs.
+//
+// It returns an error if the graph doesn't return exactly three outputs.
+func (e *ExecThreeOutputs) Call(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor, error) {
+	return e.Call3(args...)
+}
+
+// MustCall executes the graph with the given arguments and returns three outputs.
+//
+// It panics on errors or if the graph doesn't return exactly three outputs.
+func (e *ExecThreeOutputs) MustCall(args ...any) (*tensors.Tensor, *tensors.Tensor, *tensors.Tensor) {
+	return e.MustCall3(args...)
+}
+
+// NewExec1 constructs an ExecOneOutput wrapper around a new Exec object, constraining the graphFn to return a single output.
+func NewExec1[F ExecGraphFnOneOutput](backend compute.Backend, graphFn F) (*ExecOneOutput, error) {
+	exec, err := NewExec(backend, graphFn)
+	if err != nil {
+		return nil, err
+	}
+	return &ExecOneOutput{Exec: exec}, nil
+}
+
+// NewExec2 constructs an ExecTwoOutputs wrapper around a new Exec object, constraining the graphFn to return two outputs.
+func NewExec2[F ExecGraphFnTwoOutputs](backend compute.Backend, graphFn F) (*ExecTwoOutputs, error) {
+	exec, err := NewExec(backend, graphFn)
+	if err != nil {
+		return nil, err
+	}
+	return &ExecTwoOutputs{Exec: exec}, nil
+}
+
+// NewExec3 constructs an ExecThreeOutputs wrapper around a new Exec object, constraining the graphFn to return three outputs.
+func NewExec3[F ExecGraphFnThreeOutputs](backend compute.Backend, graphFn F) (*ExecThreeOutputs, error) {
+	exec, err := NewExec(backend, graphFn)
+	if err != nil {
+		return nil, err
+	}
+	return &ExecThreeOutputs{Exec: exec}, nil
+}
+
+// MustNewExec1 constructs an ExecOneOutput wrapper around a new Exec object and panics on error.
+func MustNewExec1[F ExecGraphFnOneOutput](backend compute.Backend, graphFn F) *ExecOneOutput {
+	return &ExecOneOutput{Exec: MustNewExec(backend, graphFn)}
+}
+
+// MustNewExec2 constructs an ExecTwoOutputs wrapper around a new Exec object and panics on error.
+func MustNewExec2[F ExecGraphFnTwoOutputs](backend compute.Backend, graphFn F) *ExecTwoOutputs {
+	return &ExecTwoOutputs{Exec: MustNewExec(backend, graphFn)}
+}
+
+// MustNewExec3 constructs an ExecThreeOutputs wrapper around a new Exec object and panics on error.
+func MustNewExec3[F ExecGraphFnThreeOutputs](backend compute.Backend, graphFn F) *ExecThreeOutputs {
+	return &ExecThreeOutputs{Exec: MustNewExec(backend, graphFn)}
+}
+
