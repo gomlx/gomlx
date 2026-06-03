@@ -28,16 +28,16 @@ func main() {
 		fmt.Println("* building addFn computation graph")
 		return Add(a, b)
 	}
-	addExec := MustNewExec(backend, addFn)
-	fmt.Printf("\t- 1+1=%s\n", addExec.MustCall1(1.0, 1.0))
-	fmt.Printf("\t- 2+2=%s\n", addExec.MustCall1(2.0, 2.0))
+	addExec := MustNewExec1(backend, addFn)
+	fmt.Printf("\t- 1+1=%s\n", addExec.MustCall(1.0, 1.0))
+	fmt.Printf("\t- 2+2=%s\n", addExec.MustCall(2.0, 2.0))
 	//md_end:cell2
 
 	// Output to cell2
 	fmt.Println("md:cell3")
 
 	//md_start:cell3
-	_, err := addExec.Call1(int32(1), float32(1.0))
+	_, err := addExec.Call(int32(1), float32(1.0))
 	if err != nil {
 		//md_end:cell3
 		//... //md:cell3

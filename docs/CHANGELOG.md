@@ -57,6 +57,7 @@ And a few small renaming:
 - `Scope` -> `Store` and `Scope`
 - `NewScope` -> `NewStore` (the only "global" one)
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
+  - New `Exec` wrappers for fixed number of outputs: `NewExec1`, `NewExec2` and `NewExec3` for graphs with one, two or three outputs.
 - Using mostly `fullPath` instead of the split scope/key pairs.
 - Variables:
   - `Scope.VariableWithValueGraph` -> `Scope.VariableWithNodeValue`
@@ -80,6 +81,7 @@ And a few small renaming:
 
 ## Graph (github.com/gomlx/gomlx/core/graph):
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
+  - New `Exec` wrappers for fixed number of outputs: `NewExec1`, `NewExec2` and `NewExec3` for graphs with one, two or three outputs.
 
 ## Tensors (github.com/gomlx/gomlx/core/tensors):
 - Renamed `FromAnyValue` to `MustFromAnyValue` and added `FromAnyValue` returning `(tensor, error)`.
