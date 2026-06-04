@@ -59,6 +59,8 @@ and error messages are useful (always with a stack-trace) and try to make it eas
 
 ## 🔮 Upcoming Features & Plans 🔮
 
+<img align="right" src="docs/gomlx_gopher_hiking.jpeg" alt="GoMLX Gopher" width="220px"/>
+
 **Large API and package re-organization coming soon in v0.28 release:**
 
 - `backends` moved to `github.com/gomlx/compute` repository!
