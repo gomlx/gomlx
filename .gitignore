@@ -15,6 +15,7 @@ venv
 go.work
 go.work.sum
 *.test
+reconstructed.png
 
 # Jupyter tmp files
 .ipynb_checkpoints

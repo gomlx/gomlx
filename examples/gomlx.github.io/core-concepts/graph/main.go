@@ -25,7 +25,7 @@ func main() {
 
 	//md_start:cell2
 	addFn := func(a, b *Node) *Node {
-		fmt.Println("* building addFn computation graph")
+		fmt.Printf("* building addFn computation graph: a.shape=%s, b.shape=%s\n", a.Shape(), b.Shape())
 		return Add(a, b)
 	}
 	addExec := MustNewExec1(backend, addFn)
@@ -33,14 +33,13 @@ func main() {
 	fmt.Printf("\t- 2+2=%s\n", addExec.MustCall(2.0, 2.0))
 	//md_end:cell2
 
-	// Output to cell2
+	// Output to cell3
 	fmt.Println("md:cell3")
 
-	//md_start:cell3
-	_, err := addExec.Call(int32(1), float32(1.0))
-	if err != nil {
-		//md_end:cell3
+	_, err := addExec.Call(int32(1), float32(1.0)) //md:cell3
+	if err != nil {                                //md:cell3
 		//... //md:cell3
+		// Only output the relevant part of the error for the snippet:
 		lines := strings.Split(fmt.Sprintf("%+v", err), "\n")
 		for i, line := range lines {
 			if i == 0 {
