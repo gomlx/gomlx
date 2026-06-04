@@ -27,13 +27,13 @@ import (
 )
 
 // denseLayer defines a simple fully-connected layer.
-func denseLayer(ctx *model.Scope, x *Node, outputDims int) *Node {
+func denseLayer(scope *model.Scope, x *Node, outputDims int) *Node {
 	g := x.Graph()
 	dtype := x.DType()
 	inputDims := x.Shape().Dimensions[1]
 
-	weights := ctx.VariableWithShape("weights", shapes.Make(dtype, inputDims, outputDims)).NodeValue(g)
-	biases := ctx.VariableWithShape("biases", shapes.Make(dtype, 1, outputDims)).NodeValue(g)
+	weights := scope.VariableWithShape("weights", shapes.Make(dtype, inputDims, outputDims)).NodeValue(g)
+	biases := scope.VariableWithShape("biases", shapes.Make(dtype, 1, outputDims)).NodeValue(g)
 
 	return Add(Dot(x, weights).Product(), biases)
 }
@@ -111,18 +111,18 @@ func main() {
 	ds.BatchSize(512, false).Shuffle().Infinite(true)
 
 	// 3. Define the neural network model function (MLP)
-	modelFn := func(ctx *model.Scope, spec any, inputs []*Node) []*Node {
+	modelFn := func(scope *model.Scope, spec any, inputs []*Node) []*Node {
 		x := inputs[0] // shape: [batch_size, 2]
 
-		h := denseLayer(ctx.In("layer1"), x, 64)
+		h := denseLayer(scope.In("layer1"), x, 64)
 		h = activation.Relu(h)
-		h = denseLayer(ctx.In("layer2"), h, 64)
+		h = denseLayer(scope.In("layer2"), h, 64)
 		h = activation.Relu(h)
-		h = denseLayer(ctx.In("layer3"), h, 64)
+		h = denseLayer(scope.In("layer3"), h, 64)
 		h = activation.Relu(h)
 
 		// Output RGB values mapped to [0.0, 1.0] using Sigmoid
-		y := Sigmoid(denseLayer(ctx.In("output"), h, 3))
+		y := Sigmoid(denseLayer(scope.In("output"), h, 3))
 		return []*Node{y}
 	}
 
@@ -154,8 +154,8 @@ func main() {
 	//md_end:training
 
 	// 6. Predict the colors for all pixel coordinates to reconstruct the image
-	predictExec := model.MustNewExec(backend, store, func(ctx *model.Scope, x *Node) *Node {
-		return modelFn(ctx, nil, []*Node{x})[0]
+	predictExec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+		return modelFn(scope, nil, []*Node{x})[0]
 	})
 
 	outWidth, outHeight := width, height

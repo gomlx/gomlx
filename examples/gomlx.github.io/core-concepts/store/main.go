@@ -14,14 +14,14 @@ import (
 )
 
 //md_start:scopes
-func denseLayer(ctx *model.Scope, x *Node, outputDims int) *Node {
+func denseLayer(scope *model.Scope, x *Node, outputDims int) *Node {
 	g := x.Graph()
 	dtype := x.DType()
 	inputDims := x.Shape().Dimensions[1] // x shape is [batch, inputDims]
 
 	// Create weights and biases in the current scope
-	weights := ctx.VariableWithShape("weights", shapes.Make(dtype, inputDims, outputDims)).NodeValue(g)
-	biases := ctx.VariableWithShape("biases", shapes.Make(dtype, 1, outputDims)).NodeValue(g)
+	weights := scope.VariableWithShape("weights", shapes.Make(dtype, inputDims, outputDims)).NodeValue(g)
+	biases := scope.VariableWithShape("biases", shapes.Make(dtype, 1, outputDims)).NodeValue(g)
 
 	// Compute x * weights + biases
 	return Add(Dot(x, weights).Product(), biases)
@@ -37,8 +37,8 @@ func main() {
 
 	//md_start:counter
 	store := model.NewStore()
-	counterFn := func(ctx *model.Scope, g *Graph) *Node {
-		counterVar := ctx.VariableWithValue("counter", int32(0))
+	counterFn := func(scope *model.Scope, g *Graph) *Node {
+		counterVar := scope.VariableWithValue("counter", int32(0))
 		counter := AddScalar(counterVar.NodeValue(g), 1)
 		counterVar.SetNodeValue(counter)
 		return counter
@@ -54,10 +54,10 @@ func main() {
 	fmt.Println("md:scopes")
 
 	//md_start:scopes
-	modelFn := func(ctx *model.Scope, x *Node) *Node {
-		// Use ctx.In to partition variable names under sub-scopes:
-		h := denseLayer(ctx.In("layer1"), x, 3) // variables: /layer1/weights, /layer1/biases
-		y := denseLayer(ctx.In("layer2"), h, 1) // variables: /layer2/weights, /layer2/biases
+	modelFn := func(scope *model.Scope, x *Node) *Node {
+		// Use scope.In to partition variable names under sub-scopes:
+		h := denseLayer(scope.In("layer1"), x, 3) // variables: /layer1/weights, /layer1/biases
+		y := denseLayer(scope.In("layer2"), h, 1) // variables: /layer2/weights, /layer2/biases
 		return y
 	}
 	//md_end:scopes
