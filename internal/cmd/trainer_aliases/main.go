@@ -105,6 +105,15 @@ func main() {
 		fmt.Fprintf(f, "%s\n}\n\n", strings.Join(parts, " |\n"))
 	}
 
+	fmt.Fprintln(f, "// ModelFnCompatible represents a set of function signatures that are compatible aliases")
+	fmt.Fprintln(f, "// to the canonical [ModelFn].")
+	fmt.Fprintln(f, "//")
+	fmt.Fprintln(f, "// NewTrainer accepts any function matching this constraint and automatically wraps it")
+	fmt.Fprintln(f, "// to conform to the ModelFn signature.")
+	fmt.Fprintln(f, "//")
+	fmt.Fprintln(f, "// Notice that the optional 'any' parameter in these signatures is always the opaque 'spec'")
+	fmt.Fprintln(f, "// parameter provided by datasets (usually only used for datasets with heterogeneous input")
+	fmt.Fprintln(f, "// data for multi-task training).")
 	fmt.Fprintln(f, "type ModelFnCompatible interface {")
 	fmt.Fprintf(f, "\t%s\n", strings.Join(interfaceNames, " |\n\t"))
 	fmt.Fprintln(f, "}")

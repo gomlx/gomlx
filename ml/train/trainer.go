@@ -107,15 +107,15 @@ type Trainer struct {
 //
 // The `predictions` output by ModelFn is fed to a LossFn and to MetricsFn during training.
 //
-// Notice `spec` is opaque to train package, it's passed from the train.Dataset to the ModelFn, and its
-// meaning is determined by the train.Dataset used. For static case (where data is always the same) it can simply be
-// nil. Each value of `spec` is mapped to different computation graphs by the train.Trainer.
+// Notice `spec` is opaque to train package, it's passed from the [Dataset] to the [ModelFn], and its
+// meaning is determined by the [Dataset] used. For static case (where data is always the same) it can simply be
+// nil. Each value of `spec` is mapped to different computation graphs by the [Trainer].
 //
-// In most of the cases, on can instead simply use a ModelFnCompatible signature for the model function,
-// and the NewTrainer will automatically wrap it and convert it to a `ModelFn`.
+// In most of the cases, on can instead simply use a [ModelFnCompatible] signature for the model function,
+// and the [NewTrainer] will automatically wrap it and convert it to a [ModelFn].
 //
 // E.g.: A simple image classification modelFn that is ModelFnCompatible (single input, single output) and
-// will automatically get converted to a ModelFn signature:
+// will automatically get converted to a [ModelFn] signature:
 //
 //	func MyImageClassificationModel(scope *model.Scope, image *graph.Node) (prediction *graph.Node)
 type ModelFn func(scope *model.Scope, spec any, inputs []*graph.Node) (predictions []*graph.Node)
@@ -158,8 +158,9 @@ const (
 //
 //   - scope (will) hold the variables, hyperparameters, and related information for the model.
 //
-//   - modelFn builds the graph that transforms inputs into predictions (or logits). It accepts any function type
-//     compatible with the [ModelFnCompatible] constraint (e.g., omitting the spec parameter, or returning 1-3 nodes).
+//   - modelFn builds the graph that transforms inputs into predictions (or logits). It takes a ModelFn function
+//     or a function with a compatible signature, see the [ModelFnCompatible] constraint, that gets automatically
+//     converted to [ModelFn] (e.g., omitting the spec parameter, or returning 1-3 nodes).
 //
 //   - lossFn takes the predictions (the output of modelFn) and the labels and outputs the loss. If the
 //     returned loss is not a scalar, it will be ReduceAllMean to a scalar.

@@ -73,6 +73,15 @@ type ModelFnCompatibleSliceOutputs interface {
 		~func(*model.Scope, any, []*graph.Node) []*graph.Node
 }
 
+// ModelFnCompatible represents a set of function signatures that are compatible aliases
+// to the canonical [ModelFn].
+//
+// NewTrainer accepts any function matching this constraint and automatically wraps it
+// to conform to the ModelFn signature.
+//
+// Notice that the optional 'any' parameter in these signatures is always the opaque 'spec'
+// parameter provided by datasets (usually only used for datasets with heterogeneous input
+// data for multi-task training).
 type ModelFnCompatible interface {
 	ModelFnCompatibleZeroOutputs |
 		ModelFnCompatibleOneOutput |
