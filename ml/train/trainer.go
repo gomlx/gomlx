@@ -8,6 +8,8 @@
 // their own training loops.
 package train
 
+//go:generate go run ../../internal/cmd/trainer_aliases
+
 import (
 	"fmt"
 	"io"
@@ -148,7 +150,8 @@ const (
 //
 //   - scope (will) hold the variables, hyperparameters, and related information for the model.
 //
-//   - modelFn builds the graph that transforms inputs into predictions (or logits).
+//   - modelFn builds the graph that transforms inputs into predictions (or logits). It accepts any function type
+//     compatible with the [ModelFnCompatible] constraint (e.g., omitting the spec parameter, or returning 1-3 nodes).
 //
 //   - lossFn takes the predictions (the output of modelFn) and the labels and outputs the loss. If the
 //     returned loss is not a scalar, it will be ReduceAllMean to a scalar.
@@ -166,15 +169,15 @@ const (
 //   - evalMetrics are output by trainer.EvalStep and trainer.Eval. Here it's recommend to use mean metrics, since the model
 //     is presumably frozen, and it sees each example exactly once. The mean of the loss of the dataset is always provided
 //     as the first metric. It's ok to be empty (nil).
-func NewTrainer(backend compute.Backend, store *model.Store,
-	modelFn ModelFn, lossFn LossFn, theOptimizer optimizer.Interface,
+func NewTrainer[ModelFnT ModelFnCompatible](backend compute.Backend, store *model.Store,
+	modelFn ModelFnT, lossFn LossFn, theOptimizer optimizer.Interface,
 	trainMetrics, evalMetrics []metric.Interface) *Trainer {
 
 	r := &Trainer{
 		backend:   backend,
 		store:     store,
 		deviceNum: 0,
-		modelFn:   modelFn,
+		modelFn:   createModelFnWrapper(modelFn),
 		lossFn:    lossFn,
 		optimizer: theOptimizer,
 
