@@ -12,11 +12,14 @@ import (
 )
 
 // InceptionV3ModelPrep is executed before training: it downloads the inceptionv3 weights.
-func InceptionV3ModelPrep(scope *model.Scope, dataDir string, checkpointHandler *checkpoint.Handler) {
+func InceptionV3ModelPrep(scope *model.Scope, dataDir string, checkpointHandler *checkpoint.Handler) error {
 	scope.SetParam("data_dir", dataDir)
 	if model.GetParamOr(scope, "inception_pretrained", true) {
-		check(inceptionv3.DownloadAndUnpackWeights(dataDir))
+		if err := inceptionv3.DownloadAndUnpackWeights(dataDir); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // InceptionV3ModelGraph uses an optionally pre-trained inception model.

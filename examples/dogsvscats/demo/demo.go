@@ -64,23 +64,34 @@ func main() {
 		must(dogsvscats.FilterValidImages(*flagDataDir))
 		klog.Infof("Data downloaded in %s", *flagDataDir)
 	case *flagPreGenerate:
-		preGenerate(store, *flagDataDir)
+		must(preGenerate(store, *flagDataDir))
 	case *flagTrain:
-		dogsvscats.TrainWithStore(store, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet)
+		must(dogsvscats.Train(store, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet))
 	default:
 		klog.Info("exit: usage -download, -pre and/or -train, optional -data")
 	}
 }
 
-func preGenerate(store *model.Store, dataDir string) {
-	if !must1(fsutil.FileExists(dataDir)) {
-		must(os.MkdirAll(dataDir, 0777))
+func preGenerate(store *model.Store, dataDir string) error {
+	exists, err := fsutil.FileExists(dataDir)
+	if err != nil {
+		return err
 	}
-	must(dogsvscats.Download(dataDir))
-	must(dogsvscats.FilterValidImages(dataDir))
+	if !exists {
+		if err := os.MkdirAll(dataDir, 0777); err != nil {
+			return err
+		}
+	}
+	if err := dogsvscats.Download(dataDir); err != nil {
+		return err
+	}
+	if err := dogsvscats.FilterValidImages(dataDir); err != nil {
+		return err
+	}
 
 	config := dogsvscats.NewPreprocessingConfiguration(store, dataDir)
 	dogsvscats.PreGenerate(config, *flagPreGenEpochs, true)
+	return nil
 }
 
 // must reports and exits on error.
