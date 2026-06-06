@@ -17,7 +17,6 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/examples/dogsvscats"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"k8s.io/klog/v2"
@@ -51,46 +50,51 @@ func main() {
 	fmt.Printf("Backend: %s\n\t%s\n", backend.Name(), backend.Description())
 	fmt.Println(commandline.SprintSettings(store))
 
-	err = exceptions.TryCatch[error](func() {
-		if *flagDownload {
-			*flagDataDir = fsutil.MustReplaceTildeInDir(*flagDataDir)
-			if !fsutil.MustFileExists(*flagDataDir) {
-				check(os.MkdirAll(*flagDataDir, 0777))
-			}
-			check(dogsvscats.Download(*flagDataDir))
-			check(dogsvscats.FilterValidImages(*flagDataDir))
-			klog.Infof("Data downloaded in %s", *flagDataDir)
-		}
-		if *flagPreGenerate {
-			preGenerate(store.RootScope(), *flagDataDir)
-		} else if *flagTrain {
-			dogsvscats.TrainWithStore(store, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet)
-		}
-		if !*flagDownload && !*flagPreGenerate && !*flagTrain {
-			klog.Info("exit: usage -download, -pre and/or -train, optional -data")
-		}
-	})
+	*flagDataDir, err = fsutil.ReplaceTildeInDir(*flagDataDir)
 	if err != nil {
-		klog.Fatalf("Error:\n%+v", err)
+		klog.Fatalf("Fatal error replacing tilde in data directory: %+v", err)
+	}
+
+	switch {
+	case *flagDownload:
+		if !fsutil.MustFileExists(*flagDataDir) {
+			must(os.MkdirAll(*flagDataDir, 0777))
+		}
+		must(dogsvscats.Download(*flagDataDir))
+		must(dogsvscats.FilterValidImages(*flagDataDir))
+		klog.Infof("Data downloaded in %s", *flagDataDir)
+	case *flagPreGenerate:
+		preGenerate(store, *flagDataDir)
+	case *flagTrain:
+		dogsvscats.TrainWithStore(store, *flagDataDir, *flagCheckpoint, *flagEval, paramsSet)
+	default:
+		klog.Info("exit: usage -download, -pre and/or -train, optional -data")
 	}
 }
 
-func preGenerate(scope *model.Scope, dataDir string) {
-	*flagDataDir = fsutil.MustReplaceTildeInDir(*flagDataDir)
-	if !fsutil.MustFileExists(*flagDataDir) {
-		check(os.MkdirAll(*flagDataDir, 0777))
+func preGenerate(store *model.Store, dataDir string) {
+	if !must1(fsutil.FileExists(dataDir)) {
+		must(os.MkdirAll(dataDir, 0777))
 	}
-	check(dogsvscats.Download(*flagDataDir))
-	check(dogsvscats.FilterValidImages(*flagDataDir))
+	must(dogsvscats.Download(dataDir))
+	must(dogsvscats.FilterValidImages(dataDir))
 
-	config := dogsvscats.NewPreprocessingConfigurationFromScope(scope, *flagDataDir)
+	config := dogsvscats.NewPreprocessingConfiguration(store, dataDir)
 	dogsvscats.PreGenerate(config, *flagPreGenEpochs, true)
 }
 
-// check reports and exits on error.
-func check(err error) {
+// must reports and exits on error.
+func must(err error) {
 	if err == nil {
 		return
 	}
 	klog.Fatalf("Fatal error: %+v", err)
+}
+
+// must1 return the v value if err is nil, otherwise report the error and exit.
+func must1[T any](v T, err error) T {
+	if err != nil {
+		must(err)
+	}
+	return v
 }

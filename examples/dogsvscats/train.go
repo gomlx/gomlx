@@ -32,7 +32,6 @@ import (
 
 var (
 
-
 	// ModelsPrep maps models to a preparation function called in TrainModel before training start.
 	//
 	// This can be extended for new models.
@@ -160,7 +159,7 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	// Generation of augmented images and create datasets.
 	check(Download(dataDir))
 	check(FilterValidImages(dataDir))
-	config := NewPreprocessingConfigurationFromScope(scope, dataDir)
+	config := NewPreprocessingConfiguration(store, dataDir)
 	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(config)
 
 	// Metrics we are interested.
