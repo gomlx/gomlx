@@ -140,7 +140,7 @@ func main() {
 		}
 	}
 	fmt.Fprintln(f, "\tdefault:")
-	fmt.Fprintln(f, "\t\tpanic(fmt.Sprintf(\"invalid modelFn type %T\", modelFn))")
+	fmt.Fprintf(f, "\t\tpanic(fmt.Sprintf(\"invalid modelFn type %%T\", modelFn))\n")
 	fmt.Fprintln(f, "\t}")
 	fmt.Fprintln(f)
 	fmt.Fprintln(f, "}")
