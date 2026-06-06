@@ -17,16 +17,14 @@ import (
 // - categorical inputs, shaped  `(int64)[batch_size, len(VocabulariesFeatures)]`
 // - continuous inputs, shaped `(float32)[batch_size, len(Quantiles)]`
 // - weights: not currently used, but shaped `(float32)[batch_size, 1]`.
-func Model(scope *model.Scope, spec any, inputs []*Node) []*Node {
-	_ = spec // Not used, since the dataset is always the same.
-	g := inputs[0].Graph()
-	dtype := inputs[1].DType() // From continuous features.
+func Model(scope *model.Scope, categorical, continuous, weights *Node) *Node {
+	g := categorical.Graph()
+	dtype := continuous.DType() // From continuous features.
 	scope = scope.In("model")
 
 	// Use Cosine schedule of the learning rate, if hyperparameter is set to a value > 0.
 	cosineschedule.New(scope, g, dtype).FromScope().Done()
 
-	categorical, continuous := inputs[0], inputs[1]
 	batchSize := categorical.Shape().Dimensions[0]
 
 	// Feature preprocessing:
@@ -75,5 +73,5 @@ func Model(scope *model.Scope, spec any, inputs []*Node) []*Node {
 		logits = fnn.New(scope.In("fnn"), logits, 1).Done()
 	}
 	logits.AssertDims(batchSize, 1) // 2-dim tensor, with batch size as the leading dimension.
-	return []*Node{logits}
+	return logits
 }

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gomlx/compute"
-	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/layers"
@@ -32,16 +31,7 @@ import (
 )
 
 var (
-	// ModelsFns maps a model name to its train model function.
-	// It holds mappings to predefined models, but one can insert new ones.
-	// It is used by the TrainModel function.
-	//
-	// Models are selected by the "model" hyperparameter.
-	ModelsFns = map[string]train.ModelFn{
-		"cnn":       CnnModelGraph,
-		"inception": InceptionV3ModelGraph,
-		"byol":      nil,
-	}
+
 
 	// ModelsPrep maps models to a preparation function called in TrainModel before training start.
 	//
@@ -179,14 +169,11 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 
 	// Select the model type we are using:
 	modelType := model.GetParamOr(scope, "model", "")
-	modelFn, found := ModelsFns[modelType]
-	if !found {
-		exceptions.Panicf("Unknown model type %q: valid values are %q", modelType, xslices.Keys(ModelsFns))
-	}
 	fmt.Printf("Model: %q\n", modelType)
 	if modelPrep, found := ModelsPrep[modelType]; found {
 		modelPrep(scope, dataDir, checkpointHandler)
 	}
+
 	// BYOL may require pretraining.
 	preTraining := modelType == "byol" && model.GetParamOr(scope, "byol_pretrain", false)
 	if preTraining && checkpointHandler == nil {
@@ -200,19 +187,36 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	backend := compute.MustNew()
 	var trainer *train.Trainer
 	theOptimizer := optimizer.FromStore(store)
-	if !preTraining {
-		trainer = train.NewTrainer(backend, store, modelFn,
+	switch modelType {
+	case "cnn":
+		trainer = train.NewTrainer(backend, store, CnnModelGraph,
 			loss.BinaryCrossentropyLogits,
 			theOptimizer,
 			[]metric.Interface{movingAccuracyMetric}, // trainMetrics
 			[]metric.Interface{meanAccuracyMetric})   // evalMetrics
-	} else {
-		// Pre-training: no loss, no metrics.
-		trainer = train.NewTrainer(backend, store, modelFn,
-			nil,
+	case "inception":
+		trainer = train.NewTrainer(backend, store, InceptionV3ModelGraph,
+			loss.BinaryCrossentropyLogits,
 			theOptimizer,
-			nil, // trainMetrics
-			nil) // evalMetrics
+			[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+			[]metric.Interface{meanAccuracyMetric})   // evalMetrics
+	case "byol":
+		if !preTraining {
+			trainer = train.NewTrainer(backend, store, ByolCnnModelGraph,
+				loss.BinaryCrossentropyLogits,
+				theOptimizer,
+				[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+				[]metric.Interface{meanAccuracyMetric})   // evalMetrics
+		} else {
+			// Pre-training: no loss, no metrics.
+			trainer = train.NewTrainer(backend, store, ByolCnnModelGraph,
+				nil,
+				theOptimizer,
+				nil, // trainMetrics
+				nil) // evalMetrics
+		}
+	default:
+		exceptions.Panicf("Unknown model type %q: valid values are [\"cnn\", \"inception\", \"byol\"]", modelType)
 	}
 
 	// Debugging.

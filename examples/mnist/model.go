@@ -32,22 +32,22 @@ import (
 // LinearModelGraph builds a simple  model logistic model
 // It returns the logit, not the predictions, which works with most losses with shape `[batch_size, NumClasses]`.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
-func LinearModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
+func LinearModelGraph(scope *model.Scope, images *Node) *Node {
 	scope = scope.In("model") // Create the model by default under the "/model" scope.
-	batchSize := inputs[0].Shape().Dimensions[0]
-	embeddings := Reshape(inputs[0], batchSize, -1)
+	batchSize := images.Shape().Dimensions[0]
+	embeddings := Reshape(images, batchSize, -1)
 	logits := layers.DenseWithBias(scope, embeddings, NumClasses)
-	return []*Node{logits}
+	return logits
 }
 
 // CnnModelGraph builds the CNN model for our demo.
 // It returns the logit, not the predictions, which works with most losses with shape `[batch_size, NumClasses]`.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
-func CnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
+func CnnModelGraph(scope *model.Scope, images *Node) *Node {
 	scope = scope.In("model") // Create the model by default under the "/model" scope.
-	embeddings := CnnEmbeddings(scope, inputs[0])
+	embeddings := CnnEmbeddings(scope, images)
 	logits := layers.Dense(scope, embeddings, true, NumClasses)
-	return []*Node{logits}
+	return logits
 }
 
 func CnnEmbeddings(scope *model.Scope, images *Node) *Node {
