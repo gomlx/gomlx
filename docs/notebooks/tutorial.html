@@ -8174,7 +8174,7 @@ JIT-compiled code later on.</li>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
-<pre>2026/06/07 10:37:03 Fatal error: cannot broadcast Float64 and Int64 for "Add": they have different dtypes
+<pre>2026/06/07 14:38:56 Fatal error: cannot broadcast Float64 and Int64 for "Add": they have different dtypes
 github.com/gomlx/go-xla/compute/xla.(*Builder).broadcastForBinaryOps
 	/home/janpf/Projects/gomlx/go-xla/compute/xla/builder.go:317
 github.com/gomlx/go-xla/compute/xla.(*Function).Add
@@ -8182,7 +8182,7 @@ github.com/gomlx/go-xla/compute/xla.(*Function).Add
 github.com/gomlx/gomlx/core/graph.Add
 	/home/janpf/Projects/gomlx/gomlx/core/graph/gen_compute_ops.go:212
 main.Sum
-	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell Line 0 ]]</span> /tmp/gonb_0b091acc/main.go:20
+	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [3] Line 11 ]]</span> /tmp/gonb_2b3f2b41/main.go:20
 github.com/gomlx/gomlx/core/graph.convertExecFn[...].func5
 	/home/janpf/Projects/gomlx/gomlx/core/graph/gen_constraints.go:84
 github.com/gomlx/gomlx/core/graph.(*Exec).buildAndCompileGraph.func1
@@ -8204,7 +8204,7 @@ github.com/gomlx/gomlx/core/graph.(*Exec).CallWithGraph
 github.com/gomlx/gomlx/core/graph.(*Exec).Call
 	/home/janpf/Projects/gomlx/gomlx/core/graph/execaliases.go:38
 main.main
-	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [4] Line 3 ]]</span> /tmp/gonb_0b091acc/main.go:35
+	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [4] Line 3 ]]</span> /tmp/gonb_2b3f2b41/main.go:35
 runtime.main
 	/home/janpf/sdk/go1.26.3/src/runtime/proc.go:290
 runtime.goexit
@@ -8214,6 +8214,88 @@ compilation failed for Exec "Exec:main.Sum"
 failed during graph construction/compilation
 exit status 1
 </pre>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
+<style>
+.gonb-err-location {
+	background: var(--jp-err-color2);  
+	border-radius: 3px;
+	border-style: dotted;
+	border-width: 1px;
+	border-color: var(--jp-border-color2);
+}
+.gonb-err-hover-area {
+	cursor: pointer;
+}
+.gonb-err-hover-area:hover .gonb-err-location {
+	border-width: 2px;
+	border-style: solid;
+	border-color: var(--jp-border-color2);
+}
+.gonb-err-hover-area:hover .gonb-cell-line-info {
+	border-color: var(--jp-border-color2);
+}
+.gonb-err-context {
+	display: none;
+}
+.gonb-err-hover-area:hover + .gonb-err-context {
+	background: var(--jp-dialog-background);  
+	border-radius: 3px;
+	border-style: solid;
+	border-width: 1px;
+	border-color: var(--jp-border-color2);
+	display: block;
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-family: monospace;
+}
+.gonb-err-line {
+	border-radius: 3px;
+	border-style: dotted;
+	border-width: 1px;	
+	border-color: var(--jp-border-color2);
+	background-color: var(--jp-rendermime-err-background);
+	font-weight: bold;
+}
+.gonb-cell-line-info {
+	background: var(--jp-layout-color2);
+	color: #999;
+	margin: 0.1em;
+	border: 1px solid var(--jp-border-color1);
+	padding-left: 0.2em;
+	padding-right: 0.2em;
+}
+.jp-RenderedHTML:has(.jp-RenderedText[data-mime-type="application/vnd.jupyter.stderr"]) {
+	padding: 0 !important;
+	margin: 0 !important;
+}
+</style>
+<div class="jp-RenderedText" data-mime-type="application/vnd.jupyter.stderr" style="font-family: monospace;">
+<div style="white-space: pre-wrap;"> <span class="gonb-err-hover-area"><span class="gonb-cell-line-info">Cell[3]: Line 11</span> <span class="gonb-err-location">/tmp/gonb_2b3f2b41/main.go:20</span></span><div class="gonb-err-context">func Sum(a, b *Node) *Node {
+    g := a.Graph()  // Graph on which this symbolic computation is being built.
+    fmt.Printf("\n- Building graph (GraphId=%d) for a.shape=%s and b.shape=%s\n", g.GraphId(), a.Shape(), b.Shape())
+<div class="gonb-err-line">    return Add(a, b)
+</div>}
+
+</div></div>
+<div style="white-space: pre-wrap;"> <span class="gonb-err-hover-area"><span class="gonb-cell-line-info">Cell[4]: Line 3</span> <span class="gonb-err-location">/tmp/gonb_2b3f2b41/main.go:35</span></span><div class="gonb-err-context">func main() {
+	flag.Parse()
+sumExec := MustNewExec(backend, Sum)
+<div class="gonb-err-line">_ = must(sumExec.Call(1.1, 2)) // Error: arguments have different dtypes Float64 and Int64.
+</div>
+}
+</div></div>
+</div>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>
+exit status 1</pre>
 </div>
 </div>
 </div>
@@ -8875,7 +8957,7 @@ have been selected in Go directly using <code>math/random</code>, but just for f
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Example of target: coefficients=[4.14 4.9 5.86], bias=22.5
+<pre>Example of target: coefficients=[1.49 2.56 1.5], bias=4.35
 </pre>
 </div>
 </div>
@@ -8964,13 +9046,13 @@ selected coefficients plus some normal noise.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[4.1 -2.12 -0.989], bias=1.73
+<pre>Target: coefficients=[-4.9 2.14 -3.38], bias=3.38
 5 dataset examples:
-	x=[0.0243 -0.0356 0.574]; label=[0.835]
-	x=[-0.766 1.83 -0.469]; label=[-4.99]
-	x=[0.208 0.601 0.0742]; label=[1.19]
-	x=[-0.496 -0.448 1.67]; label=[-0.827]
-	x=[-0.0583 1.42 -2.74]; label=[1.31]
+	x=[-0.469 1.95 0.487]; label=[8.14]
+	x=[1.28 -1.77 2.32]; label=[-14.7]
+	x=[0.699 0.364 0.941]; label=[-2.51]
+	x=[0.199 -0.701 -0.158]; label=[1.52]
+	x=[1.58 -0.313 0.524]; label=[-6.46]
 </pre>
 </div>
 </div>
@@ -9208,12 +9290,12 @@ or plotting of a graph.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[-3.38 -0.601 -2.71], bias=-5.62
+<pre>Target: coefficients=[5.83 3.14 -4.88], bias=-4
 Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 
-      <span class="ansi-bold"> 100% [========================================] (14472 steps/s)</span> [step=99] [loss=0.0858] [~loss=2.88]                
+      <span class="ansi-bold"> 100% [========================================] (11491 steps/s)</span> [step=99] [loss=0.145] [~loss=3.85]                
 
-Learned: coefficients=[[-3.29] [-0.573] [-2.65]], bias=[-5.5]
+Learned: coefficients=[[5.72] [3.07] [-4.76]], bias=[-3.92]
 </pre>
 </div>
 </div>
@@ -9281,7 +9363,7 @@ the only metrics are the default ones, the batch and mean of the loss -- the mea
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[9.08 1.19 3.78], bias=3.95
+<pre>Target: coefficients=[-1.57 3.63 -5.28], bias=-9.1
 Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 
 </pre>
@@ -9295,7 +9377,7 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold">   3% [&gt;.......................................] (13171 steps/s) [0s:0s]</span> [step=164] [loss=0.144] [~loss=4]           </pre>
+<pre>      <span class="ansi-bold">   3% [&gt;.......................................] (16088 steps/s) [0s:0s]</span> [step=164] [loss=0.0899] [~loss=3.94]        </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -9306,7 +9388,7 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold"> 100% [========================================] (16424 steps/s)</span> [step=4999] [loss=0.137] [~loss=0.137]                
+<pre>      <span class="ansi-bold"> 100% [========================================] (16882 steps/s)</span> [step=4999] [loss=0.0829] [~loss=0.0829]                
 </pre>
 </div>
 </div>
@@ -9319,7 +9401,14 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="6243572e"></div>
+<div id="a90baab5"></div>
+</div>
+</div>
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>
+</pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -9333,8 +9422,8 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[0.8584598033315238,0.19231306361855363,0.14392702642396132,0.1383839126684369,0.13758952796025684,0.1374629099515606,0.13744117900608693,0.1374373224808607,0.13743663287581606,0.13743651077732805,0.1374364896301525,0.13743648607799752,0.13743648550287274,0.13743648541334486,0.1374364854001607,0.1374364853983215,0.13743648539808082,0.13743648539805145,0.13743648539804815,0.13743648539804781,0.13743648539804776,0.1374364853980478,0.13743648539804776,0.13743648539804776,0.13743648539804776,0.13743648539804776]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[14.415163503795249,7.114306612321002,3.9255380034407032,2.0705344152065255,1.056513508033311,0.5446664671039109,0.30392671367087654,0.19961583227737198,0.15843805444419193,0.14378749302984448,0.13913885914536145,0.1378369131899176,0.13751831038832268,0.13745072214284973,0.13743857341357654,0.13743673840096804,0.13743651022118555,0.13743648733089633,0.13743648551511106,0.13743648540339942,0.13743648539822761,0.13743648539805273,0.1374364853980499,0.1374364853980499,0.1374364853980499,0.1374364853980499]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('6243572e', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[0.807434776261667,0.1384779969601645,0.08951576884842241,0.08385936269829734,0.08304128060343341,0.08290957408408801,0.08288672334966113,0.08288262006070156,0.08288187688355395,0.08288174345986957,0.08288172000086542,0.08288171599577424,0.08288171533584825,0.08288171523116429,0.08288171521543215,0.08288171521318918,0.08288171521288873,0.08288171521285116,0.08288171521284682,0.08288171521284635,0.0828817152128463,0.08288171521284629,0.08288171521284629,0.0828817152128463,0.0828817152128463,0.0828817152128463]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[14.3371121255663,7.049376524848916,3.865509615262691,2.013220003379248,1.000654180545896,0.48953537089032517,0.24913671256157094,0.14497329912207604,0.10385366134327172,0.0892237688994851,0.08458168973555531,0.08328157883300809,0.08296342494895427,0.08289593190992436,0.08288380028897159,0.08288196785973394,0.08288174000107075,0.08288171714297876,0.08288171532974521,0.08288171521818925,0.08288171521302458,0.08288171521285002,0.08288171521284643,0.08288171521284643,0.08288171521284643,0.08288171521284643]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('a90baab5', data);
 
 	}
 	
@@ -9375,8 +9464,7 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>
-Learned: coefficients=[[9.07] [1.18] [3.78]], bias=[3.95]
+<pre>Learned: coefficients=[[-1.56] [3.62] [-5.27]], bias=[-9.1]
 </pre>
 </div>
 </div>
