@@ -394,8 +394,41 @@ func (s *Store) SetParams(keyValues map[string]any) {
 	}
 }
 
+// storeLink is a key used to store a pointer to a graphStore in a graph's state.
+// This allows the graphStore to be retrieved from the graph.
+type storeLink struct{}
+
+// GetStore returns the current model.Store associated with the graph (if any, otherwise nil).
+//
+// The [model.Exec] executor will automatically set it for you.
+// Alternatively, it can be set using [SetGraphStore].
+func GetStore(g graph.GraphProvider) *Store {
+	if g == nil {
+		return nil
+	}
+	gr := g.Graph()
+	if gr == nil {
+		return nil
+	}
+	state := gr.State(storeLink{})
+	if state == nil {
+		return nil
+	}
+	return state.(*Store)
+}
+
+// SetStore associated with a graph.
+// One doesn't need to do this usually, as it is taken care by the [model.Exec] executor.
+// But if you are building the graph "manually", you can use this.
+func SetStore(g graph.GraphProvider, store *Store) {
+	g.Graph().AttachState(storeLink{}, store)
+}
+
+// graphState holds the state associate with this specific graph, in the form a `graphStore`.
 type graphState struct{}
 
+// graphStore is the [Store] information associated specifically to this graph (and that gets
+// automatically destroyed when the graph is destroyed).
 type graphStore struct {
 	mu        sync.RWMutex
 	params    *scoped.Params
@@ -437,24 +470,6 @@ func (gs *graphStore) IterVariables() iter.Seq2[string, *variableNodes] {
 	}
 }
 
-type graphStoreLink struct{}
-
-// GetStore returns the current model.Store associated with the graph (if any, otherwise nil).
-func GetStore(g graph.GraphProvider) *Store {
-	if g == nil {
-		return nil
-	}
-	gr := g.Graph()
-	if gr == nil {
-		return nil
-	}
-	state := gr.State(graphStoreLink{})
-	if state == nil {
-		return nil
-	}
-	return state.(*Store)
-}
-
 func newGraphStore() *graphStore {
 	return &graphStore{
 		params:    scoped.New(ScopeSeparator),
@@ -481,8 +496,8 @@ func setGraphStore(g *Graph, gs *graphStore) {
 
 // GetGraphParam returns the value for the given param key for the given graph,
 // searching successively from the current scope back to the root scope ("/").
-func GetGraphParam(g *Graph, fullPath string) (value any, found bool) {
-	gs := getGraphStore(g)
+func GetGraphParam(g graph.GraphProvider, fullPath string) (value any, found bool) {
+	gs := getGraphStore(g.Graph())
 	if gs == nil {
 		return
 	}

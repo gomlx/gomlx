@@ -100,7 +100,7 @@ func (e *Exec) buildGraphFn() graph.CanonicalExecGraphFn {
 		g.AttachState(graphState{}, newGraphStore())
 
 		// Attach a link to the model.Store used by model.Exec.
-		g.AttachState(graphStoreLink{}, e.store)
+		g.AttachState(storeLink{}, e.store)
 
 		// Call modelGraphFn, the results will be a slice of *Node.
 		modelGraphFnResults := e.modelGraphFn(e.store.RootScope(), g, inputs)
