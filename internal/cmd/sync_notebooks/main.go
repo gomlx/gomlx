@@ -21,6 +21,7 @@ var notebooks = map[string]string{
 	"examples/cifar/cifar.ipynb":           "docs/notebooks/cifar.html",
 	"examples/mnist/mnist.ipynb":           "docs/notebooks/mnist.html",
 	"examples/dogsvscats/dogsvscats.ipynb": "docs/notebooks/dogsvscats.html",
+	"examples/spiral/Spiral.ipynb":         "docs/notebooks/Spiral.html",
 	// "examples/oxfordflowers102/OxfordFlowers102_Diffusion.ipynb": "docs/notebooks/OxfordFlowers102_Diffusion.html",
 	// "examples/imdb/imdb.ipynb":                                   "docs/notebooks/imdb.html",
 	// "examples/ogbnmag/ogbn-mag.ipynb":                            "docs/notebooks/ogbn-mag.html",
@@ -28,7 +29,6 @@ var notebooks = map[string]string{
 	// "examples/discretekan/kans_shapes.ipynb":                     "docs/notebooks/kans_shapes.html",
 	// "examples/discretekan/discrete-kan.ipynb":                   "docs/notebooks/discrete-kan.html",
 	// "examples/FlowMatching/flow_matching.ipynb":                  "docs/notebooks/flow_matching.html",
-	// "examples/spiral/Spiral.ipynb":                               "docs/notebooks/Spiral.html",
 	// "ml/layers/rational/rational.ipynb":                          "docs/notebooks/rational.html",
 }
 
