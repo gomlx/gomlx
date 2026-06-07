@@ -8174,7 +8174,7 @@ JIT-compiled code later on.</li>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
-<pre>2026/06/07 14:38:56 Fatal error: cannot broadcast Float64 and Int64 for "Add": they have different dtypes
+<pre>2026/06/07 14:58:21 Fatal error: cannot broadcast Float64 and Int64 for "Add": they have different dtypes
 github.com/gomlx/go-xla/compute/xla.(*Builder).broadcastForBinaryOps
 	/home/janpf/Projects/gomlx/go-xla/compute/xla/builder.go:317
 github.com/gomlx/go-xla/compute/xla.(*Function).Add
@@ -8182,7 +8182,7 @@ github.com/gomlx/go-xla/compute/xla.(*Function).Add
 github.com/gomlx/gomlx/core/graph.Add
 	/home/janpf/Projects/gomlx/gomlx/core/graph/gen_compute_ops.go:212
 main.Sum
-	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [3] Line 11 ]]</span> /tmp/gonb_2b3f2b41/main.go:20
+	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [3] Line 11 ]]</span> /tmp/gonb_70e3afe7/main.go:20
 github.com/gomlx/gomlx/core/graph.convertExecFn[...].func5
 	/home/janpf/Projects/gomlx/gomlx/core/graph/gen_constraints.go:84
 github.com/gomlx/gomlx/core/graph.(*Exec).buildAndCompileGraph.func1
@@ -8204,7 +8204,7 @@ github.com/gomlx/gomlx/core/graph.(*Exec).CallWithGraph
 github.com/gomlx/gomlx/core/graph.(*Exec).Call
 	/home/janpf/Projects/gomlx/gomlx/core/graph/execaliases.go:38
 main.main
-	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [4] Line 3 ]]</span> /tmp/gonb_2b3f2b41/main.go:35
+	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [4] Line 3 ]]</span> /tmp/gonb_70e3afe7/main.go:35
 runtime.main
 	/home/janpf/sdk/go1.26.3/src/runtime/proc.go:290
 runtime.goexit
@@ -8274,14 +8274,14 @@ exit status 1
 }
 </style>
 <div class="jp-RenderedText" data-mime-type="application/vnd.jupyter.stderr" style="font-family: monospace;">
-<div style="white-space: pre-wrap;"> <span class="gonb-err-hover-area"><span class="gonb-cell-line-info">Cell[3]: Line 11</span> <span class="gonb-err-location">/tmp/gonb_2b3f2b41/main.go:20</span></span><div class="gonb-err-context">func Sum(a, b *Node) *Node {
+<div style="white-space: pre-wrap;"> <span class="gonb-err-hover-area"><span class="gonb-cell-line-info">Cell[3]: Line 11</span> <span class="gonb-err-location">/tmp/gonb_70e3afe7/main.go:20</span></span><div class="gonb-err-context">func Sum(a, b *Node) *Node {
     g := a.Graph()  // Graph on which this symbolic computation is being built.
     fmt.Printf("\n- Building graph (GraphId=%d) for a.shape=%s and b.shape=%s\n", g.GraphId(), a.Shape(), b.Shape())
 <div class="gonb-err-line">    return Add(a, b)
 </div>}
 
 </div></div>
-<div style="white-space: pre-wrap;"> <span class="gonb-err-hover-area"><span class="gonb-cell-line-info">Cell[4]: Line 3</span> <span class="gonb-err-location">/tmp/gonb_2b3f2b41/main.go:35</span></span><div class="gonb-err-context">func main() {
+<div style="white-space: pre-wrap;"> <span class="gonb-err-hover-area"><span class="gonb-cell-line-info">Cell[4]: Line 3</span> <span class="gonb-err-location">/tmp/gonb_70e3afe7/main.go:35</span></span><div class="gonb-err-context">func main() {
 	flag.Parse()
 sumExec := MustNewExec(backend, Sum)
 <div class="gonb-err-line">_ = must(sumExec.Call(1.1, 2)) // Error: arguments have different dtypes Float64 and Int64.
@@ -8957,7 +8957,7 @@ have been selected in Go directly using <code>math/random</code>, but just for f
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Example of target: coefficients=[1.49 2.56 1.5], bias=4.35
+<pre>Example of target: coefficients=[-4.5 0.954 -0.569], bias=15.7
 </pre>
 </div>
 </div>
@@ -9046,13 +9046,13 @@ selected coefficients plus some normal noise.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[-4.9 2.14 -3.38], bias=3.38
+<pre>Target: coefficients=[-5.03 4.62 -3.89], bias=-16.1
 5 dataset examples:
-	x=[-0.469 1.95 0.487]; label=[8.14]
-	x=[1.28 -1.77 2.32]; label=[-14.7]
-	x=[0.699 0.364 0.941]; label=[-2.51]
-	x=[0.199 -0.701 -0.158]; label=[1.52]
-	x=[1.58 -0.313 0.524]; label=[-6.46]
+	x=[-0.301 0.207 -0.911]; label=[-10.2]
+	x=[-0.417 -0.563 0.052]; label=[-16.9]
+	x=[-2.11 -0.265 -0.792]; label=[-3.64]
+	x=[-0.439 -1.58 0.0704]; label=[-21.4]
+	x=[-0.0472 -0.514 1.13]; label=[-22.3]
 </pre>
 </div>
 </div>
@@ -9149,13 +9149,15 @@ the data dynamically -- it could also have been used for this example.
 See example in <a href="https://github.com/gomlx/gomlx/blob/main/examples/discretekan/kans_shapes.ipynb">KANs Shapes demo</a>.</li>
 <li>Downloading of datasets (with progress-bar) and checksum functions.</li>
 </ul>
-<h3 id="ModelFn">ModelFn<a class="anchor-link" href="#ModelFn">¶</a></h3><p>Next we build a model, that for our <code>train</code> package means implementing a function with the following signature:</p>
-<div class="highlight"><pre><span></span><span class="kd">type</span><span class="w"> </span><span class="nx">ModelFn</span><span class="w"> </span><span class="kd">func</span><span class="p">(</span><span class="nx">scope</span><span class="w"> </span><span class="o">*</span><span class="nx">model</span><span class="p">.</span><span class="nx">Scope</span><span class="p">,</span><span class="w"> </span><span class="nx">spec</span><span class="w"> </span><span class="kt">any</span><span class="p">,</span><span class="w"> </span><span class="nx">inputs</span><span class="w"> </span><span class="p">[]</span><span class="o">*</span><span class="nx">graph</span><span class="p">.</span><span class="nx">Node</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="nx">predictions</span><span class="w"> </span><span class="p">[]</span><span class="o">*</span><span class="nx">graph</span><span class="p">.</span><span class="nx">Node</span><span class="p">)</span>
-</pre></div>
-<p>It takes a <code>model.Store</code> for the variables and hyperparameters, the <code>spec</code>  and a slice of <code>inputs</code> —
-the last two are fed by <code>Dataset.Yield</code> above. It returns a slice of <code>predictions</code> — is most cases there
-is just one value in the slice (only one prediction). During training <code>predictions</code> fed to the loss function,
-and during inference they can be returned directly.</p>
+<h3 id="ModelFn">ModelFn<a class="anchor-link" href="#ModelFn">¶</a></h3><p>Next we write a <code>modelFn</code> to be used by our trainer.</p>
+<p>The <code>modelFn</code> should always take a <code>model.Scope</code> (from where to access the variables),
+optionally a <code>spec any</code> from the dataset (it is used for multi-task training), zero to three input nodes or
+a slice of nodes.</p>
+<p>It should output zero to three prediction nodes, or a slice of nodes. It uses generics
+to match any of the accepted signatures, so it won't compile if you pass an invalid <code>modelFn</code>.
+See <code>model.ModelFnCompatible</code> for details.</p>
+<p>During training the predictions returned are fed to the loss function, and during inference they can be
+used directly.</p>
 <p>Our linear example has the simplest model possible:</p>
 </div>
 </div>
@@ -9170,10 +9172,8 @@ and during inference they can be returned directly.</p>
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">"github.com/gomlx/gomlx/ml/model"</span>
 
-<span class="n">func</span> <span class="n">linearModel</span><span class="p">(</span><span class="n">scope</span> <span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">Scope</span><span class="p">,</span> <span class="n">spec</span> <span class="nb">any</span><span class="p">,</span> <span class="n">inputs</span> <span class="p">[]</span><span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">([]</span><span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
-    <span class="n">_</span> <span class="o">=</span> <span class="n">spec</span>  <span class="o">//</span> <span class="n">Not</span> <span class="n">needed</span> <span class="n">here</span><span class="p">,</span> <span class="n">we</span> <span class="n">know</span> <span class="n">the</span> <span class="n">dataset</span><span class="o">.</span>
-    <span class="n">logits</span> <span class="o">:=</span> <span class="n">layers</span><span class="o">.</span><span class="n">DenseWithBias</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">/*</span> <span class="n">outputDim</span><span class="o">=</span> <span class="o">*/</span> <span class="mi">1</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">[]</span><span class="o">*</span><span class="n">Node</span><span class="p">{</span><span class="n">logits</span><span class="p">}</span>
+<span class="n">func</span> <span class="n">linearModel</span><span class="p">(</span><span class="n">scope</span> <span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">Scope</span><span class="p">,</span> <span class="nb">input</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">(</span><span class="n">prediction</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">layers</span><span class="o">.</span><span class="n">DenseWithBias</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="nb">input</span><span class="p">,</span> <span class="o">/*</span> <span class="n">outputDim</span><span class="o">=</span> <span class="o">*/</span> <span class="mi">1</span><span class="p">)</span>
 <span class="p">}</span>
 </pre></div>
 </div>
@@ -9240,7 +9240,7 @@ or plotting of a graph.</p>
 <span class="p">}</span>
 
 <span class="o">//</span> <span class="n">TrainMain</span><span class="p">()</span> <span class="n">does</span> <span class="n">everything</span> <span class="n">to</span> <span class="n">train</span> <span class="n">the</span> <span class="n">linear</span> <span class="n">model</span><span class="o">.</span>
-<span class="n">func</span> <span class="n">TrainMain</span><span class="p">()</span> <span class="p">{</span>
+<span class="n">func</span> <span class="n">TrainMain</span><span class="p">()</span> <span class="n">error</span> <span class="p">{</span>
     <span class="n">flag</span><span class="o">.</span><span class="n">Parse</span><span class="p">()</span>
 
     <span class="o">//</span> <span class="n">Select</span> <span class="n">coefficients</span> <span class="n">that</span> <span class="n">we</span> <span class="n">will</span> <span class="k">try</span> <span class="n">to</span> <span class="n">predic</span><span class="o">.</span>
@@ -9258,7 +9258,8 @@ or plotting of a graph.</p>
     <span class="n">store</span><span class="o">.</span><span class="n">SetParam</span><span class="p">(</span><span class="n">regularizer</span><span class="o">.</span><span class="n">ParamL2</span><span class="p">,</span> <span class="mf">1e-3</span><span class="p">)</span>  <span class="o">//</span> <span class="mf">1e-3</span> <span class="n">of</span> <span class="n">L2</span> <span class="n">regularization</span><span class="o">.</span>
 
     <span class="o">//</span> <span class="n">train</span><span class="o">.</span><span class="n">Trainer</span> <span class="n">executes</span> <span class="n">a</span> <span class="n">training</span> <span class="n">step</span><span class="o">.</span>
-    <span class="n">trainer</span> <span class="o">:=</span> <span class="n">train</span><span class="o">.</span><span class="n">NewTrainer</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">linearModel</span><span class="p">,</span>
+    <span class="n">trainer</span> <span class="o">:=</span> <span class="n">train</span><span class="o">.</span><span class="n">NewTrainer</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> 
+        <span class="n">linearModel</span><span class="p">,</span>
         <span class="n">loss</span><span class="o">.</span><span class="n">MeanSquaredError</span><span class="p">,</span>
         <span class="n">optimizer</span><span class="o">.</span><span class="n">StochasticGradientDescent</span><span class="p">(),</span>
         <span class="n">nil</span><span class="p">,</span> <span class="n">nil</span><span class="p">)</span> <span class="o">//</span> <span class="n">trainMetrics</span><span class="p">,</span> <span class="n">evalMetrics</span>
@@ -9266,7 +9267,8 @@ or plotting of a graph.</p>
     <span class="n">AttachToLoop</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span>
 
     <span class="o">//</span> <span class="n">Loop</span> <span class="k">for</span> <span class="n">given</span> <span class="n">number</span> <span class="n">of</span> <span class="n">steps</span><span class="o">.</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">()</span> <span class="n">panics</span><span class="p">,</span> <span class="k">if</span> <span class="n">loop</span><span class="o">.</span><span class="n">RunSteps</span> <span class="n">returns</span> <span class="n">an</span> <span class="n">error</span><span class="o">.</span>
-    <span class="n">metrics</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">loop</span><span class="o">.</span><span class="n">RunSteps</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNumSteps</span><span class="p">))</span>
+    <span class="n">metrics</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">loop</span><span class="o">.</span><span class="n">RunSteps</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNumSteps</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="k">return</span> <span class="n">err</span> <span class="p">}</span>
     <span class="n">_</span> <span class="o">=</span> <span class="n">metrics</span>  <span class="o">//</span> <span class="n">We</span> <span class="n">are</span> <span class="ow">not</span> <span class="n">interested</span> <span class="ow">in</span> <span class="n">them</span> <span class="ow">in</span> <span class="n">this</span> <span class="n">example</span><span class="o">.</span>
 
     <span class="o">//</span> <span class="n">Print</span> <span class="n">learned</span> <span class="n">coefficients</span> <span class="ow">and</span> <span class="n">bias</span> <span class="o">--</span> <span class="kn">from</span><span class="w"> </span><span class="nn">the</span> <span class="n">weights</span> <span class="ow">in</span> <span class="n">the</span> <span class="n">dense</span> <span class="n">layer</span><span class="o">.</span>
@@ -9274,10 +9276,12 @@ or plotting of a graph.</p>
     <span class="n">coefVar</span><span class="p">,</span> <span class="n">biasVar</span> <span class="o">:=</span> <span class="n">store</span><span class="o">.</span><span class="n">GetVariable</span><span class="p">(</span><span class="s2">"/dense/weights"</span><span class="p">),</span> <span class="n">store</span><span class="o">.</span><span class="n">GetVariable</span><span class="p">(</span><span class="s2">"/dense/biases"</span><span class="p">)</span>
     <span class="n">learnedCoef</span><span class="p">,</span> <span class="n">learnedBias</span> <span class="o">:=</span> <span class="n">must</span><span class="p">(</span><span class="n">coefVar</span><span class="o">.</span><span class="n">Value</span><span class="p">()),</span> <span class="n">must</span><span class="p">(</span><span class="n">biasVar</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Learned: coefficients=%0.3v, bias=%0.3v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">learnedCoef</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">learnedBias</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">nil</span>
 <span class="p">}</span>
 
 <span class="o">%%</span>
-<span class="n">TrainMain</span><span class="p">()</span>
+<span class="n">err</span> <span class="o">:=</span> <span class="n">TrainMain</span><span class="p">()</span>
+<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
 </pre></div>
 </div>
 </div>
@@ -9290,12 +9294,12 @@ or plotting of a graph.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[5.83 3.14 -4.88], bias=-4
+<pre>Target: coefficients=[7.99 -4.12 2.15], bias=13.1
 Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 
-      <span class="ansi-bold"> 100% [========================================] (11491 steps/s)</span> [step=99] [loss=0.145] [~loss=3.85]                
+      <span class="ansi-bold"> 100% [========================================] (9214 steps/s)</span> [step=99] [loss=0.246] [~loss=12.6]                
 
-Learned: coefficients=[[5.72] [3.07] [-4.76]], bias=[-3.92]
+Learned: coefficients=[[7.83] [-4.06] [2.1]], bias=[12.8]
 </pre>
 </div>
 </div>
@@ -9350,7 +9354,8 @@ the only metrics are the default ones, the batch and mean of the loss -- the mea
 <span class="p">}</span>
 
 <span class="o">%%</span> <span class="o">--</span><span class="n">steps</span><span class="o">=</span><span class="mi">5000</span>
-<span class="n">TrainMain</span><span class="p">()</span>
+<span class="n">err</span> <span class="o">:=</span> <span class="n">TrainMain</span><span class="p">()</span>
+<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
 </pre></div>
 </div>
 </div>
@@ -9363,7 +9368,7 @@ the only metrics are the default ones, the batch and mean of the loss -- the mea
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[-1.57 3.63 -5.28], bias=-9.1
+<pre>Target: coefficients=[-1.51 -5.9 -0.305], bias=-17.1
 Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 
 </pre>
@@ -9377,7 +9382,7 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold">   3% [&gt;.......................................] (16088 steps/s) [0s:0s]</span> [step=164] [loss=0.0899] [~loss=3.94]        </pre>
+<pre>      <span class="ansi-bold">   3% [&gt;.......................................] (18001 steps/s) [0s:0s]</span> [step=164] [loss=0.0931] [~loss=8.61]        </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -9388,7 +9393,7 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold"> 100% [========================================] (16882 steps/s)</span> [step=4999] [loss=0.0829] [~loss=0.0829]                
+<pre>      <span class="ansi-bold"> 100% [========================================] (16303 steps/s)</span> [step=4999] [loss=0.0774] [~loss=0.0774]                
 </pre>
 </div>
 </div>
@@ -9401,7 +9406,7 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="a90baab5"></div>
+<div id="31bca6ce"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -9422,8 +9427,8 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[0.807434776261667,0.1384779969601645,0.08951576884842241,0.08385936269829734,0.08304128060343341,0.08290957408408801,0.08288672334966113,0.08288262006070156,0.08288187688355395,0.08288174345986957,0.08288172000086542,0.08288171599577424,0.08288171533584825,0.08288171523116429,0.08288171521543215,0.08288171521318918,0.08288171521288873,0.08288171521285116,0.08288171521284682,0.08288171521284635,0.0828817152128463,0.08288171521284629,0.08288171521284629,0.0828817152128463,0.0828817152128463,0.0828817152128463]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[14.3371121255663,7.049376524848916,3.865509615262691,2.013220003379248,1.000654180545896,0.48953537089032517,0.24913671256157094,0.14497329912207604,0.10385366134327172,0.0892237688994851,0.08458168973555531,0.08328157883300809,0.08296342494895427,0.08289593190992436,0.08288380028897159,0.08288196785973394,0.08288174000107075,0.08288171714297876,0.08288171532974521,0.08288171521818925,0.08288171521302458,0.08288171521285002,0.08288171521284643,0.08288171521284643,0.08288171521284643,0.08288171521284643]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('a90baab5', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[1.6883405193789252,0.2009423784218363,0.0921027711352416,0.0795551170665795,0.07774627803943548,0.07745629406344699,0.07740623635259737,0.07739729991084954,0.07739569203985777,0.07739540549892349,0.07739535552639348,0.07739534707004965,0.07739534568996519,0.07739534547327807,0.07739534544106842,0.07739534543652903,0.07739534543592831,0.07739534543585419,0.07739534543584571,0.07739534543584481,0.07739534543584473,0.07739534543584471,0.07739534543584473,0.07739534543584471,0.0773953454358447,0.07739534543584471]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[31.60626892820731,15.487968312261918,8.445015521865166,4.347534126689076,2.107616182006638,0.9769605032891713,0.44517052205772123,0.21474901442242117,0.12378766914170096,0.09142468420664729,0.08115588026374511,0.07827988857991908,0.07757609650035753,0.0774267943526443,0.0773999578554841,0.07739590431864113,0.07739540027011299,0.07739534970550666,0.07739534569443743,0.07739534544766481,0.07739534543624033,0.0773953454358541,0.07739534543584538,0.07739534543584538,0.07739534543584538,0.07739534543584538]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('31bca6ce', data);
 
 	}
 	
@@ -9464,7 +9469,7 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Learned: coefficients=[[-1.56] [3.62] [-5.27]], bias=[-9.1]
+<pre>Learned: coefficients=[[-1.51] [-5.9] [-0.303]], bias=[-17.1]
 </pre>
 </div>
 </div>
