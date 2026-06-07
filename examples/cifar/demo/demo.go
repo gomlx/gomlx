@@ -135,7 +135,7 @@ func main() {
 			klog.Infof("Data downloaded in %s", *flagDataDir)
 		}
 		if *flagTrain {
-			cifar.TrainCifar10WithStore(store, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)
+			cifar.TrainCifar10(store, *flagDataDir, *flagCheckpoint, *flagEval, *flagVerbosity, paramsSet)
 		}
 		if !*flagDownload && !*flagTrain {
 			klog.Info("exit: usage -download and/or -train, optional -data")

@@ -44,8 +44,8 @@ var (
 // Backend is created once and reused if train is called multiple times.
 var Backend compute.Backend
 
-// TrainCifar10WithStore with hyperparameters given in store.
-func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
+// TrainCifar10 with hyperparameters given in store.
+func TrainCifar10(store *model.Store, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
 	scope := store.RootScope()
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
