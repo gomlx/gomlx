@@ -3,14 +3,13 @@
 package dataset
 
 import (
-	"slices"
+	"iter"
 	"sync"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/pkg/errors"
-	"k8s.io/klog/v2"
 )
 
 // onDeviceBatch represents a batch that has been uploaded to the target device.
@@ -18,48 +17,34 @@ type onDeviceBatch struct {
 	spec   any
 	inputs []*tensors.Tensor
 	labels []*tensors.Tensor
-	err    error // io.EOF or other error
+	err    error
 }
 
 // OnDevice is a wrapper around a train.Dataset that yields tensors already on the target device.
 //
-// It reads from the source dataset in parallel (if configured) and uploads the data to the target device,
-// keeping batches buffered in a channel so they're ready when Yield() is called.
-//
-// The dataset uses a single channel for synchronization and buffering. The background reader goroutine
-// reads from the source dataset and uploads tensors to the target device before placing them in the buffer.
-//
-// The order of the yields is not preserved for bufferSize > 1: the queuing process may yield results in slighly
-// different order.
+// It reads from the source dataset concurrently and uploads the data to the target device,
+// keeping batches buffered in a channel so they're ready when Iter() is called.
 type OnDevice struct {
 	backend compute.Backend
 
 	// Source dataset to read from
-	source                train.Dataset
-	sourceConcurrencySafe bool
-	sourceMu              sync.Mutex // Serializes source.Yield call, if sourceConcurrencySafe is false.
+	source train.Dataset
 
 	// Configuration
 	name, shortName string
 	targetDevice    compute.DeviceNum
 	bufferSize      int
-
-	// Channel for buffering batches that are already on device (size 1 by default)
-	nextBatch chan *onDeviceBatch
 }
 
 var _ train.Dataset = &OnDevice{}
 
-// NewOnDevice creates a new OnDeviceDataset that wraps the source dataset and uploads batches to the target device.
+// NewOnDevice creates a new OnDevice wrapper that wraps the source dataset and uploads batches to the target device.
 //
 // - backend: the backend to use for device operations
 // - source: the source dataset to read from.
-// - concurrent: whether the source dataset Yield method can be called in parallel.
 // - bufferSize: size of the buffer channel (defaults to 1 if <= 0)
-// - targetDevice: 0
-//
-// Use SetTargetDevice() and SetCanCallInParallel() to configure before first use.
-func NewOnDevice(backend compute.Backend, source train.Dataset, concurrent bool,
+// - targetDevice: the target device number
+func NewOnDevice(backend compute.Backend, source train.Dataset,
 	bufferSize int, targetDevice compute.DeviceNum) (*OnDevice, error) {
 	if backend == nil {
 		return nil, errors.New("backend cannot be nil")
@@ -72,13 +57,11 @@ func NewOnDevice(backend compute.Backend, source train.Dataset, concurrent bool,
 	}
 
 	ds := &OnDevice{
-		backend:               backend,
-		source:                source,
-		sourceConcurrencySafe: concurrent,
-		name:                  source.Name(),
-		targetDevice:          targetDevice,
-		bufferSize:            bufferSize,
-		nextBatch:             make(chan *onDeviceBatch, bufferSize),
+		backend:      backend,
+		source:       source,
+		name:         source.Name(),
+		targetDevice: targetDevice,
+		bufferSize:   bufferSize,
 	}
 	if sn, ok := source.(train.HasShortName); ok {
 		ds.shortName = sn.ShortName()
@@ -86,8 +69,6 @@ func NewOnDevice(backend compute.Backend, source train.Dataset, concurrent bool,
 		ds.shortName = ds.name[:3]
 	}
 
-	// Start the bufferSize readers.
-	ds.startReader()
 	return ds, nil
 }
 
@@ -101,92 +82,106 @@ func (ds *OnDevice) ShortName() string {
 	return ds.shortName
 }
 
-// Reset implements train.Dataset.
-func (ds *OnDevice) Reset() {
-	// Drain the channel: this guarantees there are no more readers running.
-	for range ds.bufferSize {
-		batch := <-ds.nextBatch
-		if batch != nil {
-			// Finalize any tensors in the batch: we discard the results and errors.
-			for _, slice := range [][]*tensors.Tensor{batch.inputs, batch.labels} {
-				for _, t := range slice {
-					err := t.FinalizeAll()
-					if err != nil {
-						klog.Errorf("failed to finalize tensor in dataset %q, in Reset() method: %v", ds.name, err)
-					}
+// Iter implements train.Dataset.
+func (ds *OnDevice) Iter() iter.Seq2[train.Batch, error] {
+	return func(yield func(train.Batch, error) bool) {
+		nextBatch := make(chan *onDeviceBatch, ds.bufferSize)
+
+		// 1. Defer draining nextBatch (runs last of the defers).
+		// Since the worker is guaranteed to have finished and closed nextBatch before this runs,
+		// ranging over nextBatch is completely safe and won't block.
+		defer func() {
+			for b := range nextBatch {
+				if b.inputs != nil || b.labels != nil {
+					_ = train.Batch{Inputs: b.inputs, Labels: b.labels}.Finalize()
 				}
 			}
-		}
-	}
+		}()
 
-	// Reset the source dataset and start new readers to populate the buffer channel.
-	ds.source.Reset()
-	ds.startReader()
-}
+		var wg sync.WaitGroup
+		// 2. Defer wg.Wait() (runs after close(stopChan) and stop()).
+		defer wg.Wait()
 
-// Yield implements train.Dataset.
-func (ds *OnDevice) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	// Read the next prepared batch from channel, and prepare the next reader to prepare the next batch in parallel.
-	batch := <-ds.nextBatch
-	go ds.reader() // Start next reader to repopulate the batch we are consuming.
-	if batch.err != nil {
-		return nil, nil, nil, batch.err
-	}
-	return batch.spec, batch.inputs, batch.labels, nil
-}
+		stopChan := make(chan struct{})
+		// 3. Defer close(stopChan) (runs after stop()).
+		defer close(stopChan)
 
-// startReader starts a background reader goroutines to fill the buffer channel.
-func (ds *OnDevice) startReader() {
-	for range ds.bufferSize {
-		go ds.reader()
-	}
-}
+		next, stop := iter.Pull2(ds.source.Iter())
+		// 4. Defer stop() (runs first).
+		defer stop()
 
-// reader reads the source, transfers the tensors to the target device an enqueue it in the buffered channel.
-//
-// It is meant to be called on its own goroutine.
-func (ds *OnDevice) reader() {
-	// Read from source dataset
-	spec, inputs, labels, err := ds.safeYield()
-	if err != nil {
-		// Send error batch
-		ds.nextBatch <- &onDeviceBatch{err: err}
-		return
-	}
+		// Start worker.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer close(nextBatch)
 
-	// Upload inputs and labels to target device
-	for _, slice := range [][]*tensors.Tensor{inputs, labels} {
-		for _, t := range slice {
-			err := t.MaterializeOnDevice(ds.backend, true, ds.targetDevice)
-			if err != nil {
-				ds.nextBatch <- &onDeviceBatch{
-					err: errors.WithMessagef(err, "dataset %q failed to upload tensor to device %d",
-						ds.name, ds.targetDevice)}
+			for {
+				select {
+				case <-stopChan:
+					return
+				default:
+				}
+
+				batch, err, ok := next()
+				if !ok {
+					return
+				}
+				if err != nil {
+					_ = batch.Finalize()
+					select {
+					case nextBatch <- &onDeviceBatch{err: err}:
+					case <-stopChan:
+					}
+					return
+				}
+
+				// Upload inputs and labels to target device
+				for _, slice := range [][]*tensors.Tensor{batch.Inputs, batch.Labels} {
+					for _, t := range slice {
+						err := t.MaterializeOnDevice(ds.backend, true, ds.targetDevice)
+						if err != nil {
+							_ = batch.Finalize()
+							select {
+							case nextBatch <- &onDeviceBatch{
+								err: errors.WithMessagef(err, "dataset %q failed to upload tensor to device %d",
+									ds.name, ds.targetDevice),
+							}:
+							case <-stopChan:
+							}
+							return
+						}
+						t.FinalizeLocal()
+					}
+				}
+
+				select {
+				case nextBatch <- &onDeviceBatch{
+					spec:   batch.Spec,
+					inputs: batch.Inputs,
+					labels: batch.Labels,
+				}:
+				case <-stopChan:
+					_ = batch.Finalize()
+					return
+				}
+			}
+		}()
+
+		// Read batches converted concurrently.
+		for b := range nextBatch {
+			if b.err != nil {
+				yield(train.Batch{}, b.err)
 				return
 			}
-			t.FinalizeLocal()
+			batch := train.Batch{
+				Spec:   b.spec,
+				Inputs: b.inputs,
+				Labels: b.labels,
+			}
+			if !yield(batch, nil) {
+				return
+			}
 		}
 	}
-
-	// Send ready batch to channel (blocking if channel is full)
-	ds.nextBatch <- &onDeviceBatch{
-		spec:   spec,
-		inputs: inputs,
-		labels: labels,
-	}
-}
-
-// safeYield handles the serialization of calls to source.Yield, if required.
-func (ds *OnDevice) safeYield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	if !ds.sourceConcurrencySafe {
-		ds.sourceMu.Lock()
-		defer ds.sourceMu.Unlock()
-	}
-	spec, inputs, labels, err = ds.source.Yield()
-	if err != nil {
-		return
-	}
-	inputs = slices.Clone(inputs)
-	labels = slices.Clone(labels)
-	return
 }

@@ -213,7 +213,6 @@ func MakeDatasets(dataDir string) (trainDS, trainEvalDS, validEvalDS, testEvalDS
 	perDatasetFn := func(ds train.Dataset) train.Dataset {
 		ds = mldata.Map(ds, ExtractLabelsFromInput)
 		ds = mldata.Parallel(ds)
-		ds = mldata.Freeing(ds)
 		return ds
 	}
 

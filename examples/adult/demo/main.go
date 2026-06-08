@@ -257,7 +257,7 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 		// Distributed datasets already prefetch on device, so we don't need to do it here.
 		if !*flagDistributed {
 			var err error
-			trainDS, err = dataset.NewOnDevice(backend, trainDS, false, *flagPrefetchOnDevice, compute.DeviceNum(0))
+			trainDS, err = dataset.NewOnDevice(backend, trainDS, *flagPrefetchOnDevice, compute.DeviceNum(0))
 			if err != nil {
 				return err
 			}
