@@ -3,7 +3,6 @@
 package train
 
 import (
-	"io"
 	"iter"
 	"math"
 	"slices"
@@ -87,10 +86,6 @@ type Loop struct {
 	onStart *priorityHooks[*hookWithName[OnStartFn]]
 	onStep  *priorityHooks[*hookWithName[OnStepFn]]
 	onEnd   *priorityHooks[*hookWithName[OnEndFn]]
-
-	// finalizeYieldedTrainTensors indicates whether the training datasets yielded tensors should be finalized.
-	// True by default.
-	finalizeYieldedTrainTensors bool
 }
 
 // NewLoop creates a new training loop trainer.
@@ -150,30 +145,16 @@ func (loop *Loop) start(ds Dataset) error {
 
 // step of loop, called by all looping methods.
 // It calls the appropriate hooks.
-func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor, err error) {
+func (loop *Loop) step(batch Batch) (metrics []*tensors.Tensor, err error) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
 		loop.TrainStepDurations = append(loop.TrainStepDurations, elapsed)
 	}()
 
-	metrics, err = loop.Trainer.TrainStep(spec, inputs, labels)
+	metrics, err = loop.Trainer.TrainStep(batch)
 	if err != nil {
 		return nil, err
-	}
-
-	// Free inputs and labels:
-	if loop.finalizeYieldedTrainTensors {
-		for sliceIdx, slice := range [][]*tensors.Tensor{inputs, labels} {
-			for i, t := range slice {
-				err := t.FinalizeAll()
-				if err != nil {
-					return nil, errors.WithMessagef(
-						err, "finalizing tensor #%d of %s after use in a distributed train step",
-						i, yieldInputTypeNames[sliceIdx])
-				}
-			}
-		}
 	}
 
 	err = loop.postStep(metrics)
@@ -188,30 +169,16 @@ func (loop *Loop) step(spec any, inputs, labels []*tensors.Tensor) (metrics []*t
 // It calls the appropriate hooks.
 func (loop *Loop) distributedStep(
 	strategy distributed.Strategy, deviceAssignment []compute.DeviceNum,
-	spec any, inputs, labels []*dtensor.Tensor) (metrics []*tensors.Tensor, err error) {
+	batch DistributedBatch) (metrics []*tensors.Tensor, err error) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
 		loop.TrainStepDurations = append(loop.TrainStepDurations, elapsed)
 	}()
 
-	metrics, err = loop.Trainer.DistributedTrainStep(strategy, deviceAssignment, spec, inputs, labels)
+	metrics, err = loop.Trainer.DistributedTrainStep(strategy, deviceAssignment, batch)
 	if err != nil {
 		return nil, err
-	}
-
-	// Free inputs and labels:
-	if loop.finalizeYieldedTrainTensors {
-		for sliceIdx, slice := range [][]*dtensor.Tensor{inputs, labels} {
-			for i, dt := range slice {
-				err := dt.Finalize()
-				if err != nil {
-					return nil, errors.WithMessagef(
-						err, "finalizing tensor #%d of %s after use in a distributed train step",
-						i, yieldInputTypeNames[sliceIdx])
-				}
-			}
-		}
 	}
 
 	err = loop.postStep(metrics)
@@ -277,16 +244,6 @@ func (loop *Loop) end(metrics []*tensors.Tensor) error {
 		}
 	}
 	return nil
-}
-
-// finalizeYieldedTensors checks whether for this datasets the yielded tensors should be finalized.
-func finalizeYieldedTensors(ds Dataset) bool {
-	dsOwnership, ok := ds.(DatasetCustomOwnership)
-	if !ok {
-		// Default is true, if not otherwise configured.
-		return true
-	}
-	return dsOwnership.IsOwnershipTransferred()
 }
 
 var yieldInputTypeNames = []string{"inputs", "labels"}
@@ -371,7 +328,6 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, er
 	if err = loop.Trainer.ResetTrainMetrics(); err != nil {
 		return
 	}
-	loop.finalizeYieldedTrainTensors = finalizeYieldedTensors(ds)
 	loop.StartStep = loop.LoopStep
 	loop.setLastStep(loop.LoopStep + steps)
 	err = loop.start(ds)
@@ -400,20 +356,22 @@ func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, er
 func (loop *Loop) runStepsSingleDevice(ds Dataset, steps int) (metrics []*tensors.Tensor, err error) {
 	loop.TrainStepDurations = make([]time.Duration, 0, steps)
 	metricsInterfaces := loop.Trainer.Metrics()
+	next, stop := iter.Pull2(ds.Iter())
+	defer stop()
 	for loop.LoopStep = loop.StartStep; loop.LoopStep < loop.EndStep; loop.LoopStep++ {
-		spec, inputs, labels, err := ds.Yield()
+		batch, err, ok := next()
+		if !ok {
+			return nil, errors.Errorf(
+				"reached Dataset end after %d steps (requested %d steps) -- did you mean to use "+
+					"a different (looping) Dataset, or use Loop.RunEpochs() instead of Loop.RunSteps() ?",
+				loop.LoopStep-loop.StartStep, steps)
+		}
 		if err != nil {
-			if err == io.EOF {
-				return nil, errors.Errorf(
-					"reached Dataset end after %d steps (requested %d steps) -- did you mean to use "+
-						"a different (looping) Dataset, or use Loop.RunEpochs() instead of Loop.RunSteps() ?",
-					loop.LoopStep-loop.StartStep, steps)
-			}
 			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed reading from Dataset", steps)
 		}
 
 		// Check inputs and labels are valid.
-		err = checkYield(inputs, labels)
+		err = checkYield(batch.Inputs, batch.Labels)
 		if err != nil {
 			return nil, err
 		}
@@ -424,7 +382,7 @@ func (loop *Loop) runStepsSingleDevice(ds Dataset, steps int) (metrics []*tensor
 		}
 
 		// Execute the step.
-		metrics, err = loop.step(spec, inputs, labels)
+		metrics, err = loop.step(batch)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed TrainStep(LoopStep=%d)",
 				steps, loop.LoopStep)
@@ -438,20 +396,22 @@ func (loop *Loop) runStepsDistributed(ds DistributedDataset, steps int) (metrics
 	metricsInterfaces := loop.Trainer.Metrics()
 	strategy := ds.Strategy()
 	deviceAssignment := ds.DeviceAssignment()
+	next, stop := iter.Pull2(ds.DistributedIter())
+	defer stop()
 	for loop.LoopStep = loop.StartStep; loop.LoopStep < loop.EndStep; loop.LoopStep++ {
-		spec, inputs, labels, err := ds.DistributedYield()
+		batch, err, ok := next()
+		if !ok {
+			return nil, errors.Errorf(
+				"reached Dataset end after %d steps (requested %d steps) -- did you mean to use "+
+					"a different (looping) Dataset, or use Loop.RunEpochs() instead of Loop.RunSteps() ?",
+				loop.LoopStep-loop.StartStep, steps)
+		}
 		if err != nil {
-			if err == io.EOF {
-				return nil, errors.Errorf(
-					"reached Dataset end after %d steps (requested %d steps) -- did you mean to use "+
-						"a different (looping) Dataset, or use Loop.RunEpochs() instead of Loop.RunSteps() ?",
-					loop.LoopStep-loop.StartStep, steps)
-			}
 			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed reading from Dataset", steps)
 		}
 
 		// Check inputs and labels are valid.
-		err = checkDistributedYield(inputs, labels)
+		err = checkDistributedYield(batch.Inputs, batch.Labels)
 		if err != nil {
 			return nil, err
 		}
@@ -462,7 +422,7 @@ func (loop *Loop) runStepsDistributed(ds DistributedDataset, steps int) (metrics
 		}
 
 		// Execute the step.
-		metrics, err = loop.distributedStep(strategy, deviceAssignment, spec, inputs, labels)
+		metrics, err = loop.distributedStep(strategy, deviceAssignment, batch)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "Loop.RunSteps(%d): failed TrainStep(LoopStep=%d)",
 				steps, loop.LoopStep)
@@ -478,11 +438,10 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, 
 	if err = loop.Trainer.ResetTrainMetrics(); err != nil {
 		return
 	}
-	loop.finalizeYieldedTrainTensors = finalizeYieldedTensors(ds)
 	loop.StartStep = loop.LoopStep
 	loop.setLastStep(-1)
 	loop.Epoch = 0
-
+ 
 	err = loop.start(ds)
 	if err != nil {
 		return nil, err
@@ -492,14 +451,8 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, 
 	for loop.Epoch = 0; loop.Epoch < epochs; loop.Epoch++ {
 		yieldsPerEpoch := 0
 		// Loop over one epoch:
-		for {
-			spec, inputs, labels, err := ds.Yield()
+		for batch, err := range ds.Iter() {
 			if err != nil {
-				if err == io.EOF {
-					// End of epoch: estimate new last step (loop.EndStep) and reset.
-					loop.setLastStep(loop.LoopStep + yieldsPerEpoch*(epochs-loop.Epoch-1))
-					break
-				}
 				return nil, errors.WithMessagef(
 					err,
 					"Loop.RunEpochs(epoch %d of %d): failed reading from Dataset",
@@ -509,7 +462,7 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, 
 			}
 
 			// Check inputs and labels are valid.
-			err = checkYield(inputs, labels)
+			err = checkYield(batch.Inputs, batch.Labels)
 			if err != nil {
 				return nil, err
 			}
@@ -520,7 +473,7 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, 
 			for _, metric := range metrics {
 				metric.MustFinalizeAll()
 			}
-			metrics, err = loop.step(spec, inputs, labels)
+			metrics, err = loop.step(batch)
 			if err != nil {
 				return nil, errors.WithMessagef(
 					err,
@@ -531,7 +484,8 @@ func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, 
 			}
 			loop.LoopStep++
 		}
-		ds.Reset()
+		// End of epoch: estimate new last step (loop.EndStep).
+		loop.setLastStep(loop.LoopStep + yieldsPerEpoch*(epochs-loop.Epoch-1))
 	}
 	err = loop.end(metrics)
 	if err != nil {
