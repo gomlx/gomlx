@@ -47,5 +47,5 @@ func TestDemo(t *testing.T) {
 	store := createModelStore()
 	store.SetParam("train_steps", 10) // Only 10 steps.
 	paramsSet := check1(commandline.ParseSettings(store, *flagSettings))
-	cifar.TrainCifar10WithStore(store, *flagDataDir, "", true, 1, paramsSet)
+	cifar.TrainCifar10(store, *flagDataDir, "", true, 1, paramsSet)
 }

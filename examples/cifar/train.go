@@ -10,6 +10,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
@@ -43,8 +44,8 @@ var (
 // Backend is created once and reused if train is called multiple times.
 var Backend compute.Backend
 
-// TrainCifar10WithStore with hyperparameters given in store.
-func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
+// TrainCifar10 with hyperparameters given in store.
+func TrainCifar10(store *model.Store, dataDir, checkpointPath string, evaluateOnEnd bool, verbosity int, paramsSet []string) {
 	scope := store.RootScope()
 	// Data directory: datasets and top-level directory holding checkpoints for different models.
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
@@ -168,7 +169,7 @@ func TrainCifar10WithStore(store *model.Store, dataDir, checkpointPath string, e
 }
 
 // SelectModelFn based on hyperparameter "model" in Scope.
-func SelectModelFn(scope *model.Scope) (modelFn train.ModelFn, err error) {
+func SelectModelFn(scope *model.Scope) (modelFn func(*model.Scope, *graph.Node) *graph.Node, err error) {
 	modelFn = C10PlainModelGraph // Handles all models except CNN.
 	modelType := model.GetParamOr(scope, "model", C10ValidModels[0])
 	if slices.Index(C10ValidModels, modelType) == -1 {

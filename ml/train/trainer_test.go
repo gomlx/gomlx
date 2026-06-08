@@ -116,3 +116,83 @@ func TestTrainer_DynamicShapes(t *testing.T) {
 		require.NotEmpty(t, metrics3)
 	})
 }
+
+func TestTrainerAliases(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+
+	// 1. func(scope *model.Scope, x *graph.Node) *graph.Node
+	{
+		store := model.NewStore()
+		modelFn := func(scope *model.Scope, x *graph.Node) *graph.Node {
+			return graph.AddScalar(x, 1)
+		}
+		trainer := NewTrainer(backend, store, modelFn, loss.MeanAbsoluteError, optimizer.StochasticGradientDescent().Done(), nil, nil)
+		xTensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
+		yTensor := tensors.MustFromAnyValue([]float32{2, 3, 4})
+		metrics, err := trainer.TrainStep(nil, []*tensors.Tensor{xTensor}, []*tensors.Tensor{yTensor})
+		require.NoError(t, err)
+		assert.NotEmpty(t, metrics)
+	}
+
+	// 2. func(scope *model.Scope, spec any, x *graph.Node) *graph.Node
+	{
+		store := model.NewStore()
+		modelFn := func(scope *model.Scope, spec any, x *graph.Node) *graph.Node {
+			scale := spec.(float32)
+			return graph.MulScalar(x, scale)
+		}
+		trainer := NewTrainer(backend, store, modelFn, loss.MeanAbsoluteError, optimizer.StochasticGradientDescent().Done(), nil, nil)
+		xTensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
+		yTensor := tensors.MustFromAnyValue([]float32{2, 4, 6})
+		metrics, err := trainer.TrainStep(float32(2.0), []*tensors.Tensor{xTensor}, []*tensors.Tensor{yTensor})
+		require.NoError(t, err)
+		assert.NotEmpty(t, metrics)
+	}
+
+	// 3. func(scope *model.Scope, spec any, inputs []*graph.Node) *graph.Node
+	{
+		store := model.NewStore()
+		modelFn := func(scope *model.Scope, spec any, inputs []*graph.Node) *graph.Node {
+			return graph.Add(inputs[0], inputs[1])
+		}
+		trainer := NewTrainer(backend, store, modelFn, loss.MeanAbsoluteError, optimizer.StochasticGradientDescent().Done(), nil, nil)
+		x1Tensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
+		x2Tensor := tensors.MustFromAnyValue([]float32{3, 2, 1})
+		yTensor := tensors.MustFromAnyValue([]float32{4, 4, 4})
+		metrics, err := trainer.TrainStep(nil, []*tensors.Tensor{x1Tensor, x2Tensor}, []*tensors.Tensor{yTensor})
+		require.NoError(t, err)
+		assert.NotEmpty(t, metrics)
+	}
+
+	// 4. func(scope *model.Scope, x *graph.Node) (*graph.Node, *graph.Node)
+	{
+		store := model.NewStore()
+		modelFn := func(scope *model.Scope, x *graph.Node) (*graph.Node, *graph.Node) {
+			return x, x
+		}
+		customLossFn := func(labels, predictions []*graph.Node) *graph.Node {
+			return graph.Add(loss.MeanAbsoluteError(labels[:1], predictions[:1]), loss.MeanAbsoluteError(labels[1:], predictions[1:]))
+		}
+		trainer := NewTrainer(backend, store, modelFn, customLossFn, optimizer.StochasticGradientDescent().Done(), nil, nil)
+		xTensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
+		y1Tensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
+		y2Tensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
+		metrics, err := trainer.TrainStep(nil, []*tensors.Tensor{xTensor}, []*tensors.Tensor{y1Tensor, y2Tensor})
+		require.NoError(t, err)
+		assert.NotEmpty(t, metrics)
+	}
+
+	// 5. func(scope *model.Scope, x *graph.Node) []*graph.Node
+	{
+		store := model.NewStore()
+		modelFn := func(scope *model.Scope, x *graph.Node) []*graph.Node {
+			return []*graph.Node{x}
+		}
+		trainer := NewTrainer(backend, store, modelFn, loss.MeanAbsoluteError, optimizer.StochasticGradientDescent().Done(), nil, nil)
+		xTensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
+		yTensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
+		metrics, err := trainer.TrainStep(nil, []*tensors.Tensor{xTensor}, []*tensors.Tensor{yTensor})
+		require.NoError(t, err)
+		assert.NotEmpty(t, metrics)
+	}
+}

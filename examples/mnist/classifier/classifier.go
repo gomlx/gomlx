@@ -22,7 +22,6 @@ import (
 	"github.com/gomlx/gomlx/examples/mnist"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
-	"github.com/gomlx/gomlx/ml/train"
 )
 
 // Classifier holds the MNIST model compiled.
@@ -56,7 +55,7 @@ func New(checkpointDir string) (*Classifier, error) {
 	}
 
 	modelType := model.GetParamOr(c.scope, "model", "")
-	var modelFn train.ModelFn
+	var modelFn func(*model.Scope, *graph.Node) *graph.Node
 	switch modelType {
 	case "linear":
 		modelFn = mnist.LinearModelGraph
@@ -72,7 +71,7 @@ func New(checkpointDir string) (*Classifier, error) {
 		func(scope *model.Scope, image *graph.Node) (choice *graph.Node) {
 			// We take the first result from the modelFn -- it returns a slice.
 			image = graph.ExpandAxes(image, 0) // Create a batch dimension of size 1.
-			logits := modelFn(scope, nil, []*graph.Node{image})[0]
+			logits := modelFn(scope, image)
 			// Take the class with highest logit value.
 			choice = graph.ArgMax(logits, -1, dtypes.Int32)
 			// Remove batch dimension.

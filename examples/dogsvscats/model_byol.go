@@ -48,9 +48,7 @@ func byolModelEmbedding(scope *model.Scope, images *Node, baseTrainable bool) (e
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
 //
 // Based on https://arxiv.org/abs/2006.07733
-func ByolCnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
-	_ = spec // Not used.
-
+func ByolCnnModelGraph(scope *model.Scope, image0, image1 *Node) []*Node {
 	// Create two models: same structure, different initializations, and if `--byol_use_pairs` is set,
 	// different augmentations of the same image.
 	onlineScope := scope.In("online")
@@ -62,19 +60,19 @@ func ByolCnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 
 	// Evaluation/Inference and if pre-training is over, we only use the "online" model, and return
 	// its prediction.
-	g := inputs[0].Graph()
+	g := image0.Graph()
 	byolPretrain := model.GetParamOr(scope, "byol_pretrain", false)
 	byolFinetune := model.GetParamOr(scope, "byol_finetune", false)
 	if !scope.IsTraining(g) || !byolPretrain {
 		// Normal model path, without byol regularization.
 		baseTraining := scope.IsTraining(g) && byolFinetune
-		embeddings := byolModelEmbedding(onlineScope, inputs[0], baseTraining)
+		embeddings := byolModelEmbedding(onlineScope, image0, baseTraining)
 		logit := fnn.New(scope.In("readout"), embeddings, 1).NumHiddenLayers(0, 0).Done()
 		return []*Node{logit} // Return only the logits.
 	}
 
-	stackedImages12 := Concatenate([]*Node{inputs[0], inputs[1]}, 0) // For "online" model.
-	stackedImages21 := Concatenate([]*Node{inputs[1], inputs[0]}, 0) // For "target" model.
+	stackedImages12 := Concatenate([]*Node{image0, image1}, 0) // For "online" model.
+	stackedImages21 := Concatenate([]*Node{image1, image0}, 0) // For "target" model.
 	regularizationRate := model.GetParamOr(targetScope, "byol_regularization_rate", 1.0)
 
 	onlineEmbedding := byolModelEmbedding(onlineScope, stackedImages12, true)

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gomlx/compute"
-	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/layers"
@@ -24,29 +23,19 @@ import (
 	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
-	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/fsutil"
+	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
 	"k8s.io/klog/v2"
 )
 
 var (
-	// ModelsFns maps a model name to its train model function.
-	// It holds mappings to predefined models, but one can insert new ones.
-	// It is used by the TrainModel function.
-	//
-	// Models are selected by the "model" hyperparameter.
-	ModelsFns = map[string]train.ModelFn{
-		"cnn":       CnnModelGraph,
-		"inception": InceptionV3ModelGraph,
-		"byol":      nil,
-	}
 
 	// ModelsPrep maps models to a preparation function called in TrainModel before training start.
 	//
 	// This can be extended for new models.
-	ModelsPrep = map[string]func(scope *model.Scope, dataDir string, checkpointHandler *checkpoint.Handler){
+	ModelsPrep = map[string]func(scope *model.Scope, dataDir string, checkpointHandler *checkpoint.Handler) error{
 		"inception": InceptionV3ModelPrep,
 	}
 )
@@ -140,19 +129,29 @@ func CreateModelStore() *model.Store {
 	return store
 }
 
-// TrainWithStore based on configuration and flags.
-func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval bool, paramsSet []string) {
+// Train based on configuration and flags.
+func Train(store *model.Store, dataDir, checkpointPath string, runEval bool, paramsSet []string) error {
 	scope := store.RootScope()
-	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
-	if !fsutil.MustFileExists(dataDir) {
-		check(os.MkdirAll(dataDir, 0777))
+	var err error
+	dataDir, err = fsutil.ReplaceTildeInDir(dataDir)
+	if err != nil {
+		return err
+	}
+	exists, err := fsutil.FileExists(dataDir)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		if err = os.MkdirAll(dataDir, 0777); err != nil {
+			return err
+		}
 	}
 
 	// Checkpoint: it loads if already exists, and it will save as we train.
 	var checkpointHandler *checkpoint.Handler
 	if checkpointPath != "" {
 		numCheckpoints := model.GetParamOr(scope, "num_checkpoints", 3)
-		checkpointHandler = check1(checkpoint.Build(store).
+		checkpointHandler, err = checkpoint.Build(store).
 			DirFromBase(checkpointPath, dataDir).
 			ExcludeParams(append(
 				paramsSet,
@@ -164,13 +163,20 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 				"byol_pretrain",
 				"byol_finetune",
 			)...).
-			Keep(numCheckpoints).Done())
+			Keep(numCheckpoints).Done()
+		if err != nil {
+			return err
+		}
 	}
 
 	// Generation of augmented images and create datasets.
-	check(Download(dataDir))
-	check(FilterValidImages(dataDir))
-	config := NewPreprocessingConfigurationFromScope(scope, dataDir)
+	if err = Download(dataDir); err != nil {
+		return err
+	}
+	if err = FilterValidImages(dataDir); err != nil {
+		return err
+	}
+	config := NewPreprocessingConfiguration(store, dataDir)
 	trainDS, trainEvalDS, validationEvalDS := CreateDatasets(config)
 
 	// Metrics we are interested.
@@ -179,14 +185,13 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 
 	// Select the model type we are using:
 	modelType := model.GetParamOr(scope, "model", "")
-	modelFn, found := ModelsFns[modelType]
-	if !found {
-		exceptions.Panicf("Unknown model type %q: valid values are %q", modelType, xslices.Keys(ModelsFns))
-	}
 	fmt.Printf("Model: %q\n", modelType)
 	if modelPrep, found := ModelsPrep[modelType]; found {
-		modelPrep(scope, dataDir, checkpointHandler)
+		if err = modelPrep(scope, dataDir, checkpointHandler); err != nil {
+			return err
+		}
 	}
+
 	// BYOL may require pretraining.
 	preTraining := modelType == "byol" && model.GetParamOr(scope, "byol_pretrain", false)
 	if preTraining && checkpointHandler == nil {
@@ -200,19 +205,36 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	backend := compute.MustNew()
 	var trainer *train.Trainer
 	theOptimizer := optimizer.FromStore(store)
-	if !preTraining {
-		trainer = train.NewTrainer(backend, store, modelFn,
+	switch modelType {
+	case "cnn":
+		trainer = train.NewTrainer(backend, store, CnnModelGraph,
 			loss.BinaryCrossentropyLogits,
 			theOptimizer,
 			[]metric.Interface{movingAccuracyMetric}, // trainMetrics
 			[]metric.Interface{meanAccuracyMetric})   // evalMetrics
-	} else {
-		// Pre-training: no loss, no metrics.
-		trainer = train.NewTrainer(backend, store, modelFn,
-			nil,
+	case "inception":
+		trainer = train.NewTrainer(backend, store, InceptionV3ModelGraph,
+			loss.BinaryCrossentropyLogits,
 			theOptimizer,
-			nil, // trainMetrics
-			nil) // evalMetrics
+			[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+			[]metric.Interface{meanAccuracyMetric})   // evalMetrics
+	case "byol":
+		if !preTraining {
+			trainer = train.NewTrainer(backend, store, ByolCnnModelGraph,
+				loss.BinaryCrossentropyLogits,
+				theOptimizer,
+				[]metric.Interface{movingAccuracyMetric}, // trainMetrics
+				[]metric.Interface{meanAccuracyMetric})   // evalMetrics
+		} else {
+			// Pre-training: no loss, no metrics.
+			trainer = train.NewTrainer(backend, store, ByolCnnModelGraph,
+				nil,
+				theOptimizer,
+				nil, // trainMetrics
+				nil) // evalMetrics
+		}
+	default:
+		return errors.Errorf("Unknown model type %q: valid values are [\"cnn\", \"inception\", \"byol\"]", modelType)
 	}
 
 	// Debugging.
@@ -256,15 +278,23 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	numTrainSteps := model.GetParamOr(scope, "train_steps", 0)
 	globalStep := int(optimizer.GetGlobalStep(store))
 	if globalStep < numTrainSteps {
-		_ = check1(loop.RunSteps(trainDS, int(numTrainSteps-globalStep)))
+		if _, err = loop.RunSteps(trainDS, int(numTrainSteps-globalStep)); err != nil {
+			return err
+		}
 		fmt.Printf(
 			"\t[Step %d] median train step: %d microseconds\n",
 			loop.LoopStep,
 			loop.MedianTrainStepDuration().Microseconds(),
 		)
-		if check1(norm.UpdateBatchNormAverages(trainer, trainEvalDS)) {
+		updated, err := norm.UpdateBatchNormAverages(trainer, trainEvalDS)
+		if err != nil {
+			return err
+		}
+		if updated {
 			fmt.Println("\tUpdated batch normalization mean/variances averages.")
-			check(checkpointHandler.Save())
+			if err = checkpointHandler.Save(); err != nil {
+				return err
+			}
 		}
 	} else {
 		fmt.Printf("\t - target train_steps=%d already reached. To train further, set a number additional "+
@@ -275,30 +305,25 @@ func TrainWithStore(store *model.Store, dataDir, checkpointPath string, runEval 
 	if preTraining {
 		// If pre-training (unsupervised), skip evaluation, and clear optimizer variables and global step.
 		fmt.Println("Pre-training only, no evaluation.")
-		check(theOptimizer.Clear(scope))
-		check(optimizer.DeleteGlobalStep(scope))
-		check(checkpointHandler.Save())
-		return
+		if err = theOptimizer.Clear(scope); err != nil {
+			return err
+		}
+		if err = optimizer.DeleteGlobalStep(scope); err != nil {
+			return err
+		}
+		if err = checkpointHandler.Save(); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	// Finally, print an evaluation on train and test datasets.
 	if runEval {
 		fmt.Println()
-		check(commandline.ReportEval(trainer, trainEvalDS, validationEvalDS))
+		if err = commandline.ReportEval(trainer, trainEvalDS, validationEvalDS); err != nil {
+			return err
+		}
 		fmt.Println()
 	}
-}
-
-// check reports and exits on error.
-func check(err error) {
-	if err == nil {
-		return
-	}
-	klog.Fatalf("Fatal error: %+v", err)
-}
-
-// check1 reports and exits on error. Otherwise returns the value passed.
-func check1[T any](v T, err error) T {
-	check(err)
-	return v
+	return nil
 }

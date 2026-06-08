@@ -28,6 +28,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/nanlogger"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/layers"
@@ -127,7 +128,7 @@ func Train(store *model.Store, dataDir, checkpointPath string, paramsSet []strin
 	}
 
 	modelType := model.GetParamOr(scope, "model", "")
-	var modelFn train.ModelFn
+	var modelFn func(*model.Scope, *graph.Node) *graph.Node
 	switch modelType {
 	case "linear":
 		modelFn = LinearModelGraph

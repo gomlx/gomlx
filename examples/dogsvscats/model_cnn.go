@@ -17,11 +17,11 @@ import (
 // CnnModelGraph builds the CNN model for our demo.
 // It returns the logit, not the predictions, which works with most losses.
 // inputs: only one tensor, with shape `[batch_size, width, height, depth]`.
-func CnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
+func CnnModelGraph(scope *model.Scope, images *Node) *Node {
 	scope = scope.In("model") // Create the model by default under the "/model" scope.
-	embeddings := CnnEmbeddings(scope, inputs[0])
+	embeddings := CnnEmbeddings(scope, images)
 	logit := fnn.New(scope.In("readout"), embeddings, 1).NumHiddenLayers(0, 0).Done()
-	return []*Node{logit}
+	return logit
 }
 
 func CnnEmbeddings(scope *model.Scope, images *Node) *Node {

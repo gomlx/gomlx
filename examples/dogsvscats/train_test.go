@@ -26,7 +26,9 @@ func init() {
 	klog.InitFlags(nil)
 	if _, found := os.LookupEnv(compute.ConfigEnvVar); !found {
 		// For testing, we use the CPU backend (and avoid GPU if not explicitly requested).
-		check(os.Setenv(compute.ConfigEnvVar, "xla:cpu"))
+		if err := os.Setenv(compute.ConfigEnvVar, "xla:cpu"); err != nil {
+			klog.Fatalf("Failed to set env: %+v", err)
+		}
 	}
 }
 
@@ -40,6 +42,12 @@ func TestTrain(t *testing.T) {
 	store.SetParam("train_steps", 10)
 	store.SetParam("plots", false)
 	store.SetParam(layers.ParamNormalization, "layer")
-	paramsSet := check1(commandline.ParseSettings(store, *flagSettings))
-	TrainWithStore(store, *flagDataDir, "", false, paramsSet)
+	paramsSet, err := commandline.ParseSettings(store, *flagSettings)
+	if err != nil {
+		t.Fatalf("Failed to parse settings: %+v", err)
+	}
+	err = Train(store, *flagDataDir, "", false, paramsSet)
+	if err != nil {
+		t.Fatalf("Train failed: %+v", err)
+	}
 }

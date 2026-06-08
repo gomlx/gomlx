@@ -78,6 +78,8 @@ And a few small renaming:
   - `TotalLoss` to return their sum.
   - Older API marked as deprecated.
   - Changed default loss metrics behavior to only return the total loss by default (named "Loss" / "~loss"). Added `WithMainLossMetric()` method to include the "no-reg" metrics when requested.
+- `NewTrainer` now accepts generic functions matching the `ModelFnCompatible` constraint. This allows `modelFn` signatures to omit the `spec` parameter if not used, use named `*graph.Node` input parameters, and return a single `*graph.Node` (or up to 3 nodes) directly instead of a slice. The passed functions are automatically converted to the canonical signature.
+  - All standard examples (`adult`, `cifar`, `mnist`, `dogsvscats`) and their corresponding Jupyter Notebooks have been updated to use these simplified/cleaner signatures.
 
 ## Graph (github.com/gomlx/gomlx/core/graph):
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.

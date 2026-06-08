@@ -15,8 +15,7 @@ import (
 
 // C10PlainModelGraph implements train.ModelFn, and returns the logit Node, given the input image.
 // It's a basic FNN (Feedforward Neural Network), so no convolutions. It is meant only as an example.
-func C10PlainModelGraph(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
-	batchedImages := inputs[0]
+func C10PlainModelGraph(scope *model.Scope, batchedImages *graph.Node) *graph.Node {
 	batchSize := batchedImages.Shape().Dimensions[0]
 	logits := graph.Reshape(batchedImages, batchSize, -1)
 	numClasses := len(C10Labels)
@@ -32,7 +31,7 @@ func C10PlainModelGraph(scope *model.Scope, spec any, inputs []*graph.Node) []*g
 		logits = fnn.New(scope, logits, numClasses).Done()
 	}
 	logits.AssertDims(batchSize, numClasses)
-	return []*graph.Node{logits}
+	return logits
 }
 
 const ParamCNNNormalization = "cnn_normalization"
@@ -64,8 +63,7 @@ func normalizeCNN(scope *model.Scope, logits *graph.Node) *graph.Node {
 // This is modeled after the Keras example in Kaggle:
 // https://www.kaggle.com/code/ektasharma/simple-cifar10-cnn-keras-code-with-88-accuracy
 // (Thanks @ektasharma)
-func C10ConvolutionModelGraph(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
-	batchedImages := inputs[0]
+func C10ConvolutionModelGraph(scope *model.Scope, batchedImages *graph.Node) *graph.Node {
 	g := batchedImages.Graph()
 	dtype := batchedImages.DType()
 	batchSize := batchedImages.Shape().Dimensions[0]
@@ -121,5 +119,5 @@ func C10ConvolutionModelGraph(scope *model.Scope, spec any, inputs []*graph.Node
 	logits = layers.DropoutNormalize(nextScope("dropout"), logits, graph.Scalar(g, dtype, 0.5), true)
 	numClasses := len(C10Labels)
 	logits = layers.Dense(nextScope("dense"), logits, true, numClasses)
-	return []*graph.Node{logits}
+	return logits
 }

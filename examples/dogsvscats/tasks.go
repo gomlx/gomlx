@@ -100,25 +100,25 @@ var (
 
 )
 
-// NewPreprocessingConfigurationFromScope create a preprocessing configuration based on hyperparameters
+// NewPreprocessingConfiguration create a preprocessing configuration based on hyperparameters
 // set in the model.
 //
 // Notice some configuration parameters depends on the model type ("model" hyperparameter): "inception" has a
 // specific size, "byol" model requires image pairs.
-func NewPreprocessingConfigurationFromScope(scope *model.Scope, dataDir string) *PreprocessingConfiguration {
+func NewPreprocessingConfiguration(store *model.Store, dataDir string) *PreprocessingConfiguration {
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
-	modelType := model.GetParamOr(scope, "model", "")
+	modelType := model.GetRootParamOr(store, "model", "")
 	config := &PreprocessingConfiguration{}
 	*config = *DefaultConfig
 	config.DataDir = dataDir
-	config.BatchSize = model.GetParamOr(scope, "batch_size", 0)
-	config.EvalBatchSize = model.GetParamOr(scope, "eval_batch_size", 0)
-	config.AngleStdDev = model.GetParamOr(scope, "augmentation_angle_stddev", 0.0)
-	config.FlipRandomly = model.GetParamOr(scope, "augmentation_random_flips", false)
+	config.BatchSize = model.GetRootParamOr(store, "batch_size", 0)
+	config.EvalBatchSize = model.GetRootParamOr(store, "eval_batch_size", 0)
+	config.AngleStdDev = model.GetRootParamOr(store, "augmentation_angle_stddev", 0.0)
+	config.FlipRandomly = model.GetRootParamOr(store, "augmentation_random_flips", false)
 	if modelType == "inception" {
 		config.ModelImageSize = inceptionv3.MinimumImageSize
 	}
-	config.ForceOriginal = model.GetParamOr(scope, "augmentation_force_original", false)
+	config.ForceOriginal = model.GetRootParamOr(store, "augmentation_force_original", false)
 	config.UseParallelism = true
 	config.BufferSize = 100
 	config.YieldImagePairs = modelType == "byol"
