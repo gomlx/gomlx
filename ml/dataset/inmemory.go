@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
+	"iter"
 	"log"
 	"math/rand"
 	"sync"
@@ -59,17 +60,11 @@ type InMemoryDataset struct {
 	// dropIncompleteBatch, when there are not enough remaining examples in the epoch.
 	dropIncompleteBatch bool
 
-	// next record to be sampled. If shuffle is given, this is an index in shuffle. If randomWithReplacement,
-	// this is a count only.
-	//
-	// If it is set to -1, it means the dataset has been exhausted already.
-	next int
-
 	// randomWithReplacement indicates that one should simply take a random entry every time.
 	randomWithReplacement bool
 
-	// shuffle holds the current shuffle if RandomSampling was selected.
-	shuffle []int
+	// shuffleEnabled indicates whether random shuffling without replacement is enabled.
+	shuffleEnabled bool
 
 	// infinite sets whether to loop indefinitely.
 	infinite bool
@@ -205,12 +200,14 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 	}
 
 	count := 0
-	for {
-		spec, inputs, labels, newErr := ds.Yield()
-		err = newErr
-		if err == io.EOF {
-			break
+	for batch, newErr := range ds.Iter() {
+		if newErr != nil {
+			err = newErr
+			return
 		}
+		inputs := batch.Inputs
+		labels := batch.Labels
+		spec := batch.Spec
 		inputsAndLabels := append(inputs, labels...)
 		if mds.numExamples == 0 {
 			// First yield:
@@ -402,49 +399,80 @@ func (mds *InMemoryDataset) SetName(name string, shortName ...string) *InMemoryD
 	return mds
 }
 
-// Reset implements `train.Dataset`
-func (mds *InMemoryDataset) Reset() {
-	mds.muSampling.Lock()
-	defer mds.muSampling.Unlock()
+// Reset implements `train.Dataset`. It is a no-op since Iter() handles resetting dynamically per iteration.
+func (mds *InMemoryDataset) Reset() {}
 
-	mds.next = 0
-	if mds.shuffle != nil {
-		mds.shuffleLocked()
+// inMemoryIterState holds the sampling state of a single iteration of InMemoryDataset.
+type inMemoryIterState struct {
+	mds                   *InMemoryDataset
+	next                  int
+	shuffle               []int
+	randomNumberGenerator *rand.Rand
+}
+
+// shuffle shuffles dataset yield order.
+func (s *inMemoryIterState) shuffleData() {
+	if s.shuffle == nil {
+		s.shuffle = make([]int, s.mds.numExamples)
+	}
+	for ii := 0; ii < s.mds.numExamples; ii++ {
+		newPos := s.randomNumberGenerator.Intn(ii + 1)
+		if newPos == ii {
+			s.shuffle[ii] = ii
+		} else {
+			// Swap position with the new example.
+			s.shuffle[newPos], s.shuffle[ii] = ii, s.shuffle[newPos]
+		}
 	}
 }
 
-// indicesNextYield retrieve the indices for the next Yield call. This needs to be done protected by `muSampling`,
-// but the gathering of the returned indices can be parallelized.
-func (mds *InMemoryDataset) indicesNextYield() (indices []int) {
+// newIterState creates a new, independent iteration state for InMemoryDataset.
+func (mds *InMemoryDataset) newIterState() *inMemoryIterState {
 	mds.muSampling.Lock()
 	defer mds.muSampling.Unlock()
-	if mds.next == -1 {
+
+	state := &inMemoryIterState{
+		mds:  mds,
+		next: 0,
+	}
+
+	seed := mds.randomNumberGenerator.Int63()
+	state.randomNumberGenerator = rand.New(rand.NewSource(seed))
+
+	// Initialize shuffle if the dataset is configured to shuffle
+	if mds.shuffleEnabled {
+		state.shuffleData()
+	}
+
+	return state
+}
+
+// indicesNextYield retrieve the indices for the next Yield call.
+func (s *inMemoryIterState) indicesNextYield() (indices []int) {
+	if s.next == -1 {
 		return // dataset already exhausted.
 	}
-	n := mds.batchSize
-	if n <= 0 {
-		n = 1
-	}
+	n := max(s.mds.batchSize, 1)
 	indices = make([]int, 0, n)
-	for mds.next < mds.numExamples && len(indices) < n {
-		if len(mds.shuffle) > 0 {
-			indices = append(indices, mds.shuffle[mds.next])
-		} else if mds.randomWithReplacement {
-			indices = append(indices, mds.randomNumberGenerator.Intn(mds.numExamples))
+	for s.next < s.mds.numExamples && len(indices) < n {
+		if len(s.shuffle) > 0 {
+			indices = append(indices, s.shuffle[s.next])
+		} else if s.mds.randomWithReplacement {
+			indices = append(indices, s.randomNumberGenerator.Intn(s.mds.numExamples))
 		} else {
-			indices = append(indices, mds.next)
+			indices = append(indices, s.next)
 		}
-		mds.next++
+		s.next++
 	}
-	if len(indices) < n && mds.dropIncompleteBatch {
+	if len(indices) < n && s.mds.dropIncompleteBatch {
 		// Drop the incomplete batch.
 		indices = nil
 	}
-	if mds.next >= mds.numExamples {
-		mds.next = -1
+	if s.next >= s.mds.numExamples {
+		s.next = -1
 	}
-	if mds.takeN > 0 && mds.next >= mds.takeN*n {
-		mds.next = -1
+	if s.mds.takeN > 0 && s.next >= s.mds.takeN*n {
+		s.next = -1
 	}
 	return
 }
@@ -462,31 +490,32 @@ func gatherFromDataTensorsGraph(indicesAndData []*Node) (gathered []*Node) {
 	return
 }
 
-// Yield implements `train.Dataset`.
-//
-// Returns next batch's inputs and labels or single example if BatchSize is set to 0.
-func (mds *InMemoryDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	if len(mds.inputsAndLabelsData) == 0 {
+// yieldNext returns the next batch of inputs and labels or single example if BatchSize is set to 0.
+func (s *inMemoryIterState) yieldNext() (batch train.Batch, err error) {
+	if len(s.mds.inputsAndLabelsData) == 0 {
 		err = errors.Errorf("InMemoryDataset is empty, maybe it has been finalized?")
 		return
 	}
-	for _, data := range mds.inputsAndLabelsData {
+	for _, data := range s.mds.inputsAndLabelsData {
 		if !data.Ok() {
 			err = errors.Errorf("InMemoryDataset data has been been finalized?")
 			return
 		}
 	}
-	indices := mds.indicesNextYield()
+	indices := s.indicesNextYield()
 	if len(indices) == 0 {
-		if !mds.infinite {
+		if !s.mds.infinite {
 			// Dataset is already exhausted.
 			err = io.EOF
 			return
 		}
 
-		// If looping infinitely, automatically Reset and pull new indices.
-		mds.Reset()
-		indices = mds.indicesNextYield()
+		// If looping infinitely, automatically reset next and pull new indices.
+		s.next = 0
+		if len(s.shuffle) > 0 {
+			s.shuffleData()
+		}
+		indices = s.indicesNextYield()
 		if len(indices) == 0 {
 			log.Printf("InMemoryDataset configured for infinite loop, but Reset failed to generate new examples!?")
 			err = io.EOF
@@ -495,10 +524,10 @@ func (mds *InMemoryDataset) Yield() (spec any, inputs []*tensors.Tensor, labels 
 	}
 
 	// Gather the elements (inputs and labels) all in one call, given the indices.
-	inputsAndLabels := make([]*tensors.Tensor, len(mds.inputsAndLabelsData))
-	indicesAndData := make([]any, 0, len(mds.inputsAndLabelsData)+1)
+	inputsAndLabels := make([]*tensors.Tensor, len(s.mds.inputsAndLabelsData))
+	indicesAndData := make([]any, 0, len(s.mds.inputsAndLabelsData)+1)
 	var indicesT *tensors.Tensor
-	if mds.batchSize == 0 {
+	if s.mds.batchSize == 0 {
 		// Index should be a scalar.
 		indicesAndData = append(indicesAndData, indices[0])
 	} else {
@@ -507,25 +536,50 @@ func (mds *InMemoryDataset) Yield() (spec any, inputs []*tensors.Tensor, labels 
 		defer indicesT.MustFinalizeAll() // Free immediately after use.
 		indicesAndData = append(indicesAndData, indicesT)
 	}
-	for _, data := range mds.inputsAndLabelsData {
+	for _, data := range s.mds.inputsAndLabelsData {
 		indicesAndData = append(indicesAndData, data)
 	}
-	inputsAndLabels, err = mds.gatherExec.Call(indicesAndData...)
+	inputsAndLabels, err = s.mds.gatherExec.Call(indicesAndData...)
 	if err != nil {
 		err = errors.WithMessagef(err, "failed gathering examples from mds data, indices=%v", indices)
 		return
 	}
 
 	// Prepare the return values.
-	spec = mds.spec
-	if mds.numInputsTensors > 0 {
-		inputs = inputsAndLabels[:mds.numInputsTensors]
+	var inputs, labels []*tensors.Tensor
+	if s.mds.numInputsTensors > 0 {
+		inputs = inputsAndLabels[:s.mds.numInputsTensors]
 	}
-	numLabels := len(mds.inputsAndLabelsData) - mds.numInputsTensors
+	numLabels := len(s.mds.inputsAndLabelsData) - s.mds.numInputsTensors
 	if numLabels > 0 {
-		labels = inputsAndLabels[mds.numInputsTensors:]
+		labels = inputsAndLabels[s.mds.numInputsTensors:]
+	}
+	batch = train.Batch{
+		Spec:   s.mds.spec,
+		Inputs: inputs,
+		Labels: labels,
 	}
 	return
+}
+
+// Iter implements `train.Dataset`.
+func (mds *InMemoryDataset) Iter() iter.Seq2[train.Batch, error] {
+	return func(yield func(train.Batch, error) bool) {
+		state := mds.newIterState()
+		for {
+			batch, err := state.yieldNext()
+			if err != nil {
+				if err == io.EOF {
+					return
+				}
+				yield(train.Batch{}, err)
+				return
+			}
+			if !yield(batch, nil) {
+				return
+			}
+		}
+	}
 }
 
 // RandomWithReplacement configures the InMemoryDataset to return random elements with replacement.
@@ -536,38 +590,20 @@ func (mds *InMemoryDataset) RandomWithReplacement() *InMemoryDataset {
 	mds.muSampling.Lock()
 	defer mds.muSampling.Unlock()
 	mds.randomWithReplacement = true
-	mds.shuffle = nil
+	mds.shuffleEnabled = false
 	return mds
 }
 
 // Shuffle configures the InMemoryDataset to shuffle the order of the data. It returns random elements
 // without replacement. If this is configured, RandomWithReplacement is canceled.
 //
-// At each call to Reset() it is reshuffled. It happens automatically if dataset is configured to Loop.
-//
 // It returns the modified InMemoryDataset, so calls can be cascaded if one wants.
 func (mds *InMemoryDataset) Shuffle() *InMemoryDataset {
 	mds.muSampling.Lock()
 	defer mds.muSampling.Unlock()
 	mds.randomWithReplacement = false
-	mds.shuffleLocked()
+	mds.shuffleEnabled = true
 	return mds
-}
-
-// shuffleLocked shuffles dataset yield order. It assumed muSampling is locked.
-func (mds *InMemoryDataset) shuffleLocked() {
-	if mds.shuffle == nil {
-		mds.shuffle = make([]int, mds.numExamples)
-	}
-	for ii := 0; ii < mds.numExamples; ii++ {
-		newPos := rand.Intn(ii + 1)
-		if newPos == ii {
-			mds.shuffle[ii] = ii
-		} else {
-			// Swap position with the new example.
-			mds.shuffle[newPos], mds.shuffle[ii] = ii, mds.shuffle[newPos]
-		}
-	}
 }
 
 // BatchSize configures the InMemoryDataset to return batches of the given size. dropIncompleteBatch is set to true,
@@ -589,16 +625,11 @@ func (mds *InMemoryDataset) BatchSize(n int, dropIncompleteBatch bool) *InMemory
 // deterministic random sampling, if one wants. The default is to use an RNG initialized with the current
 // nanosecond time.
 //
-// If dataset is configured with Shuffle, this re-shuffles the dataset immediately.
-//
 // It returns the modified InMemoryDataset, so calls can be cascaded if one wants.
 func (mds *InMemoryDataset) WithRand(rng *rand.Rand) *InMemoryDataset {
 	mds.muSampling.Lock()
 	defer mds.muSampling.Unlock()
 	mds.randomNumberGenerator = rng
-	if mds.shuffle != nil {
-		mds.shuffleLocked()
-	}
 	return mds
 }
 
