@@ -1,23 +1,22 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
 // Package datasets is a collection of utility datasets (train.Dataset) that can be combined for efficient
-// preprocessing: `Take`, `InMemory`, `Parallel`, `MapWithGraphFn`, `Freeing`.
+// preprocessing: `Take`, `InMemory`, `Parallel`, `Map`, `MapOnHost`, `Freeing`.
 //
 // It also includes normalization tools.
 package dataset
 
 import (
 	"fmt"
-	"io"
+	"iter"
 
-	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/train"
 )
 
 // takeDataset implements a `train.Dataset` that only yields `take` batches.
 type takeDataset struct {
-	ds          train.Dataset
-	count, take int
+	ds   train.Dataset
+	take int
 }
 
 // Take returns a wrapper to `ds`, a `train.Dataset` that only yields `n` batches.
@@ -33,19 +32,22 @@ func (ds *takeDataset) Name() string {
 	return fmt.Sprintf("%s [Take %d]", ds.ds.Name(), ds.take)
 }
 
-// Reset implements train.Dataset.
-func (ds *takeDataset) Reset() {
-	ds.ds.Reset()
-	ds.count = 0
-}
-
-// Yield implements train.Dataset.
-func (ds *takeDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	if ds.count >= ds.take {
-		err = io.EOF
-		return
+// Iter implements train.Dataset.
+func (ds *takeDataset) Iter() iter.Seq2[train.Batch, error] {
+	return func(yield func(train.Batch, error) bool) {
+		count := 0
+		for batch, err := range ds.ds.Iter() {
+			if err != nil {
+				yield(batch, err)
+				return
+			}
+			if count >= ds.take {
+				return
+			}
+			count++
+			if !yield(batch, nil) {
+				return
+			}
+		}
 	}
-	ds.count++
-	spec, inputs, labels, err = ds.ds.Yield()
-	return
 }
