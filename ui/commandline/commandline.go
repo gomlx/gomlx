@@ -23,7 +23,6 @@ func ReportEval(trainer *train.Trainer, datasets ...train.Dataset) error {
 			value := metricsValues[metricIdx]
 			fmt.Printf("\t%s (%s): %s\n", metric.Name(), metric.ShortName(), metric.PrettyPrint(value))
 		}
-		ds.Reset()
 	}
 	return nil
 }
