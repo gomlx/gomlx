@@ -72,6 +72,20 @@ func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*dtensor.Tensor, err
 	return e.exec.AggregateShards(shards)
 }
 
+// Call parses the arguments into tensors (if they are not yet) and executes
+// the graph corresponding to the shapes of the arguments.
+//
+// Notice it uses the Store object used during creation -- if needed, you can change it with SetStore.
+//
+// If a graph does not yet exist, one is created (using graphFn provided during creation), compiled, and cached
+// for these shapes of the inputs.
+//
+// It returns the outputs in a slice. See the aliases Call1, Call2, ..., Call4 when you expect a fixed number of outputs.
+func (e *Exec) Call(args ...any) ([]*tensors.Tensor, error) {
+	outputs, _, err := e.CallWithGraph(args...)
+	return outputs, err
+}
+
 // MustCall parses the arguments into tensors (if they are not yet) and executes
 // the graph corresponding to the shapes of the arguments.
 //
@@ -80,11 +94,14 @@ func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*dtensor.Tensor, err
 // If a graph does not yet exist, one is created (using graphFn provided during creation), compiled, and cached
 // for these shapes of the inputs.
 //
-// It returns the outputs in a slice. See MustExec1, MustExec2, ..., MustExec4 as aliases when you expect a fixed number of outputs.
+// It returns the outputs in a slice. See the aliases MustCall1, MustCall2, ..., MustCall4 when you expect a fixed number of outputs.
 //
 // It panics with an informative error if something goes wrong.
 func (e *Exec) MustCall(args ...any) []*tensors.Tensor {
-	outputs, _ := e.MustCallWithGraph(args...)
+	outputs, err := e.Call(args...)
+	if err != nil {
+		panic(err)
+	}
 	return outputs
 }
 
@@ -475,4 +492,3 @@ func MustNewExec2[F ExecGraphFnTwoOutputs](backend compute.Backend, store *Store
 func MustNewExec3[F ExecGraphFnThreeOutputs](backend compute.Backend, store *Store, graphFn F) *ExecThreeOutputs {
 	return &ExecThreeOutputs{Exec: MustNewExec(backend, store, graphFn)}
 }
-
