@@ -3,10 +3,8 @@
 package dataset
 
 import (
-	"io"
-
 	"github.com/gomlx/compute"
-	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
@@ -28,14 +26,14 @@ import (
 // by that will result in error. Use ReplaceZerosByOnes below to avoid the numeric issues.
 func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, independentAxes ...int) (mean, stddev *tensors.Tensor, err error) {
 	store := model.NewStore()
-	updateValuesWithInput := model.MustNewExec(backend, store, func(scope *model.Scope, batch *Node) {
+	updateValuesWithInput := model.MustNewExec(backend, store, func(scope *model.Scope, batch *graph.Node) {
 		g := batch.Graph()
 		scope = scope.WithInitializer(initializer.Zero)
 
 		// Find axes to reduce from the input.
 		mapIndependentAxes := make([]bool, batch.Rank())
 		for _, axis := range independentAxes {
-			adjustedAxis := MustAdjustAxis(axis, batch)
+			adjustedAxis := graph.MustAdjustAxis(axis, batch)
 			mapIndependentAxes[adjustedAxis] = true
 		}
 		reduceAxes := make([]int, 0, batch.Rank()-len(independentAxes))
@@ -46,54 +44,53 @@ func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, i
 		}
 
 		// Parameters of batch.
-		batchSum := ReduceAndKeep(batch, ReduceSum, reduceAxes...)
+		batchSum := graph.ReduceAndKeep(batch, graph.ReduceSum, reduceAxes...)
 		reducedCount := batch.Shape().Size() / batchSum.Shape().Size()
 
 		countVar := scope.VariableWithValue("count", 0.0)
-		countVar.SetNodeValue(AddScalar(countVar.NodeValue(g), float64(reducedCount)))
+		countVar.SetNodeValue(graph.AddScalar(countVar.NodeValue(g), float64(reducedCount)))
 
 		sumVar := scope.VariableWithShape("sum", batchSum.Shape())
-		sumVar.SetNodeValue(Add(sumVar.NodeValue(g), batchSum))
+		sumVar.SetNodeValue(graph.Add(sumVar.NodeValue(g), batchSum))
 
-		batchSum2 := ReduceAndKeep(Square(batch), ReduceSum, reduceAxes...)
+		batchSum2 := graph.ReduceAndKeep(graph.Square(batch), graph.ReduceSum, reduceAxes...)
 		sumSquareVar := scope.VariableWithShape("sum^2", batchSum2.Shape())
-		sumSquareVar.SetNodeValue(Add(sumSquareVar.NodeValue(g), batchSum2))
+		sumSquareVar.SetNodeValue(graph.Add(sumSquareVar.NodeValue(g), batchSum2))
 	})
 
 	// Read through dataset updating measurements.
 	batchNum := 0
-	var inputs []*tensors.Tensor
-	for {
-		_, inputs, _, err = ds.Yield()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			err = errors.WithMessagef(err, "while reading batch #%d of the dataset", batchNum)
+	for batch, newErr := range ds.Iter() {
+		if newErr != nil {
+			err = errors.WithMessagef(newErr, "while reading batch #%d of the dataset", batchNum)
 			return
 		}
-		if inputsIndex >= len(inputs) {
+		if inputsIndex >= len(batch.Inputs) {
+			_ = batch.Finalize()
 			err = errors.Errorf("asked for inputsIndex=%d, but inputs has only %d elements",
-				inputsIndex, len(inputs))
+				inputsIndex, len(batch.Inputs))
 			return
 		}
-		batch := inputs[inputsIndex]
-		if !batch.DType().IsFloat() {
+		t := batch.Inputs[inputsIndex]
+		if !t.DType().IsFloat() {
+			_ = batch.Finalize()
 			err = errors.Errorf("dataset input %d has invalid dtype (shape=%s): Normalization() only accepts float values.",
-				inputsIndex, batch.Shape())
+				inputsIndex, t.Shape())
 			return
 		}
-		err = exceptions.TryCatch[error](func() { updateValuesWithInput.MustCall(batch) })
+		err = exceptions.TryCatch[error](func() { updateValuesWithInput.MustCall(t) })
+		_ = batch.Finalize()
 		if err != nil {
 			err = errors.WithMessagef(err, "while processing batch #%d of the dataset", batchNum)
 			return
 		}
+		batchNum++
 	}
 
 	// Calculate mean and stddev, using a graph.
 	var results []*tensors.Tensor
 	err = exceptions.TryCatch[error](func() {
-		results = model.MustNewExec(backend, store, func(scope *model.Scope, g *Graph) []*Node {
+		results = model.MustNewExec(backend, store, func(scope *model.Scope, g *graph.Graph) []*graph.Node {
 			countVar := scope.GetVariable("count")
 			count := countVar.NodeValue(g)
 
@@ -103,13 +100,13 @@ func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, i
 			sumSquareVar := scope.GetVariable("sum^2")
 			sumSquare := sumSquareVar.NodeValue(g)
 
-			count = ConvertDType(count, sum.DType())
-			mean := Div(sum, count)
-			variance := Sub(
-				Div(sumSquare, count),
-				Square(mean))
-			stddev := Sqrt(variance)
-			return []*Node{mean, stddev}
+			count = graph.ConvertDType(count, sum.DType())
+			mean := graph.Div(sum, count)
+			variance := graph.Sub(
+				graph.Div(sumSquare, count),
+				graph.Square(mean))
+			stddev := graph.Sqrt(variance)
+			return []*graph.Node{mean, stddev}
 		}).MustCall()
 	})
 	if err != nil {
@@ -124,10 +121,10 @@ func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, i
 // ReplaceZerosByOnes replaces any zero values in x by one.
 // This is useful if normalizing a value with a standard deviation
 // (`stddev`) that has zeros.
-func ReplaceZerosByOnes(x *Node) *Node {
+func ReplaceZerosByOnes(x *graph.Node) *graph.Node {
 	g := x.Graph()
-	return Where(
-		Equal(x, ScalarZero(g, x.DType())),
-		OnesLike(x),
+	return graph.Where(
+		graph.Equal(x, graph.ScalarZero(g, x.DType())),
+		graph.OnesLike(x),
 		x)
 }

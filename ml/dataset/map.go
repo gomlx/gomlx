@@ -7,7 +7,7 @@ import (
 	"iter"
 
 	"github.com/gomlx/compute"
-	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
@@ -16,7 +16,7 @@ import (
 
 // GraphBatch represents a batch of nodes in the graph building phase.
 type GraphBatch struct {
-	Inputs, Labels []*Node
+	Inputs, Labels []*graph.Node
 	Spec           any
 }
 
@@ -114,8 +114,8 @@ func (mapDS *mapDataset) Iter() iter.Seq2[train.Batch, error] {
 			if !found {
 				executor = &mapDatasetExecutor{}
 				executor.exec = model.MustNewExec(mapDS.backend, mapDS.store,
-					func(scope *model.Scope, inputsAndLabels []*Node) []*Node {
-						var inputs, labels []*Node
+					func(scope *model.Scope, inputsAndLabels []*graph.Node) []*graph.Node {
+						var inputs, labels []*graph.Node
 						if key.numInputs > 0 {
 							inputs = inputsAndLabels[:key.numInputs]
 						}
@@ -144,7 +144,7 @@ func (mapDS *mapDataset) Iter() iter.Seq2[train.Batch, error] {
 					inputsAndLabelsAny[idx] = t
 					tensorsToFinalize = append(tensorsToFinalize, t)
 				} else {
-					donated, err := DonateTensorBuffer(t, mapDS.backend, 0)
+					donated, err := graph.DonateTensorBuffer(t, mapDS.backend, 0)
 					if err != nil {
 						inputsAndLabelsAny[idx] = t
 						tensorsToFinalize = append(tensorsToFinalize, t)

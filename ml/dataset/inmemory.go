@@ -15,7 +15,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
-	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/pkg/errors"
@@ -49,7 +49,7 @@ type InMemoryDataset struct {
 	numExamples int
 
 	// gatherExec gather the slices of the inputs/labels for a particular batch being yielded.
-	gatherExec *Exec // Batch tensors.
+	gatherExec *graph.Exec // Batch tensors.
 
 	// muSampling serializes the sampling information, all the member variables below.
 	muSampling sync.Mutex
@@ -95,7 +95,7 @@ func InMemory(backend compute.Backend, ds train.Dataset, dsIsBatched bool) (mds 
 	mds = &InMemoryDataset{
 		backend:               backend,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
-		gatherExec:            MustNewExec(backend, gatherFromDataTensorsGraph),
+		gatherExec:            graph.MustNewExec(backend, gatherFromDataTensorsGraph),
 		name:                  ds.Name(),
 	}
 	if sn, ok := ds.(train.HasShortName); ok {
@@ -131,7 +131,7 @@ func InMemoryFromData(
 	mds = &InMemoryDataset{
 		backend:               backend,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
-		gatherExec:            MustNewExec(backend, gatherFromDataTensorsGraph),
+		gatherExec:            graph.MustNewExec(backend, gatherFromDataTensorsGraph),
 		name:                  name,
 		shortName:             name[:3],
 		inputsAndLabelsData:   make([]*tensors.Tensor, 0, len(inputs)+len(labels)),
@@ -275,11 +275,11 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 
 	// Graph building function to concatenate results.
 	alreadyBatched := dsIsBatched // Changes after the first round of concatenating.
-	concatenateFn := func(parts []*Node) *Node {
+	concatenateFn := func(parts []*graph.Node) *graph.Node {
 		if !alreadyBatched {
-			newParts := make([]*Node, 0, len(parts))
+			newParts := make([]*graph.Node, 0, len(parts))
 			for _, input := range parts {
-				newParts = append(newParts, InsertAxes(input, 0))
+				newParts = append(newParts, graph.InsertAxes(input, 0))
 			}
 			parts = newParts
 		}
@@ -287,9 +287,9 @@ func (mds *InMemoryDataset) readDataset(ds train.Dataset, dsIsBatched bool) (err
 			return parts[0]
 		}
 		// Batch dimension is by convention the very first.
-		return Concatenate(parts, 0)
+		return graph.Concatenate(parts, 0)
 	}
-	concatenateExec := MustNewExec(mds.backend, concatenateFn)
+	concatenateExec := graph.MustNewExec(mds.backend, concatenateFn)
 	// Configure a large cache, since there can be quite a few cycles times the number of elements.
 	concatenateExec.SetMaxCache(512)
 
@@ -480,12 +480,12 @@ func (s *inMemoryIterState) indicesNextYield() (indices []int) {
 // gatherFromDataTensorsGraph will gather the indices from each data input. The `indicesAndDataTensors` first element
 // is `indices`, the others are all data values. It returns one gathered value for each data value
 // (`len(indicesAndData) - 1` tensors).
-func gatherFromDataTensorsGraph(indicesAndData []*Node) (gathered []*Node) {
+func gatherFromDataTensorsGraph(indicesAndData []*graph.Node) (gathered []*graph.Node) {
 	indices := indicesAndData[0]
 	dataNodes := indicesAndData[1:]
-	gathered = make([]*Node, 0, len(dataNodes))
+	gathered = make([]*graph.Node, 0, len(dataNodes))
 	for _, n := range dataNodes {
-		gathered = append(gathered, Gather(n, indices))
+		gathered = append(gathered, graph.Gather(n, indices))
 	}
 	return
 }
@@ -741,7 +741,7 @@ func GobDeserializeInMemoryToDevice(
 	mds = &InMemoryDataset{
 		backend:               backend,
 		randomNumberGenerator: rand.New(rand.NewSource(time.Now().UnixNano())),
-		gatherExec:            MustNewExec(backend, gatherFromDataTensorsGraph),
+		gatherExec:            graph.MustNewExec(backend, gatherFromDataTensorsGraph),
 	}
 
 	var numInputsAndLabels int32
