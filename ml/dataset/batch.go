@@ -8,7 +8,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
-	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/pkg/errors"
@@ -40,7 +40,7 @@ type batchedDataset struct {
 	batchSize                              int
 	createLeadingAxis, dropIncompleteBatch bool
 
-	batchExec *Exec // Batch tensors.
+	batchExec *graph.Exec // Batch tensors.
 }
 
 // Batch creates dataset that batches `ds` into batches of size `batchSize`.
@@ -80,7 +80,7 @@ func Batch(
 		createLeadingAxis:   createLeadingAxis,
 		dropIncompleteBatch: dropIncompleteBatch,
 	}
-	batched.batchExec = MustNewExec(backend, batched.batchTensorsGraph)
+	batched.batchExec = graph.MustNewExec(backend, batched.batchTensorsGraph)
 	return batched
 }
 
@@ -274,11 +274,11 @@ func (ds *batchedDataset) batchTensor(parts []*tensors.Tensor) (batched *tensors
 
 // batchTensorsGraph builds the computational graph that batches a collection of Nodes
 // (that will hold the tensors).
-func (ds *batchedDataset) batchTensorsGraph(inputs []*Node) *Node {
+func (ds *batchedDataset) batchTensorsGraph(inputs []*graph.Node) *graph.Node {
 	if ds.createLeadingAxis {
-		newInputs := make([]*Node, 0, len(inputs))
+		newInputs := make([]*graph.Node, 0, len(inputs))
 		for _, input := range inputs {
-			newInputs = append(newInputs, InsertAxes(input, 0))
+			newInputs = append(newInputs, graph.InsertAxes(input, 0))
 		}
 		inputs = newInputs
 	}
@@ -286,7 +286,7 @@ func (ds *batchedDataset) batchTensorsGraph(inputs []*Node) *Node {
 	if len(inputs) == 1 {
 		return inputs[0]
 	}
-	return Concatenate(inputs, 0)
+	return graph.Concatenate(inputs, 0)
 }
 
 // ReadAhead returns a Dataset that reads bufferSize elements of the given `ds`
