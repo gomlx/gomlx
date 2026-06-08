@@ -52,12 +52,13 @@ And a few small renaming:
 - `ml/train/losses` -> `ml/train/loss`
 
 
-## **Scope Redesign** now in package `model`
+## **Scope Redesign**
 - Package `context` -> `model`
 - `Scope` -> `Store` and `Scope`
 - `NewScope` -> `NewStore` (the only "global" one)
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
-  - New `Exec` wrappers for fixed number of outputs: `NewExec1`, `NewExec2` and `NewExec3` for graphs with one, two or three outputs.
+  - New `Exec` wrappers for fixed number of outputs: `NewExec1()`, `NewExec2()` and `NewExec3()` for graphs with one,
+    two or three outputs.
 - Using mostly `fullPath` instead of the split scope/key pairs.
 - Variables:
   - `Scope.VariableWithValueGraph` -> `Scope.VariableWithNodeValue`
@@ -72,18 +73,26 @@ And a few small renaming:
   the Graph is destroyed (preventing some leaks).
 
 ## Package `ml/train`: 
+- `NewTrainer` now accepts generic functions matching the `ModelFnCompatible` constraint. This allows `modelFn`
+  signatures to omit the `spec` parameter if not used, use named `*graph.Node` input parameters, and return a single
+  `*graph.Node` (or up to 3 nodes) directly instead of a slice. The passed functions are automatically converted to the
+  canonical signature.
+  - All standard examples (`adult`, `cifar`, `mnist`, `dogsvscats`) and their corresponding Jupyter Notebooks have been
+    updated to use these simplified/cleaner signatures.
+- `Dataset` API change: updated to use iterators, and now yields a `Batch` struct -- more convenient if we need
+  future extensions, and easier to ignore non-used fields (like `Spec`).
 - Clarification of main loss vs regularization loss in `ml/train`, added: 
   - `AddMainLoss`/`GetMainLoss` to accumulate the main model losses; 
   - `AddRegularizationLoss`/`GetRegularizationLoss` to accumulate regularization losses;
   - `TotalLoss` to return their sum.
   - Older API marked as deprecated.
-  - Changed default loss metrics behavior to only return the total loss by default (named "Loss" / "~loss"). Added `WithMainLossMetric()` method to include the "no-reg" metrics when requested.
-- `NewTrainer` now accepts generic functions matching the `ModelFnCompatible` constraint. This allows `modelFn` signatures to omit the `spec` parameter if not used, use named `*graph.Node` input parameters, and return a single `*graph.Node` (or up to 3 nodes) directly instead of a slice. The passed functions are automatically converted to the canonical signature.
-  - All standard examples (`adult`, `cifar`, `mnist`, `dogsvscats`) and their corresponding Jupyter Notebooks have been updated to use these simplified/cleaner signatures.
+  - Changed default loss metrics behavior to only return the total loss by default (named "Loss" / "~loss"). Added
+    `WithMainLossMetric()` method to include the "no-reg" metrics when requested.
 
 ## Graph (github.com/gomlx/gomlx/core/graph):
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
-  - New `Exec` wrappers for fixed number of outputs: `NewExec1`, `NewExec2` and `NewExec3` for graphs with one, two or three outputs.
+  - New `Exec` wrappers for fixed number of outputs: `NewExec1`, `NewExec2` and `NewExec3` for graphs with one, two or
+    three outputs.
 
 ## Tensors (github.com/gomlx/gomlx/core/tensors):
 - Renamed `FromAnyValue` to `MustFromAnyValue` and added `FromAnyValue` returning `(tensor, error)`.

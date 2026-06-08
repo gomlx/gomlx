@@ -52,9 +52,6 @@ type Dataset interface {
 	// and types of a generic CSV file reader.
 	//
 	// **Important**:
-	// 1. For train.Trainer the `spec` is converted to string as a key of a `map[string]` for different computation
-	//    graphs, so each time the `spec` changes, the model graph is regenerated and re-compiled. Just like with
-	//   `inputs` or `labels` of different shapes.
 	// 2. The number of `inputs` and `labels` should not change for the same `spec` -- the train.Trainer will return
 	//    an error if they do. Their shape can vary (at the cost of creating a new JIT-compiled graph for each
 	//    different combination of shapes). If the number of `inputs` or `labels` needs changing, a new `spec`
@@ -68,6 +65,28 @@ type Dataset interface {
 	//
 	// Any other errors should interrupt the training/evaluation and be returned to the user.
 	Yield() (spec any, inputs, labels []*tensors.Tensor, err error)
+}
+
+// Batch represents one "item" yielded by a Dataset.
+type Batch struct {
+	// Inputs and Labels of a batch, either are optional.
+	// The inputs are passed to the model function during training and evaluation.
+	// The labels are passed to the loss function(s) and metrics.
+	// The order must be agreed between the dataset and the model function that takes the inputs,
+	// and the loss/metric function for the loss(es) and metric(s).
+	Inputs, Labels []*tensors.Tensor
+
+	// Spec defines the task, configuration, or structural requirements
+	// for this specific batch. If this changes, GoMLX will generate
+	// and JIT-compile a new computation graph.
+	//
+	// This is used for multi-task training.
+	// If you are not using that, you can ignore it.
+	//
+	// For train.Trainer the Batch.Spec is converted to string as a key of a map[string] for different computation
+	// graphs, so each time the `spec` changes, the model graph is regenerated and re-compiled. Just like with
+	// Inputs or Labels of different shapes.
+	Spec any
 }
 
 // DistributedDataset is different API to a Dataset but yields dtensor.Tensors, ready for distributed
