@@ -8174,7 +8174,7 @@ JIT-compiled code later on.</li>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
-<pre>2026/06/07 14:58:21 Fatal error: cannot broadcast Float64 and Int64 for "Add": they have different dtypes
+<pre>2026/06/09 13:45:31 Fatal error: cannot broadcast Float64 and Int64 for "Add": they have different dtypes
 github.com/gomlx/go-xla/compute/xla.(*Builder).broadcastForBinaryOps
 	/home/janpf/Projects/gomlx/go-xla/compute/xla/builder.go:317
 github.com/gomlx/go-xla/compute/xla.(*Function).Add
@@ -8182,7 +8182,7 @@ github.com/gomlx/go-xla/compute/xla.(*Function).Add
 github.com/gomlx/gomlx/core/graph.Add
 	/home/janpf/Projects/gomlx/gomlx/core/graph/gen_compute_ops.go:212
 main.Sum
-	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [3] Line 11 ]]</span> /tmp/gonb_70e3afe7/main.go:20
+	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [3] Line 11 ]]</span> /tmp/gonb_bd1ce53c/main.go:20
 github.com/gomlx/gomlx/core/graph.convertExecFn[...].func5
 	/home/janpf/Projects/gomlx/gomlx/core/graph/gen_constraints.go:84
 github.com/gomlx/gomlx/core/graph.(*Exec).buildAndCompileGraph.func1
@@ -8204,7 +8204,7 @@ github.com/gomlx/gomlx/core/graph.(*Exec).CallWithGraph
 github.com/gomlx/gomlx/core/graph.(*Exec).Call
 	/home/janpf/Projects/gomlx/gomlx/core/graph/execaliases.go:38
 main.main
-	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [4] Line 3 ]]</span> /tmp/gonb_70e3afe7/main.go:35
+	 <span class="ansi-default-inverse-fg ansi-default-inverse-bg">[[ Cell [4] Line 3 ]]</span> /tmp/gonb_bd1ce53c/main.go:35
 runtime.main
 	/home/janpf/sdk/go1.26.3/src/runtime/proc.go:290
 runtime.goexit
@@ -8274,14 +8274,14 @@ exit status 1
 }
 </style>
 <div class="jp-RenderedText" data-mime-type="application/vnd.jupyter.stderr" style="font-family: monospace;">
-<div style="white-space: pre-wrap;"> <span class="gonb-err-hover-area"><span class="gonb-cell-line-info">Cell[3]: Line 11</span> <span class="gonb-err-location">/tmp/gonb_70e3afe7/main.go:20</span></span><div class="gonb-err-context">func Sum(a, b *Node) *Node {
+<div style="white-space: pre-wrap;"> <span class="gonb-err-hover-area"><span class="gonb-cell-line-info">Cell[3]: Line 11</span> <span class="gonb-err-location">/tmp/gonb_bd1ce53c/main.go:20</span></span><div class="gonb-err-context">func Sum(a, b *Node) *Node {
     g := a.Graph()  // Graph on which this symbolic computation is being built.
     fmt.Printf("\n- Building graph (GraphId=%d) for a.shape=%s and b.shape=%s\n", g.GraphId(), a.Shape(), b.Shape())
 <div class="gonb-err-line">    return Add(a, b)
 </div>}
 
 </div></div>
-<div style="white-space: pre-wrap;"> <span class="gonb-err-hover-area"><span class="gonb-cell-line-info">Cell[4]: Line 3</span> <span class="gonb-err-location">/tmp/gonb_70e3afe7/main.go:35</span></span><div class="gonb-err-context">func main() {
+<div style="white-space: pre-wrap;"> <span class="gonb-err-hover-area"><span class="gonb-cell-line-info">Cell[4]: Line 3</span> <span class="gonb-err-location">/tmp/gonb_bd1ce53c/main.go:35</span></span><div class="gonb-err-context">func main() {
 	flag.Parse()
 sumExec := MustNewExec(backend, Sum)
 <div class="gonb-err-line">_ = must(sumExec.Call(1.1, 2)) // Error: arguments have different dtypes Float64 and Int64.
@@ -8957,7 +8957,7 @@ have been selected in Go directly using <code>math/random</code>, but just for f
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Example of target: coefficients=[-4.5 0.954 -0.569], bias=15.7
+<pre>Example of target: coefficients=[6.3 -7.22 6.58], bias=12
 </pre>
 </div>
 </div>
@@ -8996,7 +8996,7 @@ selected coefficients plus some normal noise.</p>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [14]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="n">func</span> <span class="n">buildExamples</span><span class="p">(</span><span class="n">backend</span> <span class="n">compute</span><span class="o">.</span><span class="n">Backend</span><span class="p">,</span> <span class="n">coef</span><span class="p">,</span> <span class="n">bias</span> <span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">numExamples</span> <span class="nb">int</span><span class="p">,</span> <span class="n">noise</span> <span class="n">float64</span><span class="p">)</span> <span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span> <span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="p">{</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="n">func</span> <span class="n">buildExamples</span><span class="p">(</span><span class="n">backend</span> <span class="n">compute</span><span class="o">.</span><span class="n">Backend</span><span class="p">,</span> <span class="n">coef</span><span class="p">,</span> <span class="n">bias</span> <span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">numExamples</span> <span class="nb">int</span><span class="p">,</span> <span class="n">noise</span> <span class="n">float64</span><span class="p">)</span> <span class="n">train</span><span class="o">.</span><span class="n">Batch</span> <span class="p">{</span>
     <span class="n">e</span> <span class="o">:=</span> <span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">func</span><span class="p">(</span><span class="n">coef</span><span class="p">,</span> <span class="n">bias</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
         <span class="n">g</span> <span class="o">:=</span> <span class="n">coef</span><span class="o">.</span><span class="n">Graph</span><span class="p">()</span>
         <span class="n">numFeatures</span> <span class="o">:=</span> <span class="n">coef</span><span class="o">.</span><span class="n">Shape</span><span class="p">()</span><span class="o">.</span><span class="n">Dimensions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
@@ -9018,19 +9018,19 @@ selected coefficients plus some normal noise.</p>
         <span class="p">}</span>
         <span class="k">return</span>
     <span class="p">})</span>
-    <span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">MustCall2</span><span class="p">(</span><span class="n">coef</span><span class="p">,</span> <span class="n">bias</span><span class="p">)</span>
-    <span class="k">return</span>
+    <span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span> <span class="o">:=</span> <span class="n">e</span><span class="o">.</span><span class="n">MustCall2</span><span class="p">(</span><span class="n">coef</span><span class="p">,</span> <span class="n">bias</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">train</span><span class="o">.</span><span class="n">Batch</span><span class="p">{</span><span class="n">Inputs</span><span class="p">:</span> <span class="p">[]</span><span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">{</span><span class="n">inputs</span><span class="p">},</span> <span class="n">Labels</span><span class="p">:</span> <span class="p">[]</span><span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">{</span><span class="n">labels</span><span class="p">}}</span>
 <span class="p">}</span>
 
 <span class="o">%%</span>
 <span class="n">coef</span><span class="p">,</span> <span class="n">bias</span> <span class="o">:=</span> <span class="n">initCoefficients</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
-<span class="n">numExamples</span> <span class="o">:=</span> <span class="mi">5</span>
-<span class="n">inputsTensor</span><span class="p">,</span> <span class="n">labelsTensor</span> <span class="o">:=</span> <span class="n">buildExamples</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">coef</span><span class="p">,</span> <span class="n">bias</span><span class="p">,</span> <span class="n">numExamples</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">)</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Target: coefficients=%0.3v, bias=%0.3v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">coef</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">bias</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
 
+<span class="n">numExamples</span> <span class="o">:=</span> <span class="mi">5</span>
+<span class="n">theBatch</span> <span class="o">:=</span> <span class="n">buildExamples</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">coef</span><span class="p">,</span> <span class="n">bias</span><span class="p">,</span> <span class="n">numExamples</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">)</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="si">%d</span><span class="s2"> dataset examples:</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">numExamples</span><span class="p">)</span>
-<span class="n">inputs</span> <span class="o">:=</span> <span class="n">inputsTensor</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span><span class="o">.</span><span class="p">([][]</span><span class="n">float64</span><span class="p">)</span>
-<span class="n">labels</span> <span class="o">:=</span> <span class="n">labelsTensor</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span><span class="o">.</span><span class="p">([][]</span><span class="n">float64</span><span class="p">)</span>
+<span class="n">inputs</span> <span class="o">:=</span> <span class="n">theBatch</span><span class="o">.</span><span class="n">Inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span><span class="o">.</span><span class="p">([][]</span><span class="n">float64</span><span class="p">)</span>
+<span class="n">labels</span> <span class="o">:=</span> <span class="n">theBatch</span><span class="o">.</span><span class="n">Labels</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span><span class="o">.</span><span class="p">([][]</span><span class="n">float64</span><span class="p">)</span>
 <span class="k">for</span> <span class="n">ii</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">ii</span> <span class="o">&lt;</span> <span class="n">numExamples</span><span class="p">;</span> <span class="n">ii</span> <span class="o">++</span> <span class="p">{</span>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">x=%0.3v; label=%0.3v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="n">ii</span><span class="p">],</span> <span class="n">labels</span><span class="p">[</span><span class="n">ii</span><span class="p">])</span>
 <span class="p">}</span>
@@ -9046,13 +9046,13 @@ selected coefficients plus some normal noise.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[-5.03 4.62 -3.89], bias=-16.1
+<pre>Target: coefficients=[-1.29 -5.26 -2.09], bias=-22.9
 5 dataset examples:
-	x=[-0.301 0.207 -0.911]; label=[-10.2]
-	x=[-0.417 -0.563 0.052]; label=[-16.9]
-	x=[-2.11 -0.265 -0.792]; label=[-3.64]
-	x=[-0.439 -1.58 0.0704]; label=[-21.4]
-	x=[-0.0472 -0.514 1.13]; label=[-22.3]
+	x=[0.161 -2.22 0.845]; label=[-12.8]
+	x=[1.47 -0.576 -0.217]; label=[-21.3]
+	x=[0.606 0.173 -0.161]; label=[-24.1]
+	x=[-0.644 -0.0497 1.41]; label=[-24.7]
+	x=[1.53 0.893 -1.01]; label=[-27.2]
 </pre>
 </div>
 </div>
@@ -9066,20 +9066,34 @@ selected coefficients plus some normal noise.</p>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="Dataset">Dataset<a class="anchor-link" href="#Dataset">¶</a></h3><p>Now the first new concept of this section: <code>train.Dataset</code> is the interface that is used to feed data to
-during a training loop or evaluation.</p>
-<p>There are three methods: <code>Dataset.Yield</code> that returns the next batch of examples;
-<code>Dataset.Reset</code> restarts the dataset, for datasets that don't loop indefinitely;
-Finally <code>Dataset.Name</code> returns the dataset name, usually used for metric names, logging and printing.</p>
-<p>Datasets also yield a <code>spec</code>, an opaque type for GoMLX (defined as <code>any</code>), that allows the dataset to communicate
-to the model which type of data it is generating. In our case, since it's always the same data, we don't need it,
-so we keep it set to <code>nil</code>.
-If one would implement a dataset like a generic CSV file, one may want to communicate
-to the model the field names to the Model throught the <code>spec</code>, for instance. See the documentation for more details.</p>
-<p>For our linear synthetic data we implement the simplest <code>train.Dataset</code>: the whole data is pre-generated, and we return a giant batch with the full data every time -- we could also have more easily used <code>dataset.InMemoryDataset</code> for that, but for didactic purposes we create it from scratch:</p>
+during a training loop or evaluation. It must implement a <code>Dataset.Name()</code> method, and a <code>Dataset.Iter()</code> method to iterate over the data, yielding a <code>train.Batch</code> with inputs and labels.</p>
+<p>For our linear model, we are training always with the full training data, so there is only one batch that should
+be yielded every time.</p>
+<p>GoMLX provides several <code>Dataset</code> tools in the package <code>ml/dataset</code>, one of which has exactly what we want <code>dataset.Const(batch)</code>, it creates a constant dataset that yields always the same batch.</p>
+<blockquote>
+<p><strong>Note</strong>:</p>
+<ul>
+<li>More often it is more work pre-processing data than actually building an ML model ... that's life 🙁</li>
+<li>In the <a href="../../../tree/main/examples/">examples/</a> subdirectory we implement <code>train.Dataset</code> for some
+well known data sets: UCI Adult, Cifar-10, Cifar-100, IMDB Reviews, Kaggle's Dogs vs Cats, Oxford Flowers 102.
+These can be used as libraries to easily try different models.
+If you are workig on public datasets, please consider contributing similar libraries.</li>
+</ul>
+</blockquote>
+<p>The package <a href="https://pkg.go.dev/github.com/gomlx/gomlx/ml/datasetset">github.com/gomlx/gomlx/ml/dataset</a> provides several
+other tools to facilitate the work here:</p>
+<ul>
+<li><code>InMemory</code>: reads a dataset into (accelerator) memory, and then serves it from there -- greatly accelerates training.</li>
+<li><code>Take(inputDS, n)</code>, <code>Batch(inputDS, batchSize)</code>, <code>Buffer</code>, <code>Map(inputDS, mapFn), MapOnHost(inputDS, mapFn)</code>: usual transformation functions that transform one dataset into another.</li>
+<li><code>ParallelizeMap</code>, <code>ParallelizeMapOnHost</code>: parallelized verion of <code>Map</code> and <code>MapOnHost</code>, for performant transformation of datasets.</li>
+<li><code>Const(batch)</code>, <code>Zero()</code>: Constant datasets that always yields the same batch.</li>
+</ul>
+<p>See also <a href="https://github.com/gomlx/go-huggingface/">github.com/gomlx/go-huggingface</a> for a project that among other things makes it trivial to iterate over HuggingFace datasets (many standard public datasets are stored there).</p>
+<p>Below a small demo creating our training batch, and iterating over it: it yields always the same value.</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=2cadb18d-ef0e-4036-b450-a64f8286a65b">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=221e7a69-dacd-4c6d-94d2-1956e6f9c443">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9087,34 +9101,41 @@ to the model the field names to the Model throught the <code>spec</code>, for in
 <div class="jp-InputPrompt jp-InputArea-prompt">In [15]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">"github.com/gomlx/gomlx/ml/train"</span>
-
-<span class="o">//</span> <span class="n">TrivialDataset</span> <span class="n">always</span> <span class="n">returns</span> <span class="n">the</span> <span class="n">whole</span> <span class="n">data</span><span class="o">.</span>
-<span class="nb">type</span> <span class="n">TrivialDataset</span> <span class="n">struct</span> <span class="p">{</span>
-    <span class="n">name</span> <span class="n">string</span>
-    <span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span> <span class="p">[]</span><span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span>
+<span class="n">const</span> <span class="n">numFeatures</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">const</span> <span class="n">batchSize</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">trueCoefficients</span><span class="p">,</span> <span class="n">trueBias</span> <span class="o">:=</span> <span class="n">initCoefficients</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">numFeatures</span><span class="p">)</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Target: coefficients=%0.3v, bias=%0.3v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">trueCoefficients</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">trueBias</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
+<span class="n">theBatch</span> <span class="o">:=</span> <span class="n">buildExamples</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">trueCoefficients</span><span class="p">,</span> <span class="n">trueBias</span><span class="p">,</span> <span class="n">batchSize</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">)</span>
+<span class="n">ds</span> <span class="o">:=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">Const</span><span class="p">(</span><span class="n">theBatch</span><span class="p">)</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Dataset: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">ds</span><span class="o">.</span><span class="n">Name</span><span class="p">())</span>
+<span class="n">var</span> <span class="n">count</span> <span class="nb">int</span>
+<span class="k">for</span> <span class="n">batch</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="nb">range</span> <span class="n">ds</span><span class="o">.</span><span class="n">Iter</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
+    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"- Batch: input=</span><span class="si">%s</span><span class="s2">, label=</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">Inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">batch</span><span class="o">.</span><span class="n">Labels</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">batch</span><span class="o">.</span><span class="n">Finalize</span><span class="p">()</span>
+    <span class="n">count</span><span class="o">++</span>
+    <span class="k">if</span> <span class="n">count</span><span class="o">==</span><span class="mi">2</span> <span class="p">{</span>
+        <span class="k">break</span>
+    <span class="p">}</span>
 <span class="p">}</span>
-
-<span class="n">var</span> <span class="p">(</span>
-    <span class="o">//</span> <span class="n">Assert</span> <span class="n">Dataset</span> <span class="n">implements</span> <span class="n">train</span><span class="o">.</span><span class="n">Dataset</span><span class="o">.</span>
-    <span class="n">_</span> <span class="n">train</span><span class="o">.</span><span class="n">Dataset</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">TrivialDataset</span><span class="p">{}</span>
-<span class="p">)</span>
-<span class="o">//</span> <span class="n">Name</span> <span class="n">implements</span> <span class="n">train</span><span class="o">.</span><span class="n">Dataset</span><span class="o">.</span>
-<span class="n">func</span> <span class="p">(</span><span class="n">ds</span> <span class="o">*</span><span class="n">TrivialDataset</span><span class="p">)</span> <span class="n">Name</span><span class="p">()</span> <span class="n">string</span> <span class="p">{</span> <span class="k">return</span> <span class="n">ds</span><span class="o">.</span><span class="n">name</span> <span class="p">}</span>
-
-<span class="o">//</span> <span class="n">Yield</span> <span class="n">implements</span> <span class="n">train</span><span class="o">.</span><span class="n">Dataset</span><span class="o">.</span>
-<span class="n">func</span> <span class="p">(</span><span class="n">ds</span> <span class="o">*</span><span class="n">TrivialDataset</span><span class="p">)</span> <span class="n">Yield</span><span class="p">()</span> <span class="p">(</span><span class="n">spec</span> <span class="nb">any</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span> <span class="p">[]</span><span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">err</span> <span class="n">error</span><span class="p">)</span> <span class="p">{</span>
-    <span class="k">return</span> <span class="n">ds</span><span class="p">,</span> <span class="n">ds</span><span class="o">.</span><span class="n">inputs</span><span class="p">,</span> <span class="n">ds</span><span class="o">.</span><span class="n">labels</span><span class="p">,</span> <span class="n">nil</span>
-<span class="p">}</span>
-
-<span class="o">//</span> <span class="n">IsOwnershipTransferred</span> <span class="n">tells</span> <span class="n">the</span> <span class="n">training</span> <span class="n">loop</span> <span class="n">that</span> <span class="n">the</span> <span class="n">dataset</span> <span class="n">keeps</span> <span class="n">ownership</span> <span class="n">of</span> <span class="n">the</span> <span class="n">yielded</span> <span class="n">tensors</span><span class="o">.</span>
-<span class="n">func</span> <span class="p">(</span><span class="n">ds</span> <span class="o">*</span><span class="n">TrivialDataset</span><span class="p">)</span> <span class="n">IsOwnershipTransferred</span><span class="p">()</span> <span class="nb">bool</span> <span class="p">{</span>
-    <span class="k">return</span> <span class="n">false</span>
-<span class="p">}</span>
-
-<span class="o">//</span> <span class="n">Reset</span> <span class="n">implements</span> <span class="n">train</span><span class="o">.</span><span class="n">Dataset</span><span class="o">.</span>
-<span class="n">func</span> <span class="p">(</span><span class="n">ds</span> <span class="o">*</span><span class="n">TrivialDataset</span><span class="p">)</span> <span class="n">Reset</span><span class="p">()</span> <span class="p">{}</span>
 </pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Target: coefficients=[3.38 -1.14 -0.244 -3.09], bias=-7.57
+Dataset: dataset.Const
+- Batch: input=[1][4]float64{{0.6384, 0.7118, -0.1299, 1.708}}, label=[1][1]float64{{-11.43}}
+- Batch: input=[1][4]float64{{0.6384, 0.7118, -0.1299, 1.708}}, label=[1][1]float64{{-11.43}}
+</pre>
 </div>
 </div>
 </div>
@@ -9126,29 +9147,6 @@ to the model the field names to the Model throught the <code>spec</code>, for in
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<blockquote>
-<p><strong>Note</strong>:</p>
-<ul>
-<li>More often it is more work pre-processing data than actually building an ML model ... that's life 🙁</li>
-<li>In the <a href="../../../tree/main/examples/">examples/</a> subdirectory we implement <code>train.Dataset</code> for some
-well known data sets: UCI Adult, Cifar-10, Cifar-100, IMDB Reviews, Kaggle's Dogs vs Cats, Oxford Flowers 102.
-These can be used as libraries to easily try different models.
-If you are workig on public datasets, please consider contributing similar libraries.</li>
-<li><strong>GoMLX</strong> also include the <code>dataset.InMemoryDataset</code>, which can be created from tensors in one line</li>
-</ul>
-</blockquote>
-<p>The package <a href="https://pkg.go.dev/github.com/gomlx/gomlx/ml/datasetset">github.com/gomlx/gomlx/ml/dataset</a> provides several
-tools to facilitate the work here:</p>
-<ul>
-<li><code>Parallel</code>: parallelizes any dataset, includes some buffer.</li>
-<li><code>InMemory</code>: reads a dataset into (accelerator) memory, and then serves it from there -- greatly accelerates training.
-We could have used that instead of defining <code>TrivialDataset</code>, but we left it because it's common to specialize
-datasets.</li>
-<li><code>ConstantDataset</code>: trivial Dataset that returns always empty inputs and labels. Used when one is going to generate
-the data dynamically -- it could also have been used for this example.
-See example in <a href="https://github.com/gomlx/gomlx/blob/main/examples/discretekan/kans_shapes.ipynb">KANs Shapes demo</a>.</li>
-<li>Downloading of datasets (with progress-bar) and checksum functions.</li>
-</ul>
 <h3 id="ModelFn">ModelFn<a class="anchor-link" href="#ModelFn">¶</a></h3><p>Next we write a <code>modelFn</code> to be used by our trainer.</p>
 <p>The <code>modelFn</code> should always take a <code>model.Scope</code> (from where to access the variables),
 optionally a <code>spec any</code> from the dataset (it is used for multi-task training), zero to three input nodes or
@@ -9195,18 +9193,14 @@ and add a learnable bias. It's the most basic building block of neural networks 
 The implementation of <code>layers.DenseWithBias</code> is pretty simple, and worth checking out to refresh how
 variables from the <code>scope</code> are used.</li>
 <li>Since it's a linear model, we don't use an activation function. The usual are available for NNs (<code>Relu</code>,
-<code>Sigmoid</code>, <code>Tanh</code> and more to come).</li>
-<li>The <code>spec</code> parameter allows the creation of a <code>ModelFn</code> that can be used for different types of data. The dataset
-can Yield also a <code>spec</code> about the type of data it is reading. Each different value of <code>spec</code> will trigger the
-the creation of a different computation graph, so ideally there would be at most a few types of different data
-source <code>spec</code>. Most commonly there is only one, like in this example, and the parameter can be ignored.</li>
+<code>Sigmoid</code>, <code>Tanh</code>, <code>Gelu</code>, <code>Silu</code>, etc.).</li>
 </ul>
 </blockquote>
-<h3 id="Trainer-and-Loop">Trainer and Loop<a class="anchor-link" href="#Trainer-and-Loop">¶</a></h3><p>The last part is put together a <code>train.Trainer</code> and <code>train.Loop</code> objects in our <code>main()</code> function. The
-first stitches together the model, the optimizer and the loss function, and is able to run training
-steps and evaluations. The second, <code>train.Loop</code>, loops over the dataset executing a training step at
-a time and supporst a subscription (hooking) system, where one attaches things like a progress bar,
-or plotting of a graph.</p>
+<h3 id="Trainer-and-Loop">Trainer and Loop<a class="anchor-link" href="#Trainer-and-Loop">¶</a></h3><p>The last part is to put together a <code>train.Trainer</code> and <code>train.Loop</code> objects in our <code>main()</code> function.</p>
+<p>The <code>train.Trainer</code> stitches together the model, the optimizer and the loss function, and is able to run training
+steps and evaluations (you can always write your own if you want, GoMLX is designed for simple plug&amp;play).</p>
+<p>The second, <code>train.Loop</code>, loops over the dataset executing a training step at
+a time and supports a subscription (hooking) system, where one attaches things like a progress bar, periodic check-pointing, run evaluations, and/or plotting of a graph of metrics.</p>
 </div>
 </div>
 </div>
@@ -9248,9 +9242,9 @@ or plotting of a graph.</p>
     <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Target: coefficients=%0.3v, bias=%0.3v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">trueCoefficients</span><span class="o">.</span><span class="n">Value</span><span class="p">(),</span> <span class="n">trueBias</span><span class="o">.</span><span class="n">Value</span><span class="p">())</span>
 
     <span class="o">//</span> <span class="n">Generate</span> <span class="n">training</span> <span class="n">data</span> <span class="k">with</span> <span class="n">noise</span><span class="o">.</span>
-    <span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span> <span class="o">:=</span> <span class="n">buildExamples</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">trueCoefficients</span><span class="p">,</span> <span class="n">trueBias</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNumExamples</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNoise</span><span class="p">)</span>
-    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Training data (inputs, labels): (</span><span class="si">%s</span><span class="s2">, </span><span class="si">%s</span><span class="s2">)</span><span class="se">\n\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">inputs</span><span class="o">.</span><span class="n">Shape</span><span class="p">(),</span> <span class="n">labels</span><span class="o">.</span><span class="n">Shape</span><span class="p">())</span>
-    <span class="n">ds</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="n">TrivialDataset</span><span class="p">{</span><span class="s2">"linear"</span><span class="p">,</span> <span class="p">[]</span><span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">{</span><span class="n">inputs</span><span class="p">},</span> <span class="p">[]</span><span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">{</span><span class="n">labels</span><span class="p">}}</span>
+    <span class="n">theBatch</span> <span class="o">:=</span> <span class="n">buildExamples</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">trueCoefficients</span><span class="p">,</span> <span class="n">trueBias</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNumExamples</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNoise</span><span class="p">)</span>
+    <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Training data (inputs, labels): (</span><span class="si">%s</span><span class="s2">, </span><span class="si">%s</span><span class="s2">)</span><span class="se">\n\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">theBatch</span><span class="o">.</span><span class="n">Inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Shape</span><span class="p">(),</span> <span class="n">theBatch</span><span class="o">.</span><span class="n">Labels</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Shape</span><span class="p">())</span>
+    <span class="n">ds</span> <span class="o">:=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">Const</span><span class="p">(</span><span class="n">theBatch</span><span class="p">)</span>
 
     <span class="o">//</span> <span class="n">Creates</span> <span class="n">scope</span> <span class="k">with</span> <span class="n">learned</span> <span class="n">weights</span> <span class="ow">and</span> <span class="n">bias</span><span class="o">.</span>
     <span class="n">store</span> <span class="o">:=</span> <span class="n">model</span><span class="o">.</span><span class="n">NewStore</span><span class="p">()</span>
@@ -9266,7 +9260,7 @@ or plotting of a graph.</p>
     <span class="n">loop</span> <span class="o">:=</span> <span class="n">train</span><span class="o">.</span><span class="n">NewLoop</span><span class="p">(</span><span class="n">trainer</span><span class="p">)</span>
     <span class="n">AttachToLoop</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span>
 
-    <span class="o">//</span> <span class="n">Loop</span> <span class="k">for</span> <span class="n">given</span> <span class="n">number</span> <span class="n">of</span> <span class="n">steps</span><span class="o">.</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">()</span> <span class="n">panics</span><span class="p">,</span> <span class="k">if</span> <span class="n">loop</span><span class="o">.</span><span class="n">RunSteps</span> <span class="n">returns</span> <span class="n">an</span> <span class="n">error</span><span class="o">.</span>
+    <span class="o">//</span> <span class="n">Loop</span> <span class="k">for</span> <span class="n">given</span> <span class="n">number</span> <span class="n">of</span> <span class="n">steps</span><span class="o">.</span> 
     <span class="n">metrics</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">loop</span><span class="o">.</span><span class="n">RunSteps</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNumSteps</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="k">return</span> <span class="n">err</span> <span class="p">}</span>
     <span class="n">_</span> <span class="o">=</span> <span class="n">metrics</span>  <span class="o">//</span> <span class="n">We</span> <span class="n">are</span> <span class="ow">not</span> <span class="n">interested</span> <span class="ow">in</span> <span class="n">them</span> <span class="ow">in</span> <span class="n">this</span> <span class="n">example</span><span class="o">.</span>
@@ -9294,12 +9288,12 @@ or plotting of a graph.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[7.99 -4.12 2.15], bias=13.1
+<pre>Target: coefficients=[0.388 8.48 1.81], bias=10.4
 Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 
-      <span class="ansi-bold"> 100% [========================================] (9214 steps/s)</span> [step=99] [loss=0.246] [~loss=12.6]                
+      <span class="ansi-bold"> 100% [========================================] (8000 steps/s)</span> [step=99] [loss=0.219] [~loss=9.92]                
 
-Learned: coefficients=[[7.83] [-4.06] [2.1]], bias=[12.8]
+Learned: coefficients=[[0.441] [8.27] [1.79]], bias=[10.2]
 </pre>
 </div>
 </div>
@@ -9368,7 +9362,7 @@ the only metrics are the default ones, the batch and mean of the loss -- the mea
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Target: coefficients=[-1.51 -5.9 -0.305], bias=-17.1
+<pre>Target: coefficients=[4.88 -5.79 0.911], bias=3.83
 Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 
 </pre>
@@ -9382,7 +9376,7 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold">   3% [&gt;.......................................] (18001 steps/s) [0s:0s]</span> [step=164] [loss=0.0931] [~loss=8.61]        </pre>
+<pre>      <span class="ansi-bold">   3% [&gt;.......................................] (12697 steps/s) [0s:0s]</span> [step=164] [loss=0.101] [~loss=2.14]        </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -9393,7 +9387,7 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold"> 100% [========================================] (16303 steps/s)</span> [step=4999] [loss=0.0774] [~loss=0.0774]                
+<pre>      <span class="ansi-bold"> 100% [========================================] (12719 steps/s)</span> [step=4999] [loss=0.0975] [~loss=0.0975]                
 </pre>
 </div>
 </div>
@@ -9406,14 +9400,7 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="31bca6ce"></div>
-</div>
-</div>
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>
-</pre>
+<div id="1dac59e7"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -9427,8 +9414,8 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[1.6883405193789252,0.2009423784218363,0.0921027711352416,0.0795551170665795,0.07774627803943548,0.07745629406344699,0.07740623635259737,0.07739729991084954,0.07739569203985777,0.07739540549892349,0.07739535552639348,0.07739534707004965,0.07739534568996519,0.07739534547327807,0.07739534544106842,0.07739534543652903,0.07739534543592831,0.07739534543585419,0.07739534543584571,0.07739534543584481,0.07739534543584473,0.07739534543584471,0.07739534543584473,0.07739534543584471,0.0773953454358447,0.07739534543584471]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[31.60626892820731,15.487968312261918,8.445015521865166,4.347534126689076,2.107616182006638,0.9769605032891713,0.44517052205772123,0.21474901442242117,0.12378766914170096,0.09142468420664729,0.08115588026374511,0.07827988857991908,0.07757609650035753,0.0774267943526443,0.0773999578554841,0.07739590431864113,0.07739540027011299,0.07739534970550666,0.07739534569443743,0.07739534544766481,0.07739534543624033,0.0773953454358541,0.07739534543584538,0.07739534543584538,0.07739534543584538,0.07739534543584538]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('31bca6ce', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[0.47263833778125464,0.1257214075603238,0.1007947570449135,0.09796391902523552,0.09756131934881063,0.09749759762487357,0.09748673305674724,0.09748481704383236,0.09748447651099215,0.0974844165747328,0.09748440625418259,0.09748440453050607,0.09748440425299681,0.09748440421003733,0.09748440420374573,0.09748440420287278,0.09748440420275917,0.09748440420274539,0.09748440420274385,0.09748440420274368,0.09748440420274367,0.09748440420274367,0.09748440420274367,0.09748440420274365,0.09748440420274368,0.09748440420274367]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[51,106,167,234,308,389,478,576,684,803,934,1078,1236,1410,1601,1811,2042,2296,2575,2882,3220,3592,4001,4451,4946,5000],"y":[7.664171624958208,3.7935638903427686,2.104125337716993,1.1214629744286582,0.5843224154773291,0.31319442243151413,0.1856741960526389,0.13042073196118156,0.10860890254944208,0.10084852140487013,0.09838614817856764,0.09769650995033372,0.09752774671637446,0.09749194537301543,0.0974855102194404,0.09748453821773789,0.09748441735149163,0.09748440522656772,0.0974844042647515,0.09748440420557816,0.09748440420283878,0.09748440420274612,0.09748440420274455,0.09748440420274455,0.09748440420274455,0.09748440420274455]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('1dac59e7', data);
 
 	}
 	
@@ -9469,7 +9456,8 @@ Training data (inputs, labels): ((Float64)[10000, 3], (Float64)[10000, 1])
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Learned: coefficients=[[-1.51] [-5.9] [-0.303]], bias=[-17.1]
+<pre>
+Learned: coefficients=[[4.87] [-5.78] [0.91]], bias=[3.83]
 </pre>
 </div>
 </div>
