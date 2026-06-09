@@ -6,6 +6,7 @@ import (
 	"iter"
 	"testing"
 
+	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/testutil"
@@ -148,4 +149,172 @@ func TestMapExecutorsCaching(t *testing.T) {
 	exec4, found := mDS.executors[k1]
 	require.True(t, found)
 	require.Equal(t, exec1, exec4)
+}
+
+func TestParallelMapOnHost(t *testing.T) {
+	// Create batches with simple indices in input.
+	var batches []train.Batch
+	for i := 0; i < 100; i++ {
+		tVal := tensors.MustFromAnyValue(i)
+		batches = append(batches, train.Batch{
+			Inputs: []*tensors.Tensor{tVal},
+			Spec:   dummySpec(string(rune(i))),
+		})
+	}
+
+	ds := &mockMultiBatchDS{batches: batches}
+
+	// mapFn increments the value in Inputs[0] by 1000.
+	mapFn := func(batch train.Batch) train.Batch {
+		val := tensors.ToScalar[int64](batch.Inputs[0])
+		batch.Inputs[0].MustFinalizeAll()
+		batch.Inputs = []*tensors.Tensor{tensors.MustFromAnyValue(val + 1000)}
+		return batch
+	}
+
+	pds := ParallelMapOnHost(ds, mapFn).WithParallelism(4)
+
+	// Iterate and check values are in order and incremented.
+	count := int64(0)
+	for batch, err := range pds.Iter() {
+		require.NoError(t, err)
+		val := tensors.ToScalar[int64](batch.Inputs[0])
+		require.Equal(t, count+1000, val)
+		batch.Finalize()
+		count++
+	}
+	require.Equal(t, int64(100), count)
+}
+
+func TestParallelMapOnHostUnordered(t *testing.T) {
+	// Create batches with simple indices in input.
+	var batches []train.Batch
+	for i := 0; i < 100; i++ {
+		tVal := tensors.MustFromAnyValue(i)
+		batches = append(batches, train.Batch{
+			Inputs: []*tensors.Tensor{tVal},
+			Spec:   dummySpec(string(rune(i))),
+		})
+	}
+
+	ds := &mockMultiBatchDS{batches: batches}
+
+	// mapFn increments the value in Inputs[0] by 1000.
+	mapFn := func(batch train.Batch) train.Batch {
+		val := tensors.ToScalar[int64](batch.Inputs[0])
+		batch.Inputs[0].MustFinalizeAll()
+		batch.Inputs = []*tensors.Tensor{tensors.MustFromAnyValue(val + 1000)}
+		return batch
+	}
+
+	// Test default behavior is preserving order
+	pdsDefault := ParallelMapOnHost(ds, mapFn).WithParallelism(4)
+	require.True(t, pdsDefault.preserveOrder)
+
+	// Test builder pattern to disable preserveOrder
+	pdsUnordered := ParallelMapOnHost(ds, mapFn).WithParallelism(4).WithPreserveOrder(false)
+	require.False(t, pdsUnordered.preserveOrder)
+
+	// Iterate and check all values are present (but order is not checked).
+	seen := make(map[int64]bool)
+	count := 0
+	for batch, err := range pdsUnordered.Iter() {
+		require.NoError(t, err)
+		val := tensors.ToScalar[int64](batch.Inputs[0])
+		require.GreaterOrEqual(t, val, int64(1000))
+		require.Less(t, val, int64(1100))
+		seen[val] = true
+		batch.Finalize()
+		count++
+	}
+	require.Equal(t, 100, count)
+	require.Len(t, seen, 100)
+}
+
+func TestParallelMapUnordered(t *testing.T) {
+	// Create an iterator with numbers 0 to 99
+	seq := func(yield func(int, error) bool) {
+		for i := 0; i < 100; i++ {
+			if !yield(i, nil) {
+				return
+			}
+		}
+	}
+
+	mapFn := func(val int) (int, error) {
+		return val + 1000, nil
+	}
+
+	mappedSeq := parallelMapUnorderedImpl(seq, 4, mapFn)
+
+	seen := make(map[int]bool)
+	count := 0
+	for val, err := range mappedSeq {
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, val, 1000)
+		require.Less(t, val, 1100)
+		seen[val] = true
+		count++
+	}
+	require.Equal(t, 100, count)
+	require.Len(t, seen, 100)
+}
+
+func TestParallelMap(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+
+	// Create batches with simple indices in input.
+	var batches []train.Batch
+	for i := 0; i < 100; i++ {
+		tVal := tensors.FromValue(float32(i))
+		batches = append(batches, train.Batch{
+			Inputs: []*tensors.Tensor{tVal},
+			Spec:   dummySpec(string(rune(i))),
+		})
+	}
+
+	ds := &mockMultiBatchDS{batches: batches}
+
+	// mapFn adds 1000 to the input tensor in the graph.
+	mapFn := func(graphBatch GraphBatch) GraphBatch {
+		g := graphBatch.Inputs[0].Graph()
+		node := graphBatch.Inputs[0]
+		added := graph.Add(node, graph.Const(g, float32(1000.0)))
+		return GraphBatch{
+			Inputs: []*graph.Node{added},
+			Spec:   graphBatch.Spec,
+		}
+	}
+
+	pds := ParallelMap(backend, ds, mapFn)
+	require.True(t, pds.preserveOrder)
+
+	// Iterate and check values are in order and mapped.
+	count := 0
+	for batch, err := range pds.Iter() {
+		require.NoError(t, err)
+		val := tensors.ToScalar[float32](batch.Inputs[0])
+		require.Equal(t, float32(count+1000), val)
+		batch.Finalize()
+		count++
+	}
+	require.Equal(t, 100, count)
+
+	// Test unordered mapping on accelerator
+	pdsUnordered := ParallelMap(backend, ds, mapFn).WithPreserveOrder(false)
+	require.False(t, pdsUnordered.preserveOrder)
+
+	seen := make(map[float32]bool)
+	count = 0
+	for batch, err := range pdsUnordered.Iter() {
+		require.NoError(t, err)
+		val := tensors.ToScalar[float32](batch.Inputs[0])
+		require.GreaterOrEqual(t, val, float32(1000.0))
+		require.Less(t, val, float32(1100.0))
+		seen[val] = true
+		batch.Finalize()
+		count++
+	}
+	require.Equal(t, 100, count)
+	require.Len(t, seen, 100)
 }

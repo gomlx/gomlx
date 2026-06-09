@@ -292,10 +292,10 @@ func (ds *batchedDataset) batchTensorsGraph(inputs []*graph.Node) *graph.Node {
 // ReadAhead returns a Dataset that reads bufferSize elements of the given `ds`
 // so that when Yield is called, the results are immediate.
 //
-// It uses ParallelDataset to implement it.
+// Deprecated: please use Buffer() instead.
 func ReadAhead(ds train.Dataset, bufferSize int) train.Dataset {
 	if bufferSize <= 0 {
 		return ds
 	}
-	return CustomParallel(ds).Parallelism(1).Buffer(bufferSize - 1).Start()
+	return Buffer(ds, bufferSize)
 }

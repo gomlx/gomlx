@@ -56,13 +56,13 @@ func (ds *testDS) Iter() iter.Seq2[train.Batch, error] {
 	}
 }
 
-// TestNewParallelDataset with and without buffer.
-func TestParallelDataset(t *testing.T) {
+// TestBufferDataset with and without buffer.
+func TestBufferDataset(t *testing.T) {
 	for _, cacheSize := range []int{0, 10} {
 		ds := &testDS{}
-		pDS := CustomParallel(ds).Parallelism(0).Buffer(cacheSize).Start()
+		bDS := Buffer(ds, cacheSize)
 		count := int64(0)
-		for batch, err := range pDS.Iter() {
+		for batch, err := range bDS.Iter() {
 			require.NoError(t, err, "Test failed with unexpected error")
 			require.Len(t, batch.Inputs, 1, "Expected Dataset to yield 1 input tensor")
 			count++
@@ -70,7 +70,7 @@ func TestParallelDataset(t *testing.T) {
 		}
 		require.Equalf(t, testDSMaxValue, count, "Number of yielded batches first loop, cacheSize=%d.", cacheSize)
 		count = 0
-		for batch, err := range pDS.Iter() {
+		for batch, err := range bDS.Iter() {
 			require.NoError(t, err, "Test failed with unexpected error")
 			require.Len(t, batch.Inputs, 1, "Expected Dataset to yield 1 input tensor")
 			count++
