@@ -7,6 +7,8 @@ import (
 	"math/rand/v2"
 	"path"
 
+	"iter"
+
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
@@ -14,6 +16,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/dataset"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/pkg/errors"
 	"github.com/schollz/progressbar/v3"
@@ -111,16 +114,22 @@ func (bds *BalancedDataset) readAllImages() error {
 	bds.AllLabels = tensors.FromShape(shapes.Make(dtypes.Int32, NumExamples))
 	tensors.MustMutableFlatData[uint8](bds.AllImages, func(flatAllImages []uint8) {
 		tensors.MustMutableFlatData[int32](bds.AllLabels, func(flatAllLabels []int32) {
-			ds := dataset.Parallel(NewDataset(dtypes.Uint8, bds.Size))
+			ds := dataset.Buffer(NewDataset(dtypes.Uint8, bds.Size))
+			next, stop := iter.Pull2(ds.Iter())
+			defer stop()
 			pbar := progressbar.Default(int64(NumExamples), "Processing images")
 			for exampleIdx := range NumExamples {
-				_, inputs, labels, yieldErr := ds.Yield()
+				batch, yieldErr, ok := next()
+				if !ok {
+					err = errors.Errorf("dataset ended early at example #%d", exampleIdx)
+					return
+				}
 				if yieldErr != nil {
 					err = errors.WithMessagef(yieldErr, "failed to reall all examples from normal dataset")
 					return
 				}
-				image := inputs[0]
-				label := labels[0]
+				image := batch.Inputs[0]
+				label := batch.Labels[0]
 				if err = image.Shape().Check(dtype, bds.Size, bds.Size, 3); err != nil {
 					err = errors.WithMessagef(
 						err,
@@ -140,6 +149,7 @@ func (bds *BalancedDataset) readAllImages() error {
 					copy(flatAllImages[exampleIdx*imageSize:], flatImage)
 				})
 				flatAllLabels[exampleIdx] = tensors.ToScalar[int32](label)
+				_ = batch.Finalize()
 				_ = pbar.Add(1)
 			}
 			_ = pbar.Finish()
@@ -149,28 +159,25 @@ func (bds *BalancedDataset) readAllImages() error {
 	return err
 }
 
-// Yield implements train.Dataset interface.
-// It returns `ds` (the Dataset pointer) as spec.
-//
-// It yields one example at a time, each consists of:
-//   - The inputs will have three values:
-//     1. always the same tensor with all images shaped (uint8)[NumExamples, image_size, image_size, 3];
-//     2. indices of the examples to pick for this batch, shapes (int32)[102];
-//     3. labels of the flower shaped (int32)[102] and always the same values: {0, 1, ..., 101} -- it always take
-//     one random example per flower type.
-//   - `labels`: the type of flower (same as `inputs[2]`), shaped (int32)[102], and always the same values.
-func (bds *BalancedDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	spec = bds
-	examplesIdx := make([]int32, NumLabels)
-	for flowerType := range NumLabels {
-		choices := bds.PerFlowerIndices[flowerType]
-		examplesIdx[flowerType] = choices[rand.N(len(choices))]
+// Iter implements `train.Dataset` interface.
+func (bds *BalancedDataset) Iter() iter.Seq2[train.Batch, error] {
+	return func(yield func(train.Batch, error) bool) {
+		for {
+			examplesIdx := make([]int32, NumLabels)
+			for flowerType := range NumLabels {
+				choices := bds.PerFlowerIndices[flowerType]
+				examplesIdx[flowerType] = choices[rand.N(len(choices))]
+			}
+			inputs := []*tensors.Tensor{bds.AllImages, tensors.FromValue(examplesIdx), bds.Labels}
+			labels := []*tensors.Tensor{bds.Labels}
+			batch := train.Batch{
+				Spec:   bds,
+				Inputs: inputs,
+				Labels: labels,
+			}
+			if !yield(batch, nil) {
+				return
+			}
+		}
 	}
-	inputs = []*tensors.Tensor{bds.AllImages, tensors.FromValue(examplesIdx), bds.Labels}
-	labels = []*tensors.Tensor{bds.Labels}
-	return
 }
-
-// Reset implements train.Dataset interface.
-// It's a no-op.
-func (bds *BalancedDataset) Reset() {}

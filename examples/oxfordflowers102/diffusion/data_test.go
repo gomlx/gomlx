@@ -4,7 +4,7 @@ package diffusion
 
 import (
 	"fmt"
-	"io"
+	"iter"
 	"testing"
 	"time"
 
@@ -17,43 +17,57 @@ import (
 
 func benchmarkDataset(ds train.Dataset) {
 	var batchSize int
-	// Warm up, run 100 ds.Yield().
+	// Warm up, run 10 ds.Iter() steps.
+	next, stop := iter.Pull2(ds.Iter())
 	for range 10 {
-		_, inputs, labels, err := ds.Yield()
+		batch, err, ok := next()
+		if !ok {
+			stop()
+			next, stop = iter.Pull2(ds.Iter())
+			batch, err, ok = next()
+			if !ok {
+				panic("empty dataset")
+			}
+		}
 		check(err)
-		batchSize = inputs[0].Shape().Dimensions[0]
-		finalize(inputs)
-		finalize(labels)
+		batchSize = batch.Inputs[0].Shape().Dimensions[0]
+		_ = batch.Finalize()
 	}
 
 	// Start benchmark.
 	start := time.Now()
 	count := 0
 	for count < 100 {
-		_, inputs, labels, err := ds.Yield()
-		if err == io.EOF {
+		batch, err, ok := next()
+		if !ok {
 			break
 		}
 		check(err)
-		finalize(inputs)
-		finalize(labels)
+		_ = batch.Finalize()
 		count++
 	}
+	stop()
 	elapsed := time.Since(start)
 	fmt.Printf("\t%d batches of %d examples read in %s\n", count, batchSize, elapsed)
 }
 
 func loopDataset(b *testing.B, ds train.Dataset, n int) {
+	next, stop := iter.Pull2(ds.Iter())
+	defer stop()
 	for range n {
-		_, inputs, labels, err := ds.Yield()
-		if err == io.EOF {
-			ds.Reset()
+		batch, err, ok := next()
+		if !ok {
+			stop()
+			next, stop = iter.Pull2(ds.Iter())
+			batch, err, ok = next()
+			if !ok {
+				b.Fatalf("Dataset is empty even after resetting")
+			}
 		}
 		if err != nil {
 			b.Fatalf("Dataset failed with %+v", err)
 		}
-		finalize(inputs)
-		finalize(labels)
+		_ = batch.Finalize()
 	}
 }
 
@@ -63,22 +77,19 @@ func BenchmarkDatasets(b *testing.B) {
 	dsBatched := dataset.Batch(config.Backend, ds, config.BatchSize, true, true)
 	require.NoError(b, flowers.DownloadAndParse(config.DataDir))
 
-	dsParallel := dataset.Parallel(dsBatched)
+	dsParallel := dataset.Buffer(dsBatched)
 
 	// Warmup.
 	loopDataset(b, dsParallel, 100) // Warms up both dsParallel and the underlying dsBatched.
 
-	dsBatched.Reset()
 	b.Run("Disk", func(b *testing.B) { loopDataset(b, dsBatched, b.N) })
 
-	dsParallel.Reset()
 	b.Run("ParallelDisk", func(b *testing.B) { loopDataset(b, dsParallel, b.N) })
 
 	trainDS, _ := config.CreateInMemoryDatasets()
 	trainDS.BatchSize(config.BatchSize, true)
 	trainDS.Infinite(true)
 	loopDataset(b, trainDS, 100) // Warm up.
-	trainDS.Reset()
 	b.Run("InMemory", func(b *testing.B) { loopDataset(b, trainDS, b.N) })
 }
 

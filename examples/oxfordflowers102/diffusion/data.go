@@ -138,13 +138,16 @@ func (c *Config) NormalizationValues() (mean, stddev *tensors.Tensor) {
 
 	trainDS, _ := c.CreateInMemoryDatasets()
 	trainDS.BatchSize(128, false)
-	ds := dataset.MapWithGraphFn(
+	ds := dataset.Map(
 		c.Backend,
-		nil,
 		trainDS,
-		func(scope *model.Scope, inputs, labels []*Node) (mappedInputs, mappedLabels []*Node) {
-			images := c.PreprocessImages(inputs[0], false)
-			return []*Node{images}, labels
+		func(graphBatch dataset.GraphBatch) dataset.GraphBatch {
+			images := c.PreprocessImages(graphBatch.Inputs[0], false)
+			return dataset.GraphBatch{
+				Inputs: []*Node{images},
+				Labels: graphBatch.Labels,
+				Spec:   graphBatch.Spec,
+			}
 		},
 	)
 	var err2 error

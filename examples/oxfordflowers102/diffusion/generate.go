@@ -7,7 +7,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"image"
-	"io"
 	"math"
 	"math/rand"
 	"os"
@@ -515,22 +514,21 @@ func (kg *KidGenerator) EvalStepGraph(scope *model.Scope, allImages []*Node) (me
 }
 
 func (kg *KidGenerator) Eval() (metric *tensors.Tensor) {
-	kg.ds.Reset()
 	kg.kid.Reset(kg.scopeInceptionV3)
 	generatedImages := kg.generator.Generate()
 	count := 0
-	for {
-		_, inputs, _, err := kg.ds.Yield()
-		if err == io.EOF {
-			break
+	for batch, err := range kg.ds.Iter() {
+		if err != nil {
+			panic(err)
 		}
 		count++
 
-		datasetImages := inputs[0]
+		datasetImages := batch.Inputs[0]
 		if metric != nil {
 			metric.MustFinalizeAll()
 		}
 		metric = kg.evalExec.MustCall(generatedImages, datasetImages)[0]
+		_ = batch.Finalize()
 	}
 	if count == 0 {
 		exceptions.Panicf("evaluation dataset %s yielded no batches, no data to evaluate KID", kg.ds)
