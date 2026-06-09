@@ -10,7 +10,6 @@ import (
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
 
-	"io"
 	"path"
 	"runtime"
 	"testing"
@@ -59,22 +58,33 @@ func BenchmarkDataset(b *testing.B) {
 		for _, useParallelism := range []bool{false, true} {
 			name := dsType
 			ds := train.Dataset(allDatasets[dsIdx])
-			ds.Reset()
 			if useParallelism {
 				name = fmt.Sprintf("%s-parallel(%d)", name, runtime.NumCPU())
+				if concrete, ok := ds.(*Dataset); ok {
+					concrete.WithParallelism(runtime.NumCPU())
+				}
+			} else {
+				if concrete, ok := ds.(*Dataset); ok {
+					concrete.WithParallelism(1)
+				}
 			}
 			b.Run(name, func(b *testing.B) {
 				if useParallelism {
-					ds = dataset.CustomParallel(ds).Buffer(10).Start()
+					ds = dataset.Buffer(ds, 10)
 				}
-				for ii := 0; ii < b.N; ii++ {
-					_, _, _, err := ds.Yield()
-					if err != nil {
-						if err == io.EOF {
-							ds.Reset()
-						} else {
+				// Loop indefinitely over the dataset until the count reaches b.N:
+				var count int
+			benchLoop:
+				for {
+					for batch, err := range ds.Iter() {
+						if err != nil {
 							b.Fatalf("Failed reading dataset: %+v", err)
 						}
+						_ = batch.Finalize()
+						if count == b.N {
+							break benchLoop
+						}
+						count++
 					}
 				}
 			})

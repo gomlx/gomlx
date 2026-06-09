@@ -24,9 +24,9 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/fsutil"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
+	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
 
