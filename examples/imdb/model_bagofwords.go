@@ -53,12 +53,12 @@ func EmbedTokensGraph(scope *model.Scope, tokens *Node) (embed, mask *Node) {
 
 // BagOfWordsModelGraph builds the computation graph for the "bag of words" model: simply the sum of the embeddings
 // for each token included.
-func BagOfWordsModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
-	embed, _ := EmbedTokensGraph(scope, inputs[0])
+func BagOfWordsModelGraph(scope *model.Scope, tokens *Node) *Node {
+	embed, _ := EmbedTokensGraph(scope, tokens)
 
 	// Take the max over the content length, and put an FNN on top.
 	// Shape transformation: [batch_size, content_len, embed_size] -> [batch_size, embed_size]
 	embed = ReduceMax(embed, 1)
 	logits := fnn.New(scope, embed, 1).Done()
-	return []*Node{logits}
+	return logits
 }

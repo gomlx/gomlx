@@ -12,9 +12,7 @@ import (
 
 // TransformerModelGraph is the part of the model that takes the word/token embeddings to a transformed
 // embedding through attention ready to be pooled and read out.
-func TransformerModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
-	_ = spec
-	tokens := inputs[0]
+func TransformerModelGraph(scope *model.Scope, tokens *Node) *Node {
 	maskWordTaskWeight := model.GetParamOr(scope, "imdb_mask_word_task_weight", 0.0)
 	useMaskWordTask := maskWordTaskWeight > 0
 	if useMaskWordTask {
@@ -81,7 +79,7 @@ func TransformerModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node
 	logits := ReduceMax(embed, 1)
 	logits = fnn.New(scope, logits, 1).Done()
 	logits.AssertDims(batchSize, 1)
-	return []*Node{logits}
+	return logits
 }
 
 // TransformerLayers builds the stacked transformer layers for the model.
