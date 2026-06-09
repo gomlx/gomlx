@@ -7910,13 +7910,13 @@ drwxr-x--- 2 janpf janpf 4.0K Dec  4  2025 -h
 -rw-r--r-- 1 janpf janpf 2.0M Jul 20  2024 adult.test
 -rw-r--r-- 1 janpf janpf 1.3M Jul 20  2024 adult_data-100_quantiles.bin
 drwxr-x--- 2 janpf janpf 4.0K May 24 11:55 base_mode
-drwxr-x--- 2 janpf janpf 4.0K Jun  7 08:57 base_model
+drwxr-x--- 2 janpf janpf 4.0K Jun  9 07:38 base_model
 drwxr-xr-x 2 janpf janpf 4.0K Jun  4  2009 cifar-10-batches-bin
 -rw-r--r-- 1 janpf janpf 163M Aug 15  2024 cifar-10-binary.tar.gz
 drwxr-x--- 2 janpf janpf 4.0K Dec  4  2025 distributed
 drwxr-x--- 2 janpf janpf 4.0K Aug  2  2024 fnn
 drwxr-x--- 2 janpf janpf 4.0K Jul 21  2024 kan_baseline
-drwxr-x--- 2 janpf janpf 4.0K Jun  7 08:57 kan_model
+drwxr-x--- 2 janpf janpf 4.0K Jun  9 07:38 kan_model
 drwxr-x--- 2 janpf janpf 4.0K Feb 23  2025 test
 drwxr-x--- 2 janpf janpf 4.0K Jun 18  2025 test_model
 drwxr-x--- 3 janpf janpf 4.0K May 24 11:58 v028_test
@@ -7937,7 +7937,7 @@ drwxr-x--- 3 janpf janpf 4.0K May 24 11:58 v028_test
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=31d03e06-f375-4a68-8705-c9d3b6af81ab">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=31d03e06-f375-4a68-8705-c9d3b6af81ab">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8005,30 +8005,7 @@ drwxr-x--- 3 janpf janpf 4.0K May 24 11:58 v028_test
     <span class="n">paramsSet</span> <span class="o">=</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">(</span><span class="n">commandline</span><span class="o">.</span><span class="n">ParseSettings</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="o">*</span><span class="n">settings</span><span class="p">))</span>
     <span class="k">return</span>
 <span class="p">}</span>
-
-<span class="o">//</span> <span class="n">Let</span><span class="s1">'s test that we can set hyperparameters by setting it in the "-set" flag:</span>
-<span class="o">%%</span> <span class="o">-</span><span class="nb">set</span><span class="o">=</span><span class="s2">"batch_size=17;fnn_num_hidden_layers=12"</span>
-<span class="n">store</span><span class="p">,</span> <span class="n">paramsSet</span> <span class="o">:=</span> <span class="n">storeFromSettings</span><span class="p">()</span>
-<span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">name</span> <span class="o">:=</span> <span class="nb">range</span> <span class="n">paramsSet</span> <span class="p">{</span>
-    <span class="k">if</span> <span class="n">value</span><span class="p">,</span> <span class="n">found</span> <span class="o">:=</span> <span class="n">store</span><span class="o">.</span><span class="n">GetParam</span><span class="p">(</span><span class="n">name</span><span class="p">);</span> <span class="n">found</span> <span class="p">{</span>
-        <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="si">%s</span><span class="s2">=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
-    <span class="p">}</span>
-<span class="p">}</span>
 </pre></div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	batch_size=17
-	fnn_num_hidden_layers=12
-</pre>
 </div>
 </div>
 </div>
@@ -8041,7 +8018,8 @@ drwxr-x--- 3 janpf janpf 4.0K May 24 11:58 v028_test
 <div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">-</span><span class="nb">set</span><span class="o">=</span><span class="s2">"batch_size=17;fnn_num_hidden_layers=12"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="o">//</span> <span class="n">Let</span><span class="s1">'s test that we can set hyperparameters by setting it in the "-set" flag:</span>
+<span class="o">%%</span> <span class="o">-</span><span class="nb">set</span><span class="o">=</span><span class="s2">"batch_size=17;fnn_num_hidden_layers=12"</span>
 <span class="n">store</span><span class="p">,</span> <span class="n">paramsSet</span> <span class="o">:=</span> <span class="n">storeFromSettings</span><span class="p">()</span>
 <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">name</span> <span class="o">:=</span> <span class="nb">range</span> <span class="n">paramsSet</span> <span class="p">{</span>
     <span class="k">if</span> <span class="n">value</span><span class="p">,</span> <span class="n">found</span> <span class="o">:=</span> <span class="n">store</span><span class="o">.</span><span class="n">GetParam</span><span class="p">(</span><span class="n">name</span><span class="p">);</span> <span class="n">found</span> <span class="p">{</span>
@@ -8074,9 +8052,7 @@ drwxr-x--- 3 janpf janpf 4.0K May 24 11:58 v028_test
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="Creating-Datasets">Creating Datasets<a class="anchor-link" href="#Creating-Datasets">¶</a></h3><p>First we create the GoMLX's <code>backend</code> (defined by the <code>compute.Backend</code> interface in <code>github.com/gomlx/compute</code>, and typically created with <code>compute.New()</code> or <code>compute.MustNew()</code>): it's the engine instance (XLA in this case) that
-compiles and executes our computation graph.</p>
-<p>It's needed to create tensors that will be fed to the accelearator (GPU or even CPU accelerated code)</p>
+<h3 id="Creating-Datasets">Creating Datasets<a class="anchor-link" href="#Creating-Datasets">¶</a></h3><p>First we create the GoMLX's <em>backend</em> (a <code>compute.Backend</code> interface defined in <code>github.com/gomlx/compute</code>): it's the engine instance (XLA in this case) that compiles and executes our computation graph on top of some software/hardware stack (e.g. "xla:cuda", "xla:cpu", "cpu").</p>
 <p>With that we create the samplers of data that we will use to train and evaluate. They implement
 GoMLX's <code>train.Dataset</code> interface, which is what is used by our training loop to draw batches to
 train, or our eval loop to draw batches to evaluate.</p>
@@ -8102,6 +8078,7 @@ train, or our eval loop to draw batches to evaluate.</p>
     <span class="s2">"github.com/gomlx/gomlx/examples/adult"</span>
     <span class="s2">"github.com/gomlx/gomlx/ml/train"</span>
     <span class="s2">"github.com/gomlx/gomlx/core/tensors"</span>
+    <span class="o">.</span> <span class="s2">"github.com/gomlx/gomlx/core/graph"</span>
 
     <span class="n">_</span> <span class="s2">"github.com/gomlx/gomlx/backends/default"</span>
 <span class="p">)</span>
@@ -8110,9 +8087,9 @@ train, or our eval loop to draw batches to evaluate.</p>
 <span class="n">var</span> <span class="n">backend</span> <span class="o">=</span> <span class="n">compute</span><span class="o">.</span><span class="n">MustNew</span><span class="p">()</span>
 
 <span class="o">//</span> <span class="n">BuildDatasets</span> <span class="n">returns</span> <span class="mi">3</span> <span class="err">`</span><span class="n">train</span><span class="o">.</span><span class="n">Dataset</span><span class="err">`</span><span class="p">:</span>
-<span class="o">//</span> <span class="o">*</span> <span class="n">trainingSampler</span> <span class="ow">is</span> <span class="n">an</span> <span class="n">endless</span> <span class="n">random</span> <span class="n">sampler</span> <span class="n">used</span> <span class="k">for</span> <span class="n">training</span><span class="o">.</span>
-<span class="o">//</span> <span class="o">*</span> <span class="n">trainingEvalSampler</span> <span class="n">samples</span> <span class="n">through</span> <span class="n">exactly</span> <span class="n">one</span> <span class="n">epoch</span> <span class="n">of</span> <span class="n">the</span> <span class="n">train</span> <span class="n">dataset</span><span class="o">.</span>
-<span class="o">//</span> <span class="o">*</span> <span class="n">testEvalSampler</span> <span class="n">samples</span> <span class="n">through</span> <span class="n">exactly</span> <span class="n">one</span> <span class="n">epoch</span> <span class="n">of</span> <span class="n">the</span> <span class="n">test</span> <span class="n">dataset</span><span class="o">.</span>
+<span class="o">//</span> <span class="o">*</span> <span class="n">trainDS</span> <span class="ow">is</span> <span class="n">an</span> <span class="n">endless</span> <span class="n">random</span> <span class="n">sampler</span> <span class="n">used</span> <span class="k">for</span> <span class="n">training</span><span class="o">.</span>
+<span class="o">//</span> <span class="o">*</span> <span class="n">trainEvalDS</span> <span class="n">samples</span> <span class="n">through</span> <span class="n">exactly</span> <span class="n">one</span> <span class="n">epoch</span> <span class="n">of</span> <span class="n">the</span> <span class="n">train</span> <span class="n">dataset</span><span class="o">.</span>
+<span class="o">//</span> <span class="o">*</span> <span class="n">testEvalDS</span> <span class="n">samples</span> <span class="n">through</span> <span class="n">exactly</span> <span class="n">one</span> <span class="n">epoch</span> <span class="n">of</span> <span class="n">the</span> <span class="n">test</span> <span class="n">dataset</span><span class="o">.</span>
 <span class="n">func</span> <span class="n">BuildDatasets</span><span class="p">(</span><span class="n">store</span> <span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">Store</span><span class="p">)</span> <span class="p">(</span><span class="n">trainDS</span><span class="p">,</span> <span class="n">trainEvalDS</span><span class="p">,</span> <span class="n">testEvalDS</span> <span class="n">train</span><span class="o">.</span><span class="n">Dataset</span><span class="p">)</span> <span class="p">{</span>
 	<span class="n">batchSize</span> <span class="o">:=</span> <span class="n">model</span><span class="o">.</span><span class="n">GetRootParamOr</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="s2">"batch_size"</span><span class="p">,</span> <span class="mi">128</span><span class="p">)</span>
 	<span class="n">evalBatchSize</span> <span class="o">:=</span> <span class="n">model</span><span class="o">.</span><span class="n">GetRootParamOr</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="s2">"eval_batch_size"</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span>
@@ -8131,20 +8108,16 @@ train, or our eval loop to draw batches to evaluate.</p>
 <span class="o">//</span> <span class="n">We</span> <span class="n">could</span> <span class="n">do</span> <span class="n">this</span> <span class="n">easily</span> <span class="k">with</span> <span class="n">GoMLX</span> <span class="n">computation</span> <span class="n">model</span> <span class="p">(</span><span class="n">just</span> <span class="err">`</span><span class="n">ReduceAllSum</span><span class="err">`</span><span class="p">),</span> <span class="n">but</span>
 <span class="o">//</span> <span class="n">this</span> <span class="n">examples</span> <span class="n">shows</span> <span class="n">it</span><span class="s1">'s also ok to mix Go computations.</span>
 <span class="n">func</span> <span class="n">PositiveRatio</span><span class="p">(</span><span class="n">ds</span> <span class="n">train</span><span class="o">.</span><span class="n">Dataset</span><span class="p">)</span> <span class="n">float32</span> <span class="p">{</span>
-    <span class="n">ds</span><span class="o">.</span><span class="n">Reset</span><span class="p">()</span>  <span class="o">//</span> <span class="n">Start</span> <span class="kn">from</span><span class="w"> </span><span class="nn">beginning.</span>
     <span class="n">var</span> <span class="nb">sum</span> <span class="n">float32</span>
     <span class="n">var</span> <span class="n">count</span> <span class="n">float32</span>
-    <span class="k">for</span> <span class="p">{</span>
-        <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">ds</span><span class="o">.</span><span class="n">Yield</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">err</span> <span class="o">==</span> <span class="n">io</span><span class="o">.</span><span class="n">EOF</span> <span class="p">{</span>
-            <span class="k">break</span><span class="p">;</span>
-        <span class="p">}</span>
+    <span class="n">reduceSumExec</span> <span class="o">:=</span> <span class="n">MustNewExec1</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">func</span><span class="p">(</span><span class="n">labels</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="n">ReduceAllSum</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
+    <span class="p">})</span>
+    <span class="k">for</span> <span class="n">batch</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="nb">range</span> <span class="n">ds</span><span class="o">.</span><span class="n">Iter</span><span class="p">()</span> <span class="p">{</span>
         <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
-        <span class="n">data</span> <span class="o">:=</span> <span class="n">tensors</span><span class="o">.</span><span class="n">MustCopyFlatData</span><span class="p">[</span><span class="n">float32</span><span class="p">](</span><span class="n">labels</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span> <span class="o">:=</span> <span class="nb">range</span> <span class="n">data</span> <span class="p">{</span>
-            <span class="nb">sum</span> <span class="o">+=</span> <span class="n">value</span>
-        <span class="p">}</span>
-        <span class="n">count</span> <span class="o">+=</span> <span class="n">float32</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+        <span class="nb">sum</span> <span class="o">+=</span> <span class="n">reduceSumExec</span><span class="o">.</span><span class="n">MustCall</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">Labels</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span><span class="o">.</span><span class="p">(</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">count</span> <span class="o">+=</span> <span class="n">float32</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">Labels</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Size</span><span class="p">())</span>
+        <span class="n">batch</span><span class="o">.</span><span class="n">Finalize</span><span class="p">()</span>
     <span class="p">}</span>
     <span class="k">return</span> <span class="nb">sum</span><span class="o">/</span><span class="n">count</span>
 <span class="p">}</span>
@@ -8154,20 +8127,24 @@ train, or our eval loop to draw batches to evaluate.</p>
 
 <span class="n">adult</span><span class="o">.</span><span class="n">LoadAndPreprocessData</span><span class="p">(</span><span class="o">*</span><span class="n">flagDataDir</span><span class="p">,</span> <span class="o">*</span><span class="n">flagNumQuantiles</span><span class="p">,</span> <span class="o">*</span><span class="n">flagForceDownload</span><span class="p">,</span> <span class="o">*</span><span class="n">flagVerbosity</span><span class="p">)</span>    
 <span class="n">store</span><span class="p">,</span> <span class="n">_</span> <span class="o">:=</span> <span class="n">storeFromSettings</span><span class="p">()</span>
-<span class="n">trainingDS</span><span class="p">,</span> <span class="n">trainingEvalDS</span><span class="p">,</span> <span class="n">testEvalDS</span> <span class="o">:=</span> <span class="n">BuildDatasets</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
+<span class="n">trainDS</span><span class="p">,</span> <span class="n">trainEvalDS</span><span class="p">,</span> <span class="n">testEvalDS</span> <span class="o">:=</span> <span class="n">BuildDatasets</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
 
 <span class="o">//</span> <span class="n">Take</span> <span class="n">one</span> <span class="n">batch</span><span class="o">.</span>
-<span class="n">_</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">trainingDS</span><span class="o">.</span><span class="n">Yield</span><span class="p">()</span>
+<span class="n">var</span> <span class="n">batch</span> <span class="n">train</span><span class="o">.</span><span class="n">Batch</span>
+<span class="n">var</span> <span class="n">err</span> <span class="n">error</span>
+<span class="k">for</span> <span class="n">batch</span><span class="p">,</span> <span class="n">err</span> <span class="o">=</span> <span class="nb">range</span> <span class="n">trainDS</span><span class="o">.</span><span class="n">Iter</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">break</span>
+<span class="p">}</span>
 <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">}</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Inputs of batch (size </span><span class="si">%d</span><span class="s2">):</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">model</span><span class="o">.</span><span class="n">GetRootParamOr</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="s2">"batch_size"</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">categorical:</span><span class="se">\n\t\t</span><span class="s2">Features=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">adult</span><span class="o">.</span><span class="n">Data</span><span class="o">.</span><span class="n">VocabulariesFeatures</span><span class="p">)</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t\t</span><span class="s2">Values: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t\t</span><span class="s2">Values: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">Inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">continuous:</span><span class="se">\n\t\t</span><span class="s2">Features=%v</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">adult</span><span class="o">.</span><span class="n">Data</span><span class="o">.</span><span class="n">QuantilesFeatures</span><span class="p">)</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t\t</span><span class="s2">Values: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">weights: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Labels of batch:</span><span class="se">\n\t</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">labels</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t\t</span><span class="s2">Values: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">Inputs</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\t</span><span class="s2">weights: </span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">Inputs</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Labels of batch:</span><span class="se">\n\t</span><span class="si">%s</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">Labels</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">Labels distributions:</span><span class="se">\n\t</span><span class="s2">Train:</span><span class="se">\t</span><span class="si">%.2f%%</span><span class="s2"> positive</span><span class="se">\n\t</span><span class="s2">Test:</span><span class="se">\t</span><span class="si">%.2f%%</span><span class="s2"> positive</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span>
-           <span class="n">PositiveRatio</span><span class="p">(</span><span class="n">trainingEvalDS</span><span class="p">)</span><span class="o">*</span><span class="mf">100.0</span><span class="p">,</span> <span class="n">PositiveRatio</span><span class="p">(</span><span class="n">testEvalDS</span><span class="p">)</span><span class="o">*</span><span class="mf">100.0</span><span class="p">)</span>
+           <span class="n">PositiveRatio</span><span class="p">(</span><span class="n">trainEvalDS</span><span class="p">)</span><span class="o">*</span><span class="mf">100.0</span><span class="p">,</span> <span class="n">PositiveRatio</span><span class="p">(</span><span class="n">testEvalDS</span><span class="p">)</span><span class="o">*</span><span class="mf">100.0</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -8186,38 +8163,38 @@ Inputs of batch (size 128):
 		Features=[workclass education marital-status occupation relationship race sex native-country]
 		Values: [128][8]int64{
  {4, 16, 3, ..., 5, 2, 39},
- {4, 1, 3, ..., 5, 2, 39},
- {4, 12, 5, ..., 5, 2, 39},
+ {6, 8, 3, ..., 5, 2, 0},
+ {4, 10, 5, ..., 5, 1, 39},
  ...,
- {4, 12, 3, ..., 5, 2, 39},
- {4, 12, 5, ..., 5, 1, 39},
- {1, 13, 3, ..., 3, 2, 27}}
+ {4, 6, 3, ..., 5, 2, 39},
+ {4, 8, 3, ..., 2, 2, 39},
+ {4, 12, 1, ..., 5, 1, 39}}
 	continuous:
 		Features=[age education-num capital-gain capital-loss hours-per-week]
 		Values: [128][5]float32{
- {59, 10, 0, 1848, 45},
- {36, 6, 0, 0, 40},
- {38, 9, 0, 0, 40},
+ {58, 10, 0, 0, 36},
+ {42, 12, 0, 0, 40},
+ {46, 13, 0, 0, 40},
  ...,
- {55, 9, 0, 0, 40},
- {22, 9, 0, 0, 40},
- {33, 14, 0, 0, 40}}
+ {55, 4, 0, 0, 75},
+ {41, 12, 0, 0, 40},
+ {36, 9, 0, 0, 40}}
 	weights: [128][1]float32{
- {2.314e+05},
- {3.74e+05},
- {3.056e+05},
+ {9.584e+04},
+ {1.838e+05},
+ {2.792e+05},
  ...,
- {2.136e+05},
- {6.429e+04},
- {6.159e+05}}
+ {1.905e+05},
+ {3.497e+05},
+ {1.166e+05}}
 
 Labels of batch:
 	[128][1]float32{
- {1},
+ {0},
  {0},
  {0},
  ...,
- {1},
+ {0},
  {0},
  {0}}
 
@@ -8385,6 +8362,7 @@ it is working.</p>
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
     <span class="s2">"fmt"</span>
     <span class="s2">"time"</span>
+    <span class="s2">"github.com/gomlx/compute/support/humanize"</span>
     <span class="s2">"github.com/gomlx/gomlx/ui/gonb/plotly"</span>
     <span class="s2">"github.com/gomlx/gomlx/support/fsutil"</span>
     <span class="s2">"github.com/gomlx/gomlx/ml/train"</span>
@@ -8410,26 +8388,26 @@ it is working.</p>
     <span class="n">trainDS</span><span class="p">,</span> <span class="n">trainEvalDS</span><span class="p">,</span> <span class="n">testEvalDS</span> <span class="o">:=</span> <span class="n">BuildDatasets</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
 
 	<span class="o">//</span> <span class="n">Checkpoints</span> <span class="n">loading</span> <span class="p">(</span><span class="ow">and</span> <span class="n">saving</span><span class="p">)</span>
-	<span class="n">var</span> <span class="n">checkpointHandler</span> <span class="o">*</span><span class="n">checkpoint</span><span class="o">.</span><span class="n">Handler</span>
-	<span class="k">if</span> <span class="o">*</span><span class="n">flagCheckpoint</span> <span class="o">!=</span> <span class="s2">""</span> <span class="p">{</span>
-		<span class="n">numCheckpointsToKeep</span> <span class="o">:=</span> <span class="n">model</span><span class="o">.</span><span class="n">GetParamOr</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="s2">"num_checkpoints"</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
-		<span class="n">checkpointHandler</span> <span class="o">=</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">(</span><span class="n">checkpoint</span><span class="o">.</span><span class="n">Build</span><span class="p">(</span><span class="n">store</span><span class="p">)</span><span class="o">.</span>
-			<span class="n">DirFromBase</span><span class="p">(</span><span class="o">*</span><span class="n">flagCheckpoint</span><span class="p">,</span> <span class="o">*</span><span class="n">flagDataDir</span><span class="p">)</span><span class="o">.</span>
-			<span class="n">Keep</span><span class="p">(</span><span class="n">numCheckpointsToKeep</span><span class="p">)</span><span class="o">.</span>
-			<span class="n">ExcludeParams</span><span class="p">(</span><span class="n">append</span><span class="p">(</span><span class="n">paramsSet</span><span class="p">,</span> <span class="s2">"train_steps"</span><span class="p">,</span> <span class="s2">"plots"</span><span class="p">,</span> <span class="s2">"num_checkpoints"</span><span class="p">)</span><span class="o">...</span><span class="p">)</span><span class="o">.</span>
-			<span class="n">Done</span><span class="p">())</span>
-	<span class="p">}</span>
+    <span class="n">var</span> <span class="n">checkpointHandler</span> <span class="o">*</span><span class="n">checkpoint</span><span class="o">.</span><span class="n">Handler</span>
+    <span class="k">if</span> <span class="o">*</span><span class="n">flagCheckpoint</span> <span class="o">!=</span> <span class="s2">""</span> <span class="p">{</span>
+        <span class="n">numCheckpointsToKeep</span> <span class="o">:=</span> <span class="n">model</span><span class="o">.</span><span class="n">GetParamOr</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="s2">"num_checkpoints"</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="n">checkpointHandler</span> <span class="o">=</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">(</span><span class="n">checkpoint</span><span class="o">.</span><span class="n">Build</span><span class="p">(</span><span class="n">store</span><span class="p">)</span><span class="o">.</span>
+            <span class="n">DirFromBase</span><span class="p">(</span><span class="o">*</span><span class="n">flagCheckpoint</span><span class="p">,</span> <span class="o">*</span><span class="n">flagDataDir</span><span class="p">)</span><span class="o">.</span>
+            <span class="n">Keep</span><span class="p">(</span><span class="n">numCheckpointsToKeep</span><span class="p">)</span><span class="o">.</span>
+            <span class="n">ExcludeParams</span><span class="p">(</span><span class="n">append</span><span class="p">(</span><span class="n">paramsSet</span><span class="p">,</span> <span class="s2">"train_steps"</span><span class="p">,</span> <span class="s2">"plots"</span><span class="p">,</span> <span class="s2">"num_checkpoints"</span><span class="p">)</span><span class="o">...</span><span class="p">)</span><span class="o">.</span>
+            <span class="n">Done</span><span class="p">())</span>
+    <span class="p">}</span>
 
-	<span class="o">//</span> <span class="n">Metrics</span> <span class="n">we</span> <span class="n">are</span> <span class="n">interested</span><span class="o">.</span>
-	<span class="n">meanAccuracyMetric</span> <span class="o">:=</span> <span class="n">metric</span><span class="o">.</span><span class="n">NewMeanBinaryLogitsAccuracy</span><span class="p">(</span><span class="s2">"Mean Accuracy"</span><span class="p">,</span> <span class="s2">"#acc"</span><span class="p">)</span>
-	<span class="n">movingAccuracyMetric</span> <span class="o">:=</span> <span class="n">metric</span><span class="o">.</span><span class="n">NewMovingAverageBinaryLogitsAccuracy</span><span class="p">(</span><span class="s2">"Moving Average Accuracy"</span><span class="p">,</span> <span class="s2">"~acc"</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">)</span>
+    <span class="o">//</span> <span class="n">Metrics</span> <span class="n">we</span> <span class="n">are</span> <span class="n">interested</span><span class="o">.</span>
+    <span class="n">meanAccuracyMetric</span> <span class="o">:=</span> <span class="n">metric</span><span class="o">.</span><span class="n">NewMeanBinaryLogitsAccuracy</span><span class="p">(</span><span class="s2">"Mean Accuracy"</span><span class="p">,</span> <span class="s2">"#acc"</span><span class="p">)</span>
+    <span class="n">movingAccuracyMetric</span> <span class="o">:=</span> <span class="n">metric</span><span class="o">.</span><span class="n">NewMovingAverageBinaryLogitsAccuracy</span><span class="p">(</span><span class="s2">"Moving Average Accuracy"</span><span class="p">,</span> <span class="s2">"~acc"</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">)</span>
 
 	<span class="o">//</span> <span class="n">Create</span> <span class="n">a</span> <span class="n">train</span><span class="o">.</span><span class="n">Trainer</span><span class="p">:</span> <span class="n">this</span> <span class="nb">object</span> <span class="n">will</span> <span class="n">orchestrate</span> <span class="n">running</span> <span class="n">the</span> <span class="n">model</span><span class="p">,</span> <span class="n">feeding</span>
 	<span class="o">//</span> <span class="n">results</span> <span class="n">to</span> <span class="n">the</span> <span class="n">optimizer</span><span class="p">,</span> <span class="n">evaluating</span> <span class="n">the</span> <span class="n">metrics</span><span class="p">,</span> <span class="n">etc</span><span class="o">.</span> <span class="p">(</span><span class="nb">all</span> <span class="n">happens</span> <span class="ow">in</span> <span class="n">trainer</span><span class="o">.</span><span class="n">TrainStep</span><span class="p">)</span>
-	<span class="n">trainer</span> <span class="o">:=</span> <span class="n">train</span><span class="o">.</span><span class="n">NewTrainer</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">Model</span><span class="p">,</span> <span class="n">loss</span><span class="o">.</span><span class="n">BinaryCrossentropyLogits</span><span class="p">,</span>
-		<span class="n">optimizer</span><span class="o">.</span><span class="n">FromStore</span><span class="p">(</span><span class="n">store</span><span class="p">),</span>
-		<span class="p">[]</span><span class="n">metric</span><span class="o">.</span><span class="n">Interface</span><span class="p">{</span><span class="n">movingAccuracyMetric</span><span class="p">},</span> <span class="o">//</span> <span class="n">trainMetrics</span>
-		<span class="p">[]</span><span class="n">metric</span><span class="o">.</span><span class="n">Interface</span><span class="p">{</span><span class="n">meanAccuracyMetric</span><span class="p">})</span>   <span class="o">//</span> <span class="n">evalMetrics</span>
+    <span class="n">trainer</span> <span class="o">:=</span> <span class="n">train</span><span class="o">.</span><span class="n">NewTrainer</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">Model</span><span class="p">,</span> <span class="n">loss</span><span class="o">.</span><span class="n">BinaryCrossentropyLogits</span><span class="p">,</span>
+        <span class="n">optimizer</span><span class="o">.</span><span class="n">FromStore</span><span class="p">(</span><span class="n">store</span><span class="p">),</span>
+        <span class="p">[]</span><span class="n">metric</span><span class="o">.</span><span class="n">Interface</span><span class="p">{</span><span class="n">movingAccuracyMetric</span><span class="p">},</span> <span class="o">//</span> <span class="n">trainMetrics</span>
+        <span class="p">[]</span><span class="n">metric</span><span class="o">.</span><span class="n">Interface</span><span class="p">{</span><span class="n">meanAccuracyMetric</span><span class="p">})</span>   <span class="o">//</span> <span class="n">evalMetrics</span>
 
     <span class="o">//</span> <span class="n">Use</span> <span class="n">standard</span> <span class="n">training</span> <span class="n">loop</span><span class="o">.</span>
     <span class="n">loop</span> <span class="o">:=</span> <span class="n">train</span><span class="o">.</span><span class="n">NewLoop</span><span class="p">(</span><span class="n">trainer</span><span class="p">)</span>
@@ -8440,7 +8418,8 @@ it is working.</p>
         <span class="n">period</span> <span class="o">:=</span> <span class="n">time</span><span class="o">.</span><span class="n">Minute</span> <span class="o">*</span> <span class="mi">1</span>
         <span class="n">train</span><span class="o">.</span><span class="n">PeriodicCallback</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span> <span class="n">period</span><span class="p">,</span> <span class="n">true</span><span class="p">,</span> <span class="s2">"saving checkpoint"</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span>
             <span class="n">func</span><span class="p">(</span><span class="n">loop</span> <span class="o">*</span><span class="n">train</span><span class="o">.</span><span class="n">Loop</span><span class="p">,</span> <span class="n">metrics</span> <span class="p">[]</span><span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="n">error</span> <span class="p">{</span>
-                <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">[saving checkpoint@</span><span class="si">%d</span><span class="s2">] [median train step (ms): </span><span class="si">%d</span><span class="s2">]</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">loop</span><span class="o">.</span><span class="n">LoopStep</span><span class="p">,</span> <span class="n">loop</span><span class="o">.</span><span class="n">MedianTrainStepDuration</span><span class="p">()</span><span class="o">.</span><span class="n">Milliseconds</span><span class="p">())</span>
+                <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">[saving checkpoint@</span><span class="si">%d</span><span class="s2">] [median train step: </span><span class="si">%s</span><span class="s2">]</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> 
+                           <span class="n">loop</span><span class="o">.</span><span class="n">LoopStep</span><span class="p">,</span> <span class="n">humanize</span><span class="o">.</span><span class="n">Duration</span><span class="p">(</span><span class="n">loop</span><span class="o">.</span><span class="n">MedianTrainStepDuration</span><span class="p">()))</span>
                 <span class="k">return</span> <span class="n">checkpointHandler</span><span class="o">.</span><span class="n">Save</span><span class="p">()</span>
             <span class="p">})</span>
     <span class="p">}</span>
@@ -8537,7 +8516,7 @@ it is working.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold">  14% [====&gt;...................................] (108 steps/s) [2s:39s]</span> [step=724] [loss=0.349] [~loss=0.324] [~acc=85.27%]        </pre>
+<pre>      <span class="ansi-bold">  14% [====&gt;...................................] (108 steps/s) [2s:39s]</span> [step=724] [loss=0.351] [~loss=0.319] [~acc=85.74%]        </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8548,9 +8527,9 @@ it is working.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold"> 100% [========================================] (1418 steps/s)</span> [step=4999] [loss=0.198] [~loss=0.273] [~acc=87.53%]                
+<pre>      <span class="ansi-bold"> 100% [========================================] (1414 steps/s)</span> [step=4999] [loss=0.275] [~loss=0.273] [~acc=87.34%]                
 
-[saving checkpoint@5000] [median train step (ms): 0]
+[saving checkpoint@5000] [median train step: 257.8µs]
 </pre>
 </div>
 </div>
@@ -8563,7 +8542,7 @@ it is working.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="d93e0092"></div>
+<div id="0b49d3cd"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8577,8 +8556,8 @@ it is working.</p>
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.7899577617645264,0.8366994261741638,0.8518645763397217,0.8602859973907471,0.8652776479721069,0.8691727519035339,0.8735083341598511,0.8705886602401733,0.8741273880004883,0.8752598166465759]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.8293664455413818,0.8496667742729187,0.8558705449104309,0.8629034757614136,0.8693836331367493,0.8724855184555054,0.8736525177955627,0.8728233575820923,0.8733147382736206,0.8746967315673828]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.8313370943069458,0.8520360589027405,0.8573182821273804,0.8633989691734314,0.8692954182624817,0.8707081079483032,0.8709537982940674,0.8720594048500061,0.8696025609970093,0.8711380958557129]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('d93e0092', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.7461938858032227,0.8375911116600037,0.8572095632553101,0.86472487449646,0.8720223903656006,0.8724963068962097,0.8740557432174683,0.8745182156562805,0.8708308935165405,0.8733623027801514]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.8078683018684387,0.8528915047645569,0.8617978692054749,0.8679401874542236,0.8703050017356873,0.8729154467582703,0.8733454346656799,0.872546911239624,0.8732532858848572,0.8748195767402649]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.8117436766624451,0.8546157479286194,0.8606350421905518,0.8648116588592529,0.8689883351325989,0.8697254061698914,0.8708309531211853,0.8683127164840698,0.869234025478363,0.8708924055099487]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('0b49d3cd', data);
 
 	}
 	
@@ -8625,7 +8604,7 @@ it is working.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="391eda5a"></div>
+<div id="ac2dc4c8"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8639,8 +8618,8 @@ it is working.</p>
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.31075942516326904,0.24495509266853333,0.3537605404853821,0.2788725793361664,0.3150302469730377,0.29315632581710815,0.2530573308467865,0.2517443597316742,0.2906173765659332,0.19798439741134644]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.43446654081344604,0.3574466109275818,0.3250060975551605,0.30541345477104187,0.2939683496952057,0.28454917669296265,0.2781826853752136,0.2761492133140564,0.27024441957473755,0.27276888489723206]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.3794657289981842,0.33604931831359863,0.315136194229126,0.2999739944934845,0.28648966550827026,0.2786861062049866,0.27472856640815735,0.2724039554595947,0.2719481587409973,0.2697143256664276]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.3749925196170807,0.33399561047554016,0.31620994210243225,0.30297234654426575,0.2917803227901459,0.2861456871032715,0.28278905153274536,0.281832218170166,0.28197723627090454,0.2797984778881073]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('391eda5a', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.413554310798645,0.2964184284210205,0.3376757502555847,0.30481043457984924,0.3247709274291992,0.24266599118709564,0.22563496232032776,0.32181569933891296,0.29221972823143005,0.27498066425323486]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.5132843255996704,0.36817115545272827,0.31875336170196533,0.2973432242870331,0.2848348021507263,0.28307393193244934,0.2778671383857727,0.27352502942085266,0.2741367816925049,0.273348331451416]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.4222164452075958,0.3379410207271576,0.307730495929718,0.29214465618133545,0.28433507680892944,0.2772345542907715,0.27427026629447937,0.2749819755554199,0.2734788656234741,0.27047494053840637]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.41947436332702637,0.3373906910419464,0.31151676177978516,0.2975885570049286,0.29055577516555786,0.2839118540287018,0.2814599573612213,0.28295332193374634,0.28197628259658813,0.2802383601665497]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('ac2dc4c8', data);
 
 	}
 	
@@ -8684,10 +8663,10 @@ it is working.</p>
 <pre>	[Step 5000] median train step: 257 microseconds
 Results on batched train:
 	Mean Loss (#loss): 0.27
-	Mean Accuracy (#acc): 87.47%
+	Mean Accuracy (#acc): 87.48%
 Results on test:
 	Mean Loss (#loss): 0.28
-	Mean Accuracy (#acc): 87.11%
+	Mean Accuracy (#acc): 87.09%
 </pre>
 </div>
 </div>
@@ -8715,7 +8694,7 @@ let's train further, another 5k steps, for 10K steps in total.</p>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [10]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">--</span><span class="n">checkpoint</span> <span class="n">base_model</span> <span class="o">-</span><span class="nb">set</span><span class="o">=</span><span class="s2">"plots=true;train_steps=10000"</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">--</span><span class="n">checkpoint</span> <span class="n">base_model</span> <span class="o">-</span><span class="nb">set</span><span class="o">=</span><span class="s2">"plots=true;train_steps=10_000"</span>
 <span class="n">store</span><span class="p">,</span> <span class="n">paramsSet</span> <span class="o">:=</span> <span class="n">storeFromSettings</span><span class="p">()</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"train_steps=</span><span class="si">%d</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">model</span><span class="o">.</span><span class="n">GetRootParamOr</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="s2">"train_steps"</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
 <span class="n">trainModel</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">paramsSet</span><span class="p">)</span>
@@ -8749,9 +8728,9 @@ let's train further, another 5k steps, for 10K steps in total.</p>
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>	- restarting training from global_step=5000
-      <span class="ansi-bold"> 100% [========================================] (1418 steps/s)</span> [step=9999] [loss=0.178] [~loss=0.269] [~acc=87.48%]                  
+      <span class="ansi-bold"> 100% [========================================] (1486 steps/s)</span> [step=9999] [loss=0.233] [~loss=0.269] [~acc=87.30%]                  
 
-[saving checkpoint@10000] [median train step (ms): 0]
+[saving checkpoint@10000] [median train step: 243.2µs]
 </pre>
 </div>
 </div>
@@ -8764,7 +8743,7 @@ let's train further, another 5k steps, for 10K steps in total.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="c02c0779"></div>
+<div id="5e0316d7"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8778,8 +8757,8 @@ let's train further, another 5k steps, for 10K steps in total.</p>
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.7899577617645264,0.8366994261741638,0.8518645763397217,0.8602859973907471,0.8652776479721069,0.8691727519035339,0.8735083341598511,0.8705886602401733,0.8741273880004883,0.8752598166465759,0.8722238540649414,0.8735980987548828,0.8727473616600037,0.8721603155136108,0.8747537136077881]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.8293664455413818,0.8496667742729187,0.8558705449104309,0.8629034757614136,0.8693836331367493,0.8724855184555054,0.8736525177955627,0.8728233575820923,0.8733147382736206,0.8746967315673828,0.873928964138031,0.8738982081413269,0.8747581839561462,0.8747274279594421,0.8738982081413269]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.8313370943069458,0.8520360589027405,0.8573182821273804,0.8633989691734314,0.8692954182624817,0.8707081079483032,0.8709537982940674,0.8720594048500061,0.8696025609970093,0.8711380958557129,0.8709537982940674,0.8715065717697144,0.8715680241584778,0.8709537982940674,0.8704624176025391]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('c02c0779', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.7461938858032227,0.8375911116600037,0.8572095632553101,0.86472487449646,0.8720223903656006,0.8724963068962097,0.8740557432174683,0.8745182156562805,0.8708308935165405,0.8733623027801514,0.8725596070289612,0.8722063899040222,0.8756702542304993,0.8737514019012451,0.8729788661003113]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.8078683018684387,0.8528915047645569,0.8617978692054749,0.8679401874542236,0.8703050017356873,0.8729154467582703,0.8733454346656799,0.872546911239624,0.8732532858848572,0.8748195767402649,0.8741132020950317,0.8735604286193848,0.8750345706939697,0.8743896484375,0.8742974996566772]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.8117436766624451,0.8546157479286194,0.8606350421905518,0.8648116588592529,0.8689883351325989,0.8697254061698914,0.8708309531211853,0.8683127164840698,0.869234025478363,0.8708924055099487,0.8715680241584778,0.8717522621154785,0.8721822500228882,0.8719979524612427,0.8709537982940674]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('5e0316d7', data);
 
 	}
 	
@@ -8826,7 +8805,7 @@ let's train further, another 5k steps, for 10K steps in total.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="85ed3519"></div>
+<div id="99145ac5"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8840,8 +8819,8 @@ let's train further, another 5k steps, for 10K steps in total.</p>
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.31075942516326904,0.24495509266853333,0.3537605404853821,0.2788725793361664,0.3150302469730377,0.29315632581710815,0.2530573308467865,0.2517443597316742,0.2906173765659332,0.19798439741134644,0.3542305529117584,0.2839266061782837,0.2653563320636749,0.3483913838863373,0.17786598205566406]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.43446654081344604,0.3574466109275818,0.3250060975551605,0.30541345477104187,0.2939683496952057,0.28454917669296265,0.2781826853752136,0.2761492133140564,0.27024441957473755,0.27276888489723206,0.27316299080848694,0.2712560296058655,0.27354007959365845,0.2727733254432678,0.26913243532180786]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.3794657289981842,0.33604931831359863,0.315136194229126,0.2999739944934845,0.28648966550827026,0.2786861062049866,0.27472856640815735,0.2724039554595947,0.2719481587409973,0.2697143256664276,0.2700643539428711,0.2696554958820343,0.2690284848213196,0.2684348523616791,0.2691952884197235]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.3749925196170807,0.33399561047554016,0.31620994210243225,0.30297234654426575,0.2917803227901459,0.2861456871032715,0.28278905153274536,0.281832218170166,0.28197723627090454,0.2797984778881073,0.2798202931880951,0.28133994340896606,0.2808898985385895,0.28132164478302,0.2820068895816803]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('85ed3519', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.413554310798645,0.2964184284210205,0.3376757502555847,0.30481043457984924,0.3247709274291992,0.24266599118709564,0.22563496232032776,0.32181569933891296,0.29221972823143005,0.27498066425323486,0.3215692937374115,0.2874992787837982,0.26235994696617126,0.2954002022743225,0.23303024470806122]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.5132843255996704,0.36817115545272827,0.31875336170196533,0.2973432242870331,0.2848348021507263,0.28307393193244934,0.2778671383857727,0.27352502942085266,0.2741367816925049,0.273348331451416,0.2729775905609131,0.2726285457611084,0.2674201428890228,0.2716900110244751,0.2692650854587555]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.4222164452075958,0.3379410207271576,0.307730495929718,0.29214465618133545,0.28433507680892944,0.2772345542907715,0.27427026629447937,0.2749819755554199,0.2734788656234741,0.27047494053840637,0.27007925510406494,0.26943305134773254,0.2683905363082886,0.26808685064315796,0.2684392035007477]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000,5200,6441,7930,9717,10000],"y":[0.41947436332702637,0.3373906910419464,0.31151676177978516,0.2975885570049286,0.29055577516555786,0.2839118540287018,0.2814599573612213,0.28295332193374634,0.28197628259658813,0.2802383601665497,0.27974727749824524,0.27885201573371887,0.2787383496761322,0.27904269099235535,0.2793804705142975]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('99145ac5', data);
 
 	}
 	
@@ -8882,13 +8861,13 @@ let's train further, another 5k steps, for 10K steps in total.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	[Step 10000] median train step: 261 microseconds
+<pre>	[Step 10000] median train step: 243 microseconds
 Results on batched train:
-	Mean Loss (#loss): 0.269
-	Mean Accuracy (#acc): 87.39%
+	Mean Loss (#loss): 0.268
+	Mean Accuracy (#acc): 87.43%
 Results on test:
-	Mean Loss (#loss): 0.282
-	Mean Accuracy (#acc): 87.05%
+	Mean Loss (#loss): 0.279
+	Mean Accuracy (#acc): 87.10%
 </pre>
 </div>
 </div>
@@ -8948,7 +8927,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold">   7% [=&gt;......................................] (110 steps/s) [2s:1m24s]</span> [step=719] [loss=4.2] [~loss=4.27] [~acc=80.87%]         </pre>
+<pre>      <span class="ansi-bold">   7% [=&gt;......................................] (106 steps/s) [2s:1m27s]</span> [step=719] [loss=4.29] [~loss=4.35] [~acc=80.09%]        </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8959,9 +8938,9 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold"> 100% [========================================] (1806 steps/s)</span> [step=9999] [loss=1.25] [~loss=1.28] [~acc=86.81%]                  
+<pre>      <span class="ansi-bold"> 100% [========================================] (1669 steps/s)</span> [step=9999] [loss=1.27] [~loss=1.29] [~acc=86.83%]                  
 
-[saving checkpoint@10000] [median train step (ms): 0]
+[saving checkpoint@10000] [median train step: 315.8µs]
 </pre>
 </div>
 </div>
@@ -8974,7 +8953,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="76a99c61"></div>
+<div id="c8f657a1"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8988,8 +8967,8 @@ Results on test:
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.6911916732788086,0.7817731499671936,0.8083935379981995,0.828889787197113,0.8352870345115662,0.844516396522522,0.8519635200500488,0.8538392782211304,0.8622689843177795,0.8606382012367249,0.8617070913314819,0.8639293313026428,0.863943338394165,0.8680978417396545]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.7612788677215576,0.7923282384872437,0.8155769109725952,0.8321611881256104,0.8411903977394104,0.8468106389045715,0.852092981338501,0.8551334738731384,0.8584502935409546,0.8623199462890625,0.8638555407524109,0.8657596707344055,0.8680323362350464,0.8686158657073975]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.7575086951255798,0.7924574017524719,0.8177629709243774,0.830661416053772,0.8419629335403442,0.846446692943573,0.8527116775512695,0.8543086647987366,0.8567655086517334,0.8613106608390808,0.8624776601791382,0.8613721132278442,0.8640131950378418,0.8644431233406067]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('76a99c61', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.7148147821426392,0.7585930824279785,0.8018525242805481,0.8205824494361877,0.8343923687934875,0.8426834940910339,0.8437892198562622,0.8474463224411011,0.850055992603302,0.8534591197967529,0.8583493232727051,0.862443745136261,0.8669843077659607,0.8682763576507568]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.7598046660423279,0.7711679935455322,0.8141027688980103,0.8258038759231567,0.8371672034263611,0.8422960042953491,0.849021852016449,0.8495132327079773,0.8517244458198547,0.8571911454200745,0.8594023585319519,0.8639169931411743,0.8679401874542236,0.8686158657073975]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.7628523707389832,0.772986888885498,0.814323365688324,0.8243964910507202,0.8379091620445251,0.8391990065574646,0.845341145992279,0.8459553718566895,0.8488421440124512,0.8512375950813293,0.8506847620010376,0.8577482104301453,0.8627848029136658,0.8639518022537231]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('c8f657a1', data);
 
 	}
 	
@@ -9036,7 +9015,7 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="a242565a"></div>
+<div id="536c43a6"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -9050,8 +9029,8 @@ Results on test:
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[4.570773124694824,4.435069561004639,4.243218421936035,3.987794876098633,3.7716593742370605,3.557677745819092,3.2064449787139893,2.9771904945373535,2.672935962677002,2.364238977432251,1.9662178754806519,1.744924545288086,1.3652780055999756,1.2456285953521729]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[4.71928071975708,4.47199821472168,4.269283771514893,4.052819728851318,3.830258369445801,3.5769150257110596,3.2995705604553223,3.0022449493408203,2.672395944595337,2.337439775466919,1.9900940656661987,1.6471010446548462,1.3319010734558105,1.2811213731765747]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[4.5899200439453125,4.393255233764648,4.203948974609375,3.993525743484497,3.7730507850646973,3.5255117416381836,3.2588136196136475,2.9608726501464844,2.6424906253814697,2.3049492835998535,1.9613112211227417,1.6244006156921387,1.30881667137146,1.2660698890686035]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[4.592082500457764,4.389779567718506,4.200360298156738,3.994614839553833,3.7739200592041016,3.528700828552246,3.2605392932891846,2.96451735496521,2.649176597595215,2.3094773292541504,1.9699853658676147,1.6326289176940918,1.3179069757461548,1.2766971588134766]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('a242565a', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[4.687384605407715,4.484559059143066,4.278294563293457,4.063423156738281,3.769773006439209,3.550725221633911,3.2564990520477295,3.0025644302368164,2.601835012435913,2.3771626949310303,1.9430110454559326,1.5892548561096191,1.3882752656936646,1.2664494514465332]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[4.792262554168701,4.586837291717529,4.3450422286987305,4.110392093658447,3.8661038875579834,3.607935667037964,3.3304059505462646,3.0253796577453613,2.693591356277466,2.3488264083862305,1.9988367557525635,1.6553289890289307,1.3327217102050781,1.2931749820709229]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on batched train","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[4.692140102386475,4.495628356933594,4.264047622680664,4.045563697814941,3.8108155727386475,3.5598814487457275,3.2769172191619873,2.9812309741973877,2.662022590637207,2.312365770339966,1.9682538509368896,1.6299940347671509,1.3162075281143188,1.2762234210968018]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[4.6910810470581055,4.495246410369873,4.264498233795166,4.047453880310059,3.8143200874328613,3.5674126148223877,3.2870025634765625,2.989424228668213,2.670358657836914,2.3225529193878174,1.9818880558013916,1.6427394151687622,1.3275196552276611,1.2880593538284302]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('536c43a6', data);
 
 	}
 	
@@ -9092,13 +9071,13 @@ Results on test:
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	[Step 10000] median train step: 292 microseconds
+<pre>	[Step 10000] median train step: 315 microseconds
 Results on batched train:
-	Mean Loss (#loss): 1.27
+	Mean Loss (#loss): 1.28
 	Mean Accuracy (#acc): 86.86%
 Results on test:
-	Mean Loss (#loss): 1.28
-	Mean Accuracy (#acc): 86.44%
+	Mean Loss (#loss): 1.29
+	Mean Accuracy (#acc): 86.40%
 </pre>
 </div>
 </div>
