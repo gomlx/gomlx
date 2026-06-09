@@ -81,7 +81,7 @@ func main() {
 		}
 
 		if !runNeeded {
-			fmt.Printf("  Up-to-date, skipping (use -force to run anyway)\n")
+			fmt.Printf("✅ %s is up-to-date, skipping (use -force to run anyway)\n", ipynbPath)
 			continue
 		}
 
