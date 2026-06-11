@@ -7,7 +7,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"image"
-	"io"
 	"math/rand"
 	"os"
 	"path"
@@ -312,7 +311,7 @@ func PlotModelEvolution(cfg *diffusion.Config, imagesPerSample int, animate bool
 	<canvas id="canvas_{{.Id}}" height="{{.Size}}px" width="{{.Width}}px"></canvas>
 	<script>
 	var canvas_{{.Id}} = document.getElementById("canvas_{{.Id}}");
-	var ctx_{{.Id}} = canvas_{{.Id}}.getScope("2d");
+	var ctx_{{.Id}} = canvas_{{.Id}}.getContext("2d");
 	var currentFrame_{{.Id}} = 0;
 	var frameRate_{{.Id}} = {{.FrameRateMs}};
 	var imagePaths_{{.Id}} = [{{range .Images}}
@@ -541,12 +540,12 @@ func GenerateImagesOfAllFlowerTypes(cfg *diffusion.Config, numDiffusionSteps int
 	numImages := flowers.NumLabels
 	_ = cfg.Store.ResetRNGState()
 	imageSize := cfg.ImageSize
-	noise := MustNewExec(cfg.Backend, func(g *Graph) *Node {
+	noise := MustExecOnce(cfg.Backend, func(g *Graph) *Node {
 		state := RNGStateForGraph(g)
 		_, noise := RandomNormal(state, shapes.Make(cfg.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise
-	}).MustExec()[0]
+	})
 	flowerIds := tensors.FromValue(xslices.Iota(int32(0), numImages))
 	generator := NewImagesGenerator(cfg, noise, flowerIds, numDiffusionSteps)
 	return generator.Generate()
@@ -595,22 +594,21 @@ func (kg *KidGenerator) EvalStepGraph(scope *model.Scope, allImages []*Node) (me
 }
 
 func (kg *KidGenerator) Eval() (metric *tensors.Tensor) {
-	kg.ds.Reset()
 	kg.kid.Reset(kg.storeInceptionV3.RootScope())
 	generatedImages := kg.generator.Generate()
 	count := 0
-	for {
-		_, inputs, _, err := kg.ds.Yield()
-		if err == io.EOF {
-			break
+	for batch, err := range kg.ds.Iter() {
+		if err != nil {
+			panic(err)
 		}
 		count++
 
-		datasetImages := inputs[0]
+		datasetImages := batch.Inputs[0]
 		if metric != nil {
 			metric.MustFinalizeAll()
 		}
 		metric = kg.evalExec.MustCall(generatedImages, datasetImages)[0]
+		_ = batch.Finalize()
 	}
 	if count == 0 {
 		exceptions.Panicf("evaluation dataset %s yielded no batches, no data to evaluate KID", kg.ds)
