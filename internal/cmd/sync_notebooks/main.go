@@ -16,19 +16,19 @@ import (
 
 // notebooks maps the relative path of the Jupyter notebook to the relative path of the exported HTML.
 var notebooks = map[string]string{
-	"examples/tutorial/tutorial.ipynb":     "docs/notebooks/tutorial.html",
-	"examples/adult/uci-adult.ipynb":       "docs/notebooks/uci-adult.html",
-	"examples/cifar/cifar.ipynb":           "docs/notebooks/cifar.html",
-	"examples/mnist/mnist.ipynb":           "docs/notebooks/mnist.html",
-	"examples/dogsvscats/dogsvscats.ipynb": "docs/notebooks/dogsvscats.html",
-	"examples/spiral/Spiral.ipynb":         "docs/notebooks/Spiral.html",
-	"examples/imdb/imdb.ipynb":             "docs/notebooks/imdb.html",
-	// "examples/oxfordflowers102/OxfordFlowers102_Diffusion.ipynb": "docs/notebooks/OxfordFlowers102_Diffusion.html",
+	"examples/tutorial/tutorial.ipynb":                           "docs/notebooks/tutorial.html",
+	"examples/adult/uci-adult.ipynb":                             "docs/notebooks/uci-adult.html",
+	"examples/cifar/cifar.ipynb":                                 "docs/notebooks/cifar.html",
+	"examples/mnist/mnist.ipynb":                                 "docs/notebooks/mnist.html",
+	"examples/dogsvscats/dogsvscats.ipynb":                       "docs/notebooks/dogsvscats.html",
+	"examples/spiral/Spiral.ipynb":                               "docs/notebooks/Spiral.html",
+	"examples/imdb/imdb.ipynb":                                   "docs/notebooks/imdb.html",
+	"examples/oxfordflowers102/OxfordFlowers102_Diffusion.ipynb": "docs/notebooks/OxfordFlowers102_Diffusion.html",
+	"examples/FlowMatching/flow_matching.ipynb":                  "docs/notebooks/flow_matching.html",
 	// "examples/ogbnmag/ogbn-mag.ipynb":                            "docs/notebooks/ogbn-mag.html",
 	// "examples/fft/fft.ipynb":                                     "docs/notebooks/fft.html",
 	// "examples/discretekan/kans_shapes.ipynb":                     "docs/notebooks/kans_shapes.html",
 	// "examples/discretekan/discrete-kan.ipynb":                   "docs/notebooks/discrete-kan.html",
-	// "examples/FlowMatching/flow_matching.ipynb":                  "docs/notebooks/flow_matching.html",
 	// "ml/layers/rational/rational.ipynb":                          "docs/notebooks/rational.html",
 }
 
