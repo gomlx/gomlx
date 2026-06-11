@@ -273,7 +273,7 @@ func (c *Config) SliderDiffusionSteps(
 	// Use cache if available.
 	var imagesAndDiffusions *ImagesAndDiffusions
 	gob.Register(imagesAndDiffusions)
-	imagesAndDiffusions = cache.Cache[*ImagesAndDiffusions](cacheKey, generateFn)
+	imagesAndDiffusions = cache.Cache(cacheKey, generateFn)
 
 	// Create HTML content and containers.
 	denoiseHtmlId := "denoise_" + gonbui.UniqueId()

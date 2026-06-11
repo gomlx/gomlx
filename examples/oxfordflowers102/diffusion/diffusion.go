@@ -238,7 +238,7 @@ const IsV1Test = true
 //   - "diffusion_num_residual_blocks" (static hyperparameter): number of blocks to use per numChannelsList element.
 func UNetModelGraph(scope *model.Scope, nanLogger *nanlogger.NanLogger, noisyImages, noiseVariances, flowerIds *Node) *Node {
 	dtype := noisyImages.DType()
-	scope = scope.In(UNetModelScope).WithInitializer(initializer.XavierNormalFn(scope))
+	scope = scope.At(UNetModelScope).WithInitializer(initializer.XavierNormalFn(scope))
 
 	// nextScope return a new scope prefixed with a counter, to give a nice ordering to the variables.
 	layerNum := 0
@@ -403,7 +403,7 @@ func Denoise(scope *model.Scope, noisyImages, signalRatios, noiseRatios, flowerI
 		emaScope := scope.In("ema").WithInitializer(initializer.Zero)
 		newPrefixScope := emaScope.Scope()
 		// Enumerate the variables we care about, under the UNet model:
-		for v := range scope.Shared(UNetModelScope).IterVariables() {
+		for v := range scope.At(UNetModelScope).IterVariables() {
 			if !strings.HasPrefix(v.Scope(), prefixScope) {
 				exceptions.Panicf("unxpected variable %q in scope %q", v.Name(), v.Scope())
 			}
