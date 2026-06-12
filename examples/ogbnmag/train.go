@@ -259,7 +259,8 @@ func newTrainer(backend compute.Backend, store *model.Store) *train.Trainer {
 	return trainer
 }
 
-func EvalWithStore(
+// Eval runs the evaluation of the model in `store`, loading it from `checkpointPath`.
+func Eval(
 	backend compute.Backend,
 	store *model.Store,
 	dataDir, checkpointPath string,

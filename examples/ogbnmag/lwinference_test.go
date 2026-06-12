@@ -4,7 +4,6 @@ package ogbnmag
 
 import (
 	"fmt"
-	"io"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	mldata "github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
+	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
@@ -43,8 +43,12 @@ func findSmallestDegreeSubgraph(t *testing.T) int32 {
 		strategy := NewSamplerStrategy(magSampler, batchSize, seedsIds)
 		ds := strategy.NewDataset("lwinference_test")
 
-		_, inputs, _, err := ds.Yield()
-		require.NoError(t, err, "Dataset.Yield")
+		var inputs []*tensors.Tensor
+		for batch, err := range ds.Iter() {
+			require.NoError(t, err)
+			inputs = batch.Inputs
+			break
+		}
 		nameToState, _ := sampler.MapInputsToStates(strategy, inputs)
 		maxDegree := int32(-1)
 		for name, state := range nameToState {
@@ -75,16 +79,18 @@ func configureLayerWiseTestScope(scope *model.Scope) {
 		"train_steps":     0,
 		"plots":           true,
 
-		optimizer.ParamOptimizer:        "adam",
-		optimizer.ParamLearningRate:     0.001,
-		cosineschedule.ParamPeriodSteps: 0,
-		optimizer.ParamClipStepByValue:  0.0,
-		optimizer.ParamAdamEpsilon:      1e-7,
-		optimizer.ParamAdamDType:        "",
+		optimizer.ParamOptimizer:            "adam",
+		optimizer.ParamLearningRate:         0.001,
+		cosineschedule.ParamPeriodSteps:     0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_cycles".
+		cosineschedule.ParamCycles:          0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_steps".
+		cosineschedule.ParamMinLearningRate: 0,
+		optimizer.ParamClipStepByValue:      0.0,
+		optimizer.ParamAdamEpsilon:          1e-7,
+		optimizer.ParamAdamDType:            "",
 
-		layers.ParamL2Regularization: 1e-5,
-		layers.ParamDropoutRate:      0.2,
-		activation.ParamActivation:   "swish",
+		regularizer.ParamL2:        1e-5,
+		layers.ParamDropoutRate:    0.2,
+		activation.ParamActivation: "swish",
 
 		gnn.ParamEdgeDropoutRate:       0.0,
 		gnn.ParamNumGraphUpdates:       6, // gnn_num_messages
@@ -134,8 +140,12 @@ func TestLayerWiseInferenceLogits(t *testing.T) {
 	require.NoError(t, err, "NewSampler")
 	strategy := NewSamplerStrategy(magSampler, batchSize, seedsIds)
 	ds := strategy.NewDataset("lwinference_test")
-	_, inputs, _, err := ds.Yield()
-	require.NoError(t, err, "Dataset.Yield")
+	var inputs []*tensors.Tensor
+	for batch, err := range ds.Iter() {
+		require.NoError(t, err)
+		inputs = batch.Inputs
+		break
+	}
 
 	backend := testutil.BuildTestBackend()
 	for scopeSourceIdx := range 2 {
@@ -202,7 +212,7 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	strategy := NewSamplerStrategy(magSampler, batchSize, nil /* all papers */)
 	var ds train.Dataset
 	ds = strategy.NewDataset("lwinference_test")
-	ds = mldata.Map(ds, ExtractLabelsFromInput)
+	ds = mldata.MapOnHost(ds, ExtractLabelsFromInput)
 
 	// Create scope and load from pre-trained checkpointHandler.
 	backend := testutil.BuildTestBackend()
@@ -234,16 +244,13 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 	numSteps = 64
 	predictionsGNN := make([]int32, 0, numSteps*batchSize)
 	pBar := progressbar.Default(numSteps, "steps")
-	ds.Reset()
 	count := 0
-	for {
-		_, inputs, labels, err := ds.Yield()
-		if err == io.EOF || count == int(numSteps) {
-			require.NoError(t, pBar.Finish())
-			require.NoError(t, pBar.Close())
+	for batch, err := range ds.Iter() {
+		if count == int(numSteps) {
 			break
 		}
-		require.NoError(t, err, "Dataset.Yield")
+		require.NoError(t, err)
+		inputs, labels := batch.Inputs, batch.Labels
 		inputs = append(inputs, labels[0])
 		var results []*tensors.Tensor
 		require.NotPanics(t, func() { results = executor.MustCall(inputs) })
@@ -253,6 +260,8 @@ func TestLayerWiseInferencePredictions(t *testing.T) {
 		_ = pBar.Add(1)
 		count++
 	}
+	require.NoError(t, pBar.Finish())
+	require.NoError(t, pBar.Close())
 	fmt.Printf("predictionsGNN: %d correct out of %d, %.2f%% accuracy\n%v ...\n",
 		correct, total, 100.0*float64(correct)/float64(total), predictionsGNN[:100])
 	executor.Finalize()

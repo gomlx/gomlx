@@ -7,6 +7,7 @@ package ogbnmag
 import (
 	"flag"
 	"fmt"
+	"iter"
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
@@ -56,13 +57,16 @@ func TestModel(t *testing.T) {
 	testGraphExec := model.MustNewExec(backend, scope.Store(), testGraphFn)
 
 	var inputs []*tensors.Tensor
-	spec, inputs, _, err = trainDS.Yield()
+	for batch, err := range trainDS.Iter() {
+		require.NoError(t, err)
+		spec, inputs = batch.Spec, batch.Inputs
+		break
+	}
 	totalSizeBytes := int64(0)
 	for _, input := range inputs {
 		totalSizeBytes += input.Shape().ByteSize()
 	}
 	fmt.Printf("One sample (batch) size is %s bytes\n", humanize.Bytes(totalSizeBytes))
-	require.NoError(t, err)
 	outputs := testGraphExec.MustCall(inputs)
 	for ii, output := range outputs {
 		fmt.Printf("output #%d=%s\n", ii, output.Shape())
@@ -86,11 +90,16 @@ func BenchmarkParallelSampling(b *testing.B) {
 	ds, _, _, _, err := MakeDatasets(*flagDataDir)
 	require.NoError(b, err)
 
+	next, stop := iter.Pull2(ds.Iter())
+	defer stop()
 	for b.Loop() {
-		_, inputs, _, err := ds.Yield()
+		batch, err, ok := next()
+		if !ok {
+			break
+		}
 		if err != nil {
 			b.Fatalf("Failed to sample: %+v", err)
 		}
-		_ = inputs
+		_ = batch.Inputs
 	}
 }

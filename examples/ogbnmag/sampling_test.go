@@ -4,7 +4,6 @@ package ogbnmag
 
 import (
 	"fmt"
-	"io"
 	"testing"
 
 	"github.com/gomlx/gomlx/core/tensors"
@@ -33,7 +32,7 @@ func TestDatasets(t *testing.T) {
 	// Checks that shuffling also doesn't loses elements.
 	magSampler, err := NewSampler(*flagDataDir)
 	trainStrategy := NewSamplerStrategy(magSampler, BatchSize, TrainSplit)
-	shuffledTrainDS := mldata.Parallel(
+	shuffledTrainDS := mldata.Buffer(
 		trainStrategy.NewDataset("train").Epochs(1).Shuffle())
 
 	for _, testCase := range []struct {
@@ -58,12 +57,9 @@ func TestDatasets(t *testing.T) {
 		}
 		fmt.Printf("Evaluating %q: %d seeds\n", testCase.Name, len(seedsInSplit))
 		batchNum := 0
-		for {
-			spec, inputs, _, err := testCase.DS.Yield()
-			if err == io.EOF {
-				break
-			}
+		for batch, err := range testCase.DS.Iter() {
 			require.NoError(t, err)
+			spec, inputs := batch.Spec, batch.Inputs
 			strategy := spec.(*sampler.Strategy)
 			graphSample, remaining := sampler.MapInputsToStates[*tensors.Tensor](strategy, inputs)
 			require.Empty(t, remaining)

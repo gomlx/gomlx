@@ -125,7 +125,7 @@ func BuildLayerWiseInferenceModel(
 		edges, _ := sampler.MapInputsToEdges(strategy, inputs)
 
 		// Create layer-wise inference graph.
-		lw, err := gnn.LayerWiseGNN(scope, strategy)
+		lw, err := gnn.LayerWiseGNN(scope.Store(), strategy)
 		if err != nil {
 			panic(err)
 		}
