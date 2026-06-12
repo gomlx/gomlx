@@ -7332,7 +7332,12 @@ a.anchor-link {
     if (!diagrams.length) {
       return;
     }
-    const mermaid = (await import("https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.7.0/mermaid.esm.min.mjs")).default;
+    const mermaid = (await import("https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.0/mermaid.esm.min.mjs")).default;
+    const elkUrl = "https://cdnjs.cloudflare.com/ajax/libs/mermaid-layout-elk/0.1.9/mermaid-layout-elk.esm.min.mjs";
+    if(elkUrl) {
+      const elkLayouts = (await import(elkUrl)).default;
+      mermaid.registerLayoutLoaders(elkLayouts);
+    }
     const parser = new DOMParser();
 
     mermaid.initialize({
@@ -7429,7 +7434,8 @@ a.anchor-link {
      * Post-process to ensure mermaid diagrams contain only valid SVG and XHTML.
      */
     function cleanMermaidSvg(svg) {
-      return svg.replace(RE_VOID_ELEMENT, replaceVoidElement);
+      svg = svg.replace(RE_VOID_ELEMENT, replaceVoidElement);
+      return `${SVG_XML_HEADER}${svg}`;
     }
 
 
@@ -7455,6 +7461,285 @@ a.anchor-link {
       }
       return `<${tag} ${rest}>`;
     }
+
+
+  /**
+   * Named HTML entities with their decimal equivalent codes.
+   *
+   * @see https://www.w3.org/TR/WD-html40-970708/sgml/entities.html
+   * */
+  const HTML_ENTITIES = `<!ENTITY Aacute "&#193;">
+<!ENTITY aacute "&#225;">
+<!ENTITY Acirc "&#194;">
+<!ENTITY acirc "&#226;">
+<!ENTITY acute "&#180;">
+<!ENTITY AElig "&#198;">
+<!ENTITY aelig "&#230;">
+<!ENTITY Agrave "&#192;">
+<!ENTITY agrave "&#224;">
+<!ENTITY alefsym "&#8501;">
+<!ENTITY Alpha "&#913;">
+<!ENTITY alpha "&#945;">
+<!ENTITY amp "&#38;">
+<!ENTITY and "&#8869;">
+<!ENTITY ang "&#8736;">
+<!ENTITY Aring "&#197;">
+<!ENTITY aring "&#229;">
+<!ENTITY asymp "&#8776;">
+<!ENTITY Atilde "&#195;">
+<!ENTITY atilde "&#227;">
+<!ENTITY Auml "&#196;">
+<!ENTITY auml "&#228;">
+<!ENTITY bdquo "&#8222;">
+<!ENTITY Beta "&#914;">
+<!ENTITY beta "&#946;">
+<!ENTITY brvbar "&#166;">
+<!ENTITY bull "&#8226;">
+<!ENTITY cap "&#8745;">
+<!ENTITY Ccedil "&#199;">
+<!ENTITY ccedil "&#231;">
+<!ENTITY cedil "&#184;">
+<!ENTITY cent "&#162;">
+<!ENTITY Chi "&#935;">
+<!ENTITY chi "&#967;">
+<!ENTITY circ "&#710;">
+<!ENTITY clubs "&#9827;">
+<!ENTITY cong "&#8773;">
+<!ENTITY copy "&#169;">
+<!ENTITY crarr "&#8629;">
+<!ENTITY cup "&#8746;">
+<!ENTITY curren "&#164;">
+<!ENTITY dagger "&#8224;">
+<!ENTITY Dagger "&#8225;">
+<!ENTITY darr "&#8595;">
+<!ENTITY dArr "&#8659;">
+<!ENTITY deg "&#176;">
+<!ENTITY Delta "&#916;">
+<!ENTITY delta "&#948;">
+<!ENTITY diams "&#9830;">
+<!ENTITY divide "&#247;">
+<!ENTITY Eacute "&#201;">
+<!ENTITY eacute "&#233;">
+<!ENTITY Ecirc "&#202;">
+<!ENTITY ecirc "&#234;">
+<!ENTITY Egrave "&#200;">
+<!ENTITY egrave "&#232;">
+<!ENTITY empty "&#8709;">
+<!ENTITY emsp "&#8195;">
+<!ENTITY ensp "&#8194;">
+<!ENTITY epsilon "&#949;">
+<!ENTITY Epsilon "&#917;">
+<!ENTITY equiv "&#8801;">
+<!ENTITY Eta "&#919;">
+<!ENTITY eta "&#951;">
+<!ENTITY ETH "&#208;">
+<!ENTITY eth "&#240;">
+<!ENTITY Euml "&#203;">
+<!ENTITY euml "&#235;">
+<!ENTITY exist "&#8707;">
+<!ENTITY fnof "&#402;">
+<!ENTITY forall "&#8704;">
+<!ENTITY frac12 "&#189;">
+<!ENTITY frac14 "&#188;">
+<!ENTITY frac34 "&#190;">
+<!ENTITY frasl "&#8260;">
+<!ENTITY Gamma "&#915;">
+<!ENTITY gamma "&#947;">
+<!ENTITY ge "&#8805;">
+<!ENTITY gt "&#62;">
+<!ENTITY harr "&#8596;">
+<!ENTITY hArr "&#8660;">
+<!ENTITY hearts "&#9829;">
+<!ENTITY hellip "&#8230;">
+<!ENTITY Iacute "&#205;">
+<!ENTITY iacute "&#237;">
+<!ENTITY Icirc "&#206;">
+<!ENTITY icirc "&#238;">
+<!ENTITY iexcl "&#161;">
+<!ENTITY Igrave "&#204;">
+<!ENTITY igrave "&#236;">
+<!ENTITY image "&#8465;">
+<!ENTITY infin "&#8734;">
+<!ENTITY int "&#8747;">
+<!ENTITY Iota "&#921;">
+<!ENTITY iota "&#953;">
+<!ENTITY iquest "&#191;">
+<!ENTITY isin "&#8712;">
+<!ENTITY Iuml "&#207;">
+<!ENTITY iuml "&#239;">
+<!ENTITY Kappa "&#922;">
+<!ENTITY kappa "&#954;">
+<!ENTITY Lambda "&#923;">
+<!ENTITY lambda "&#955;">
+<!ENTITY lang "&#9001;">
+<!ENTITY laquo "&#171;">
+<!ENTITY larr "&#8592;">
+<!ENTITY lArr "&#8656;">
+<!ENTITY lceil "&#8968;">
+<!ENTITY ldquo "&#8220;">
+<!ENTITY le "&#8804;">
+<!ENTITY lfloor "&#8970;">
+<!ENTITY lowast "&#8727;">
+<!ENTITY loz "&#9674;">
+<!ENTITY lrm "&#8206;">
+<!ENTITY lsaquo "&#8249;">
+<!ENTITY lsquo "&#8216;">
+<!ENTITY lt "&#60;">
+<!ENTITY macr "&#175;">
+<!ENTITY mdash "&#8212;">
+<!ENTITY micro "&#181;">
+<!ENTITY middot "&#183;">
+<!ENTITY minus "&#8722;">
+<!ENTITY Mu "&#924;">
+<!ENTITY mu "&#956;">
+<!ENTITY nabla "&#8711;">
+<!ENTITY nbsp "&#160;">
+<!ENTITY ndash "&#8211;">
+<!ENTITY ne "&#8800;">
+<!ENTITY ni "&#8715;">
+<!ENTITY not "&#172;">
+<!ENTITY notin "&#8713;">
+<!ENTITY nsub "&#8836;">
+<!ENTITY Ntilde "&#209;">
+<!ENTITY ntilde "&#241;">
+<!ENTITY Nu "&#925;">
+<!ENTITY nu "&#957;">
+<!ENTITY Oacute "&#211;">
+<!ENTITY oacute "&#243;">
+<!ENTITY Ocirc "&#212;">
+<!ENTITY ocirc "&#244;">
+<!ENTITY OElig "&#338;">
+<!ENTITY oelig "&#339;">
+<!ENTITY Ograve "&#210;">
+<!ENTITY ograve "&#242;">
+<!ENTITY oline "&#8254;">
+<!ENTITY Omega "&#937;">
+<!ENTITY omega "&#969;">
+<!ENTITY Omicron "&#927;">
+<!ENTITY omicron "&#959;">
+<!ENTITY oplus "&#8853;">
+<!ENTITY or "&#8870;">
+<!ENTITY ordf "&#170;">
+<!ENTITY ordm "&#186;">
+<!ENTITY Oslash "&#216;">
+<!ENTITY oslash "&#248;">
+<!ENTITY Otilde "&#213;">
+<!ENTITY otilde "&#245;">
+<!ENTITY otimes "&#8855;">
+<!ENTITY Ouml "&#214;">
+<!ENTITY ouml "&#246;">
+<!ENTITY para "&#182;">
+<!ENTITY part "&#8706;">
+<!ENTITY permil "&#8240;">
+<!ENTITY perp "&#8869;">
+<!ENTITY Phi "&#934;">
+<!ENTITY phi "&#966;">
+<!ENTITY Pi "&#928;">
+<!ENTITY pi "&#960;">
+<!ENTITY piv "&#982;">
+<!ENTITY plusmn "&#177;">
+<!ENTITY pound "&#163;">
+<!ENTITY prime "&#8242;">
+<!ENTITY Prime "&#8243;">
+<!ENTITY prod "&#8719;">
+<!ENTITY prop "&#8733;">
+<!ENTITY Psi "&#936;">
+<!ENTITY psi "&#968;">
+<!ENTITY quot "&#34;">
+<!ENTITY radic "&#8730;">
+<!ENTITY rang "&#9002;">
+<!ENTITY raquo "&#187;">
+<!ENTITY rarr "&#8594;">
+<!ENTITY rArr "&#8658;">
+<!ENTITY rceil "&#8969;">
+<!ENTITY rdquo "&#8221;">
+<!ENTITY real "&#8476;">
+<!ENTITY reg "&#174;">
+<!ENTITY rfloor "&#8971;">
+<!ENTITY Rho "&#929;">
+<!ENTITY rho "&#961;">
+<!ENTITY rlm "&#8207;">
+<!ENTITY rsaquo "&#8250;">
+<!ENTITY rsquo "&#8217;">
+<!ENTITY sbquo "&#8218;">
+<!ENTITY Scaron "&#352;">
+<!ENTITY scaron "&#353;">
+<!ENTITY sdot "&#8901;">
+<!ENTITY sect "&#167;">
+<!ENTITY shy "&#173;">
+<!ENTITY Sigma "&#931;">
+<!ENTITY sigma "&#963;">
+<!ENTITY sigmaf "&#962;">
+<!ENTITY sim "&#8764;">
+<!ENTITY spades "&#9824;">
+<!ENTITY sub "&#8834;">
+<!ENTITY sube "&#8838;">
+<!ENTITY sum "&#8721;">
+<!ENTITY sup "&#8835;">
+<!ENTITY sup1 "&#185;">
+<!ENTITY sup2 "&#178;">
+<!ENTITY sup3 "&#179;">
+<!ENTITY supe "&#8839;">
+<!ENTITY szlig "&#223;">
+<!ENTITY Tau "&#932;">
+<!ENTITY tau "&#964;">
+<!ENTITY there4 "&#8756;">
+<!ENTITY Theta "&#920;">
+<!ENTITY theta "&#952;">
+<!ENTITY thetasym "&#977;">
+<!ENTITY thinsp "&#8201;">
+<!ENTITY THORN "&#222;">
+<!ENTITY thorn "&#254;">
+<!ENTITY tilde "&#732;">
+<!ENTITY times "&#215;">
+<!ENTITY trade "&#8482;">
+<!ENTITY Uacute "&#218;">
+<!ENTITY uacute "&#250;">
+<!ENTITY uarr "&#8593;">
+<!ENTITY uArr "&#8657;">
+<!ENTITY Ucirc "&#219;">
+<!ENTITY ucirc "&#251;">
+<!ENTITY Ugrave "&#217;">
+<!ENTITY ugrave "&#249;">
+<!ENTITY uml "&#168;">
+<!ENTITY upsih "&#978;">
+<!ENTITY Upsilon "&#933;">
+<!ENTITY upsilon "&#965;">
+<!ENTITY Uuml "&#220;">
+<!ENTITY uuml "&#252;">
+<!ENTITY weierp "&#8472;">
+<!ENTITY Xi "&#926;">
+<!ENTITY xi "&#958;">
+<!ENTITY Yacute "&#221;">
+<!ENTITY yacute "&#253;">
+<!ENTITY yen "&#165;">
+<!ENTITY Yuml "&#376;">
+<!ENTITY yuml "&#255;">
+<!ENTITY Zeta "&#918;">
+<!ENTITY zeta "&#950;">
+<!ENTITY zwj "&#8205;">
+<!ENTITY zwnj "&#8204;">`.replace(/\n/g, ' ');
+
+  /**
+   * A reasonably strict xml declaration.
+   */
+  const XML_DECL = '<?xml version="1.0" standalone="no"?>';
+
+  /**
+   * The beginning of the XML doctype declaration.
+   */
+  const DOCTYPE_START = `<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [`;
+
+  /**
+   * The end of the XML docype declaration.
+   */
+  const DOCTYPE_END = ']>';
+
+  /**
+   * A full header for an SVG XML document.
+   */
+  const SVG_XML_HEADER = `${XML_DECL}
+    ${DOCTYPE_START}${HTML_ENTITIES}${DOCTYPE_END}`;
 
     void Promise.all([...diagrams].map(renderOneMarmaid));
   });
@@ -7523,7 +7808,7 @@ The goal is to do an <code>InverseRealFFT</code> by gradient descent.</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=2a73f9ca-19a5-44e8-96c1-c488ecf356c0">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=e34bf9b0-a4ed-4afe-a52d-deccd7bd4620">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -7531,48 +7816,21 @@ The goal is to do an <code>InverseRealFFT</code> by gradient descent.</p>
 <div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="o">!</span>*rm<span class="w"> </span>-f<span class="w"> </span>go.work<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>go<span class="w"> </span>work<span class="w"> </span>init<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>go<span class="w"> </span>work<span class="w"> </span>use<span class="w"> </span>.<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">HOME</span><span class="si">}</span><span class="s2">/Projects/gomlx"</span>
-<span class="o">%</span><span class="k">goworkfix</span>
-</pre></div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	- Added replace rule for module "github.com/gomlx/gomlx" to local directory "/home/janpf/Projects/gomlx".
-</pre>
-</div>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=e34bf9b0-a4ed-4afe-a52d-deccd7bd4620">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
-    <span class="s2">"github.com/gomlx/gomlx/core/dtypes"</span>
+    <span class="s2">"github.com/gomlx/compute/dtypes"</span>
     <span class="o">.</span> <span class="s2">"github.com/gomlx/gomlx/core/graph"</span>
     <span class="o">.</span> <span class="s2">"github.com/gomlx/exceptions"</span>
     <span class="s2">"github.com/gomlx/gomlx/core/tensors"</span>
-    <span class="s2">"github.com/gomlx/gomlx/support/xslices"</span>
+    <span class="s2">"github.com/gomlx/compute/support/xslices"</span>
     <span class="n">mg</span> <span class="s2">"github.com/gomlx/gomlx/ui/gonb/margaid"</span>
     <span class="s2">"github.com/janpfeifer/gonb/gonbui"</span>
+    <span class="s2">"github.com/janpfeifer/must"</span>
 
     <span class="n">_</span> <span class="s2">"github.com/gomlx/gomlx/backends/default"</span>
 <span class="p">)</span>
 
 <span class="o">//</span> <span class="n">manager</span> <span class="n">always</span> <span class="n">created</span> <span class="n">at</span> <span class="n">initialization</span><span class="o">.</span>
-<span class="n">var</span> <span class="n">backend</span> <span class="o">=</span> <span class="n">backends</span><span class="o">.</span><span class="n">MustNew</span><span class="p">()</span>
+<span class="n">var</span> <span class="n">backend</span> <span class="o">=</span> <span class="n">compute</span><span class="o">.</span><span class="n">MustNew</span><span class="p">()</span>
 
 <span class="n">const</span> <span class="p">(</span>
     <span class="n">NumPoints</span> <span class="o">=</span> <span class="mi">100</span>
@@ -7583,14 +7841,14 @@ The goal is to do an <code>InverseRealFFT</code> by gradient descent.</p>
 
 <span class="o">//</span> <span class="n">CalculateXY</span> <span class="n">returns</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span> <span class="n">of</span> <span class="n">our</span> <span class="n">problem</span><span class="p">,</span> <span class="n">where</span> <span class="n">y</span> <span class="ow">is</span> <span class="n">a</span> <span class="n">sinusoidal</span> <span class="n">curve</span> <span class="ow">and</span> <span class="n">x</span> <span class="ow">is</span> <span class="n">its</span> <span class="n">FFT</span><span class="o">.</span>
 <span class="n">func</span> <span class="n">CalculateXY</span><span class="p">()</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="p">{</span>
-    <span class="n">e</span> <span class="o">:=</span> <span class="n">MustNewExec</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">func</span> <span class="p">(</span><span class="n">g</span> <span class="o">*</span><span class="n">Graph</span><span class="p">)</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">e</span> <span class="o">:=</span> <span class="n">MustNewExec2</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="n">func</span> <span class="p">(</span><span class="n">g</span> <span class="o">*</span><span class="n">Graph</span><span class="p">)</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">{</span>
         <span class="n">x</span> <span class="o">=</span> <span class="n">Iota</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">shapes</span><span class="o">.</span><span class="n">Make</span><span class="p">(</span><span class="n">RealDType</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">NumPoints</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
         <span class="n">x</span> <span class="o">=</span> <span class="n">MulScalar</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="mf">2.0</span><span class="o">*</span><span class="n">math</span><span class="o">.</span><span class="n">Pi</span><span class="o">*</span><span class="n">Frequency</span><span class="o">/</span><span class="n">float64</span><span class="p">(</span><span class="n">NumPoints</span><span class="p">))</span>
         <span class="n">x</span> <span class="o">=</span> <span class="n">Sin</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
         <span class="n">y</span> <span class="o">=</span> <span class="n">RealFFT</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
         <span class="k">return</span>
     <span class="p">})</span>
-    <span class="k">return</span> <span class="n">e</span><span class="o">.</span><span class="n">MustExec2</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">e</span><span class="o">.</span><span class="n">MustCall</span><span class="p">()</span>
 <span class="p">}</span>
 
 <span class="n">func</span> <span class="n">Plot</span><span class="p">(</span><span class="n">displayId</span> <span class="n">string</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">height</span> <span class="nb">int</span><span class="p">,</span> <span class="n">coordinates</span> <span class="p">[]</span><span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">names</span> <span class="p">[]</span><span class="n">string</span><span class="p">)</span> <span class="p">{</span>
@@ -7599,9 +7857,9 @@ The goal is to do an <code>InverseRealFFT</code> by gradient descent.</p>
         <span class="n">var</span> <span class="n">values</span> <span class="p">[]</span><span class="n">float64</span>
         <span class="n">switch</span> <span class="n">t</span><span class="o">.</span><span class="n">DType</span><span class="p">()</span> <span class="p">{</span>
         <span class="k">case</span> <span class="n">dtypes</span><span class="o">.</span><span class="n">Float64</span><span class="p">:</span>
-            <span class="n">values</span> <span class="o">=</span> <span class="n">tensors</span><span class="o">.</span><span class="n">CopyFlatData</span><span class="p">[</span><span class="n">float64</span><span class="p">](</span><span class="n">t</span><span class="p">)</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">(</span><span class="n">tensors</span><span class="o">.</span><span class="n">CopyFlatData</span><span class="p">[</span><span class="n">float64</span><span class="p">](</span><span class="n">t</span><span class="p">))</span>
         <span class="k">case</span> <span class="n">dtypes</span><span class="o">.</span><span class="n">Float32</span><span class="p">:</span>
-            <span class="n">values32</span> <span class="o">:=</span> <span class="n">tensors</span><span class="o">.</span><span class="n">CopyFlatData</span><span class="p">[</span><span class="n">float32</span><span class="p">](</span><span class="n">t</span><span class="p">)</span>
+            <span class="n">values32</span> <span class="o">:=</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">(</span><span class="n">tensors</span><span class="o">.</span><span class="n">CopyFlatData</span><span class="p">[</span><span class="n">float32</span><span class="p">](</span><span class="n">t</span><span class="p">))</span>
             <span class="n">values</span> <span class="o">=</span> <span class="n">xslices</span><span class="o">.</span><span class="n">Map</span><span class="p">(</span><span class="n">values32</span><span class="p">,</span> <span class="n">func</span> <span class="p">(</span><span class="n">v</span> <span class="n">float32</span><span class="p">)</span> <span class="n">float64</span> <span class="p">{</span> <span class="k">return</span> <span class="n">float64</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="p">})</span>
         <span class="n">default</span><span class="p">:</span>
             <span class="n">Panicf</span><span class="p">(</span><span class="s2">"only float32 and float64 tensor dtypes are accepted by Plot, got t.shape=</span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">Shape</span><span class="p">())</span>
@@ -7636,8 +7894,8 @@ The goal is to do an <code>InverseRealFFT</code> by gradient descent.</p>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>x: shape=(Float32)[1 100]
-y: shape=(Complex64)[1 51]
+<pre>x: shape=(Float32)[1, 100]
+y: shape=(Complex64)[1, 51]
 </pre>
 </div>
 </div>
@@ -7665,13 +7923,13 @@ y: shape=(Complex64)[1 51]
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
     <span class="o">.</span> <span class="s2">"github.com/gomlx/gomlx/core/graph"</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/context"</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/data"</span>
+    <span class="s2">"github.com/gomlx/gomlx/ml/model"</span>
+    <span class="s2">"github.com/gomlx/gomlx/ml/dataset"</span>
     <span class="s2">"github.com/gomlx/gomlx/ml/train"</span>
 <span class="p">)</span>
 
@@ -7682,27 +7940,26 @@ y: shape=(Complex64)[1 51]
 
 <span class="n">func</span> <span class="n">TrainInverseRealFFT</span><span class="p">()</span> <span class="p">{</span>
     <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">:=</span> <span class="n">CalculateXY</span><span class="p">()</span>
-    <span class="n">scope</span> <span class="o">:=</span> <span class="n">context</span><span class="o">.</span><span class="n">New</span><span class="p">()</span>
-	<span class="n">scope</span><span class="o">.</span><span class="n">SetParam</span><span class="p">(</span><span class="n">optimizer</span><span class="o">.</span><span class="n">LearningRateKey</span><span class="p">,</span> <span class="o">*</span><span class="n">flagLearningRate</span><span class="p">)</span>
+    <span class="n">store</span> <span class="o">:=</span> <span class="n">model</span><span class="o">.</span><span class="n">NewStore</span><span class="p">()</span>
+	<span class="n">store</span><span class="o">.</span><span class="n">SetParam</span><span class="p">(</span><span class="n">optimizer</span><span class="o">.</span><span class="n">LearningRateKey</span><span class="p">,</span> <span class="o">*</span><span class="n">flagLearningRate</span><span class="p">)</span>
 
-    <span class="n">modelFn</span> <span class="o">:=</span> <span class="n">func</span><span class="p">(</span><span class="n">scope</span> <span class="o">*</span><span class="n">context</span><span class="o">.</span><span class="n">Scope</span><span class="p">,</span> <span class="n">spec</span> <span class="nb">any</span><span class="p">,</span> <span class="n">inputs</span> <span class="p">[]</span><span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">[]</span><span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
+    <span class="n">modelFn</span> <span class="o">:=</span> <span class="n">func</span><span class="p">(</span><span class="n">scope</span> <span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">Scope</span><span class="p">,</span> <span class="n">spec</span> <span class="nb">any</span><span class="p">,</span> <span class="n">inputs</span> <span class="p">[]</span><span class="o">*</span><span class="n">Node</span><span class="p">)</span> <span class="p">[]</span><span class="o">*</span><span class="n">Node</span> <span class="p">{</span>
         <span class="n">g</span> <span class="o">:=</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">Graph</span><span class="p">()</span>
         <span class="n">learnedXVar</span> <span class="o">:=</span> <span class="n">scope</span><span class="o">.</span><span class="n">VariableWithShape</span><span class="p">(</span><span class="s2">"learnedX"</span><span class="p">,</span> <span class="n">x</span><span class="o">.</span><span class="n">Shape</span><span class="p">())</span>
-        <span class="n">predictedY</span> <span class="o">:=</span> <span class="n">RealFFT</span><span class="p">(</span><span class="n">learnedXVar</span><span class="o">.</span><span class="n">ValueGraph</span><span class="p">(</span><span class="n">g</span><span class="p">))</span>
+        <span class="n">predictedY</span> <span class="o">:=</span> <span class="n">RealFFT</span><span class="p">(</span><span class="n">learnedXVar</span><span class="o">.</span><span class="n">NodeValue</span><span class="p">(</span><span class="n">g</span><span class="p">))</span>
         <span class="k">return</span> <span class="p">[]</span><span class="o">*</span><span class="n">Node</span><span class="p">{</span><span class="n">predictedY</span><span class="p">}</span>
     <span class="p">}</span>
 
-    <span class="n">dataset</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">data</span><span class="o">.</span><span class="n">InMemoryFromData</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="s2">"dataset"</span><span class="p">,</span> <span class="p">[]</span><span class="nb">any</span><span class="p">{</span><span class="n">x</span><span class="p">},</span> <span class="p">[]</span><span class="nb">any</span><span class="p">{</span><span class="n">y</span><span class="p">})</span>
+    <span class="n">dataset</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">InMemoryFromData</span><span class="p">(</span><span class="n">backend</span><span class="p">,</span> <span class="s2">"dataset"</span><span class="p">,</span> <span class="p">[]</span><span class="nb">any</span><span class="p">{</span><span class="n">x</span><span class="p">},</span> <span class="p">[]</span><span class="nb">any</span><span class="p">{</span><span class="n">y</span><span class="p">})</span>
     <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span>
         <span class="n">panic</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
     <span class="p">}</span>
     <span class="n">dataset</span><span class="o">.</span><span class="n">BatchSize</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">false</span><span class="p">)</span><span class="o">.</span><span class="n">Infinite</span><span class="p">(</span><span class="n">true</span><span class="p">)</span>
 
-    <span class="n">opt</span> <span class="o">:=</span> <span class="n">optimizer</span><span class="o">.</span><span class="n">Adam</span><span class="p">()</span><span class="o">.</span><span class="n">Done</span><span class="p">()</span>
     <span class="n">trainer</span> <span class="o">:=</span> <span class="n">train</span><span class="o">.</span><span class="n">NewTrainer</span><span class="p">(</span>
-        <span class="n">backend</span><span class="p">,</span> <span class="n">scope</span><span class="p">,</span> <span class="n">modelFn</span><span class="p">,</span>
-        <span class="n">losses</span><span class="o">.</span><span class="n">MeanAbsoluteError</span><span class="p">,</span>
-        <span class="n">opt</span><span class="p">,</span>
+        <span class="n">backend</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">modelFn</span><span class="p">,</span>
+        <span class="n">loss</span><span class="o">.</span><span class="n">MeanAbsoluteError</span><span class="p">,</span>
+        <span class="n">optimizer</span><span class="o">.</span><span class="n">Adam</span><span class="p">()</span><span class="o">.</span><span class="n">Done</span><span class="p">(),</span>
         <span class="n">nil</span><span class="p">,</span> <span class="n">nil</span><span class="p">)</span> <span class="o">//</span> <span class="n">trainMetrics</span><span class="p">,</span> <span class="n">evalMetrics</span>
 
 	<span class="n">loop</span> <span class="o">:=</span> <span class="n">train</span><span class="o">.</span><span class="n">NewLoop</span><span class="p">(</span><span class="n">trainer</span><span class="p">)</span>
@@ -7712,8 +7969,9 @@ y: shape=(Complex64)[1 51]
     <span class="n">displayId</span> <span class="o">:=</span> <span class="n">gonbui</span><span class="o">.</span><span class="n">UniqueID</span><span class="p">()</span>
     <span class="n">gonbui</span><span class="o">.</span><span class="n">UpdateHTML</span><span class="p">(</span><span class="n">displayId</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
     <span class="n">train</span><span class="o">.</span><span class="n">EveryNSteps</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="s2">"plot"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">func</span><span class="p">(</span><span class="n">loop</span> <span class="o">*</span><span class="n">train</span><span class="o">.</span><span class="n">Loop</span><span class="p">,</span> <span class="n">metrics</span> <span class="p">[]</span><span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="n">error</span> <span class="p">{</span>
-        <span class="n">learnedXVar</span> <span class="o">:=</span> <span class="n">scope</span><span class="o">.</span><span class="n">InspectVariable</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">RootScope</span><span class="p">,</span> <span class="s2">"learnedX"</span><span class="p">)</span>
-        <span class="n">learnedX</span> <span class="o">:=</span> <span class="n">learnedXVar</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span>
+        <span class="n">learnedXVar</span> <span class="o">:=</span> <span class="n">store</span><span class="o">.</span><span class="n">GetVariable</span><span class="p">(</span><span class="s2">"learnedX"</span><span class="p">)</span>
+        <span class="n">learnedX</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">learnedXVar</span><span class="o">.</span><span class="n">Value</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">nil</span> <span class="p">{</span> <span class="k">return</span> <span class="n">err</span> <span class="p">}</span>
         <span class="n">Plot</span><span class="p">(</span><span class="n">displayId</span><span class="p">,</span> <span class="mi">1024</span><span class="p">,</span> <span class="mi">320</span><span class="p">,</span> <span class="p">[]</span><span class="o">*</span><span class="n">tensors</span><span class="o">.</span><span class="n">Tensor</span><span class="p">{</span><span class="n">x</span><span class="p">,</span> <span class="n">learnedX</span><span class="p">},</span> <span class="p">[]</span><span class="n">string</span><span class="p">{</span><span class="s2">"Truth"</span><span class="p">,</span> <span class="s2">"Learned"</span><span class="p">})</span>
         <span class="k">return</span> <span class="n">nil</span>
     <span class="p">})</span>
@@ -7740,13 +7998,13 @@ y: shape=(Complex64)[1 51]
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<svg height="356" preserveaspectratio="xMidYMid meet" style="background-color:#f8f8f8" viewbox="0 0 1024 320" width="1024" xmlns="http://www.w3.org/2000/svg"><defs><marker id="circle" markerheight="2%" markerunits="userSpaceOnUse" markerwidth="2%" refx="5" refy="5" viewbox="0 0 10 10 "><circle cx="5" cy="5" fill="none" r="3" stroke="black"></circle></marker><marker id="filled-circle" markerheight="2%" markerunits="userSpaceOnUse" markerwidth="2%" refx="5" refy="5" viewbox="0 0 10 10 "><circle cx="5" cy="5" fill="black" r="3" stroke="none"></circle></marker><marker id="square" markerheight="2%" markerunits="userSpaceOnUse" markerwidth="2%" refx="5" refy="5" viewbox="0 0 10 10 "><rect fill="none" height="6" stroke="black" width="6" x="2" y="2"></rect></marker><marker id="filled-square" markerheight="2%" markerunits="userSpaceOnUse" markerwidth="2%" refx="5" refy="5" viewbox="0 0 10 10 "><rect fill="black" height="6" stroke="none" width="6" x="2" y="2"></rect></marker></defs><g fill="none" marker-end="url(#square)" marker-mid="url(#square)" marker-start="url(#square)" stroke="hsl(90, 47%, 65%)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" transform="translate(70 250 )scale(1 -1 )"><path d="M1.768000e+01,9.018442e+01 L2.625212e+01,1.009365e+02 L3.482424e+01,1.116592e+02 L4.339636e+01,1.218885e+02 L5.196848e+01,1.317009e+02 L6.054061e+01,1.406720e+02 L6.911273e+01,1.492110e+02 L7.768485e+01,1.566179e+02 L8.625697e+01,1.630492e+02 L9.482909e+01,1.681726e+02 L1.034012e+02,1.722598e+02 L1.119733e+02,1.748783e+02 L1.205455e+02,1.764000e+02 L1.291176e+02,1.761877e+02 L1.376897e+02,1.748893e+02 L1.462618e+02,1.722069e+02 L1.548339e+02,1.681859e+02 L1.634061e+02,1.630325e+02 L1.719782e+02,1.566730e+02 L1.805503e+02,1.491776e+02 L1.891224e+02,1.408337e+02 L1.976945e+02,1.316888e+02 L2.062667e+02,1.218477e+02 L2.148388e+02,1.114828e+02 L2.234109e+02,1.008871e+02 L2.319830e+02,9.001868e+01 L2.405552e+02,7.924377e+01 L2.491273e+02,6.854082e+01 L2.576994e+02,5.829190e+01 L2.662715e+02,4.848711e+01 L2.748436e+02,3.921227e+01 L2.834158e+02,3.083985e+01 L2.919879e+02,2.350122e+01 L3.005600e+02,1.702543e+01 L3.091321e+02,1.182844e+01 L3.177042e+02,7.997745e+00 L3.262764e+02,5.378169e+00 L3.348485e+02,3.842576e+00 L3.434206e+02,3.821945e+00 L3.519927e+02,5.160807e+00 L3.605648e+02,7.844087e+00 L3.691370e+02,1.189244e+01 L3.777091e+02,1.690206e+01 L3.862812e+02,2.340879e+01 L3.948533e+02,3.106863e+01 L4.034255e+02,3.937168e+01 L4.119976e+02,4.837920e+01 L4.205697e+02,5.842303e+01 L4.291418e+02,6.861834e+01 L4.377139e+02,7.899020e+01 L4.462861e+02,9.007014e+01 L4.548582e+02,1.008416e+02 L4.634303e+02,1.114966e+02 L4.720024e+02,1.218146e+02 L4.805745e+02,1.315460e+02 L4.891467e+02,1.408036e+02 L4.977188e+02,1.493727e+02 L5.062909e+02,1.566447e+02 L5.148630e+02,1.630798e+02 L5.234352e+02,1.682840e+02 L5.320073e+02,1.719686e+02 L5.405794e+02,1.748051e+02 L5.491515e+02,1.763590e+02 L5.577236e+02,1.763492e+02 L5.662958e+02,1.750504e+02 L5.748679e+02,1.721647e+02 L5.834400e+02,1.680819e+02 L5.920121e+02,1.628052e+02 L6.005842e+02,1.567074e+02 L6.091564e+02,1.488831e+02 L6.177285e+02,1.407857e+02 L6.263006e+02,1.318675e+02 L6.348727e+02,1.218919e+02 L6.434448e+02,1.114634e+02 L6.520170e+02,1.009062e+02 L6.605891e+02,8.992699e+01 L6.691612e+02,7.926046e+01 L6.777333e+02,6.861514e+01 L6.863055e+02,5.802950e+01 L6.948776e+02,4.830800e+01 L7.034497e+02,3.944058e+01 L7.120218e+02,3.072777e+01 L7.205939e+02,2.353566e+01 L7.291661e+02,1.703110e+01 L7.377382e+02,1.176467e+01 L7.463103e+02,7.937511e+00 L7.548824e+02,5.170695e+00 L7.634545e+02,3.600000e+00 L7.720267e+02,3.897603e+00 L7.805988e+02,5.187952e+00 L7.891709e+02,7.939000e+00 L7.977430e+02,1.177236e+01 L8.063152e+02,1.710991e+01 L8.148873e+02,2.354074e+01 L8.234594e+02,3.091920e+01 L8.320315e+02,3.935715e+01 L8.406036e+02,4.850126e+01 L8.491758e+02,5.813852e+01 L8.577479e+02,6.857974e+01 L8.663200e+02,7.916387e+01 " vector-effect="non-scaling-stroke"></path></g><g fill="none" marker-end="url(#square)" marker-mid="url(#square)" marker-start="url(#square)" stroke="hsl(301, 88%, 65%)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" transform="translate(70 250 )scale(1 -1 )"><path d="M1.768000e+01,9.004901e+01 L2.625212e+01,1.008779e+02 L3.482424e+01,1.115361e+02 L4.339636e+01,1.218554e+02 L5.196848e+01,1.316730e+02 L6.054061e+01,1.408343e+02 L6.911273e+01,1.491946e+02 L7.768485e+01,1.566222e+02 L8.625697e+01,1.629998e+02 L9.482909e+01,1.682270e+02 L1.034012e+02,1.722213e+02 L1.119733e+02,1.749197e+02 L1.205455e+02,1.762796e+02 L1.291176e+02,1.762796e+02 L1.376897e+02,1.749197e+02 L1.462618e+02,1.722213e+02 L1.548339e+02,1.682270e+02 L1.634061e+02,1.629998e+02 L1.719782e+02,1.566222e+02 L1.805503e+02,1.491946e+02 L1.891224e+02,1.408343e+02 L1.976945e+02,1.316730e+02 L2.062667e+02,1.218553e+02 L2.148388e+02,1.115361e+02 L2.234109e+02,1.008779e+02 L2.319830e+02,9.004900e+01 L2.405552e+02,7.922008e+01 L2.491273e+02,6.856193e+01 L2.576994e+02,5.824265e+01 L2.662715e+02,4.842497e+01 L2.748436e+02,3.926375e+01 L2.834158e+02,3.090342e+01 L2.919879e+02,2.347585e+01 L3.005600e+02,1.709818e+01 L3.091321e+02,1.187100e+01 L3.177042e+02,7.876722e+00 L3.262764e+02,5.178358e+00 L3.348485e+02,3.818459e+00 L3.434206e+02,3.818459e+00 L3.519927e+02,5.178368e+00 L3.605648e+02,7.876737e+00 L3.691370e+02,1.187101e+01 L3.777091e+02,1.709821e+01 L3.862812e+02,2.347588e+01 L3.948533e+02,3.090344e+01 L4.034255e+02,3.926378e+01 L4.119976e+02,4.842502e+01 L4.205697e+02,5.824270e+01 L4.291418e+02,6.856199e+01 L4.377139e+02,7.922010e+01 L4.462861e+02,9.004903e+01 L4.548582e+02,1.008780e+02 L4.634303e+02,1.115361e+02 L4.720024e+02,1.218554e+02 L4.805745e+02,1.316731e+02 L4.891467e+02,1.408343e+02 L4.977188e+02,1.491946e+02 L5.062909e+02,1.566222e+02 L5.148630e+02,1.629999e+02 L5.234352e+02,1.682270e+02 L5.320073e+02,1.722213e+02 L5.405794e+02,1.749197e+02 L5.491515e+02,1.762796e+02 L5.577236e+02,1.762796e+02 L5.662958e+02,1.749196e+02 L5.748679e+02,1.722213e+02 L5.834400e+02,1.682270e+02 L5.920121e+02,1.629998e+02 L6.005842e+02,1.566221e+02 L6.091564e+02,1.491946e+02 L6.177285e+02,1.408342e+02 L6.263006e+02,1.316730e+02 L6.348727e+02,1.218553e+02 L6.434448e+02,1.115360e+02 L6.520170e+02,1.008779e+02 L6.605891e+02,9.004901e+01 L6.691612e+02,7.922008e+01 L6.777333e+02,6.856193e+01 L6.863055e+02,5.824265e+01 L6.948776e+02,4.842497e+01 L7.034497e+02,3.926373e+01 L7.120218e+02,3.090340e+01 L7.205939e+02,2.347584e+01 L7.291661e+02,1.709818e+01 L7.377382e+02,1.187099e+01 L7.463103e+02,7.876722e+00 L7.548824e+02,5.178358e+00 L7.634545e+02,3.818454e+00 L7.720267e+02,3.818464e+00 L7.805988e+02,5.178379e+00 L7.891709e+02,7.876753e+00 L7.977430e+02,1.187104e+01 L8.063152e+02,1.709824e+01 L8.148873e+02,2.347591e+01 L8.234594e+02,3.090349e+01 L8.320315e+02,3.926382e+01 L8.406036e+02,4.842508e+01 L8.491758e+02,5.824268e+01 L8.577479e+02,6.856197e+01 L8.663200e+02,7.922011e+01 " vector-effect="non-scaling-stroke"></path></g><g fill="none" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" transform="translate(70 250 )scale(1 -1 )"><path d="M1.768000e+01,0 L1.768000e+01,-6 M1.034012e+02,0 L1.034012e+02,-6 M1.891224e+02,0 L1.891224e+02,-6 M2.748436e+02,0 L2.748436e+02,-6 M3.605648e+02,0 L3.605648e+02,-6 M4.462861e+02,0 L4.462861e+02,-6 M5.320073e+02,0 L5.320073e+02,-6 M6.177285e+02,0 L6.177285e+02,-6 M7.034497e+02,0 L7.034497e+02,-6 M7.891709e+02,0 L7.891709e+02,-6 " vector-effect="non-scaling-stroke"></path></g><g dominant-baseline="hanging" fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" text-anchor="middle" transform="translate(70 250 )scale(1 1 )"><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="1.768000e+01" y="10">0</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="1.034012e+02" y="10">10</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="1.891224e+02" y="10">20</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="2.748436e+02" y="10">30</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="3.605648e+02" y="10">40</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="4.462861e+02" y="10">50</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="5.320073e+02" y="10">60</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="6.177285e+02" y="10">70</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="7.034497e+02" y="10">80</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="7.891709e+02" y="10">90</text></g><g dominant-baseline="baseline" fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="bold" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" text-anchor="middle" transform="translate(70 250 )scale(1 1 )rotate(0 0 0 )"><text dominant-baseline="baseline" stroke="none" vector-effect="non-scaling-stroke" x="442" y="-6">Steps</text></g><g dominant-baseline="baseline" fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="bold" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" text-anchor="middle" transform="translate(70 250 )scale(1 -1 )"><path d="M0,3.647966e+00 L-6,3.647966e+00 M0,9.004901e+01 L-6,9.004901e+01 " vector-effect="non-scaling-stroke"></path></g><g dominant-baseline="middle" fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" text-anchor="end" transform="translate(70 250 )scale(1 1 )"><text dominant-baseline="middle" stroke="none" vector-effect="non-scaling-stroke" x="-10" y="-3.647966e+00">-1.000</text><text dominant-baseline="middle" stroke="none" vector-effect="non-scaling-stroke" x="-10" y="-9.004901e+01">0.000</text></g><g dominant-baseline="middle" fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" stroke="gray" stroke-linecap="round" stroke-linejoin="round" stroke-width="0.5px" text-anchor="end" transform="translate(70 250 )scale(1 -1 )"><path d="M0,3.647966e+00 L884,3.647966e+00 M0,9.004901e+01 L884,9.004901e+01 " vector-effect="non-scaling-stroke"></path></g><g dominant-baseline="middle" fill="none" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" text-anchor="end"><rect height="180" vector-effect="non-scaling-stroke" width="884" x="70" y="70"></rect><g dominant-baseline="hanging" fill="hsl(90, 47%, 65%)" stroke="hsl(90, 47%, 65%)" stroke-width="1px" text-anchor="start"><rect height="12" vector-effect="non-scaling-stroke" width="12" x="76" y="286"></rect><g fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" stroke="black" stroke-linecap="round" stroke-linejoin="round"><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="92" y="286">Learned</text><g dominant-baseline="hanging" fill="hsl(301, 88%, 65%)" stroke="hsl(301, 88%, 65%)" stroke-width="1px" text-anchor="start"><rect height="12" vector-effect="non-scaling-stroke" width="12" x="76" y="304"></rect><g fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" stroke="black" stroke-linecap="round" stroke-linejoin="round"><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="92" y="304">Truth</text></g></g></g></g></g></svg>
+<svg height="356" preserveaspectratio="xMidYMid meet" style="background-color:#f8f8f8" viewbox="0 0 1024 320" width="1024" xmlns="http://www.w3.org/2000/svg"><defs><marker id="circle" markerheight="2%" markerunits="userSpaceOnUse" markerwidth="2%" refx="5" refy="5" viewbox="0 0 10 10 "><circle cx="5" cy="5" fill="none" r="3" stroke="black"></circle></marker><marker id="filled-circle" markerheight="2%" markerunits="userSpaceOnUse" markerwidth="2%" refx="5" refy="5" viewbox="0 0 10 10 "><circle cx="5" cy="5" fill="black" r="3" stroke="none"></circle></marker><marker id="square" markerheight="2%" markerunits="userSpaceOnUse" markerwidth="2%" refx="5" refy="5" viewbox="0 0 10 10 "><rect fill="none" height="6" stroke="black" width="6" x="2" y="2"></rect></marker><marker id="filled-square" markerheight="2%" markerunits="userSpaceOnUse" markerwidth="2%" refx="5" refy="5" viewbox="0 0 10 10 "><rect fill="black" height="6" stroke="none" width="6" x="2" y="2"></rect></marker></defs><g fill="none" marker-end="url(#square)" marker-mid="url(#square)" marker-start="url(#square)" stroke="hsl(90, 47%, 65%)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" transform="translate(70 250 )scale(1 -1 )"><path d="M1.768000e+01,9.011264e+01 L2.625212e+01,1.007254e+02 L3.482424e+01,1.116168e+02 L4.339636e+01,1.218547e+02 L5.196848e+01,1.316965e+02 L6.054061e+01,1.407517e+02 L6.911273e+01,1.492591e+02 L7.768485e+01,1.567233e+02 L8.625697e+01,1.631703e+02 L9.482909e+01,1.682692e+02 L1.034012e+02,1.722676e+02 L1.119733e+02,1.751137e+02 L1.205455e+02,1.762899e+02 L1.291176e+02,1.763507e+02 L1.376897e+02,1.749984e+02 L1.462618e+02,1.725197e+02 L1.548339e+02,1.682821e+02 L1.634061e+02,1.631515e+02 L1.719782e+02,1.569418e+02 L1.805503e+02,1.493748e+02 L1.891224e+02,1.408638e+02 L1.976945e+02,1.318498e+02 L2.062667e+02,1.219269e+02 L2.148388e+02,1.115672e+02 L2.234109e+02,1.009467e+02 L2.319830e+02,8.997241e+01 L2.405552e+02,7.918515e+01 L2.491273e+02,6.855193e+01 L2.576994e+02,5.813374e+01 L2.662715e+02,4.827225e+01 L2.748436e+02,3.915590e+01 L2.834158e+02,3.074210e+01 L2.919879e+02,2.323773e+01 L3.005600e+02,1.699130e+01 L3.091321e+02,1.174269e+01 L3.177042e+02,7.710923e+00 L3.262764e+02,4.802556e+00 L3.348485e+02,3.712806e+00 L3.434206e+02,3.702718e+00 L3.519927e+02,5.053693e+00 L3.605648e+02,7.761748e+00 L3.691370e+02,1.158293e+01 L3.777091e+02,1.696629e+01 L3.862812e+02,2.338400e+01 L3.948533e+02,3.086390e+01 L4.034255e+02,3.899043e+01 L4.119976e+02,4.830409e+01 L4.205697e+02,5.801370e+01 L4.291418e+02,6.837408e+01 L4.377139e+02,7.924542e+01 L4.462861e+02,8.998371e+01 L4.548582e+02,1.007034e+02 L4.634303e+02,1.115036e+02 L4.720024e+02,1.218374e+02 L4.805745e+02,1.317701e+02 L4.891467e+02,1.409769e+02 L4.977188e+02,1.491016e+02 L5.062909e+02,1.566333e+02 L5.148630e+02,1.630690e+02 L5.234352e+02,1.682910e+02 L5.320073e+02,1.723782e+02 L5.405794e+02,1.750655e+02 L5.491515e+02,1.764000e+02 L5.577236e+02,1.763963e+02 L5.662958e+02,1.751777e+02 L5.748679e+02,1.723726e+02 L5.834400e+02,1.682741e+02 L5.920121e+02,1.630904e+02 L6.005842e+02,1.567793e+02 L6.091564e+02,1.493111e+02 L6.177285e+02,1.410001e+02 L6.263006e+02,1.316980e+02 L6.348727e+02,1.218989e+02 L6.434448e+02,1.116330e+02 L6.520170e+02,1.008420e+02 L6.605891e+02,9.017611e+01 L6.691612e+02,7.914475e+01 L6.777333e+02,6.864363e+01 L6.863055e+02,5.808612e+01 L6.948776e+02,4.841263e+01 L7.034497e+02,3.916950e+01 L7.120218e+02,3.068372e+01 L7.205939e+02,2.314121e+01 L7.291661e+02,1.691078e+01 L7.377382e+02,1.181835e+01 L7.463103e+02,7.659504e+00 L7.548824e+02,5.077434e+00 L7.634545e+02,3.759518e+00 L7.720267e+02,3.683575e+00 L7.805988e+02,5.107361e+00 L7.891709e+02,7.757388e+00 L7.977430e+02,1.174420e+01 L8.063152e+02,1.689993e+01 L8.148873e+02,2.331526e+01 L8.234594e+02,3.059380e+01 L8.320315e+02,3.923720e+01 L8.406036e+02,4.815278e+01 L8.491758e+02,5.800196e+01 L8.577479e+02,6.847039e+01 L8.663200e+02,7.919731e+01 " vector-effect="non-scaling-stroke"></path></g><g fill="none" marker-end="url(#square)" marker-mid="url(#square)" marker-start="url(#square)" stroke="hsl(301, 88%, 65%)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" transform="translate(70 250 )scale(1 -1 )"><path d="M1.768000e+01,8.999793e+01 L2.625212e+01,1.008479e+02 L3.482424e+01,1.115267e+02 L4.339636e+01,1.218660e+02 L5.196848e+01,1.317027e+02 L6.054061e+01,1.408818e+02 L6.911273e+01,1.492583e+02 L7.768485e+01,1.567003e+02 L8.625697e+01,1.630903e+02 L9.482909e+01,1.683277e+02 L1.034012e+02,1.723297e+02 L1.119733e+02,1.750333e+02 L1.205455e+02,1.763958e+02 L1.291176e+02,1.763958e+02 L1.376897e+02,1.750333e+02 L1.462618e+02,1.723297e+02 L1.548339e+02,1.683277e+02 L1.634061e+02,1.630903e+02 L1.719782e+02,1.567003e+02 L1.805503e+02,1.492583e+02 L1.891224e+02,1.408818e+02 L1.976945e+02,1.317027e+02 L2.062667e+02,1.218660e+02 L2.148388e+02,1.115267e+02 L2.234109e+02,1.008478e+02 L2.319830e+02,8.999792e+01 L2.405552e+02,7.914797e+01 L2.491273e+02,6.846914e+01 L2.576994e+02,5.812983e+01 L2.662715e+02,4.829309e+01 L2.748436e+02,3.911409e+01 L2.834158e+02,3.073754e+01 L2.919879e+02,2.329555e+01 L3.005600e+02,1.690550e+01 L3.091321e+02,1.166817e+01 L3.177042e+02,7.666145e+00 L3.262764e+02,4.962544e+00 L3.348485e+02,3.600005e+00 L3.434206e+02,3.600005e+00 L3.519927e+02,4.962554e+00 L3.605648e+02,7.666161e+00 L3.691370e+02,1.166819e+01 L3.777091e+02,1.690553e+01 L3.862812e+02,2.329558e+01 L3.948533e+02,3.073756e+01 L4.034255e+02,3.911412e+01 L4.119976e+02,4.829315e+01 L4.205697e+02,5.812988e+01 L4.291418e+02,6.846920e+01 L4.377139e+02,7.914800e+01 L4.462861e+02,8.999794e+01 L4.548582e+02,1.008479e+02 L4.634303e+02,1.115267e+02 L4.720024e+02,1.218660e+02 L4.805745e+02,1.317028e+02 L4.891467e+02,1.408818e+02 L4.977188e+02,1.492583e+02 L5.062909e+02,1.567003e+02 L5.148630e+02,1.630904e+02 L5.234352e+02,1.683277e+02 L5.320073e+02,1.723297e+02 L5.405794e+02,1.750333e+02 L5.491515e+02,1.763958e+02 L5.577236e+02,1.763958e+02 L5.662958e+02,1.750333e+02 L5.748679e+02,1.723297e+02 L5.834400e+02,1.683276e+02 L5.920121e+02,1.630903e+02 L6.005842e+02,1.567003e+02 L6.091564e+02,1.492583e+02 L6.177285e+02,1.408817e+02 L6.263006e+02,1.317027e+02 L6.348727e+02,1.218659e+02 L6.434448e+02,1.115266e+02 L6.520170e+02,1.008478e+02 L6.605891e+02,8.999792e+01 L6.691612e+02,7.914798e+01 L6.777333e+02,6.846914e+01 L6.863055e+02,5.812983e+01 L6.948776e+02,4.829310e+01 L7.034497e+02,3.911407e+01 L7.120218e+02,3.073752e+01 L7.205939e+02,2.329554e+01 L7.291661e+02,1.690550e+01 L7.377382e+02,1.166816e+01 L7.463103e+02,7.666145e+00 L7.548824e+02,4.962544e+00 L7.634545e+02,3.600000e+00 L7.720267e+02,3.600010e+00 L7.805988e+02,4.962564e+00 L7.891709e+02,7.666176e+00 L7.977430e+02,1.166821e+01 L8.063152e+02,1.690556e+01 L8.148873e+02,2.329561e+01 L8.234594e+02,3.073760e+01 L8.320315e+02,3.911417e+01 L8.406036e+02,4.829320e+01 L8.491758e+02,5.812986e+01 L8.577479e+02,6.846918e+01 L8.663200e+02,7.914801e+01 " vector-effect="non-scaling-stroke"></path></g><g fill="none" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" transform="translate(70 250 )scale(1 -1 )"><path d="M1.768000e+01,0 L1.768000e+01,-6 M1.034012e+02,0 L1.034012e+02,-6 M1.891224e+02,0 L1.891224e+02,-6 M2.748436e+02,0 L2.748436e+02,-6 M3.605648e+02,0 L3.605648e+02,-6 M4.462861e+02,0 L4.462861e+02,-6 M5.320073e+02,0 L5.320073e+02,-6 M6.177285e+02,0 L6.177285e+02,-6 M7.034497e+02,0 L7.034497e+02,-6 M7.891709e+02,0 L7.891709e+02,-6 " vector-effect="non-scaling-stroke"></path></g><g dominant-baseline="hanging" fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" text-anchor="middle" transform="translate(70 250 )scale(1 1 )"><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="1.768000e+01" y="10">0</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="1.034012e+02" y="10">10</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="1.891224e+02" y="10">20</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="2.748436e+02" y="10">30</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="3.605648e+02" y="10">40</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="4.462861e+02" y="10">50</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="5.320073e+02" y="10">60</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="6.177285e+02" y="10">70</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="7.034497e+02" y="10">80</text><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="7.891709e+02" y="10">90</text></g><g dominant-baseline="baseline" fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="bold" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" text-anchor="middle" transform="translate(70 250 )scale(1 1 )rotate(0 0 0 )"><text dominant-baseline="baseline" stroke="none" vector-effect="non-scaling-stroke" x="442" y="-6">Steps</text></g><g dominant-baseline="baseline" fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="bold" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" text-anchor="middle" transform="translate(70 250 )scale(1 -1 )"><path d="M0,8.999793e+01 L-6,8.999793e+01 " vector-effect="non-scaling-stroke"></path></g><g dominant-baseline="middle" fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" text-anchor="end" transform="translate(70 250 )scale(1 1 )"><text dominant-baseline="middle" stroke="none" vector-effect="non-scaling-stroke" x="-10" y="-8.999793e+01">-0.000</text></g><g dominant-baseline="middle" fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" stroke="gray" stroke-linecap="round" stroke-linejoin="round" stroke-width="0.5px" text-anchor="end" transform="translate(70 250 )scale(1 -1 )"><path d="M0,8.999793e+01 L884,8.999793e+01 " vector-effect="non-scaling-stroke"></path></g><g dominant-baseline="middle" fill="none" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2px" text-anchor="end"><rect height="180" vector-effect="non-scaling-stroke" width="884" x="70" y="70"></rect><g dominant-baseline="hanging" fill="hsl(90, 47%, 65%)" stroke="hsl(90, 47%, 65%)" stroke-width="1px" text-anchor="start"><rect height="12" vector-effect="non-scaling-stroke" width="12" x="76" y="286"></rect><g fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" stroke="black" stroke-linecap="round" stroke-linejoin="round"><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="92" y="286">Learned</text><g dominant-baseline="hanging" fill="hsl(301, 88%, 65%)" stroke="hsl(301, 88%, 65%)" stroke-width="1px" text-anchor="start"><rect height="12" vector-effect="non-scaling-stroke" width="12" x="76" y="304"></rect><g fill="black" font-family="sans-serif" font-size="12px" font-style="normal" font-weight="normal" stroke="black" stroke-linecap="round" stroke-linejoin="round"><text dominant-baseline="hanging" stroke="none" vector-effect="non-scaling-stroke" x="92" y="304">Truth</text></g></g></g></g></g></svg>
 </div>
 </div>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold"> 100% [========================================] (5095 steps/s)</span> [step=799] [loss+=0.0109] [~loss+=0.0666] [~loss=0.0666]                 
+<pre>      <span class="ansi-bold"> 100% [========================================] (5160 steps/s)</span> [step=799] [loss=0.011] [~loss=0.0428]        ]         
 </pre>
 </div>
 </div>
