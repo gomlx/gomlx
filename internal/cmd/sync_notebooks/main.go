@@ -27,9 +27,9 @@ var notebooks = map[string]string{
 	"examples/FlowMatching/flow_matching.ipynb":                  "docs/notebooks/flow_matching.html",
 	"examples/fft/fft.ipynb":                                     "docs/notebooks/fft.html",
 	"examples/discretekan/kans_shapes.ipynb":                     "docs/notebooks/kans_shapes.html",
+	"examples/discretekan/discrete-kan.ipynb":                    "docs/notebooks/discrete-kan.html",
+	"ml/layers/rational/rational.ipynb":                          "docs/notebooks/rational.html",
 	// "examples/ogbnmag/ogbn-mag.ipynb":                            "docs/notebooks/ogbn-mag.html",
-	// "examples/discretekan/discrete-kan.ipynb":                   "docs/notebooks/discrete-kan.html",
-	// "ml/layers/rational/rational.ipynb":                          "docs/notebooks/rational.html",
 }
 
 func main() {
