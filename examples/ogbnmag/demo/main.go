@@ -81,7 +81,8 @@ func createModelStore() *model.Store {
 		// Optimizer parameters.
 		optimizer.ParamOptimizer:            "adamw",
 		optimizer.ParamLearningRate:         0.001,
-		cosineschedule.ParamPeriodSteps:     -1, // If set to -1, does automatic setting of CosineScheduleSteps to train_steps.
+		cosineschedule.ParamPeriodSteps:     0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_cycles".
+		cosineschedule.ParamCycles:          0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_steps".
 		cosineschedule.ParamMinLearningRate: 0.0,
 		optimizer.ParamClipStepByValue:      0.0,
 		optimizer.ParamAdamEpsilon:          1e-7,

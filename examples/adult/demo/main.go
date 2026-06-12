@@ -60,6 +60,14 @@ func must1[T any](v T, err error) T {
 // used in the model, along with their default values.
 //
 // The hyperparameters used here can then be set using the `-set` flag.
+//
+// They are almost all optional, and we leave here for reference.
+// But in most cases, you can simply include what you are going to use.
+//
+// The hyperparameters are saved with the model, and loaded again. So if you are simply
+// evaluating a saved model, or further training it, you don't need to set them again,
+// since the hyperparameters (with a few exceptiosn like "train_steps") will be overwritten
+// by the values read from the model checkpoint.
 func createModelStore() *model.Store {
 	store := model.NewStore()
 	store.SetParams(map[string]any{
@@ -76,15 +84,17 @@ func createModelStore() *model.Store {
 		//	$ gomlx_checkpointss -metrics -metrics_labels -metrics_types=accuracy --metrics_names='E(bat)/#loss,E(tes)/#loss' -loop=3s fnn
 		"plots": true,
 
-		optimizer.ParamOptimizer:        "adam",
-		optimizer.ParamLearningRate:     0.001,
-		optimizer.ParamAdamEpsilon:      1e-7,
-		optimizer.ParamAdamDType:        "",
-		cosineschedule.ParamPeriodSteps: 0,
-		activation.ParamActivation:      "sigmoid",
-		layers.ParamDropoutRate:         0.0,
-		regularizer.ParamL2:             1e-5,
-		regularizer.ParamL1:             1e-5,
+		optimizer.ParamOptimizer:            "adam",
+		optimizer.ParamLearningRate:         0.001,
+		optimizer.ParamAdamEpsilon:          1e-7,
+		optimizer.ParamAdamDType:            "",
+		cosineschedule.ParamPeriodSteps:     0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_cycles".
+		cosineschedule.ParamCycles:          0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_steps".
+		cosineschedule.ParamMinLearningRate: 0,
+		activation.ParamActivation:          "sigmoid",
+		layers.ParamDropoutRate:             0.0,
+		regularizer.ParamL2:                 1e-5,
+		regularizer.ParamL1:                 1e-5,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 1,

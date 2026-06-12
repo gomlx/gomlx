@@ -87,15 +87,17 @@ func CreateModelStore() *model.Store {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "layer",
 
-		optimizer.ParamOptimizer:        "adamw",
-		optimizer.ParamLearningRate:     1e-4,
-		optimizer.ParamAdamEpsilon:      1e-7,
-		optimizer.ParamAdamDType:        "",
-		cosineschedule.ParamPeriodSteps: 0,
-		activation.ParamActivation:      "",
-		layers.ParamDropoutRate:         0.1,
-		regularizer.ParamL2:             0.0,
-		regularizer.ParamL1:             0.0,
+		optimizer.ParamOptimizer:            "adamw",
+		optimizer.ParamLearningRate:         1e-4,
+		optimizer.ParamAdamEpsilon:          1e-7,
+		optimizer.ParamAdamDType:            "",
+		cosineschedule.ParamPeriodSteps:     0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_cycles".
+		cosineschedule.ParamCycles:          0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_steps".
+		cosineschedule.ParamMinLearningRate: 0,
+		activation.ParamActivation:          "",
+		layers.ParamDropoutRate:             0.1,
+		regularizer.ParamL2:                 0.0,
+		regularizer.ParamL1:                 0.0,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 2,

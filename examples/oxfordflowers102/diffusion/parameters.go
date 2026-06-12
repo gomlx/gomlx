@@ -84,21 +84,21 @@ func CreateModelStore() *model.Store {
 		layers.ParamNormalization: "layer",
 
 		// "diffusion_loss" is deprecated, use "loss" (losses.ParamLoss) instead.
-		"diffusion_loss":                "mse", // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error), "huber" or "apl" (Adaptive-Power-Loss).
-		loss.ParamLoss:                  "",    // Falls-back to hyperparameter diffusion_loss (for backward compatibility).
-		optimizer.ParamOptimizer:        "adam",
-		optimizer.ParamAdamEpsilon:      1e-7,
-		optimizer.ParamAdamDType:        "",
-		optimizer.ParamAdamWeightDecay:  1e-4,
-		cosineschedule.ParamPeriodSteps: 0,
-		activation.ParamActivation:      "swish",
-		layers.ParamDropoutRate:         0.15,
-		regularizer.ParamL2:             0.0,
-		regularizer.ParamL1:             0.0,
-
+		"diffusion_loss":                    "mse", // "mse" (Mean-Squared-Error), "mae" (Mean-Absolute-Error), "huber" or "apl" (Adaptive-Power-Loss).
+		loss.ParamLoss:                      "",    // Falls-back to hyperparameter diffusion_loss (for backward compatibility).
+		optimizer.ParamOptimizer:            "adam",
+		optimizer.ParamAdamEpsilon:          1e-7,
+		optimizer.ParamAdamDType:            "",
+		optimizer.ParamAdamWeightDecay:      1e-4,
 		optimizer.ParamLearningRate:         1e-3,
-		cosineschedule.ParamPeriodSteps:     0, // Enabled if > 0, it sets the period of the cosine schedule. Typically, the same value as 'train_steps'.
+		cosineschedule.ParamPeriodSteps:     0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_cycles".
+		cosineschedule.ParamCycles:          0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_steps".
 		cosineschedule.ParamMinLearningRate: 1e-5,
+
+		activation.ParamActivation: "swish",
+		layers.ParamDropoutRate:    0.15,
+		regularizer.ParamL2:        0.0,
+		regularizer.ParamL1:        0.0,
 
 		// "plots" trigger generating intermediary eval data for plotting, and if running in GoNB, to actually
 		// draw the plot with Plotly.
