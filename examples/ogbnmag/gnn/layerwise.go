@@ -15,7 +15,7 @@ import (
 // LayerWiseConfig is a configuration object for [ComputeLayerWiseGNN].
 // Once configured with its methods, call [LayerWiseConfig.Done] to actually run the layer-wise GNN.
 type LayerWiseConfig struct {
-	scope                  *model.Scope
+	store                  *model.Store
 	strategy               *sampler.Strategy
 	sampler                *sampler.Sampler
 	keepIntermediaryStates bool
@@ -31,21 +31,21 @@ type LayerWiseConfig struct {
 //
 // It returns a configuration option that can be furthered configured.
 // It runs the layer-wise GNN once [NodePrediction] is called.
-func LayerWiseGNN(scope *model.Scope, strategy *sampler.Strategy) (*LayerWiseConfig, error) {
+func LayerWiseGNN(store *model.Store, strategy *sampler.Strategy) (*LayerWiseConfig, error) {
 	lw := &LayerWiseConfig{
-		scope:                  scope,
+		store:                  store,
 		strategy:               strategy,
 		sampler:                strategy.Sampler,
 		keepIntermediaryStates: true,
 		freeAcceleratorMemory:  true,
-		numGraphUpdates:        model.GetParamOr(scope, ParamNumGraphUpdates, 2),
-		graphUpdateType:        model.GetParamOr(scope, ParamGraphUpdateType, "tree"),
+		numGraphUpdates:        model.GetRootParamOr(store, ParamNumGraphUpdates, 2),
+		graphUpdateType:        model.GetRootParamOr(store, ParamGraphUpdateType, "tree"),
 	}
 	lw.dependentsUpdateFirst = "tree" == lw.graphUpdateType
 	if lw.graphUpdateType != "tree" && lw.graphUpdateType != "simultaneous" {
 		return nil, errors.Errorf("unsupported graph update type: %s", lw.graphUpdateType)
 	}
-	if model.GetParamOr(scope, ParamUsePathToRootStates, false) {
+	if model.GetRootParamOr(store, ParamUsePathToRootStates, false) {
 		return nil, errors.Errorf("layerwise inference doesn't work if using `%q=true`",
 			ParamUsePathToRootStates)
 	}

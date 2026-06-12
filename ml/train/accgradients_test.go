@@ -41,7 +41,7 @@ func TestTrainer_AccumulateGradients(t *testing.T) {
 	numTrainerMetrics := len(trainer.TrainMetrics())
 	require.NoError(t, err)
 	for ii := range numSteps {
-		metrics, err := trainer.TrainStep(nil, []*tensors.Tensor{input}, []*tensors.Tensor{label})
+		metrics, err := trainer.TrainStep(Batch{Inputs: []*tensors.Tensor{input}, Labels: []*tensors.Tensor{label}})
 		require.NoError(t, err)
 		require.Len(t, metrics, numTrainerMetrics)
 

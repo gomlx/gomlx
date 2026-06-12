@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"runtime"
 	"time"
 
 	"github.com/gomlx/compute/dtypes"
@@ -240,13 +241,22 @@ func CreateDatasets(config *PreprocessingConfiguration) (trainDS, trainEvalDS, v
 	// Read tensors in parallel:
 	if config.UseParallelism {
 		if trainDS != nil {
-			trainDS = dataset.CustomParallel(trainDS).Buffer(config.BufferSize).Start()
+			if concrete, ok := trainDS.(*Dataset); ok {
+				concrete.WithParallelism(runtime.NumCPU())
+			}
+			trainDS = dataset.Buffer(trainDS, config.BufferSize)
 		}
 		if trainEvalDS != nil {
-			trainEvalDS = dataset.CustomParallel(trainEvalDS).Buffer(config.BufferSize).Start()
+			if concrete, ok := trainEvalDS.(*Dataset); ok {
+				concrete.WithParallelism(runtime.NumCPU())
+			}
+			trainEvalDS = dataset.Buffer(trainEvalDS, config.BufferSize)
 		}
 		if validationEvalDS != nil {
-			validationEvalDS = dataset.CustomParallel(validationEvalDS).Buffer(config.BufferSize).Start()
+			if concrete, ok := validationEvalDS.(*Dataset); ok {
+				concrete.WithParallelism(runtime.NumCPU())
+			}
+			validationEvalDS = dataset.Buffer(validationEvalDS, config.BufferSize)
 		}
 	}
 

@@ -6,12 +6,10 @@ import (
 	"encoding/gob"
 	"fmt"
 	"image"
-	"io"
 	"math"
 	"math/rand"
 	"os"
 	"path"
-	"sync"
 	"time"
 
 	"github.com/disintegration/imaging"
@@ -23,6 +21,7 @@ import (
 	"github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
+	"iter"
 	"github.com/pkg/errors"
 )
 
@@ -30,14 +29,11 @@ import (
 // It pre-transforms the image to the target `imageSize`.
 type Dataset struct {
 	name      string
-	next      int
+	shuffled  bool
 	imageSize int
-	shuffle   []int
 	toTensor  *timage.ToTensorConfig
 
 	partitionSelection []bool // Which indices to take.
-
-	mu sync.Mutex
 }
 
 // NewDataset returns a Dataset for one epoch that yields
@@ -64,21 +60,9 @@ var _ train.Dataset = &Dataset{}
 //
 // Once shuffled, every time the dataset is reset, it is reshuffled.
 func (ds *Dataset) Shuffle() *Dataset {
-	ds.mu.Lock()
-	ds.shuffleLocked()
-	ds.mu.Unlock()
+	ds.shuffled = true
 	ds.name = ds.name + " [shuffled]"
 	return ds
-}
-
-func (ds *Dataset) shuffleLocked() {
-	if ds.shuffle == nil {
-		ds.shuffle = xslices.Iota(0, NumExamples)
-	}
-	for ii := 0; ii < NumExamples; ii++ {
-		swapPos := rand.Intn(NumExamples)
-		ds.shuffle[ii], ds.shuffle[swapPos] = ds.shuffle[swapPos], ds.shuffle[ii]
-	}
 }
 
 // Partition allows one to partition the dataset into different parts -- typically "train", "validation" and "test".
@@ -95,8 +79,6 @@ func (ds *Dataset) shuffleLocked() {
 //	dsValid := oxfordflowers102.NewDataset(dtypes.Float32, 75).Partition(seed, 0.8, 0.9) // 10%
 //	dsTest := oxfordflowers102.NewDataset(dtypes.Float32, 75).Partition(seed, 0.9, 1.0)  // 10%
 func (ds *Dataset) Partition(seed int64, from, to float64) *Dataset {
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
 	ds.name = fmt.Sprintf("%s [slice %d%%-%d%%]", ds.name, int(100.0*from), int(100.0*to))
 
 	ds.partitionSelection = make([]bool, NumExamples)
@@ -110,103 +92,95 @@ func (ds *Dataset) Partition(seed int64, from, to float64) *Dataset {
 	return ds
 }
 
-// nextIndex returns the next index and increments it.
-// Concurrency safe.
-// Returns -1 if reached the end of the dataset.
-func (ds *Dataset) nextIndex() (index int) {
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
-
-	for {
-		index = ds.next
-		if ds.next < 0 {
-			return
-		}
-
-		ds.next++
-		if ds.next >= NumExamples {
-			ds.next = -1 // Indicates the end of epoch.
-		}
-
-		if ds.shuffle != nil {
-			index = ds.shuffle[index]
-		}
-
-		if len(ds.partitionSelection) > 0 {
-			if !ds.partitionSelection[index] {
-				// This index is not part of this partition, loop and take next index.
-				continue
-			}
-		}
-
-		return
-	}
-}
-
 // Name implements train.Dataset interface.
 func (ds *Dataset) Name() string {
 	return ds.name
 }
 
-// Yield implements train.Dataset interface.
-// It returns `ds` (the Dataset pointer) as spec.
-//
-// It yields one example at a time, each consists of:
-//
-//   - `inputs`: three values: the image itself and a scalar `int32` with
-//     the index of the example and finally the type of flower (from 0 to `NumLabels-1`=101).
-//   - `labels`: the type of flower (same as `inputs[2]`), an `int32` value from 0 to `NumLabels-1`
-//     with the label.
-func (ds *Dataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	spec = ds
-	index := ds.nextIndex()
-	if index == -1 {
-		err = io.EOF
-		return
-	}
-	img, label, err := ReadExample(index)
-	if err != nil {
-		err = errors.WithMessagef(err, "failed to read image/label #%d", index)
-		return
-	}
+// Iter implements `train.Dataset` interface.
+func (ds *Dataset) Iter() iter.Seq2[train.Batch, error] {
+	return func(yield func(train.Batch, error) bool) {
+		var shuffle []int
+		if ds.shuffled {
+			shuffle = xslices.Iota(0, NumExamples)
+			for ii := 0; ii < NumExamples; ii++ {
+				swapPos := rand.Intn(NumExamples)
+				shuffle[ii], shuffle[swapPos] = shuffle[swapPos], shuffle[ii]
+			}
+		}
 
-	// 1. Resize the smallest dimension to imageSize, preserving ratio.
-	width := img.Bounds().Dx()
-	height := img.Bounds().Dy()
-	if width < height {
-		ratio := float64(width) / float64(ds.imageSize)
-		width = ds.imageSize
-		height = int(math.Round(float64(height) / ratio))
-	} else if height < width {
-		ratio := float64(height) / float64(ds.imageSize)
-		height = ds.imageSize
-		width = int(math.Round(float64(width) / ratio))
-	} else {
-		width = ds.imageSize
-		height = ds.imageSize
+		next := 0
+
+		nextIndex := func() int {
+			for {
+				if next < 0 || next >= NumExamples {
+					return -1
+				}
+				index := next
+				next++
+
+				if shuffle != nil {
+					index = shuffle[index]
+				}
+
+				if len(ds.partitionSelection) > 0 {
+					if !ds.partitionSelection[index] {
+						continue
+					}
+				}
+				return index
+			}
+		}
+
+		for {
+			index := nextIndex()
+			if index == -1 {
+				return
+			}
+			img, label, err := ReadExample(index)
+			if err != nil {
+				yield(train.Batch{}, errors.WithMessagef(err, "failed to read image/label #%d", index))
+				return
+			}
+
+			// 1. Resize the smallest dimension to imageSize, preserving ratio.
+			width := img.Bounds().Dx()
+			height := img.Bounds().Dy()
+			if width < height {
+				ratio := float64(width) / float64(ds.imageSize)
+				width = ds.imageSize
+				height = int(math.Round(float64(height) / ratio))
+			} else if height < width {
+				ratio := float64(height) / float64(ds.imageSize)
+				height = ds.imageSize
+				width = int(math.Round(float64(width) / ratio))
+			} else {
+				width = ds.imageSize
+				height = ds.imageSize
+			}
+			img = imaging.Resize(img, width, height, imaging.Linear)
+
+			// 2. Crop at center the largest dimension to imageSize.
+			if width > height {
+				start := (width - ds.imageSize) / 2
+				img = imaging.Crop(img, image.Rect(start, 0, start+ds.imageSize, ds.imageSize))
+			} else if height > width {
+				start := (height - ds.imageSize) / 2
+				img = imaging.Crop(img, image.Rect(0, start, ds.imageSize, start+ds.imageSize))
+			}
+
+			inputs := []*tensors.Tensor{ds.toTensor.Single(img), tensors.FromValue(index), tensors.FromValue(label)}
+			labels := []*tensors.Tensor{tensors.FromValue(label)}
+			batch := train.Batch{
+				Spec:   ds,
+				Inputs: inputs,
+				Labels: labels,
+			}
+			if !yield(batch, nil) {
+				return
+			}
+		}
 	}
-	img = imaging.Resize(img, width, height, imaging.Linear)
-
-	// 2. Crop at center the largest dimension to imageSize.
-	if width > height {
-		start := (width - ds.imageSize) / 2
-		img = imaging.Crop(img, image.Rect(start, 0, start+ds.imageSize, ds.imageSize))
-	} else if height > width {
-		start := (height - ds.imageSize) / 2
-		img = imaging.Crop(img, image.Rect(0, start, ds.imageSize, start+ds.imageSize))
-	}
-
-	inputs = []*tensors.Tensor{ds.toTensor.Single(img), tensors.FromValue(index), tensors.FromValue(label)}
-	labels = []*tensors.Tensor{tensors.FromValue(label)}
-	return
-}
-
-// Reset implements train.Dataset interface.
-func (ds *Dataset) Reset() {
-	ds.mu.Lock()
-	ds.next = 0
-	ds.shuffleLocked()
-	ds.mu.Unlock()
 }
 
 // InMemoryDataset creates a `datasets.InMemoryDataset` with the Oxford Flowers 102, of the given `imageSize` for both,
@@ -269,7 +243,7 @@ func InMemoryDataset(backend compute.Backend, baseDir string, imageSize int, nam
 	start := time.Now()
 	fmt.Printf("Creating InMemoryDataset for %q with images cropped and scaled to %dx%d...\n", name, imageSize, imageSize)
 	ds := NewDataset(dtypes.Uint8, imageSize).Partition(partitionSeed, partitionFrom, partitionTo)
-	inMemoryDataset, err = dataset.InMemory(backend, dataset.Parallel(ds), false)
+	inMemoryDataset, err = dataset.InMemory(backend, dataset.Buffer(ds), false)
 	elapsed := time.Since(start)
 	fmt.Printf("\t- %s to process dataset.\n", elapsed)
 	if err != nil {

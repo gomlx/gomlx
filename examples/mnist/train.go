@@ -81,15 +81,17 @@ func CreateStore() *model.Store {
 		//	$ gomlx_checkpointss --metrics --metrics_labels --metrics_types=accuracy  --metrics_names='E(Tra)/#loss,E(Val)/#loss' --loop=3s "<checkpoint_path>"
 		plotly.ParamPlots: false,
 
-		optimizer.ParamOptimizer:        "adamw",
-		optimizer.ParamLearningRate:     1e-4,
-		optimizer.ParamAdamEpsilon:      1e-7,
-		optimizer.ParamAdamDType:        "",
-		cosineschedule.ParamPeriodSteps: 0,
-		activation.ParamActivation:      "relu",
-		layers.ParamDropoutRate:         0.5,
-		regularizer.ParamL2:             0.0,
-		regularizer.ParamL1:             0.0,
+		optimizer.ParamOptimizer:            "adamw",
+		optimizer.ParamLearningRate:         1e-4,
+		optimizer.ParamAdamEpsilon:          1e-7,
+		optimizer.ParamAdamDType:            "",
+		cosineschedule.ParamPeriodSteps:     0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_cycles".
+		cosineschedule.ParamCycles:          0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_steps".
+		cosineschedule.ParamMinLearningRate: 0,
+		activation.ParamActivation:          "relu",
+		layers.ParamDropoutRate:             0.5,
+		regularizer.ParamL2:                 0.0,
+		regularizer.ParamL1:                 0.0,
 
 		// CNN
 		"cnn_dropout_rate":  0.5,

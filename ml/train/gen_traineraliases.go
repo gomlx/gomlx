@@ -9,12 +9,12 @@ import (
 )
 
 type ModelFnCompatibleZeroOutputs interface {
-	~func(*model.Scope) |
+	~func(*model.Scope, *graph.Graph) |
 		~func(*model.Scope, *graph.Node) |
 		~func(*model.Scope, *graph.Node, *graph.Node) |
 		~func(*model.Scope, *graph.Node, *graph.Node, *graph.Node) |
 		~func(*model.Scope, []*graph.Node) |
-		~func(*model.Scope, any) |
+		~func(*model.Scope, any, *graph.Graph) |
 		~func(*model.Scope, any, *graph.Node) |
 		~func(*model.Scope, any, *graph.Node, *graph.Node) |
 		~func(*model.Scope, any, *graph.Node, *graph.Node, *graph.Node) |
@@ -22,12 +22,12 @@ type ModelFnCompatibleZeroOutputs interface {
 }
 
 type ModelFnCompatibleOneOutput interface {
-	~func(*model.Scope) *graph.Node |
+	~func(*model.Scope, *graph.Graph) *graph.Node |
 		~func(*model.Scope, *graph.Node) *graph.Node |
 		~func(*model.Scope, *graph.Node, *graph.Node) *graph.Node |
 		~func(*model.Scope, *graph.Node, *graph.Node, *graph.Node) *graph.Node |
 		~func(*model.Scope, []*graph.Node) *graph.Node |
-		~func(*model.Scope, any) *graph.Node |
+		~func(*model.Scope, any, *graph.Graph) *graph.Node |
 		~func(*model.Scope, any, *graph.Node) *graph.Node |
 		~func(*model.Scope, any, *graph.Node, *graph.Node) *graph.Node |
 		~func(*model.Scope, any, *graph.Node, *graph.Node, *graph.Node) *graph.Node |
@@ -35,12 +35,12 @@ type ModelFnCompatibleOneOutput interface {
 }
 
 type ModelFnCompatibleTwoOutputs interface {
-	~func(*model.Scope) (*graph.Node, *graph.Node) |
+	~func(*model.Scope, *graph.Graph) (*graph.Node, *graph.Node) |
 		~func(*model.Scope, *graph.Node) (*graph.Node, *graph.Node) |
 		~func(*model.Scope, *graph.Node, *graph.Node) (*graph.Node, *graph.Node) |
 		~func(*model.Scope, *graph.Node, *graph.Node, *graph.Node) (*graph.Node, *graph.Node) |
 		~func(*model.Scope, []*graph.Node) (*graph.Node, *graph.Node) |
-		~func(*model.Scope, any) (*graph.Node, *graph.Node) |
+		~func(*model.Scope, any, *graph.Graph) (*graph.Node, *graph.Node) |
 		~func(*model.Scope, any, *graph.Node) (*graph.Node, *graph.Node) |
 		~func(*model.Scope, any, *graph.Node, *graph.Node) (*graph.Node, *graph.Node) |
 		~func(*model.Scope, any, *graph.Node, *graph.Node, *graph.Node) (*graph.Node, *graph.Node) |
@@ -48,12 +48,12 @@ type ModelFnCompatibleTwoOutputs interface {
 }
 
 type ModelFnCompatibleThreeOutputs interface {
-	~func(*model.Scope) (*graph.Node, *graph.Node, *graph.Node) |
+	~func(*model.Scope, *graph.Graph) (*graph.Node, *graph.Node, *graph.Node) |
 		~func(*model.Scope, *graph.Node) (*graph.Node, *graph.Node, *graph.Node) |
 		~func(*model.Scope, *graph.Node, *graph.Node) (*graph.Node, *graph.Node, *graph.Node) |
 		~func(*model.Scope, *graph.Node, *graph.Node, *graph.Node) (*graph.Node, *graph.Node, *graph.Node) |
 		~func(*model.Scope, []*graph.Node) (*graph.Node, *graph.Node, *graph.Node) |
-		~func(*model.Scope, any) (*graph.Node, *graph.Node, *graph.Node) |
+		~func(*model.Scope, any, *graph.Graph) (*graph.Node, *graph.Node, *graph.Node) |
 		~func(*model.Scope, any, *graph.Node) (*graph.Node, *graph.Node, *graph.Node) |
 		~func(*model.Scope, any, *graph.Node, *graph.Node) (*graph.Node, *graph.Node, *graph.Node) |
 		~func(*model.Scope, any, *graph.Node, *graph.Node, *graph.Node) (*graph.Node, *graph.Node, *graph.Node) |
@@ -61,12 +61,12 @@ type ModelFnCompatibleThreeOutputs interface {
 }
 
 type ModelFnCompatibleSliceOutputs interface {
-	~func(*model.Scope) []*graph.Node |
+	~func(*model.Scope, *graph.Graph) []*graph.Node |
 		~func(*model.Scope, *graph.Node) []*graph.Node |
 		~func(*model.Scope, *graph.Node, *graph.Node) []*graph.Node |
 		~func(*model.Scope, *graph.Node, *graph.Node, *graph.Node) []*graph.Node |
 		~func(*model.Scope, []*graph.Node) []*graph.Node |
-		~func(*model.Scope, any) []*graph.Node |
+		~func(*model.Scope, any, *graph.Graph) []*graph.Node |
 		~func(*model.Scope, any, *graph.Node) []*graph.Node |
 		~func(*model.Scope, any, *graph.Node, *graph.Node) []*graph.Node |
 		~func(*model.Scope, any, *graph.Node, *graph.Node, *graph.Node) []*graph.Node |
@@ -94,9 +94,9 @@ func createModelFnWrapper[ModelFnT ModelFnCompatible](modelFn ModelFnT) ModelFn 
 	switch f := any(modelFn).(type) {
 	case ModelFn:
 		return f
-	case func(*model.Scope):
+	case func(*model.Scope, *graph.Graph):
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
-			f(scope)
+			f(scope, inputs[0].Graph())
 			return nil
 		}
 	case func(*model.Scope, *graph.Node):
@@ -119,9 +119,9 @@ func createModelFnWrapper[ModelFnT ModelFnCompatible](modelFn ModelFnT) ModelFn 
 			f(scope, inputs)
 			return nil
 		}
-	case func(*model.Scope, any):
+	case func(*model.Scope, any, *graph.Graph):
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
-			f(scope, spec)
+			f(scope, spec, inputs[0].Graph())
 			return nil
 		}
 	case func(*model.Scope, any, *graph.Node):
@@ -144,9 +144,9 @@ func createModelFnWrapper[ModelFnT ModelFnCompatible](modelFn ModelFnT) ModelFn 
 			f(scope, spec, inputs)
 			return nil
 		}
-	case func(*model.Scope) *graph.Node:
+	case func(*model.Scope, *graph.Graph) *graph.Node:
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
-			return []*graph.Node{f(scope)}
+			return []*graph.Node{f(scope, inputs[0].Graph())}
 		}
 	case func(*model.Scope, *graph.Node) *graph.Node:
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
@@ -164,9 +164,9 @@ func createModelFnWrapper[ModelFnT ModelFnCompatible](modelFn ModelFnT) ModelFn 
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
 			return []*graph.Node{f(scope, inputs)}
 		}
-	case func(*model.Scope, any) *graph.Node:
+	case func(*model.Scope, any, *graph.Graph) *graph.Node:
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
-			return []*graph.Node{f(scope, spec)}
+			return []*graph.Node{f(scope, spec, inputs[0].Graph())}
 		}
 	case func(*model.Scope, any, *graph.Node) *graph.Node:
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
@@ -184,9 +184,9 @@ func createModelFnWrapper[ModelFnT ModelFnCompatible](modelFn ModelFnT) ModelFn 
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
 			return []*graph.Node{f(scope, spec, inputs)}
 		}
-	case func(*model.Scope) (*graph.Node, *graph.Node):
+	case func(*model.Scope, *graph.Graph) (*graph.Node, *graph.Node):
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
-			r0, r1 := f(scope)
+			r0, r1 := f(scope, inputs[0].Graph())
 			return []*graph.Node{r0, r1}
 		}
 	case func(*model.Scope, *graph.Node) (*graph.Node, *graph.Node):
@@ -209,9 +209,9 @@ func createModelFnWrapper[ModelFnT ModelFnCompatible](modelFn ModelFnT) ModelFn 
 			r0, r1 := f(scope, inputs)
 			return []*graph.Node{r0, r1}
 		}
-	case func(*model.Scope, any) (*graph.Node, *graph.Node):
+	case func(*model.Scope, any, *graph.Graph) (*graph.Node, *graph.Node):
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
-			r0, r1 := f(scope, spec)
+			r0, r1 := f(scope, spec, inputs[0].Graph())
 			return []*graph.Node{r0, r1}
 		}
 	case func(*model.Scope, any, *graph.Node) (*graph.Node, *graph.Node):
@@ -234,9 +234,9 @@ func createModelFnWrapper[ModelFnT ModelFnCompatible](modelFn ModelFnT) ModelFn 
 			r0, r1 := f(scope, spec, inputs)
 			return []*graph.Node{r0, r1}
 		}
-	case func(*model.Scope) (*graph.Node, *graph.Node, *graph.Node):
+	case func(*model.Scope, *graph.Graph) (*graph.Node, *graph.Node, *graph.Node):
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
-			r0, r1, r2 := f(scope)
+			r0, r1, r2 := f(scope, inputs[0].Graph())
 			return []*graph.Node{r0, r1, r2}
 		}
 	case func(*model.Scope, *graph.Node) (*graph.Node, *graph.Node, *graph.Node):
@@ -259,9 +259,9 @@ func createModelFnWrapper[ModelFnT ModelFnCompatible](modelFn ModelFnT) ModelFn 
 			r0, r1, r2 := f(scope, inputs)
 			return []*graph.Node{r0, r1, r2}
 		}
-	case func(*model.Scope, any) (*graph.Node, *graph.Node, *graph.Node):
+	case func(*model.Scope, any, *graph.Graph) (*graph.Node, *graph.Node, *graph.Node):
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
-			r0, r1, r2 := f(scope, spec)
+			r0, r1, r2 := f(scope, spec, inputs[0].Graph())
 			return []*graph.Node{r0, r1, r2}
 		}
 	case func(*model.Scope, any, *graph.Node) (*graph.Node, *graph.Node, *graph.Node):
@@ -284,9 +284,9 @@ func createModelFnWrapper[ModelFnT ModelFnCompatible](modelFn ModelFnT) ModelFn 
 			r0, r1, r2 := f(scope, spec, inputs)
 			return []*graph.Node{r0, r1, r2}
 		}
-	case func(*model.Scope) []*graph.Node:
+	case func(*model.Scope, *graph.Graph) []*graph.Node:
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
-			return f(scope)
+			return f(scope, inputs[0].Graph())
 		}
 	case func(*model.Scope, *graph.Node) []*graph.Node:
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
@@ -304,9 +304,9 @@ func createModelFnWrapper[ModelFnT ModelFnCompatible](modelFn ModelFnT) ModelFn 
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
 			return f(scope, inputs)
 		}
-	case func(*model.Scope, any) []*graph.Node:
+	case func(*model.Scope, any, *graph.Graph) []*graph.Node:
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {
-			return f(scope, spec)
+			return f(scope, spec, inputs[0].Graph())
 		}
 	case func(*model.Scope, any, *graph.Node) []*graph.Node:
 		return func(scope *model.Scope, spec any, inputs []*graph.Node) []*graph.Node {

@@ -19,6 +19,7 @@ package adult
 
 import (
 	"fmt"
+	"iter"
 	"log"
 
 	"github.com/gomlx/compute"
@@ -44,15 +45,21 @@ func NewDataset(backend compute.Backend, rawData *RawData, name string) *dataset
 func PrintBatchSamples(backend compute.Backend, data *RawData) {
 	sampler := NewDataset(backend, data, "batched sample dataset")
 	sampler.BatchSize(3, true)
+	next, stop := iter.Pull2(sampler.Iter())
+	defer stop()
 	for ii := range 2 {
 		fmt.Printf("\nSample batch %d:\n", ii)
-		_, inputs, labels, err := sampler.Yield()
+		batch, err, ok := next()
+		if !ok {
+			log.Fatalf("Failed to sample batches: dataset finished early")
+		}
 		if err != nil {
 			log.Fatalf("Failed to sample batches: %+v", err)
 		}
-		fmt.Printf("\tcategorical=%v\n", inputs[0])
-		fmt.Printf("\tcontinuos=%v\n", inputs[1])
-		fmt.Printf("\tweights=%v\n", inputs[2])
-		fmt.Printf("\tlabels=%v\n", labels)
+		fmt.Printf("\tcategorical=%v\n", batch.Inputs[0])
+		fmt.Printf("\tcontinuos=%v\n", batch.Inputs[1])
+		fmt.Printf("\tweights=%v\n", batch.Inputs[2])
+		fmt.Printf("\tlabels=%v\n", batch.Labels)
+		_ = batch.Finalize()
 	}
 }

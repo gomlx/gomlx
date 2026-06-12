@@ -5,6 +5,7 @@ package dataset
 import (
 	"fmt"
 	"io"
+	"iter"
 	"strings"
 	"sync"
 
@@ -64,6 +65,9 @@ type DistributedAccumulator struct {
 	inputShardingSpecs, labelShardingSpecs []*distributed.ShardingSpec
 	deviceAssignment                       []compute.DeviceNum
 
+	mu       sync.Mutex
+	stopChan chan struct{}
+
 	// Bucketing system - no mutex needed, only one goroutine modifies buckets
 	buckets map[string]*bucket
 
@@ -72,9 +76,6 @@ type DistributedAccumulator struct {
 
 	// Channel for next prepared batch (size 1)
 	nextBatch chan *distributedBatch
-
-	// Inherited from source dataset.
-	isOwnershipTransferred bool
 }
 
 // Compile time check that DistributedAccumulator implements both train.Dataset and train.DistributedDataset.
@@ -170,27 +171,15 @@ func NewDistributedAccumulator(backend compute.Backend, source train.Dataset, st
 	}
 
 	ds := &DistributedAccumulator{
-		backend:                backend,
-		source:                 source,
-		strategy:               strategy,
-		numDevices:             numDevices,
-		numInputShards:         numInputShards,
-		inputShardingSpecs:     inputShardingSpecs,
-		labelShardingSpecs:     labelShardingSpecs,
-		deviceAssignment:       deviceAssignment,
-		buckets:                make(map[string]*bucket),
-		stats:                  sync.Map{},
-		nextBatch:              make(chan *distributedBatch, 1),
-		isOwnershipTransferred: true,
+		backend:            backend,
+		source:             source,
+		strategy:           strategy,
+		numDevices:         numDevices,
+		numInputShards:     numInputShards,
+		inputShardingSpecs: inputShardingSpecs,
+		labelShardingSpecs: labelShardingSpecs,
+		deviceAssignment:   deviceAssignment,
 	}
-
-	// Inherit ownership transfer from source dataset.
-	if isOwnershipTransferred, ok := source.(train.DatasetCustomOwnership); ok {
-		ds.isOwnershipTransferred = isOwnershipTransferred.IsOwnershipTransferred()
-	}
-
-	// Start the first reader
-	ds.startReader()
 
 	return ds, nil
 }
@@ -200,46 +189,37 @@ func (ds *DistributedAccumulator) Name() string {
 	return "Distributed(" + ds.source.Name() + ")"
 }
 
-// Reset implements train.Dataset.
-func (ds *DistributedAccumulator) Reset() {
-	// Read and discard any prepared batch in the channel
-	select {
-	case batch := <-ds.nextBatch:
-		if batch != nil {
-			// Finalize any distributed tensors
-			for _, dt := range batch.inputs {
-				dt.Finalize()
-			}
-			for _, dt := range batch.labels {
-				dt.Finalize()
-			}
-		}
-	default:
-		// Channel was empty
-	}
-
-	// Clear buckets and discard leftovers
-	for _, b := range ds.buckets {
-		// Finalize accumulated shards
-		for _, sb := range b.shards {
-			for _, t := range sb.inputs {
-				t.FinalizeAll()
-			}
-			for _, t := range sb.labels {
-				t.FinalizeAll()
-			}
+// stopIteration stops the background reader and cleans up resources.
+func (ds *DistributedAccumulator) stopIteration() {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+	if ds.stopChan != nil {
+		select {
+		case <-ds.stopChan:
+			// Already closed
+		default:
+			close(ds.stopChan)
 		}
 	}
-	ds.buckets = make(map[string]*bucket)
-
-	// Clear statistics
-	ds.stats = sync.Map{}
-
-	// Reset source dataset
-	ds.source.Reset()
-
-	// Start the next reader
-	ds.startReader()
+	// Drain nextBatch to unblock any waiting sender before we exit
+	if ds.nextBatch != nil {
+		for range ds.nextBatch {
+		}
+	}
+	// Finalize leftover buckets
+	if ds.buckets != nil {
+		for _, b := range ds.buckets {
+			for _, sb := range b.shards {
+				for _, t := range sb.inputs {
+					t.FinalizeAll()
+				}
+				for _, t := range sb.labels {
+					t.FinalizeAll()
+				}
+			}
+		}
+		ds.buckets = nil
+	}
 }
 
 // Strategy implements train.DistributedDataset.
@@ -575,33 +555,40 @@ func (ds *DistributedAccumulator) moveShardsToDevices(shards []*tensors.Tensor) 
 	return firstErr
 }
 
-// startReader starts a background reader goroutine.
-// No synchronization needed - the channel ensures only one reader is active at a time.
-func (ds *DistributedAccumulator) startReader() {
-	go ds.reader()
-}
-
-// reader is the background goroutine that reads from source dataset, accumulates shards,
+// runReader is the background goroutine that reads from source dataset, accumulates shards,
 // aggregates them, and sends ready batches to the channel.
-// It reads until it has enough shards for one batch, sends it, then exits.
-// Yield() will start the next reader.
-func (ds *DistributedAccumulator) reader() {
-	// Read from source dataset and accumulate shards until we have enough for one batch
+func (ds *DistributedAccumulator) runReader(next func() (train.Batch, error, bool), stop func()) {
+	defer stop()
+	defer func() {
+		ds.mu.Lock()
+		defer ds.mu.Unlock()
+		if ds.nextBatch != nil {
+			close(ds.nextBatch)
+		}
+	}()
+
 	for {
-		// Read from source dataset
-		sourceSpec, sourceInputs, sourceLabels, err := ds.source.Yield()
-		if err == io.EOF {
+		batch, err, ok := next()
+		if !ok {
 			// End of source dataset - check if we have any ready buckets to send
 			ds.sendReadyBatch()
-			// Send EOF batch
-			ds.nextBatch <- &distributedBatch{err: io.EOF}
+			select {
+			case ds.nextBatch <- &distributedBatch{err: io.EOF}:
+			case <-ds.stopChan:
+			}
 			return
 		}
 		if err != nil {
-			// Send error batch
-			ds.nextBatch <- &distributedBatch{err: err}
+			select {
+			case ds.nextBatch <- &distributedBatch{err: err}:
+			case <-ds.stopChan:
+			}
 			return
 		}
+
+		sourceInputs := batch.Inputs
+		sourceLabels := batch.Labels
+		sourceSpec := batch.Spec
 
 		// Create bucket key
 		key := bucketKey{
@@ -619,7 +606,6 @@ func (ds *DistributedAccumulator) reader() {
 
 		// Update statistics
 		keyStr := bucketKeyString(key)
-		// Load current value, increment, and store back (thread-safe)
 		if val, ok := ds.stats.Load(keyStr); ok {
 			ds.stats.Store(keyStr, val.(int)+1)
 		} else {
@@ -644,65 +630,103 @@ func (ds *DistributedAccumulator) reader() {
 			b.shards = b.shards[ds.numInputShards:]
 
 			// Aggregate shards
-			batch, err := ds.aggregateShards(shardsToUse, sourceSpec)
+			db, err := ds.aggregateShards(shardsToUse, sourceSpec)
 			if err != nil {
-				ds.nextBatch <- &distributedBatch{err: err}
+				select {
+				case ds.nextBatch <- &distributedBatch{err: err}:
+				case <-ds.stopChan:
+				}
 				return
 			}
 
 			// Send to channel (blocking if channel is full)
-			ds.nextBatch <- batch
-			return // Reader done, will be restarted by DistributedYield()
+			select {
+			case ds.nextBatch <- db:
+			case <-ds.stopChan:
+				return
+			}
 		}
 	}
 }
 
 // sendReadyBatch checks all buckets and sends the first ready batch if available.
 func (ds *DistributedAccumulator) sendReadyBatch() {
-	// Check all buckets for ready data
 	for _, b := range ds.buckets {
 		if len(b.shards) >= ds.numInputShards {
-			// Extract shards
 			shardsToUse := make([]shardBatch, ds.numInputShards)
 			copy(shardsToUse, b.shards[:ds.numInputShards])
 			b.shards = b.shards[ds.numInputShards:]
 
-			// Aggregate shards
 			batch, err := ds.aggregateShards(shardsToUse, shardsToUse[0].spec)
 			if err != nil {
-				ds.nextBatch <- &distributedBatch{err: err}
+				select {
+				case ds.nextBatch <- &distributedBatch{err: err}:
+				case <-ds.stopChan:
+				}
 				return
 			}
 
-			// Send to channel
-			ds.nextBatch <- batch
+			select {
+			case ds.nextBatch <- batch:
+			case <-ds.stopChan:
+			}
 			return
 		}
 	}
 }
 
-// Yield implements train.Dataset, by simply returning an error to indicate one should use DistributedYield instead.
-func (ds *DistributedAccumulator) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
-	return nil, nil, nil, errors.New("the DistributedAccumulator dataset was meant to be used in a distributed manner; " +
-		"either add support for DistributedDatasets or use a normal Dataset instead")
+// Iter implements train.Dataset.
+func (ds *DistributedAccumulator) Iter() iter.Seq2[train.Batch, error] {
+	return func(yield func(train.Batch, error) bool) {
+		yield(train.Batch{}, errors.New("the DistributedAccumulator dataset was meant to be used in a distributed manner; "+
+			"either add support for DistributedDatasets or use a normal Dataset instead"))
+	}
 }
 
-// DistributedYield implements train.DistributedDataset.
-func (ds *DistributedAccumulator) DistributedYield() (spec any, inputs, labels []*dtensor.Tensor, err error) {
-	// Read the next prepared batch from channel
-	batch := <-ds.nextBatch
+// DistributedIter implements train.DistributedDataset.
+func (ds *DistributedAccumulator) DistributedIter() iter.Seq2[train.DistributedBatch, error] {
+	return func(yield func(train.DistributedBatch, error) bool) {
+		ds.stopIteration()
 
-	if batch.err != nil {
-		if batch.err == io.EOF {
-			return nil, nil, nil, io.EOF
+		ds.mu.Lock()
+		ds.buckets = make(map[string]*bucket)
+		ds.stats = sync.Map{}
+		ds.nextBatch = make(chan *distributedBatch, 1)
+		ds.stopChan = make(chan struct{})
+		ds.mu.Unlock()
+
+		next, stop := iter.Pull2(ds.source.Iter())
+		go ds.runReader(next, stop)
+
+		defer ds.stopIteration()
+
+		for {
+			var batch *distributedBatch
+			select {
+			case batch = <-ds.nextBatch:
+			case <-ds.stopChan:
+				return
+			}
+			if batch == nil {
+				return
+			}
+			if batch.err != nil {
+				if batch.err == io.EOF {
+					return
+				}
+				yield(train.DistributedBatch{}, batch.err)
+				return
+			}
+			db := train.DistributedBatch{
+				Spec:   batch.spec,
+				Inputs: batch.inputs,
+				Labels: batch.labels,
+			}
+			if !yield(db, nil) {
+				return
+			}
 		}
-		return nil, nil, nil, batch.err
 	}
-
-	// Start the next reader in parallel
-	ds.startReader()
-
-	return batch.spec, batch.inputs, batch.labels, nil
 }
 
 // Stats returns information on the number of source inputs of each shape/number seen so far.

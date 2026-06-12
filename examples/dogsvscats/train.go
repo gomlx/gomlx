@@ -24,9 +24,9 @@ import (
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/train/optimizer/cosineschedule"
 	"github.com/gomlx/gomlx/support/fsutil"
-	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
+	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
 
@@ -80,15 +80,17 @@ func CreateModelStore() *model.Store {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "batch",
 
-		optimizer.ParamOptimizer:        "adamw",
-		optimizer.ParamLearningRate:     1e-4,
-		optimizer.ParamAdamEpsilon:      1e-7,
-		optimizer.ParamAdamDType:        "",
-		cosineschedule.ParamPeriodSteps: 0,
-		activation.ParamActivation:      "",
-		layers.ParamDropoutRate:         0.1,
-		regularizer.ParamL2:             0.0,
-		regularizer.ParamL1:             0.0,
+		optimizer.ParamOptimizer:            "adamw",
+		optimizer.ParamLearningRate:         1e-4,
+		optimizer.ParamAdamEpsilon:          1e-7,
+		optimizer.ParamAdamDType:            "",
+		cosineschedule.ParamPeriodSteps:     0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_cycles".
+		cosineschedule.ParamCycles:          0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_steps".
+		cosineschedule.ParamMinLearningRate: 0,
+		activation.ParamActivation:          "",
+		layers.ParamDropoutRate:             0.1,
+		regularizer.ParamL2:                 0.0,
+		regularizer.ParamL1:                 0.0,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 3,

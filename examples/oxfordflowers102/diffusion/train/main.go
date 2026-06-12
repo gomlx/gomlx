@@ -54,7 +54,7 @@ func main() {
 			klog.Infof("Data downloaded in %s", *flagDataDir)
 		}
 		if *flagTrain {
-			diffusion.TrainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
+			diffusion.Train(store, *flagDataDir, *flagCheckpoint, paramsSet, *flagEval, *flagVerbosity)
 		}
 		if !*flagDownload && !*flagTrain {
 			klog.Info("exit: usage -download and/or -train, optional -data")

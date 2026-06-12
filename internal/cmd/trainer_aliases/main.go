@@ -55,11 +55,15 @@ func main() {
 			if hasSpec {
 				callParts = append(callParts, "spec")
 			}
-			if numNodes == -1 {
+			switch numNodes {
+			case -1:
 				sigParts = append(sigParts, "[]*graph.Node")
 				callParts = append(callParts, "inputs")
-			} else {
-				for i := 0; i < numNodes; i++ {
+			case 0:
+				sigParts = append(sigParts, "*graph.Graph")
+				callParts = append(callParts, "inputs[0].Graph()")
+			default:
+				for i := range numNodes {
 					sigParts = append(sigParts, "*graph.Node")
 					callParts = append(callParts, fmt.Sprintf("inputs[%d]", i))
 				}

@@ -24,6 +24,7 @@ import (
 	"github.com/gomlx/gomlx/ml/train/metric"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/fsutil"
+	"github.com/pkg/errors"
 	"github.com/gomlx/gomlx/ui/commandline"
 	"github.com/gomlx/gomlx/ui/gonb/margaid"
 	"github.com/gomlx/gomlx/ui/gonb/plotly"
@@ -83,7 +84,7 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 			return checkpointHandler, noise, flowerIDs
 		}
 	}
-	if !os.IsNotExist(err) {
+	if !os.IsNotExist(errors.Cause(err)) {
 		check(err)
 	}
 
@@ -96,9 +97,9 @@ func (c *Config) AttachCheckpoint(checkpointPath string) (
 	return checkpointHandler, noise, flowerIDs
 }
 
-// TrainWithStore with hyperparameters given in Store.
+// Train with hyperparameters given in Store.
 // paramsSet enumerate the scope parameters that were set and should override values loaded from a checkpointHandler.
-func TrainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
+func Train(store *model.Store, dataDir, checkpointPath string, paramsSet []string, evaluateOnEnd bool, verbosity int) {
 	// Backend handles creation of ML computation graphs, accelerator resources, etc.
 	backend := compute.MustNew()
 	if verbosity >= 1 {

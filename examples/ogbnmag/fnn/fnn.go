@@ -79,9 +79,9 @@ func FnnModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 var ModelFn = FnnModelGraph
 
 // Train FNN model based on configuration in `scope`.
-func Train(backend compute.Backend, scope *model.Scope) error {
+func Train(backend compute.Backend, store *model.Store) error {
 	trainDS, validDS, testDS, err := mag.PapersSeedDatasets(backend)
-	mag.UploadOgbnMagVariables(backend, scope.Store())
+	mag.UploadOgbnMagVariables(backend, store)
 	//scope.EnumerateVariables(func(v *model.Variable) {
 	//	fmt.Printf("%s :: %s:\t%s\n", v.Scope(), v.Name(), v.Value().Shape())
 	//})
@@ -90,22 +90,22 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 		return err
 	}
 
-	batchSize := model.GetParamOr(scope, "batch_size", 128)
+	batchSize := model.GetRootParamOr(store, "batch_size", 128)
 	trainEvalDS := trainDS.Copy()
 	trainDS = trainDS.Shuffle().BatchSize(batchSize, true).Infinite(true)
 
 	// Evaluation datasets.
-	evalBatchSize := model.GetParamOr(scope, "eval_batch_size", 1024)
+	evalBatchSize := model.GetRootParamOr(store, "eval_batch_size", 1024)
 	trainEvalDS = trainEvalDS.BatchSize(evalBatchSize, false).Infinite(false)
 	validDS = validDS.BatchSize(evalBatchSize, false).Infinite(false)
 	testDS = testDS.BatchSize(evalBatchSize, false).Infinite(false)
 
 	// Get trainSteps before a checkpoint is loaded -- in which case it will be overwritten.
-	trainSteps := model.GetParamOr(scope, "train_steps", 100)
+	trainSteps := model.GetRootParamOr(store, "train_steps", 100)
 
 	// Checkpoint: it loads if already exists, and it will save as we train.
-	checkpointPath := model.GetParamOr(scope, "checkpoint", "")
-	numCheckpointsToKeep := model.GetParamOr(scope, "num_checkpoints", 10)
+	checkpointPath := model.GetRootParamOr(store, "checkpoint", "")
+	numCheckpointsToKeep := model.GetRootParamOr(store, "num_checkpoints", 10)
 	var checkpointHandler *checkpoint.Handler
 	var globalStep int64
 	if checkpointPath != "" {
@@ -116,19 +116,19 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 			numCheckpointsToKeep = -1
 		}
 		if numCheckpointsToKeep > 0 {
-			checkpointHandler, err = checkpoint.Build(scope.Store()).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3, backend).Done()
+			checkpointHandler, err = checkpoint.Build(store).Dir(checkpointPath).Keep(numCheckpointsToKeep).TakeMean(3, backend).Done()
 		} else {
-			checkpointHandler, err = checkpoint.Build(scope.Store()).Dir(checkpointPath).Done()
+			checkpointHandler, err = checkpoint.Build(store).Dir(checkpointPath).Done()
 		}
 		if err != nil {
 			return errors.WithMessagef(err, "while setting up checkpoint to %q (keep=%d)",
 				checkpointPath, numCheckpointsToKeep)
 		}
-		globalStep = optimizer.GetGlobalStep(scope.Store())
+		globalStep = optimizer.GetGlobalStep(store)
 		if globalStep != 0 {
 			fmt.Printf("> restarting training from global_step=%d\n", globalStep)
 		}
-		scope.SetParam("train_steps", trainSteps)
+		store.SetParam("train_steps", trainSteps)
 	}
 
 	// Loss: multi-class classification problem.
@@ -140,8 +140,8 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 
 	// Create a train.Trainer: this object will orchestrate running the model, feeding
 	// results to the optimizer, evaluating the metrics, etc. (all happens in trainer.TrainStep)
-	theOptimizer := optimizer.ByName(scope, model.GetParamOr(scope, "optimizer", "adamw"))
-	trainer := train.NewTrainer(backend, scope.Store(), ModelFn,
+	theOptimizer := optimizer.ByName(store.RootScope(), model.GetRootParamOr(store, "optimizer", "adamw"))
+	trainer := train.NewTrainer(backend, store, ModelFn,
 		lossFn,
 		theOptimizer,
 		[]metric.Interface{movingAccuracyMetric}, // trainMetrics
@@ -162,7 +162,7 @@ func Train(backend compute.Backend, scope *model.Scope) error {
 
 	// Attach a margaid plots: plot points at exponential steps.
 	// The points generated are saved along the checkpoint directory (if one is given).
-	usePlots := model.GetParamOr(scope, "plots", false)
+	usePlots := model.GetRootParamOr(store, "plots", false)
 	if usePlots {
 		_ = plotly.New().
 			WithCheckpoint(checkpointHandler).

@@ -70,6 +70,8 @@ and error messages are useful (always with a stack-trace) and try to make it eas
 - Removed `pkg/` prefix from the the top level packages (no need with `internal/` special handling).
 - The `context.Context` variable container redesigned (and simplified) into `model.Store` (the container)
   the `model.Scope` (a pointer to a `Store` with the current scope).
+- The `train.Dataset` (package `ml/train`) interface was modernized (and simplified) to use Go's standard iterators. Also now with clearer ownership rules.
+- The `train.NewTrainer` now uses a generic `modelFn` type, with a friendlier more flexible signature, using generics and the `ModelFnCompatible` constraint.
 
 See more details in the our [CHANGELOG](docs/CHANGELOG.md), including how to use `cmd/convert_v0.28`, 
 a tool that facilitates the changes needed to move to the new API -- details in the [CHANGELOG](docs/CHANGELOG.md).

@@ -167,7 +167,11 @@ func trainModel(backend compute.Backend, scope *model.Scope) {
 		inputTensor := tensors.FromValue(inputData)
 		targetTensor := tensors.FromValue(targetData)
 
-		metrics, err := trainer.TrainStep(nil, []*tensors.Tensor{inputTensor}, []*tensors.Tensor{targetTensor})
+		batch := train.Batch{
+			Inputs: []*tensors.Tensor{inputTensor},
+			Labels: []*tensors.Tensor{targetTensor},
+		}
+		metrics, err := trainer.TrainStep(batch)
 		if err != nil {
 			log.Fatalf("Training step %d failed: %v", step, err)
 		}

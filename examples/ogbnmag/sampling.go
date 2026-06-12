@@ -161,9 +161,9 @@ func NewSamplerStrategy(
 
 // ExtractLabelsFromInput create the labels from the input seed indices.
 // It returns the same inputs and the extracted labels (with mask).
-func ExtractLabelsFromInput(inputs, labels []*tensors.Tensor) ([]*tensors.Tensor, []*tensors.Tensor) {
-	seeds := inputs[0]
-	seedsMask := inputs[1]
+func ExtractLabelsFromInput(batch train.Batch) train.Batch {
+	seeds := batch.Inputs[0]
+	seedsMask := batch.Inputs[1]
 	seedsLabels := tensors.FromShape(shapes.Make(seeds.DType(), seeds.Shape().Size(), 1))
 	tensors.MustConstFlatData[int32](seeds, func(seedsData []int32) {
 		tensors.MustConstFlatData[int32](PapersLabels, func(papersLabelsData []int32) {
@@ -174,7 +174,8 @@ func ExtractLabelsFromInput(inputs, labels []*tensors.Tensor) ([]*tensors.Tensor
 			})
 		})
 	})
-	return inputs, []*tensors.Tensor{seedsLabels, seedsMask}
+	batch.Labels = []*tensors.Tensor{seedsLabels, seedsMask}
+	return batch
 }
 
 // WithReplacement indicates whether the training dataset is created with replacement.
@@ -211,9 +212,8 @@ func MakeDatasets(dataDir string) (trainDS, trainEvalDS, validEvalDS, testEvalDS
 	// - Parallelize its generation: greatly speeds it up.
 	// - Free GPU memory in between each use, since each batch may use lots of GPU memory.
 	perDatasetFn := func(ds train.Dataset) train.Dataset {
-		ds = mldata.Map(ds, ExtractLabelsFromInput)
-		ds = mldata.Parallel(ds)
-		ds = mldata.Freeing(ds)
+		ds = mldata.MapOnHost(ds, ExtractLabelsFromInput)
+		ds = mldata.Buffer(ds)
 		return ds
 	}
 

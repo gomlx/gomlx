@@ -13,9 +13,7 @@ import (
 )
 
 // Conv1DModelGraph implements a convolution (1D) based model for the IMDB dataset.
-func Conv1DModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
-	_ = spec
-	tokens := inputs[0]
+func Conv1DModelGraph(scope *model.Scope, tokens *Node) *Node {
 	embed, _ := EmbedTokensGraph(scope, tokens)
 
 	g := embed.Graph()
@@ -59,7 +57,7 @@ func Conv1DModelGraph(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	logits = ReduceMax(logits, 1)
 	logits = fnn.New(scope, logits, 1).Done()
 	logits.AssertDims(batchSize, 1)
-	return []*Node{logits}
+	return logits
 }
 
 // NormalizeSequence `x` according to "normalization" hyperparameter. Works for sequence nodes (rank-3).

@@ -8,8 +8,8 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
-	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
+	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/exceptions"
 )

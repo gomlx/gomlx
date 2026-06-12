@@ -12,7 +12,6 @@ package train
 
 import (
 	"fmt"
-	"io"
 	"iter"
 	"slices"
 
@@ -486,6 +485,8 @@ func (r *Trainer) lossFnScalarLoss(_ *model.Scope, labels, predictions []*graph.
 
 // trainStepGraph builds the graph to train one step. It is called by the scope executor (`r.trainStepExecMap`)
 // every time a graph needs to be built (typically for new batch sizes).
+//
+// Note: Graph execution (via TrainStep) takes ownership of the Batch tensors and will finalize them after use.
 func (r *Trainer) trainStepGraph(spec any, scope *model.Scope, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 	g := inputs[0].Graph()
 	scope.Store().SetTraining(g, true) // Some layers behave differently if in training.
@@ -520,15 +521,69 @@ func (r *Trainer) trainStepGraph(spec any, scope *model.Scope, inputs, labels []
 	return
 }
 
+// consumeBatch prepares Batch inputs and labels for execution, donating device buffers where possible,
+// and returning a function to finalize the rest.
+func (r *Trainer) consumeBatch(batch Batch) (inputsAndLabels []any, finalizeFn func(), err error) {
+	inputs := batch.Inputs
+	labels := batch.Labels
+	numParams := len(inputs) + len(labels)
+	inputsAndLabels = make([]any, numParams)
+	tensorsToFinalize := make([]*tensors.Tensor, 0, numParams)
+
+	idx := 0
+	for _, t := range inputs {
+		if t.IsShared() {
+			inputsAndLabels[idx] = t
+			tensorsToFinalize = append(tensorsToFinalize, t)
+		} else {
+			donated, err := graph.DonateTensorBuffer(t, r.backend, r.deviceNum)
+			if err != nil {
+				inputsAndLabels[idx] = t
+				tensorsToFinalize = append(tensorsToFinalize, t)
+			} else {
+				inputsAndLabels[idx] = donated
+			}
+		}
+		idx++
+	}
+	for _, t := range labels {
+		if t.IsShared() {
+			inputsAndLabels[idx] = t
+			tensorsToFinalize = append(tensorsToFinalize, t)
+		} else {
+			donated, err := graph.DonateTensorBuffer(t, r.backend, r.deviceNum)
+			if err != nil {
+				inputsAndLabels[idx] = t
+				tensorsToFinalize = append(tensorsToFinalize, t)
+			} else {
+				inputsAndLabels[idx] = donated
+			}
+		}
+		idx++
+	}
+
+	finalizeFn = func() {
+		for _, t := range tensorsToFinalize {
+			_ = t.FinalizeAll()
+		}
+	}
+	return inputsAndLabels, finalizeFn, nil
+}
+
 // callGraphFn for TrainStep or EvalStep makes sure the builds the arguments for execution,
 // plus do standard checks on inputs and labels.
+//
+// The Batch ownership (inputs/labels tensors) is transferred to the Trainer,
+// which will finalize them after use.
 func (r *Trainer) callGraphFn(
 	graphFn func(spec any, scope *model.Scope, inputs, labels []*graph.Node) (metrics []*graph.Node),
 	graphType GraphType,
 	execMap map[any]*model.Exec,
-	spec any,
-	inputs, labels []*tensors.Tensor,
+	batch Batch,
 ) (metrics []*tensors.Tensor, err error) {
+	spec := batch.Spec
+	inputs := batch.Inputs
+	labels := batch.Labels
 	if len(inputs) == 0 {
 		return nil, errors.New("there are no inputs, at least one is required")
 	}
@@ -545,15 +600,13 @@ func (r *Trainer) callGraphFn(
 		}
 	}
 
-	// Create arguments as []any and run trainStepExecMap.Exec().
-	numParams := len(inputs) + len(labels)
-	inputsAndLabels := make([]any, 0, numParams)
-	for _, t := range inputs {
-		inputsAndLabels = append(inputsAndLabels, t)
+	// Prepare inputs/labels for execution: donate device buffers where possible to save space/memory,
+	// and finalize the rest after execution.
+	inputsAndLabels, finalizeFn, err := r.consumeBatch(batch)
+	if err != nil {
+		return nil, err
 	}
-	for _, t := range labels {
-		inputsAndLabels = append(inputsAndLabels, t)
-	}
+	defer finalizeFn()
 
 	// Get the executor for the graphType and input spec.
 	exec, found := execMap[spec]
@@ -583,15 +636,23 @@ func (r *Trainer) callGraphFn(
 // execution, plus do standard checks on inputs and labels.
 //
 // Notice that the returned metrics are not distributed.
+//
+// The DistributedBatch ownership (inputs/labels tensors) is transferred to the Trainer,
+// which will finalize them after use.
 func (r *Trainer) distributedCallGraphFn(
 	strategy distributed.Strategy,
 	deviceAssignment []compute.DeviceNum,
 	graphFn func(spec any, scope *model.Scope, inputs, labels []*graph.Node) (metrics []*graph.Node),
 	graphType GraphType,
 	execMap map[any]*model.Exec,
-	spec any,
-	inputs, labels []*dtensor.Tensor,
+	batch DistributedBatch,
 ) (metrics []*tensors.Tensor, err error) {
+	defer func() {
+		_ = batch.Finalize()
+	}()
+	spec := batch.Spec
+	inputs := batch.Inputs
+	labels := batch.Labels
 	if len(inputs) == 0 {
 		return nil, errors.New("there are no inputs, at least one is required")
 	}
@@ -727,26 +788,34 @@ func (r *Trainer) metricsUpdatesGraph(scope *model.Scope, labels, predictions []
 }
 
 // TrainStep runs one step and returns the metrics.
-func (r *Trainer) TrainStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor, err error) {
+//
+// The Batch ownership (inputs/labels tensors) is transferred to the Trainer,
+// which will finalize them after the training step is executed.
+func (r *Trainer) TrainStep(batch Batch) (metrics []*tensors.Tensor, err error) {
 	if r.accumulateGradients {
 		// Version that accumulate gradients.
-		return r.trainStepWithAccumulateGradients(spec, inputs, labels)
+		return r.trainStepWithAccumulateGradients(batch)
 	}
-	return r.callGraphFn(r.trainStepGraph, TrainType, r.trainStepExecMap, spec, inputs, labels)
+	return r.callGraphFn(r.trainStepGraph, TrainType, r.trainStepExecMap, batch)
 }
 
 // DistributedTrainStep runs one step and returns the metrics, in a distributed fashion.
+//
+// The DistributedBatch ownership (inputs/labels tensors) is transferred to the Trainer,
+// which will finalize them after the training step is executed.
 func (r *Trainer) DistributedTrainStep(strategy distributed.Strategy, deviceAssignment []compute.DeviceNum,
-	spec any, inputs, labels []*dtensor.Tensor) (metrics []*tensors.Tensor, err error) {
+	batch DistributedBatch) (metrics []*tensors.Tensor, err error) {
 	if r.accumulateGradients {
 		// Version that accumulate gradients.
 		return nil, errors.New("distributed training with gradient accumulation not implemented yet")
 	}
-	return r.distributedCallGraphFn(strategy, deviceAssignment, r.trainStepGraph, TrainType, r.trainStepExecMap, spec, inputs, labels)
+	return r.distributedCallGraphFn(strategy, deviceAssignment, r.trainStepGraph, TrainType, r.trainStepExecMap, batch)
 }
 
 // evalStepGraph builds the graph to eval one step. It is called by the scope executor (`r.evalStepExecMap`)
 // every time a graph needs to be built (typically for new batch sizes).
+//
+// Note: Graph execution (via EvalStep) takes ownership of the Batch tensors and will finalize them after use.
 func (r *Trainer) evalStepGraph(spec any, scope *model.Scope, inputs, labels []*graph.Node) (metrics []*graph.Node) {
 	g := inputs[0].Graph()
 	scope.Store().SetTraining(g, false) // Some layers behave differently in train/eval.
@@ -774,14 +843,20 @@ func (r *Trainer) ResetTrainMetrics() error {
 }
 
 // EvalStep runs one eval step and returns the metrics, the first one being the mean loss.
-func (r *Trainer) EvalStep(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor, err error) {
-	return r.callGraphFn(r.evalStepGraph, EvalType, r.evalStepExecMap, spec, inputs, labels)
+//
+// The Batch ownership (inputs/labels tensors) is transferred to the Trainer,
+// which will finalize them after the evaluation step is executed.
+func (r *Trainer) EvalStep(batch Batch) (metrics []*tensors.Tensor, err error) {
+	return r.callGraphFn(r.evalStepGraph, EvalType, r.evalStepExecMap, batch)
 }
 
 // DistributedEvalStep runs one eval step and returns the metrics, in a distributed fashion.
+//
+// The DistributedBatch ownership (inputs/labels tensors) is transferred to the Trainer,
+// which will finalize them after the evaluation step is executed.
 func (r *Trainer) DistributedEvalStep(strategy distributed.Strategy, deviceAssignment []compute.DeviceNum,
-	spec any, inputs, labels []*dtensor.Tensor) (metrics []*tensors.Tensor, err error) {
-	return r.distributedCallGraphFn(strategy, deviceAssignment, r.evalStepGraph, EvalType, r.evalStepExecMap, spec, inputs, labels)
+	batch DistributedBatch) (metrics []*tensors.Tensor, err error) {
+	return r.distributedCallGraphFn(strategy, deviceAssignment, r.evalStepGraph, EvalType, r.evalStepExecMap, batch)
 }
 
 // resetEvalMetrics call Metrics.Reset on all eval metrics.
@@ -800,13 +875,11 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor, err error)
 	if distributedDS, ok := ds.(DistributedDataset); ok {
 		return r.DistributedEval(distributedDS)
 	}
-	ds.Reset()
 	err = r.resetEvalMetrics()
 	if err != nil {
 		return nil, err
 	}
 	count := 0
-	finalizeInputs := finalizeYieldedTensors(ds)
 
 	// Check for metrics with Go updates: these are update functions not written as a computation graph.
 	goUpdateFns := make([]metric.UpdateGo, len(r.evalMetrics))
@@ -817,11 +890,7 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor, err error)
 	}
 
 	// Loop over dataset:
-	for {
-		spec, inputs, labels, err := ds.Yield()
-		if err == io.EOF {
-			break
-		}
+	for batch, err := range ds.Iter() {
 		if err != nil {
 			return nil, errors.Wrap(err, "dataset returned an error during Eval")
 		}
@@ -836,27 +905,13 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor, err error)
 			}
 		}
 
-		lossAndMetrics, err = r.EvalStep(spec, inputs, labels)
+		lossAndMetrics, err = r.EvalStep(batch)
 		if err != nil {
 			return nil, errors.WithMessage(err, "EvalStep failed")
 		}
 		for i, goUpdateFn := range goUpdateFns {
 			if goUpdateFn != nil {
 				goUpdateFn.UpdateGo(lossAndMetrics[i])
-			}
-		}
-
-		// Free inputs and labels after usage.
-		if finalizeInputs {
-			for sliceIdx, slice := range [][]*tensors.Tensor{inputs, labels} {
-				for i, t := range slice {
-					err := t.FinalizeAll()
-					if err != nil {
-						return nil, errors.WithMessagef(
-							err, "finalizing %s tensor #%d of dataset %q after use in a distributed eval step",
-							yieldInputTypeNames[sliceIdx], i, ds.Name())
-					}
-				}
 			}
 		}
 	}
@@ -875,13 +930,11 @@ func (r *Trainer) Eval(ds Dataset) (lossAndMetrics []*tensors.Tensor, err error)
 
 // DistributedEval returns the computation of loss and metrics over the given distributed dataset.
 func (r *Trainer) DistributedEval(ds DistributedDataset) (lossAndMetrics []*tensors.Tensor, err error) {
-	ds.Reset()
 	err = r.resetEvalMetrics()
 	if err != nil {
 		return nil, err
 	}
 	count := 0
-	finalizeInputs := finalizeYieldedTensors(ds)
 	strategy := ds.Strategy()
 	deviceAssignment := ds.DeviceAssignment()
 
@@ -894,11 +947,7 @@ func (r *Trainer) DistributedEval(ds DistributedDataset) (lossAndMetrics []*tens
 	}
 
 	// Loop over dataset:
-	for {
-		spec, inputs, labels, err := ds.DistributedYield()
-		if err == io.EOF {
-			break
-		}
+	for batch, err := range ds.DistributedIter() {
 		if err != nil {
 			return nil, errors.Wrap(err, "dataset returned an error during DistributedEval")
 		}
@@ -913,27 +962,13 @@ func (r *Trainer) DistributedEval(ds DistributedDataset) (lossAndMetrics []*tens
 			}
 		}
 
-		lossAndMetrics, err = r.DistributedEvalStep(strategy, deviceAssignment, spec, inputs, labels)
+		lossAndMetrics, err = r.DistributedEvalStep(strategy, deviceAssignment, batch)
 		if err != nil {
 			return nil, errors.WithMessage(err, "DistributedEvalStep failed")
 		}
 		for i, goUpdateFn := range goUpdateFns {
 			if goUpdateFn != nil {
 				goUpdateFn.UpdateGo(lossAndMetrics[i])
-			}
-		}
-
-		// Free inputs and labels after usage.
-		if finalizeInputs {
-			for sliceIdx, slice := range [][]*dtensor.Tensor{inputs, labels} {
-				for i, t := range slice {
-					err := t.FinalizeAll()
-					if err != nil {
-						return nil, errors.WithMessagef(
-							err, "finalizing %s distributed tensor #%d of dataset %q after use in a distributed eval step",
-							yieldInputTypeNames[sliceIdx], i, ds.Name())
-					}
-				}
 			}
 		}
 	}

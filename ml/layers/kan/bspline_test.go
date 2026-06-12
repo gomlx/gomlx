@@ -4,6 +4,7 @@ package kan_test
 
 import (
 	"fmt"
+	"iter"
 	"math"
 	"path"
 	"testing"
@@ -33,12 +34,19 @@ func (ds *kanTestDataset) Name() string {
 	return "kan_dataset"
 }
 
-func (ds *kanTestDataset) Reset() {}
-
-func (ds *kanTestDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	spec = ds
-	inputs = []*tensors.Tensor{tensors.FromShape(shapes.Make(dtypes.Float64, ds.batchSize, 2))}
-	return
+func (ds *kanTestDataset) Iter() iter.Seq2[train.Batch, error] {
+	return func(yield func(train.Batch, error) bool) {
+		for {
+			inputs := []*tensors.Tensor{tensors.FromShape(shapes.Make(dtypes.Float64, ds.batchSize, 2))}
+			batch := train.Batch{
+				Spec:   ds,
+				Inputs: inputs,
+			}
+			if !yield(batch, nil) {
+				return
+			}
+		}
+	}
 }
 
 // targetF is the function we are trying to model.

@@ -3,11 +3,9 @@
 package train
 
 import (
-	"io"
 	"slices"
 
 	"github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/pkg/errors"
 )
@@ -31,37 +29,20 @@ func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) error {
 	for phase := range 2 {
 		// Reset models from previous phases.
 		r.batchNormStepExecMap = make(map[any]*model.Exec)
-		ds.Reset()
 		err = r.resetEvalMetrics()
 		if err != nil {
 			return err
 		}
 		count := 0
-		for {
-			spec, inputs, labels, err := ds.Yield()
-			if err == io.EOF {
-				break
-			}
+		for batch, err := range ds.Iter() {
 			if err != nil {
 				return errors.Wrapf(err,
 					"dataset returned an error during BatchNormalizationAveragesUpdate(phase=%d)", phase)
 			}
 			count++
-			err = r.batchNormAveragesStep(phase, spec, inputs, labels)
+			err = r.batchNormAveragesStep(phase, batch)
 			if err != nil {
 				return errors.WithMessagef(err, "BatchNormalizationAveragesUpdate(phase=%d) failed", phase)
-			}
-
-			// Free inputs and labels after usage.
-			for sliceIdx, slice := range [][]*tensors.Tensor{inputs, labels} {
-				for i, t := range slice {
-					err := t.FinalizeAll()
-					if err != nil {
-						return errors.WithMessagef(
-							err, "finalizing %s tensor #%d of dataset %q after use in a distributed eval step",
-							yieldInputTypeNames[sliceIdx], i, ds.Name())
-					}
-				}
 			}
 		}
 		if count == 0 {
@@ -74,14 +55,12 @@ func (r *Trainer) BatchNormalizationAveragesUpdate(ds Dataset) error {
 
 // batchNormAveragesStep runs one forward step on the model, with the model frozen, except
 // for non-gradient updated variables, like batch normalization moving averages.
-func (r *Trainer) batchNormAveragesStep(phase int, spec any, inputs, labels []*tensors.Tensor) error {
+func (r *Trainer) batchNormAveragesStep(phase int, batch Batch) error {
 	lossAndMetrics, err := r.callGraphFn(
 		r.batchNormsAverageStepGraphFn(phase),
 		BatchNormAveragesType,
 		r.batchNormStepExecMap,
-		spec,
-		inputs,
-		labels,
+		batch,
 	)
 	if err != nil {
 		return err

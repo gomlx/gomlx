@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/support/xslices"
+	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/dataset"
 	"github.com/gomlx/gomlx/ml/layers"
@@ -34,7 +35,7 @@ import (
 
 var (
 	// ValidModels is the list of model types supported.
-	ValidModels = map[string]train.ModelFn{
+	ValidModels = map[string]func(*model.Scope, *graph.Node) *graph.Node{
 		"bow":         BagOfWordsModelGraph,
 		"cnn":         Conv1DModelGraph,
 		"transformer": TransformerModelGraph,
@@ -86,15 +87,17 @@ func CreateModelStore() *model.Store {
 		// "normalization" is overridden by "fnn_normalization" and "cnn_normalization", if they are set.
 		layers.ParamNormalization: "layer",
 
-		optimizer.ParamOptimizer:        "adamw",
-		optimizer.ParamLearningRate:     1e-4,
-		optimizer.ParamAdamEpsilon:      1e-7,
-		optimizer.ParamAdamDType:        "",
-		cosineschedule.ParamPeriodSteps: 0,
-		activation.ParamActivation:      "",
-		layers.ParamDropoutRate:         0.1,
-		regularizer.ParamL2:             0.0,
-		regularizer.ParamL1:             0.0,
+		optimizer.ParamOptimizer:            "adamw",
+		optimizer.ParamLearningRate:         1e-4,
+		optimizer.ParamAdamEpsilon:          1e-7,
+		optimizer.ParamAdamDType:            "",
+		cosineschedule.ParamPeriodSteps:     0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_cycles".
+		cosineschedule.ParamCycles:          0, // If 0, it is disabled. Mutually exclusive with "cosine_schedule_steps".
+		cosineschedule.ParamMinLearningRate: 0,
+		activation.ParamActivation:          "",
+		layers.ParamDropoutRate:             0.1,
+		regularizer.ParamL2:                 0.0,
+		regularizer.ParamL1:                 0.0,
 
 		// FNN network parameters:
 		fnn.ParamNumHiddenLayers: 2,
@@ -170,10 +173,10 @@ func TrainWithStore(
 	trainEvalDS = NewDataset("train-eval", TypeTrain, maxLen, batchSize, false)
 	testEvalDS = NewDataset("test-eval", TypeTest, maxLen, batchSize, false)
 
-	// Parallelize generation of batches.
-	trainDS = dataset.Parallel(trainDS)
-	trainEvalDS = dataset.Parallel(trainEvalDS)
-	testEvalDS = dataset.Parallel(testEvalDS)
+	// Buffer (prefetch) generation of batches.
+	trainDS = dataset.Buffer(trainDS)
+	trainEvalDS = dataset.Buffer(trainEvalDS)
+	testEvalDS = dataset.Buffer(testEvalDS)
 
 	// Checkpoints saving.
 	var checkpointHandler *checkpoint.Handler
@@ -282,8 +285,12 @@ var sampleStyle = lipgloss.NewStyle().
 func PrintSample(n int) {
 	const maxLen = 200
 	ds := NewDataset("TypeTest", TypeTest, maxLen, n, true).Shuffle()
-	_, inputs, labels, err := ds.Yield()
-	check(err)
+	var inputs, labels []*tensors.Tensor
+	for batch, err := range ds.Iter() {
+		check(err)
+		inputs, labels = batch.Inputs, batch.Labels
+		break
+	}
 	tensors.MustConstFlatData[int8](labels[0], func(labelsData []int8) {
 		for ii := range n {
 			fmt.Println(sampleStyle.Render(

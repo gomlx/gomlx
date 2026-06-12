@@ -157,11 +157,11 @@ func (r *Trainer) accumulateStepAndApplyGraph(spec any, scope *model.Scope, inpu
 	return r.accumulateStepGraphImpl(spec, scope, inputs, labels, true)
 }
 
-func (r *Trainer) trainStepWithAccumulateGradients(spec any, inputs, labels []*tensors.Tensor) (metrics []*tensors.Tensor, err error) {
+func (r *Trainer) trainStepWithAccumulateGradients(batch Batch) (metrics []*tensors.Tensor, err error) {
 	r.accumulateGradientsCurrentStep++
 	if r.accumulateGradientsCurrentStep < r.accumulateGradientsSteps {
-		return r.callGraphFn(r.accumulateStepNoApplyGraph, TrainType, r.accumulateGradientsExecMap, spec, inputs, labels)
+		return r.callGraphFn(r.accumulateStepNoApplyGraph, TrainType, r.accumulateGradientsExecMap, batch)
 	}
 	r.accumulateGradientsCurrentStep = 0
-	return r.callGraphFn(r.accumulateStepAndApplyGraph, TrainType, r.accumulateGradientsAndApplyExecMap, spec, inputs, labels)
+	return r.callGraphFn(r.accumulateStepAndApplyGraph, TrainType, r.accumulateGradientsAndApplyExecMap, batch)
 }

@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/support/testutil"
 
@@ -48,10 +49,14 @@ func TestDataset(t *testing.T) {
 			return
 		}
 		ds.BatchSize(batchSize, false)
-		_, images, labels, err := ds.Yield()
-		if err != nil {
-			t.Errorf("Download: %v", err)
-			return
+		var images, labels []*tensors.Tensor
+		for batch, err := range ds.Iter() {
+			if err != nil {
+				t.Errorf("Iter: %v", err)
+				return
+			}
+			images, labels = batch.Inputs, batch.Labels
+			break
 		}
 		images[0].Shape().AssertDims(batchSize, Width, Height, 3)
 		labels[0].Shape().AssertDims(batchSize, 1)

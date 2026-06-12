@@ -166,8 +166,8 @@ func createDenseTestStateGraphLayerWise(
 	return graphStates, edges
 }
 
-func setMinimalTestParams(scope *model.Scope) {
-	scope.SetParams(map[string]any{
+func setMinimalTestParams(store *model.Store) {
+	store.SetParams(map[string]any{
 		layers.ParamDropoutRate:    0.0,
 		activation.ParamActivation: "none", // No activation, to make math simpler.
 		layers.ParamNormalization:  "none",
@@ -185,8 +185,8 @@ func setMinimalTestParams(scope *model.Scope) {
 	})
 }
 
-func setCommonTestParams(scope *model.Scope) {
-	scope.SetParams(map[string]any{
+func setCommonTestParams(store *model.Store) {
+	store.SetParams(map[string]any{
 		layers.ParamDropoutRate:    0.0,
 		activation.ParamActivation: "swish",
 		layers.ParamNormalization:  "layer",
@@ -211,8 +211,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	manager := testutil.BuildTestBackend()
 	_, strategy := createDenseTestStrategy(withCitation)
 	store := model.NewStore()
-	scope := store.RootScope()
-	setMinimalTestParams(scope)
+	setMinimalTestParams(store)
 	// Set weights to fixed values, that makes it easier to interpret:
 	{
 		s := store.Scope("/model/graph_update_0/gnn:authors/conv/message/dense")
@@ -231,7 +230,7 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 	}
 
 	// Normal GNN executor.
-	execGnn := model.MustNewExec(manager, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
+	execGnn := model.MustNewExec(manager, store, func(scope *model.Scope, g *Graph) *Node {
 		graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
 		NodePrediction(scope.In("model"), strategy, graphStates)
 		return graphStates["seeds"].Value
@@ -247,15 +246,15 @@ func TestLayerWiseInferenceMinimal(t *testing.T) {
 
 	// Uncomment to list variables used in model.
 	/*
-		scope.EnumerateVariables(func(v *model.Variable) {
-			fmt.Printf("\t%s=%s\n", v.GetParameterName(), v.Value())
-		})
+		for v := range store.IterVariables() {
+			fmt.Printf("\t%s=%s\n", v.Path(), v.MustValue())
+		}
 	*/
 
 	// Layer-Wise Inference: should return the same values.
-	lw, err := LayerWiseGNN(scope, strategy)
+	lw, err := LayerWiseGNN(store, strategy)
 	require.NoError(t, err)
-	execLayerWise := model.MustNewExec(manager, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
+	execLayerWise := model.MustNewExec(manager, store, func(scope *model.Scope, g *Graph) *Node {
 		graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
 		lw.NodePrediction(scope.In("model"), graphStates, edges)
 		return graphStates["seeds"]
@@ -273,11 +272,10 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 		manager := testutil.BuildTestBackend()
 		_, strategy := createDenseTestStrategy(withCitation)
 		store := model.NewStore()
-		scope := store.RootScope()
-		setCommonTestParams(scope)
+		setCommonTestParams(store)
 
 		// Normal GNN executor.
-		execGnn := model.MustNewExec(manager, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
+		execGnn := model.MustNewExec(manager, store, func(scope *model.Scope, g *Graph) *Node {
 			graphStates := createDenseTestStateGraphWithMask(strategy, g, dtypes.Float32, withCitation)
 			NodePrediction(scope, strategy, graphStates)
 			return graphStates["seeds"].Value
@@ -288,15 +286,15 @@ func TestLayerWiseInferenceCommon(t *testing.T) {
 
 		// Uncomment to list variables used in model.
 		/*
-			scope.EnumerateVariables(func(v *model.Variable) {
-				fmt.Printf("\t%s=%s\n", v.GetParameterName(), v.Value())
-			})
+			for v := range store.IterVariables() {
+				fmt.Printf("\t%s=%s\n", v.Path(), v.MustValue())
+			}
 		*/
 
 		// Layer-Wise Inference: should return the same values.
-		lw, err := LayerWiseGNN(scope, strategy)
+		lw, err := LayerWiseGNN(store, strategy)
 		require.NoError(t, err)
-		execLayerWise := model.MustNewExec(manager, scope.Store(), func(scope *model.Scope, g *Graph) *Node {
+		execLayerWise := model.MustNewExec(manager, store, func(scope *model.Scope, g *Graph) *Node {
 			graphStates, edges := createDenseTestStateGraphLayerWise(strategy, g, dtypes.Float32, withCitation)
 			lw.NodePrediction(scope, graphStates, edges)
 			return graphStates["seeds"]

@@ -4,7 +4,7 @@ package attention
 
 import (
 	"fmt"
-	"io"
+	"iter"
 	"math"
 	"math/rand"
 	"testing"
@@ -505,34 +505,39 @@ func (ds *attentionTestDataset) Name() string {
 	return ds.name
 }
 
-func (ds *attentionTestDataset) Reset() {
-	ds.count = 0
-}
+func (ds *attentionTestDataset) Iter() iter.Seq2[train.Batch, error] {
+	return func(yield func(train.Batch, error) bool) {
+		count := 0
+		for {
+			if !ds.infinite && count+ds.batchSize > ds.maxCount {
+				return
+			}
+			count += ds.batchSize
 
-func (ds *attentionTestDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	if !ds.infinite && ds.count+ds.batchSize > ds.maxCount {
-		return nil, nil, nil, io.EOF
-	}
-	ds.count += ds.batchSize
-
-	batch := make([][]float32, ds.batchSize)
-	batchLabel := make([][]float32, ds.batchSize)
-	for ii := 0; ii < ds.batchSize; ii++ {
-		batch[ii] = make([]float32, ds.sequenceSize)
-		//batchLabel[ii] = make([]float32, 1)
-		batchLabel[ii] = make([]float32, ds.sequenceSize)
-		for jj := 0; jj < ds.sequenceSize; jj++ {
-			batch[ii][jj] = float32(rand.Intn(2))
-			if batch[ii][jj] > 0 && jj > 0 && batch[ii][jj-1] > 0 {
-				batchLabel[ii][jj] = 1.0
+			batchVal := make([][]float32, ds.batchSize)
+			batchLabel := make([][]float32, ds.batchSize)
+			for ii := 0; ii < ds.batchSize; ii++ {
+				batchVal[ii] = make([]float32, ds.sequenceSize)
+				batchLabel[ii] = make([]float32, ds.sequenceSize)
+				for jj := 0; jj < ds.sequenceSize; jj++ {
+					batchVal[ii][jj] = float32(rand.Intn(2))
+					if batchVal[ii][jj] > 0 && jj > 0 && batchVal[ii][jj-1] > 0 {
+						batchLabel[ii][jj] = 1.0
+					}
+				}
+			}
+			inputs := []*tensors.Tensor{tensors.FromValue(batchVal)}
+			labels := []*tensors.Tensor{tensors.FromValue(batchLabel)}
+			batch := train.Batch{
+				Spec:   ds,
+				Inputs: inputs,
+				Labels: labels,
+			}
+			if !yield(batch, nil) {
+				return
 			}
 		}
 	}
-	inputs = []*tensors.Tensor{tensors.FromValue(batch)}
-	labels = []*tensors.Tensor{tensors.FromValue(batchLabel)}
-	//fmt.Printf("inputs: %v\n", batch)
-	//fmt.Printf("labels: %v\n", labels)
-	return
 }
 
 // TestMultiHeadAttentionTraining creates a test dataset which to be solved one needs to be able to attend to
@@ -583,18 +588,25 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 			return modelFn(scope, nil, inputs)[0]
 		}
 		inferenceExec := model.MustNewExec(backend, store, inferenceFn)
+		next, stop := iter.Pull2(evalDS.Iter())
+		defer stop()
 		for range 3 {
-			_, inputs, labels, err := evalDS.Yield()
+			batch, err, ok := next()
+			require.True(t, ok)
 			require.NoErrorf(t, err, "Failed datasets: %+v", err)
-			fmt.Printf("\nInput:\t%v\n", inputs[0].Value())
-			fmt.Printf("Label:\t%v\n", labels[0].Value())
-			results = inferenceExec.MustCall(inputs[0])
+			fmt.Printf("\nInput:\t%v\n", batch.Inputs[0].Value())
+			fmt.Printf("Label:\t%v\n", batch.Labels[0].Value())
+			results = inferenceExec.MustCall(batch.Inputs[0])
 			tmp := results[0].Value().([][]float32)[0]
 			var rounded []int
 			for _, v := range tmp {
 				rounded = append(rounded, int(math.Round(float64(v))))
 			}
-			fmt.Printf("Pred:\t[%v]\n", rounded)
+			fmt.Printf("Pred:\t%v\n", rounded)
+			_ = batch.Finalize()
+			for _, r := range results {
+				r.MustFinalizeAll()
+			}
 		}
 	}
 }

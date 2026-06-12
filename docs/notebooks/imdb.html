@@ -7332,7 +7332,12 @@ a.anchor-link {
     if (!diagrams.length) {
       return;
     }
-    const mermaid = (await import("https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.7.0/mermaid.esm.min.mjs")).default;
+    const mermaid = (await import("https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.0/mermaid.esm.min.mjs")).default;
+    const elkUrl = "https://cdnjs.cloudflare.com/ajax/libs/mermaid-layout-elk/0.1.9/mermaid-layout-elk.esm.min.mjs";
+    if(elkUrl) {
+      const elkLayouts = (await import(elkUrl)).default;
+      mermaid.registerLayoutLoaders(elkLayouts);
+    }
     const parser = new DOMParser();
 
     mermaid.initialize({
@@ -7429,7 +7434,8 @@ a.anchor-link {
      * Post-process to ensure mermaid diagrams contain only valid SVG and XHTML.
      */
     function cleanMermaidSvg(svg) {
-      return svg.replace(RE_VOID_ELEMENT, replaceVoidElement);
+      svg = svg.replace(RE_VOID_ELEMENT, replaceVoidElement);
+      return `${SVG_XML_HEADER}${svg}`;
     }
 
 
@@ -7455,6 +7461,285 @@ a.anchor-link {
       }
       return `<${tag} ${rest}>`;
     }
+
+
+  /**
+   * Named HTML entities with their decimal equivalent codes.
+   *
+   * @see https://www.w3.org/TR/WD-html40-970708/sgml/entities.html
+   * */
+  const HTML_ENTITIES = `<!ENTITY Aacute "&#193;">
+<!ENTITY aacute "&#225;">
+<!ENTITY Acirc "&#194;">
+<!ENTITY acirc "&#226;">
+<!ENTITY acute "&#180;">
+<!ENTITY AElig "&#198;">
+<!ENTITY aelig "&#230;">
+<!ENTITY Agrave "&#192;">
+<!ENTITY agrave "&#224;">
+<!ENTITY alefsym "&#8501;">
+<!ENTITY Alpha "&#913;">
+<!ENTITY alpha "&#945;">
+<!ENTITY amp "&#38;">
+<!ENTITY and "&#8869;">
+<!ENTITY ang "&#8736;">
+<!ENTITY Aring "&#197;">
+<!ENTITY aring "&#229;">
+<!ENTITY asymp "&#8776;">
+<!ENTITY Atilde "&#195;">
+<!ENTITY atilde "&#227;">
+<!ENTITY Auml "&#196;">
+<!ENTITY auml "&#228;">
+<!ENTITY bdquo "&#8222;">
+<!ENTITY Beta "&#914;">
+<!ENTITY beta "&#946;">
+<!ENTITY brvbar "&#166;">
+<!ENTITY bull "&#8226;">
+<!ENTITY cap "&#8745;">
+<!ENTITY Ccedil "&#199;">
+<!ENTITY ccedil "&#231;">
+<!ENTITY cedil "&#184;">
+<!ENTITY cent "&#162;">
+<!ENTITY Chi "&#935;">
+<!ENTITY chi "&#967;">
+<!ENTITY circ "&#710;">
+<!ENTITY clubs "&#9827;">
+<!ENTITY cong "&#8773;">
+<!ENTITY copy "&#169;">
+<!ENTITY crarr "&#8629;">
+<!ENTITY cup "&#8746;">
+<!ENTITY curren "&#164;">
+<!ENTITY dagger "&#8224;">
+<!ENTITY Dagger "&#8225;">
+<!ENTITY darr "&#8595;">
+<!ENTITY dArr "&#8659;">
+<!ENTITY deg "&#176;">
+<!ENTITY Delta "&#916;">
+<!ENTITY delta "&#948;">
+<!ENTITY diams "&#9830;">
+<!ENTITY divide "&#247;">
+<!ENTITY Eacute "&#201;">
+<!ENTITY eacute "&#233;">
+<!ENTITY Ecirc "&#202;">
+<!ENTITY ecirc "&#234;">
+<!ENTITY Egrave "&#200;">
+<!ENTITY egrave "&#232;">
+<!ENTITY empty "&#8709;">
+<!ENTITY emsp "&#8195;">
+<!ENTITY ensp "&#8194;">
+<!ENTITY epsilon "&#949;">
+<!ENTITY Epsilon "&#917;">
+<!ENTITY equiv "&#8801;">
+<!ENTITY Eta "&#919;">
+<!ENTITY eta "&#951;">
+<!ENTITY ETH "&#208;">
+<!ENTITY eth "&#240;">
+<!ENTITY Euml "&#203;">
+<!ENTITY euml "&#235;">
+<!ENTITY exist "&#8707;">
+<!ENTITY fnof "&#402;">
+<!ENTITY forall "&#8704;">
+<!ENTITY frac12 "&#189;">
+<!ENTITY frac14 "&#188;">
+<!ENTITY frac34 "&#190;">
+<!ENTITY frasl "&#8260;">
+<!ENTITY Gamma "&#915;">
+<!ENTITY gamma "&#947;">
+<!ENTITY ge "&#8805;">
+<!ENTITY gt "&#62;">
+<!ENTITY harr "&#8596;">
+<!ENTITY hArr "&#8660;">
+<!ENTITY hearts "&#9829;">
+<!ENTITY hellip "&#8230;">
+<!ENTITY Iacute "&#205;">
+<!ENTITY iacute "&#237;">
+<!ENTITY Icirc "&#206;">
+<!ENTITY icirc "&#238;">
+<!ENTITY iexcl "&#161;">
+<!ENTITY Igrave "&#204;">
+<!ENTITY igrave "&#236;">
+<!ENTITY image "&#8465;">
+<!ENTITY infin "&#8734;">
+<!ENTITY int "&#8747;">
+<!ENTITY Iota "&#921;">
+<!ENTITY iota "&#953;">
+<!ENTITY iquest "&#191;">
+<!ENTITY isin "&#8712;">
+<!ENTITY Iuml "&#207;">
+<!ENTITY iuml "&#239;">
+<!ENTITY Kappa "&#922;">
+<!ENTITY kappa "&#954;">
+<!ENTITY Lambda "&#923;">
+<!ENTITY lambda "&#955;">
+<!ENTITY lang "&#9001;">
+<!ENTITY laquo "&#171;">
+<!ENTITY larr "&#8592;">
+<!ENTITY lArr "&#8656;">
+<!ENTITY lceil "&#8968;">
+<!ENTITY ldquo "&#8220;">
+<!ENTITY le "&#8804;">
+<!ENTITY lfloor "&#8970;">
+<!ENTITY lowast "&#8727;">
+<!ENTITY loz "&#9674;">
+<!ENTITY lrm "&#8206;">
+<!ENTITY lsaquo "&#8249;">
+<!ENTITY lsquo "&#8216;">
+<!ENTITY lt "&#60;">
+<!ENTITY macr "&#175;">
+<!ENTITY mdash "&#8212;">
+<!ENTITY micro "&#181;">
+<!ENTITY middot "&#183;">
+<!ENTITY minus "&#8722;">
+<!ENTITY Mu "&#924;">
+<!ENTITY mu "&#956;">
+<!ENTITY nabla "&#8711;">
+<!ENTITY nbsp "&#160;">
+<!ENTITY ndash "&#8211;">
+<!ENTITY ne "&#8800;">
+<!ENTITY ni "&#8715;">
+<!ENTITY not "&#172;">
+<!ENTITY notin "&#8713;">
+<!ENTITY nsub "&#8836;">
+<!ENTITY Ntilde "&#209;">
+<!ENTITY ntilde "&#241;">
+<!ENTITY Nu "&#925;">
+<!ENTITY nu "&#957;">
+<!ENTITY Oacute "&#211;">
+<!ENTITY oacute "&#243;">
+<!ENTITY Ocirc "&#212;">
+<!ENTITY ocirc "&#244;">
+<!ENTITY OElig "&#338;">
+<!ENTITY oelig "&#339;">
+<!ENTITY Ograve "&#210;">
+<!ENTITY ograve "&#242;">
+<!ENTITY oline "&#8254;">
+<!ENTITY Omega "&#937;">
+<!ENTITY omega "&#969;">
+<!ENTITY Omicron "&#927;">
+<!ENTITY omicron "&#959;">
+<!ENTITY oplus "&#8853;">
+<!ENTITY or "&#8870;">
+<!ENTITY ordf "&#170;">
+<!ENTITY ordm "&#186;">
+<!ENTITY Oslash "&#216;">
+<!ENTITY oslash "&#248;">
+<!ENTITY Otilde "&#213;">
+<!ENTITY otilde "&#245;">
+<!ENTITY otimes "&#8855;">
+<!ENTITY Ouml "&#214;">
+<!ENTITY ouml "&#246;">
+<!ENTITY para "&#182;">
+<!ENTITY part "&#8706;">
+<!ENTITY permil "&#8240;">
+<!ENTITY perp "&#8869;">
+<!ENTITY Phi "&#934;">
+<!ENTITY phi "&#966;">
+<!ENTITY Pi "&#928;">
+<!ENTITY pi "&#960;">
+<!ENTITY piv "&#982;">
+<!ENTITY plusmn "&#177;">
+<!ENTITY pound "&#163;">
+<!ENTITY prime "&#8242;">
+<!ENTITY Prime "&#8243;">
+<!ENTITY prod "&#8719;">
+<!ENTITY prop "&#8733;">
+<!ENTITY Psi "&#936;">
+<!ENTITY psi "&#968;">
+<!ENTITY quot "&#34;">
+<!ENTITY radic "&#8730;">
+<!ENTITY rang "&#9002;">
+<!ENTITY raquo "&#187;">
+<!ENTITY rarr "&#8594;">
+<!ENTITY rArr "&#8658;">
+<!ENTITY rceil "&#8969;">
+<!ENTITY rdquo "&#8221;">
+<!ENTITY real "&#8476;">
+<!ENTITY reg "&#174;">
+<!ENTITY rfloor "&#8971;">
+<!ENTITY Rho "&#929;">
+<!ENTITY rho "&#961;">
+<!ENTITY rlm "&#8207;">
+<!ENTITY rsaquo "&#8250;">
+<!ENTITY rsquo "&#8217;">
+<!ENTITY sbquo "&#8218;">
+<!ENTITY Scaron "&#352;">
+<!ENTITY scaron "&#353;">
+<!ENTITY sdot "&#8901;">
+<!ENTITY sect "&#167;">
+<!ENTITY shy "&#173;">
+<!ENTITY Sigma "&#931;">
+<!ENTITY sigma "&#963;">
+<!ENTITY sigmaf "&#962;">
+<!ENTITY sim "&#8764;">
+<!ENTITY spades "&#9824;">
+<!ENTITY sub "&#8834;">
+<!ENTITY sube "&#8838;">
+<!ENTITY sum "&#8721;">
+<!ENTITY sup "&#8835;">
+<!ENTITY sup1 "&#185;">
+<!ENTITY sup2 "&#178;">
+<!ENTITY sup3 "&#179;">
+<!ENTITY supe "&#8839;">
+<!ENTITY szlig "&#223;">
+<!ENTITY Tau "&#932;">
+<!ENTITY tau "&#964;">
+<!ENTITY there4 "&#8756;">
+<!ENTITY Theta "&#920;">
+<!ENTITY theta "&#952;">
+<!ENTITY thetasym "&#977;">
+<!ENTITY thinsp "&#8201;">
+<!ENTITY THORN "&#222;">
+<!ENTITY thorn "&#254;">
+<!ENTITY tilde "&#732;">
+<!ENTITY times "&#215;">
+<!ENTITY trade "&#8482;">
+<!ENTITY Uacute "&#218;">
+<!ENTITY uacute "&#250;">
+<!ENTITY uarr "&#8593;">
+<!ENTITY uArr "&#8657;">
+<!ENTITY Ucirc "&#219;">
+<!ENTITY ucirc "&#251;">
+<!ENTITY Ugrave "&#217;">
+<!ENTITY ugrave "&#249;">
+<!ENTITY uml "&#168;">
+<!ENTITY upsih "&#978;">
+<!ENTITY Upsilon "&#933;">
+<!ENTITY upsilon "&#965;">
+<!ENTITY Uuml "&#220;">
+<!ENTITY uuml "&#252;">
+<!ENTITY weierp "&#8472;">
+<!ENTITY Xi "&#926;">
+<!ENTITY xi "&#958;">
+<!ENTITY Yacute "&#221;">
+<!ENTITY yacute "&#253;">
+<!ENTITY yen "&#165;">
+<!ENTITY Yuml "&#376;">
+<!ENTITY yuml "&#255;">
+<!ENTITY Zeta "&#918;">
+<!ENTITY zeta "&#950;">
+<!ENTITY zwj "&#8205;">
+<!ENTITY zwnj "&#8204;">`.replace(/\n/g, ' ');
+
+  /**
+   * A reasonably strict xml declaration.
+   */
+  const XML_DECL = '<?xml version="1.0" standalone="no"?>';
+
+  /**
+   * The beginning of the XML doctype declaration.
+   */
+  const DOCTYPE_START = `<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [`;
+
+  /**
+   * The end of the XML docype declaration.
+   */
+  const DOCTYPE_END = ']>';
+
+  /**
+   * A full header for an SVG XML document.
+   */
+  const SVG_XML_HEADER = `${XML_DECL}
+    ${DOCTYPE_START}${HTML_ENTITIES}${DOCTYPE_END}`;
 
     void Promise.all([...diagrams].map(renderOneMarmaid));
   });
@@ -7523,48 +7808,6 @@ a.anchor-link {
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=392f19ad-caa7-4d7d-8078-cbca680f2be2">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="Environment-Set-Up">Environment Set Up<a class="anchor-link" href="#Environment-Set-Up">¶</a></h2><p>Let's set up <code>go.mod</code> to use the local copy of GoMLX, so it can be developed jointly the dataset code with the model. That's often how data pre-processing and model code is developed together with experimentation.</p>
-<p>If you are not changing code, feel free to simply skip this cell. Or if you used a different directory for you projects, change it below.</p>
-<p>Notice the directory <code>${HOME}/Projects/gomlx</code> is where the GoMLX code is copied by default in <a href="https://hub.docker.com/repository/docker/janpfeifer/gomlx_jupyterlab/general">its Docker</a>.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=32600e05-745d-4c38-999a-3b96ca1502cc">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="o">!</span>*rm<span class="w"> </span>-f<span class="w"> </span>go.work<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>go<span class="w"> </span>work<span class="w"> </span>init<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>go<span class="w"> </span>work<span class="w"> </span>use<span class="w"> </span>.<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">HOME</span><span class="si">}</span><span class="s2">/Projects/gomlx"</span><span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">HOME</span><span class="si">}</span><span class="s2">/Projects/gopjrt"</span>
-<span class="o">%</span><span class="k">goworkfix</span>
-</pre></div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	- Added replace rule for module "github.com/gomlx/gomlx" to local directory "/home/janpf/Projects/gomlx".
-	- Added replace rule for module "github.com/gomlx/gopjrt" to local directory "/home/janpf/Projects/gopjrt".
-</pre>
-</div>
-</div>
-</div>
-</div>
-</div>
 <div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=443e9e56-ef12-4d04-b7bb-99478fa2b662">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
@@ -7580,7 +7823,7 @@ a.anchor-link {
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
@@ -7595,7 +7838,7 @@ a.anchor-link {
 	<span class="n">flagDataDir</span>    <span class="o">=</span> <span class="n">flag</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="s2">"data"</span><span class="p">,</span> <span class="s2">"~/tmp/imdb"</span><span class="p">,</span> <span class="s2">"Directory to cache downloaded and generated dataset files."</span><span class="p">)</span>
 	<span class="n">flagEval</span>       <span class="o">=</span> <span class="n">flag</span><span class="o">.</span><span class="n">Bool</span><span class="p">(</span><span class="s2">"eval"</span><span class="p">,</span> <span class="n">true</span><span class="p">,</span> <span class="s2">"Whether to evaluate the model on the validation data in the end."</span><span class="p">)</span>
 	<span class="n">flagVerbosity</span>  <span class="o">=</span> <span class="n">flag</span><span class="o">.</span><span class="n">Int</span><span class="p">(</span><span class="s2">"verbosity"</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"Level of verbosity, the higher the more verbose."</span><span class="p">)</span>
-	<span class="n">flagCheckpoint</span> <span class="o">=</span> <span class="n">flag</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="s2">"checkpoint"</span><span class="p">,</span> <span class="s2">""</span><span class="p">,</span> <span class="s2">"Directory save and load checkpoint from. If left empty, no checkpoint are created."</span><span class="p">)</span>
+	<span class="n">flagCheckpoint</span> <span class="o">=</span> <span class="n">flag</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="s2">"checkpoint"</span><span class="p">,</span> <span class="s2">""</span><span class="p">,</span> <span class="s2">"Directory save and load checkpoints from. If left empty, no checkpoints are created."</span><span class="p">)</span>
 <span class="p">)</span>
 
 <span class="n">func</span> <span class="n">AssertDownloaded</span><span class="p">()</span> <span class="p">{</span>
@@ -7644,7 +7887,7 @@ Loaded data from "aclImdb.bin": 100000 examples, 141088 unique tokens, 23727054 
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="s2">"github.com/gomlx/gomlx/examples/imdb"</span>
@@ -7668,66 +7911,70 @@ Loaded data from "aclImdb.bin": 100000 examples, 141088 unique tokens, 23727054 
 Loaded data from "aclImdb.bin": 100000 examples, 141088 unique tokens, 23727054 tokens in total.
 ┌────────────────────────────────────────────────────────────┐
 │                                                            │
-│    [Sample 0 - label 0]                                    │
-│    also dresses provocatively in every scene yet curses    │
-│    like a guy she gets very emotional when she fights      │
-│    with will smith for a while while trying to defend      │
-│    all women from bad guys everywhere the men are no       │
-│    better in this movie what we see is a bunch of          │
-│    idiots trying to do anything they can to win a date     │
-│    the males in this movie are concerned with getting      │
-│    either sexual favours or unable to speak clearly        │
-│    when face to face with a woman men in real life do      │
-│    not behave this way what we see in this movie is a      │
-│    product of culture gone awry everything is flip         │
-│    flopped guys act like girls girls act like guys all     │
-│    this is done while keeping the extreme predilections    │
-│    of the sexes very much a part of the story men are      │
-│    shown as soft and stupid but only interested in sex     │
-│    most of the time while women are shown as macho and     │
-│    overbearing but only as a veneer for their emotional    │
-│    insecurities this movie would be good if it wasn t      │
-│    presented obnoxiously to the audience the content is    │
-│    not the culprit it is the manner in which the           │
-│    content is presented                                    │
+│    [Sample 0 - label 1]                                    │
+│    &lt;START&gt; so we saw this on dvd at our apartment here     │
+│    in paris we re all here on an exchange program we       │
+│    all laughed so hard cuz so much of what was going on    │
+│    in the movie happened to us i mean yeah sure some of    │
+│    it was pretty clich d but still true know what i m      │
+│    saying i think i related more to the quiet guy the      │
+│    italian than xavier because i m more of the observer    │
+│    in our group anyway i wish i had a hot roommate like    │
+│    cecile de france she seems like a cool chick in the     │
+│    movie and for real after i saw her hosting the          │
+│    cannes festival last month now i m thinking i wanna     │
+│    go to barcelona next summer after seeing this movie     │
+│    i gotta check out the sequel too which just came out    │
+│    here in france                                          │
 │                                                            │
 │                                                            │
 └────────────────────────────────────────────────────────────┘
 ┌────────────────────────────────────────────────────────────┐
 │                                                            │
-│    [Sample 1 - label 0]                                    │
-│    &lt;START&gt; some directors take 2 and a half hours to       │
-│    tell a story david lynch takes 2 and a half hours to    │
-│    piece together scenes with clues and his trademark      │
-│    oddity but there s never a story no plot no             │
-│    progression of the characters unless you find           │
-│    revealed delusion a progression it amazes me how        │
-│    anyone can call lynch s garbage art but if beauty       │
-│    rests in the eye of the beholder so be it lynch s       │
-│    movie and tv work in the 1980 s came off as avant       │
-│    garde and alternative fine 20 years later work like     │
-│    mulholland drive comes off as a 2 5 hour david lynch    │
-│    masturbation piece it s embarrasing i ve finally        │
-│    seen the movie that takes my top spot as the worst      │
-│    ever at least the people churning out godzilla and      │
-│    rodan weren t passing them off as art                   │
+│    [Sample 1 - label 1]                                    │
+│    &lt;START&gt; a wonderful film ahead of its time i think      │
+│    so in the eighty s it was all about winning greed is    │
+│    good remember that one i have seen this film more       │
+│    that 20 times to me this is a real desert island        │
+│    film i keep watching because there is always            │
+│    something more to learn about these flawed              │
+│    characters that i just love jessica tandy and hume      │
+│    cronin are simply wonderful also beverly d angelo       │
+│    beau bridges come in at a close second don t get me     │
+│    wrong there are many more great performance s in        │
+│    this film and it is also the way it is written that     │
+│    made it for me and i hope you a film that you will      │
+│    want to see over and over i think tv shows like         │
+│    exposure and now earl owe a lot to this film but        │
+│    remember it is not a tom cruise film                    │
 │                                                            │
 │                                                            │
 └────────────────────────────────────────────────────────────┘
 ┌────────────────────────────────────────────────────────────┐
 │                                                            │
 │    [Sample 2 - label 0]                                    │
-│    &lt;START&gt; for many year i saw this movie as a real        │
-│    movie of ninjas but after study more about this         │
-│    culture i can only think this is just another karate    │
-│    film a black shinobi and some weapons doesn t make a    │
-│    ninja it s much more than that the ninja are the        │
-│    most dangerous warrior of the japan because they are    │
-│    trained in every aspect of life to survive to           │
-│    anything killing whatever try to stop them this         │
-│    movie is not a about a ninja warrior just about a       │
-│    clown trying to be something he cannot even             │
-│    understand                                              │
+│    the characters are presented with numerous              │
+│    opportunities to a save their loved ones b get the      │
+│    police to help c escape or most importantly d kill      │
+│    luther i can t feel empathy or fear for characters      │
+│    that are too stupid to help themselves snub chances     │
+│    to arm themselves with guns and knives while luther     │
+│    is away a policeman eventually arrives and is           │
+│    equally ineffective in stopping luther even though      │
+│    at one point he has a rifle squarely aimed at luther    │
+│    while luther clucks and does his rendition of the       │
+│    polish chicken dance i found myself futilely            │
+│    coaching my television make sure he s dead hes gone     │
+│    get out of there or just kill him already luther is     │
+│    a bloodthirsty savage but he is hardly hannibal         │
+│    lecter if you can t outsmart this egghead you           │
+│    deserve what s coming to you by halfway through the     │
+│    movie you ll be so lethargic to the fates of the        │
+│    half wits that only morbid curiosity will sustain       │
+│    you to last to the mildly amusing ending this movie     │
+│    was noted as one of fangoria s 101 greatest movies      │
+│    you ve never seen well fangoria is half right in the    │
+│    case of luther the geek                                 │
 │                                                            │
 │                                                            │
 └────────────────────────────────────────────────────────────┘
@@ -7745,9 +7992,9 @@ Loaded data from "aclImdb.bin": 100000 examples, 141088 unique tokens, 23727054 
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="Training">Training<a class="anchor-link" href="#Training">¶</a></h2><p>We will create 3 different types of models for this demo: <strong>Bag of Words</strong> (<strong>"bow"</strong>), <strong>Convolutionals</strong> (<strong>"cnn"</strong>) and <strong>Transformers</strong> (<strong>"transformer"</strong>).</p>
-<h3 id="Model-Configuration">Model Configuration<a class="anchor-link" href="#Model-Configuration">¶</a></h3><p>As with other demos we leverage the <code>model.Scope</code> object to store all model and training parameters.
+<h3 id="Model-Configuration">Model Configuration<a class="anchor-link" href="#Model-Configuration">¶</a></h3><p>As with other demos we leverage the <code>model.Store</code> object to store all model and training parameters.
 One can set specific parameters using the <code>-set</code> command line flag.</p>
-<p>The <a href="https://github.com/gomlx/gomlx/blob/main/examples/imdb/train.go"><code>imdb.CreateDefaultScope()</code></a> method sets all the default values for the hyperparameters that may be used by any of the 3 model types. The parameter "model" specify the model type.</p>
+<p>The <a href="https://github.com/gomlx/gomlx/blob/main/examples/imdb/train.go"><code>imdb.CreateModelStore()</code></a> method sets all the default values for the hyperparameters that may be used by any of the 3 model types. The parameter "model" specify the model type.</p>
 </div>
 </div>
 </div>
@@ -7756,29 +8003,29 @@ One can set specific parameters using the <code>-set</code> command line flag.</
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="p">(</span>
     <span class="s2">"golang.org/x/exp/maps"</span>
-    <span class="s2">"github.com/gomlx/gomlx/ml/context"</span>
+    <span class="s2">"github.com/gomlx/gomlx/ml/model"</span>
 <span class="p">)</span>
 
-<span class="o">//</span> <span class="n">settings</span> <span class="ow">is</span> <span class="n">bound</span> <span class="n">to</span> <span class="n">a</span> <span class="s2">"-set"</span> <span class="n">flag</span> <span class="n">to</span> <span class="n">be</span> <span class="n">used</span> <span class="n">to</span> <span class="nb">set</span> <span class="n">context</span> <span class="n">hyperparameters</span><span class="o">.</span>
-<span class="n">var</span> <span class="n">settings</span> <span class="o">=</span> <span class="n">commandline</span><span class="o">.</span><span class="n">CreateScopeSettingsFlag</span><span class="p">(</span><span class="n">imdb</span><span class="o">.</span><span class="n">CreateDefaultScope</span><span class="p">(),</span> <span class="s2">"set"</span><span class="p">)</span>
+<span class="o">//</span> <span class="n">settings</span> <span class="ow">is</span> <span class="n">bound</span> <span class="n">to</span> <span class="n">a</span> <span class="s2">"-set"</span> <span class="n">flag</span> <span class="n">to</span> <span class="n">be</span> <span class="n">used</span> <span class="n">to</span> <span class="nb">set</span> <span class="n">store</span> <span class="n">hyperparameters</span><span class="o">.</span>
+<span class="n">var</span> <span class="n">settings</span> <span class="o">=</span> <span class="n">commandline</span><span class="o">.</span><span class="n">CreateSettingsFlag</span><span class="p">(</span><span class="n">imdb</span><span class="o">.</span><span class="n">CreateModelStore</span><span class="p">(),</span> <span class="s2">"set"</span><span class="p">)</span>
 
-<span class="o">//</span> <span class="n">ScopeFromSettings</span> <span class="ow">is</span> <span class="n">the</span> <span class="n">default</span> <span class="n">context</span> <span class="p">(</span><span class="n">createDefaultScope</span><span class="p">)</span> <span class="n">changed</span> <span class="n">by</span> <span class="o">-</span><span class="nb">set</span> <span class="n">flag</span><span class="o">.</span>
+<span class="o">//</span> <span class="n">StoreFromSettings</span> <span class="ow">is</span> <span class="n">the</span> <span class="n">default</span> <span class="n">store</span> <span class="p">(</span><span class="n">createModelStore</span><span class="p">)</span> <span class="n">changed</span> <span class="n">by</span> <span class="o">-</span><span class="nb">set</span> <span class="n">flag</span><span class="o">.</span>
 <span class="o">//</span> <span class="n">It</span> <span class="n">also</span> <span class="n">returns</span> <span class="n">the</span> <span class="nb">list</span> <span class="n">of</span> <span class="n">parameters</span> <span class="n">changed</span> <span class="n">by</span> <span class="o">-</span><span class="nb">set</span> <span class="ow">in</span> <span class="n">paramsSet</span><span class="p">:</span> <span class="n">we</span> <span class="n">use</span> <span class="n">this</span> <span class="n">later</span> <span class="n">to</span> <span class="n">avoid</span> <span class="n">loading</span> <span class="n">over</span> <span class="n">the</span> <span class="n">values</span> <span class="kn">from</span><span class="w"> </span><span class="nn">checkpoint.</span>
-<span class="n">func</span> <span class="n">ScopeFromSettings</span><span class="p">()</span> <span class="p">(</span><span class="n">scope</span> <span class="o">*</span><span class="n">context</span><span class="o">.</span><span class="n">Scope</span><span class="p">,</span> <span class="n">paramsSet</span> <span class="p">[]</span><span class="n">string</span><span class="p">)</span> <span class="p">{</span>
-    <span class="n">scope</span> <span class="o">=</span> <span class="n">imdb</span><span class="o">.</span><span class="n">CreateDefaultScope</span><span class="p">()</span>
-    <span class="n">paramsSet</span> <span class="o">=</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">(</span><span class="n">commandline</span><span class="o">.</span><span class="n">ParseScopeSettings</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="o">*</span><span class="n">settings</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">scope</span><span class="p">,</span> <span class="n">paramsSet</span>
+<span class="n">func</span> <span class="n">StoreFromSettings</span><span class="p">()</span> <span class="p">(</span><span class="n">store</span> <span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">Store</span><span class="p">,</span> <span class="n">paramsSet</span> <span class="p">[]</span><span class="n">string</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">store</span> <span class="o">=</span> <span class="n">imdb</span><span class="o">.</span><span class="n">CreateModelStore</span><span class="p">()</span>
+    <span class="n">paramsSet</span> <span class="o">=</span> <span class="n">must</span><span class="o">.</span><span class="n">M1</span><span class="p">(</span><span class="n">commandline</span><span class="o">.</span><span class="n">ParseSettings</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="o">*</span><span class="n">settings</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">store</span><span class="p">,</span> <span class="n">paramsSet</span>
 <span class="p">}</span>
 
 <span class="o">%%</span> <span class="o">-</span><span class="nb">set</span><span class="o">=</span><span class="s2">"model=cnn"</span>
 <span class="n">fmt</span><span class="o">.</span><span class="n">Printf</span><span class="p">(</span><span class="s2">"Model types: %q</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="n">maps</span><span class="o">.</span><span class="n">Keys</span><span class="p">(</span><span class="n">imdb</span><span class="o">.</span><span class="n">ValidModels</span><span class="p">))</span>
-<span class="n">scope</span><span class="p">,</span> <span class="n">_</span> <span class="o">:=</span> <span class="n">ScopeFromSettings</span><span class="p">()</span>
-<span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="n">commandline</span><span class="o">.</span><span class="n">SprintScopeSettings</span><span class="p">(</span><span class="n">scope</span><span class="p">))</span>
+<span class="n">store</span><span class="p">,</span> <span class="n">_</span> <span class="o">:=</span> <span class="n">StoreFromSettings</span><span class="p">()</span>
+<span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="n">commandline</span><span class="o">.</span><span class="n">SprintSettings</span><span class="p">(</span><span class="n">store</span><span class="o">.</span><span class="n">RootScope</span><span class="p">()))</span>
 </pre></div>
 </div>
 </div>
@@ -7791,7 +8038,7 @@ One can set specific parameters using the <code>-set</code> command line flag.</
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>Model types: ["bow" "cnn" "transformer"]
+<pre>Model types: ["transformer" "bow" "cnn"]
 	"/activation": (string) 
 	"/adam_dtype": (string) 
 	"/adam_epsilon": (float64) 1e-07
@@ -7819,7 +8066,7 @@ One can set specific parameters using the <code>-set</code> command line flag.</
 	"/learning_rate": (float64) 0.0001
 	"/model": (string) cnn
 	"/normalization": (string) layer
-	"/num_checkpoint": (int) 3
+	"/num_checkpoints": (int) 3
 	"/optimizer": (string) adamw
 	"/plots": (bool) true
 	"/train_steps": (int) 5000
@@ -7844,18 +8091,18 @@ One can set specific parameters using the <code>-set</code> command line flag.</
 <p>The <a href="https://github.com/gomlx/gomlx/blob/main/examples/imdb/model_bagofwords.go">code in <code>imdb.BagOfWordsModelGraph</code></a> looks like this:</p>
 <div class="highlight"><pre><span></span><span class="c1">// BagOfWordsModelGraph builds the computation graph for the "bag of words" model: simply the sum of the embeddings</span>
 <span class="c1">// for each token included.</span>
-<span class="kd">func</span><span class="w"> </span><span class="nx">BagOfWordsModelGraph</span><span class="p">(</span><span class="nx">scope</span><span class="w"> </span><span class="o">*</span><span class="nx">context</span><span class="p">.</span><span class="nx">Scope</span><span class="p">,</span><span class="w"> </span><span class="nx">spec</span><span class="w"> </span><span class="kt">any</span><span class="p">,</span><span class="w"> </span><span class="nx">inputs</span><span class="w"> </span><span class="p">[]</span><span class="o">*</span><span class="nx">Node</span><span class="p">)</span><span class="w"> </span><span class="p">[]</span><span class="o">*</span><span class="nx">Node</span><span class="w"> </span><span class="p">{</span>
-<span class="w">	</span><span class="nx">embed</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">EmbedTokensGraph</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="nx">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="kd">func</span><span class="w"> </span><span class="nx">BagOfWordsModelGraph</span><span class="p">(</span><span class="nx">scope</span><span class="w"> </span><span class="o">*</span><span class="nx">model</span><span class="p">.</span><span class="nx">Scope</span><span class="p">,</span><span class="w"> </span><span class="nx">tokens</span><span class="w"> </span><span class="o">*</span><span class="nx">Node</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="nx">Node</span><span class="w"> </span><span class="p">{</span>
+<span class="w">	</span><span class="nx">embed</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">EmbedTokensGraph</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="nx">tokens</span><span class="p">)</span>
 
 <span class="w">	</span><span class="c1">// Take the max over the content length, and put an FNN on top.</span>
 <span class="w">	</span><span class="c1">// Shape transformation: [batch_size, content_len, embed_size] -&gt; [batch_size, embed_size]</span>
 <span class="w">	</span><span class="nx">embed</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">ReduceMax</span><span class="p">(</span><span class="nx">embed</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
 <span class="w">	</span><span class="nx">logits</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">fnn</span><span class="p">.</span><span class="nx">New</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="nx">embed</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">).</span><span class="nx">Done</span><span class="p">()</span>
-<span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="p">[]</span><span class="o">*</span><span class="nx">Node</span><span class="p">{</span><span class="nx">logits</span><span class="p">}</span>
+<span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="nx">logits</span>
 <span class="p">}</span>
 </pre></div>
 <p>We played a bit with the hyperparameters to get to ~85% accuracy on the validation data.</p>
-<p>The <a href="https://github.com/gomlx/gomlx/blob/main/examples/imdb/train.go">code for <code>imdb.TrainModel</code> is here</a>.
+<p>The <a href="https://github.com/gomlx/gomlx/blob/main/examples/imdb/train.go">code for <code>imdb.TrainWithStore</code> is here</a>.
 It's a straight forward GoMLX training loop.</p>
 </div>
 </div>
@@ -7865,12 +8112,12 @@ It's a straight forward GoMLX training loop.</p>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">--</span><span class="nb">set</span><span class="o">=</span><span class="s2">"model=bow;l2_regularization=1e-3;learning_rate=1e-4;normalization=none;train_steps=10000"</span>
-<span class="n">scope</span><span class="p">,</span> <span class="n">paramsSet</span> <span class="o">:=</span> <span class="n">ScopeFromSettings</span><span class="p">()</span>
-<span class="n">imdb</span><span class="o">.</span><span class="n">TrainModel</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="o">*</span><span class="n">flagDataDir</span><span class="p">,</span> <span class="o">*</span><span class="n">flagCheckpoint</span><span class="p">,</span> <span class="n">paramsSet</span><span class="p">,</span> <span class="o">*</span><span class="n">flagEval</span><span class="p">,</span> <span class="o">*</span><span class="n">flagVerbosity</span><span class="p">)</span>
+<span class="n">store</span><span class="p">,</span> <span class="n">paramsSet</span> <span class="o">:=</span> <span class="n">StoreFromSettings</span><span class="p">()</span>
+<span class="n">imdb</span><span class="o">.</span><span class="n">TrainWithStore</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="o">*</span><span class="n">flagDataDir</span><span class="p">,</span> <span class="o">*</span><span class="n">flagCheckpoint</span><span class="p">,</span> <span class="n">paramsSet</span><span class="p">,</span> <span class="o">*</span><span class="n">flagEval</span><span class="p">,</span> <span class="o">*</span><span class="n">flagVerbosity</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -7885,7 +8132,7 @@ It's a straight forward GoMLX training loop.</p>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>&gt; Loading previously generated preprocessed binary file.
 Loaded data from "aclImdb.bin": 100000 examples, 141088 unique tokens, 23727054 tokens in total.
-Backend "stablehlo":	stablehlo:cuda - PJRT "cuda" plugin (/home/janpf/.local/lib/gomlx/pjrt/pjrt_c_api_cuda_plugin.so) v0.76 [StableHLO]
+Backend "xla":	xla:cuda - PJRT "cuda" plugin (/home/janpf/.local/lib/go-xla/nvidia/pjrt_c_api_cuda_plugin.so) v0.100 [StableHLO] [1 device(s)]
 Model: bow
 </pre>
 </div>
@@ -7898,7 +8145,7 @@ Model: bow
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold">   7% [=&gt;......................................] (639 steps/s) [0s:14s]</span> [step=719] [loss+=0.785] [~loss+=0.794] [~loss=0.682] [~acc=55.80%]        </pre>
+<pre>      <span class="ansi-bold">   7% [=&gt;......................................] (350 steps/s) [0s:26s]</span> [step=719] [loss=0.785] [~loss=0.795] [~acc=56.98%]        </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -7909,7 +8156,7 @@ Model: bow
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold"> 100% [========================================] (2365 steps/s)</span> [step=9999] [loss+=0.32] [~loss+=0.33] [~loss=0.279] [~acc=88.72%]        %]        
+<pre>      <span class="ansi-bold"> 100% [========================================] (2107 steps/s)</span> [step=9999] [loss=0.343] [~loss=0.338] [~acc=88.24%]                
 </pre>
 </div>
 </div>
@@ -7922,7 +8169,7 @@ Model: bow
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="30011549"></div>
+<div id="11e85fa9"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -7936,8 +8183,8 @@ Model: bow
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.5402533411979675,0.5392853021621704,0.5596029162406921,0.632577121257782,0.6870164275169373,0.7325926423072815,0.7615707516670227,0.7936610579490662,0.8070034980773926,0.8296061158180237,0.8525648713111877,0.869276762008667,0.8816903829574585,0.8871591091156006]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.5,0.5281199812889099,0.6909199953079224,0.7739599943161011,0.7895599603652954,0.8084399700164795,0.8276799917221069,0.8472399711608887,0.8685199618339539,0.8871600031852722,0.9031599760055542,0.9178400039672852,0.9326799511909485,0.9338799715042114]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.5,0.5288000106811523,0.6824399828910828,0.7529599666595459,0.7723199725151062,0.7876799702644348,0.8042399883270264,0.8177199959754944,0.8306399583816528,0.8398799896240234,0.8474799990653992,0.8509199619293213,0.853119969367981,0.8534799814224243]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('30011549', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.5417371392250061,0.5332038998603821,0.5693699717521667,0.6431740522384644,0.694459855556488,0.7413782477378845,0.7713025808334351,0.7974762916564941,0.8165501356124878,0.8367598056793213,0.8501785397529602,0.8684552907943726,0.8848205208778381,0.8824249505996704]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.5,0.5349599719047546,0.6615200042724609,0.7648800015449524,0.7870799899101257,0.8041999936103821,0.8245199918746948,0.8485599756240845,0.8680399656295776,0.8828799724578857,0.8993600010871887,0.9149199724197388,0.9297199845314026,0.9323199987411499]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.5,0.5348399877548218,0.6470400094985962,0.7453599572181702,0.7674799561500549,0.786080002784729,0.8021599650382996,0.8187999725341797,0.8313999772071838,0.8407999873161316,0.8471199870109558,0.8515999913215637,0.8547599911689758,0.8548399806022644]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('11e85fa9', data);
 
 	}
 	
@@ -7984,7 +8231,7 @@ Model: bow
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="825aced5"></div>
+<div id="800645d6"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -7998,8 +8245,8 @@ Model: bow
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.8239019513130188,0.7825658917427063,0.7952867150306702,0.7503643035888672,0.719773530960083,0.7092522382736206,0.7051005959510803,0.6178226470947266,0.5290652513504028,0.5940009355545044,0.40306875109672546,0.3860255479812622,0.4759054481983185,0.3200609087944031]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.8194238543510437,0.8112613558769226,0.7941983342170715,0.7644442915916443,0.7168365716934204,0.6502681970596313,0.5804030299186707,0.5327412486076355,0.492558091878891,0.4517420828342438,0.40294912457466125,0.367053359746933,0.3392152786254883,0.32952880859375]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.6899962425231934,0.6898630857467651,0.6820388436317444,0.6617869734764099,0.6225388050079346,0.562140703201294,0.4975394904613495,0.45554256439208984,0.42109936475753784,0.3859061300754547,0.3425568640232086,0.3114994764328003,0.28769561648368835,0.2785656750202179]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss+Regularization on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.8208915591239929,0.8031015396118164,0.7819742560386658,0.7494954466819763,0.6897996664047241,0.6046567559242249,0.528451144695282,0.46906471252441406,0.41784268617630005,0.36872491240501404,0.32811304926872253,0.2893465459346771,0.25032347440719604,0.24494291841983795]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.6944933533668518,0.6850865483283997,0.6728652715682983,0.6492624282836914,0.5971245765686035,0.5175442695617676,0.44641536474227905,0.39256781339645386,0.3469811677932739,0.3034229576587677,0.26810505986213684,0.23407579958438873,0.19899334013462067,0.19418838620185852]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss+Regularization on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.8212147951126099,0.8038121461868286,0.7833364009857178,0.7521498799324036,0.6957464814186096,0.618066668510437,0.5526734590530396,0.506218433380127,0.46955597400665283,0.4351012110710144,0.4127872586250305,0.396352618932724,0.38565853238105774,0.3840710520744324]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.6948179602622986,0.6857978105545044,0.6742264628410339,0.6519162058830261,0.6030709147453308,0.5309540629386902,0.47063812613487244,0.42972123622894287,0.3986942172050476,0.36979955434799194,0.35277968645095825,0.341081827878952,0.334328830242157,0.333316832780838]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('825aced5', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.8353167772293091,0.8000671863555908,0.7782571911811829,0.7597056031227112,0.6921834349632263,0.5811384916305542,0.5496747493743896,0.4727739095687866,0.48695164918899536,0.4677937626838684,0.5566505193710327,0.5055662393569946,0.3178136944770813,0.3425444960594177]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.8201264142990112,0.8120034337043762,0.7945472002029419,0.7636628746986389,0.7129065990447998,0.6457326412200928,0.5814678072929382,0.5253041982650757,0.4858155846595764,0.4476035237312317,0.41734158992767334,0.37791943550109863,0.33248305320739746,0.3381021320819855]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.8222636580467224,0.8052193522453308,0.7845417857170105,0.7497624158859253,0.6841769218444824,0.5989177227020264,0.5221751928329468,0.4626132547855377,0.4126518964767456,0.37278857827186584,0.333520770072937,0.2938784956932068,0.254824161529541,0.2500147521495819]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.8225415349006653,0.8058108687400818,0.7858325839042664,0.7527298927307129,0.6909942626953125,0.6132363677024841,0.5469834804534912,0.49972763657569885,0.4632769823074341,0.43753135204315186,0.41630640625953674,0.3981502652168274,0.38617226481437683,0.3851219117641449]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('800645d6', data);
 
 	}
 	
@@ -8040,16 +8287,14 @@ Model: bow
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	[Step 10000] median train step: 217 microseconds
+<pre>	[Step 10000] median train step: 218 microseconds
 
 Results on train-eval:
-	Mean Loss+Regularization (#loss+): 0.245
-	Mean Loss (#loss): 0.194
-	Mean Accuracy (#acc): 93.39%
+	Mean Loss (#loss): 0.25
+	Mean Accuracy (#acc): 93.23%
 Results on test-eval:
-	Mean Loss+Regularization (#loss+): 0.384
-	Mean Loss (#loss): 0.333
-	Mean Accuracy (#acc): 85.35%
+	Mean Loss (#loss): 0.385
+	Mean Accuracy (#acc): 85.48%
 </pre>
 </div>
 </div>
@@ -8062,10 +8307,10 @@ Results on test-eval:
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="Convolution-Model-(cnn)">Convolution Model (cnn)<a class="anchor-link" href="#Convolution-Model-(cnn)">¶</a></h3><p>The function <a href="https://github.com/gomlx/gomlx/blob/main/examples/imdb/model_cnn.go"><code>imdb.CnnModelGraph</code></a> creates a 1D convolution model, with arbitrary number of convolutions. After the convolution, it behaves the same way as the Bag Of Words model.</p>
+<h3 id="Convolution-Model-(cnn)">Convolution Model (cnn)<a class="anchor-link" href="#Convolution-Model-(cnn)">¶</a></h3><p>The function <a href="https://github.com/gomlx/gomlx/blob/main/examples/imdb/model_cnn.go"><code>imdb.Conv1DModelGraph</code></a> creates a 1D convolution model, with arbitrary number of convolutions. After the convolution, it behaves the same way as the Bag Of Words model.</p>
 <p>The core of the convolution model looks like this:</p>
 <div class="highlight"><pre><span></span><span class="w">	</span><span class="c1">// 1D Convolution: embed is [batch_size, content_len, embed_size].</span>
-<span class="w">	</span><span class="nx">numConvolutions</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">GetParamOr</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="s">"cnn_num_layers"</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">)</span>
+<span class="w">	</span><span class="nx">numConvolutions</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">model</span><span class="p">.</span><span class="nx">GetParamOr</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="s">"cnn_num_layers"</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">)</span>
 <span class="w">	</span><span class="nx">logits</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">embed</span>
 <span class="w">	</span><span class="k">for</span><span class="w"> </span><span class="nx">convIdx</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">range</span><span class="w"> </span><span class="nx">numConvolutions</span><span class="w"> </span><span class="p">{</span>
 <span class="w">		</span><span class="nx">scope</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">scope</span><span class="p">.</span><span class="nx">Inf</span><span class="p">(</span><span class="s">"%03d_conv"</span><span class="p">,</span><span class="w"> </span><span class="nx">convIdx</span><span class="p">)</span>
@@ -8074,7 +8319,34 @@ Results on test-eval:
 <span class="w">			</span><span class="nx">logits</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">NormalizeSequence</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="nx">logits</span><span class="p">)</span>
 <span class="w">		</span><span class="p">}</span>
 <span class="w">		</span><span class="nx">logits</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">layers</span><span class="p">.</span><span class="nx">Convolution</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="nx">embed</span><span class="p">).</span><span class="nx">KernelSize</span><span class="p">(</span><span class="mi">7</span><span class="p">).</span><span class="nx">Filters</span><span class="p">(</span><span class="nx">embedSize</span><span class="p">).</span><span class="nx">Strides</span><span class="p">(</span><span class="mi">1</span><span class="p">).</span><span class="nx">Done</span><span class="p">()</span>
-<span class="w">		</span><span class="nx">logits</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">activations</span><span class="p">.</span><span class="nx">ApplyFromScope</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="nx">logits</span><span class="p">)</span>
+<span class="w">		</span><span class="nx">logits</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">activation</span><span class="p">.</span><span class="nx">ApplyFromScope</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="nx">logits</span><span class="p">)</span>
+<span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="nx">dropoutNode</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
+<span class="w">			</span><span class="nx">logits</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">layers</span><span class="p">.</span><span class="nx">Dropout</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="nx">logits</span><span class="p">,</span><span class="w"> </span><span class="nx">dropoutNode</span><span class="p">)</span>
+<span class="w">		</span><span class="p">}</span>
+<span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="nx">residual</span><span class="p">.</span><span class="nx">Shape</span><span class="p">().</span><span class="nx">Equal</span><span class="p">(</span><span class="nx">logits</span><span class="p">.</span><span class="nx">Shape</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">			</span><span class="nx">logits</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">Add</span><span class="p">(</span><span class="nx">logits</span><span class="p">,</span><span class="w"> </span><span class="nx">residual</span><span class="p">)</span>
+<span class="w">		</span><span class="p">}</span>
+<span class="w">	</span><span class="p">}</span>
+
+<span class="w">	</span><span class="c1">// Take the max over the content length, and put an FNN on top.</span>
+<span class="w">	</span><span class="c1">// Shape transformation: [batch_size, content_len, embed_size] -&gt; [batch_size, embed_size]</span>
+<span class="w">	</span><span class="nx">logits</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">ReduceMax</span><span class="p">(</span><span class="nx">logits</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<span class="w">	</span><span class="nx">logits</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">fnn</span><span class="p">.</span><span class="nx">New</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="nx">logits</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">).</span><span class="nx">Done</span><span class="p">()</span>
+<span class="w">	</span><span class="nx">logits</span><span class="p">.</span><span class="nx">AssertDims</span><span class="p">(</span><span class="nx">batchSize</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+<h3 id="Convolution-Model-(cnn)">Convolution Model (cnn)<a class="anchor-link" href="#Convolution-Model-(cnn)">¶</a></h3><p>The function <a href="https://github.com/gomlx/gomlx/blob/main/examples/imdb/model_cnn.go"><code>imdb.Conv1DModelGraph</code></a> creates a 1D convolution model, with arbitrary number of convolutions. After the convolution, it behaves the same way as the Bag Of Words model.</p>
+<p>The core of the convolution model looks like this:</p>
+<div class="highlight"><pre><span></span><span class="w">	</span><span class="c1">// 1D Convolution: embed is [batch_size, content_len, embed_size].</span>
+<span class="w">	</span><span class="nx">numConvolutions</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">model</span><span class="p">.</span><span class="nx">GetParamOr</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="s">"cnn_num_layers"</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">)</span>
+<span class="w">	</span><span class="nx">logits</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">embed</span>
+<span class="w">	</span><span class="k">for</span><span class="w"> </span><span class="nx">convIdx</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">range</span><span class="w"> </span><span class="nx">numConvolutions</span><span class="w"> </span><span class="p">{</span>
+<span class="w">		</span><span class="nx">scope</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">scope</span><span class="p">.</span><span class="nx">Inf</span><span class="p">(</span><span class="s">"%03d_conv"</span><span class="p">,</span><span class="w"> </span><span class="nx">convIdx</span><span class="p">)</span>
+<span class="w">		</span><span class="nx">residual</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">logits</span>
+<span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="nx">convIdx</span><span class="w"> </span><span class="p">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span>
+<span class="w">			</span><span class="nx">logits</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">NormalizeSequence</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="nx">logits</span><span class="p">)</span>
+<span class="w">		</span><span class="p">}</span>
+<span class="w">		</span><span class="nx">logits</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">layers</span><span class="p">.</span><span class="nx">Convolution</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="nx">embed</span><span class="p">).</span><span class="nx">KernelSize</span><span class="p">(</span><span class="mi">7</span><span class="p">).</span><span class="nx">Filters</span><span class="p">(</span><span class="nx">embedSize</span><span class="p">).</span><span class="nx">Strides</span><span class="p">(</span><span class="mi">1</span><span class="p">).</span><span class="nx">Done</span><span class="p">()</span>
+<span class="w">		</span><span class="nx">logits</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">activation</span><span class="p">.</span><span class="nx">ApplyFromScope</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="nx">logits</span><span class="p">)</span>
 <span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="nx">dropoutNode</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span>
 <span class="w">			</span><span class="nx">logits</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">layers</span><span class="p">.</span><span class="nx">Dropout</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="nx">logits</span><span class="p">,</span><span class="w"> </span><span class="nx">dropoutNode</span><span class="p">)</span>
 <span class="w">		</span><span class="p">}</span>
@@ -8098,12 +8370,12 @@ Results on test-eval:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">--</span><span class="nb">set</span><span class="o">=</span><span class="s2">"model=cnn;l2_regularization=1e-3;learning_rate=1e-4;normalization=layer;train_steps=10000"</span>
-<span class="n">scope</span><span class="p">,</span> <span class="n">paramsSet</span> <span class="o">:=</span> <span class="n">ScopeFromSettings</span><span class="p">()</span>
-<span class="n">imdb</span><span class="o">.</span><span class="n">TrainModel</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="o">*</span><span class="n">flagDataDir</span><span class="p">,</span> <span class="o">*</span><span class="n">flagCheckpoint</span><span class="p">,</span> <span class="n">paramsSet</span><span class="p">,</span> <span class="o">*</span><span class="n">flagEval</span><span class="p">,</span> <span class="o">*</span><span class="n">flagVerbosity</span><span class="p">)</span>
+<span class="n">store</span><span class="p">,</span> <span class="n">paramsSet</span> <span class="o">:=</span> <span class="n">StoreFromSettings</span><span class="p">()</span>
+<span class="n">imdb</span><span class="o">.</span><span class="n">TrainWithStore</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="o">*</span><span class="n">flagDataDir</span><span class="p">,</span> <span class="o">*</span><span class="n">flagCheckpoint</span><span class="p">,</span> <span class="n">paramsSet</span><span class="p">,</span> <span class="o">*</span><span class="n">flagEval</span><span class="p">,</span> <span class="o">*</span><span class="n">flagVerbosity</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -8118,7 +8390,7 @@ Results on test-eval:
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>&gt; Loading previously generated preprocessed binary file.
 Loaded data from "aclImdb.bin": 100000 examples, 141088 unique tokens, 23727054 tokens in total.
-Backend "stablehlo":	stablehlo:cuda - PJRT "cuda" plugin (/home/janpf/.local/lib/gomlx/pjrt/pjrt_c_api_cuda_plugin.so) v0.76 [StableHLO]
+Backend "xla":	xla:cuda - PJRT "cuda" plugin (/home/janpf/.local/lib/go-xla/nvidia/pjrt_c_api_cuda_plugin.so) v0.100 [StableHLO] [1 device(s)]
 Model: cnn
 </pre>
 </div>
@@ -8131,7 +8403,7 @@ Model: cnn
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold">   7% [=&gt;......................................] (425 steps/s) [1s:21s]</span> [step=719] [loss+=1.39] [~loss+=1.39] [~loss=0.736] [~acc=52.33%]        </pre>
+<pre>      <span class="ansi-bold">   7% [=&gt;......................................] (368 steps/s) [1s:25s]</span> [step=719] [loss=1.58] [~loss=1.47] [~acc=51.61%]        </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8142,7 +8414,7 @@ Model: cnn
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold"> 100% [========================================] (942 steps/s)</span> [step=9999] [loss+=0.25] [~loss+=0.273] [~loss=0.0894] [~acc=97.09%]        8%]        
+<pre>      <span class="ansi-bold"> 100% [========================================] (944 steps/s)</span> [step=9999] [loss=0.368] [~loss=0.331] [~acc=96.32%]        %]        
 </pre>
 </div>
 </div>
@@ -8155,7 +8427,7 @@ Model: cnn
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="add48e36"></div>
+<div id="c293d09e"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8169,8 +8441,8 @@ Model: cnn
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.5149391889572144,0.5164487361907959,0.5200543403625488,0.5363680720329285,0.5981272459030151,0.7090290784835815,0.8057874441146851,0.8603236079216003,0.8941185474395752,0.9043624401092529,0.9335997700691223,0.9549718499183655,0.9719212651252747,0.9708905816078186]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.5000799894332886,0.6017999649047852,0.5245999693870544,0.608519971370697,0.695639967918396,0.7648800015449524,0.8449999690055847,0.9058799743652344,0.9277600049972534,0.9519999623298645,0.9655199646949768,0.979479968547821,0.9884399771690369,0.9907999634742737]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.5,0.5620399713516235,0.5220000147819519,0.5731199979782104,0.6399199962615967,0.7316399812698364,0.8012399673461914,0.8382799625396729,0.8422399759292603,0.8481999635696411,0.8408799767494202,0.8388400077819824,0.8360399603843689,0.834119975566864]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('add48e36', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.5109831690788269,0.5125396251678467,0.5129016041755676,0.5433292388916016,0.6016421914100647,0.7001796364784241,0.8051252961158752,0.8464400768280029,0.8881163001060486,0.9051285982131958,0.9343982338905334,0.9501623511314392,0.96910560131073,0.9632362723350525]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.5837199687957764,0.5263999700546265,0.6977599859237671,0.7244799733161926,0.7573599815368652,0.8087999820709229,0.8657199740409851,0.8998399972915649,0.9271599650382996,0.9461199641227722,0.965719997882843,0.979159951210022,0.9861599802970886,0.9889599680900574]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.5561599731445312,0.5173599720001221,0.6265199780464172,0.6576399803161621,0.7097199559211731,0.7669999599456787,0.8167600035667419,0.8393999934196472,0.8485599756240845,0.8481599688529968,0.8506799936294556,0.847599983215332,0.8405599594116211,0.840719997882843]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('c293d09e', data);
 
 	}
 	
@@ -8217,7 +8489,7 @@ Model: cnn
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="01708ce8"></div>
+<div id="b6ebbf0a"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8231,8 +8503,8 @@ Model: cnn
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[1.5947164297103882,1.3705236911773682,1.3495779037475586,1.2521244287490845,1.1516757011413574,1.0677049160003662,0.7107961773872375,0.6363153457641602,0.4186595380306244,0.40404102206230164,0.5966446995735168,0.2461550533771515,0.20701219141483307,0.24971774220466614]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[1.5934574604034424,1.4809051752090454,1.3932859897613525,1.3065427541732788,1.1855919361114502,1.0151612758636475,0.81485515832901,0.6780970096588135,0.5758074522018433,0.522537112236023,0.4226790964603424,0.34505006670951843,0.27464571595191956,0.27334094047546387]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.8402268886566162,0.769553005695343,0.7373174428939819,0.7168058753013611,0.6687296032905579,0.5714346766471863,0.43077439069747925,0.3364470601081848,0.26919132471084595,0.24778763949871063,0.17830418050289154,0.12965695559978485,0.0867985337972641,0.08936896920204163]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss+Regularization on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[1.464152455329895,1.3664580583572388,1.3119817972183228,1.217331886291504,1.0926669836044312,0.9484019875526428,0.76480633020401,0.5972114205360413,0.5126475691795349,0.4148187041282654,0.35362374782562256,0.2822704315185547,0.22764809429645538,0.21839599311351776]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.7258200645446777,0.673882007598877,0.6754074096679688,0.6461113095283508,0.592282772064209,0.517440676689148,0.3883189260959625,0.2602337896823883,0.2095523625612259,0.14282000064849854,0.11142367124557495,0.06855308264493942,0.04117417708039284,0.03575458005070686]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss+Regularization on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[1.468509316444397,1.3756077289581299,1.325517177581787,1.241599678993225,1.1280040740966797,0.992749810218811,0.8633740544319153,0.7725917100906372,0.751920223236084,0.7110399603843689,0.7780612111091614,0.8078455328941345,0.8620367050170898,0.8927142024040222]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[0.7301766872406006,0.6830316185951233,0.6889434456825256,0.6703788638114929,0.6276198029518127,0.5617890357971191,0.4868873953819275,0.43561431765556335,0.44882556796073914,0.43904173374176025,0.5358608365058899,0.5941280126571655,0.6755622625350952,0.7100734114646912]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('01708ce8', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[1.6379871368408203,1.6458947658538818,1.3708443641662598,1.3721628189086914,1.1164286136627197,1.2025574445724487,0.8862955570220947,0.7303444147109985,0.5817133784294128,0.4579457640647888,0.448519229888916,0.3420712947845459,0.3010234236717224,0.3676719665527344]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[1.6574515104293823,1.557944416999817,1.4675697088241577,1.3668314218521118,1.2519803047180176,1.0873223543167114,0.8873744606971741,0.7625791430473328,0.6463674306869507,0.5729994177818298,0.4706115424633026,0.398868203163147,0.32650765776634216,0.33142805099487305]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[1.4265702962875366,1.398857831954956,1.3185911178588867,1.233734130859375,1.0923064947128296,0.9173341989517212,0.7849770784378052,0.6757579445838928,0.5780664682388306,0.48959511518478394,0.40476885437965393,0.33134621381759644,0.2740972340106964,0.26272812485694885]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5200,6441,7930,9717,10000],"y":[1.435580849647522,1.4146696329116821,1.3385868072509766,1.2630492448806763,1.1307415962219238,0.9873523712158203,0.9172958135604858,0.8681191205978394,0.8438431024551392,0.8234884738922119,0.8386846780776978,0.8902010917663574,0.9692500829696655,0.977671205997467]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('b6ebbf0a', data);
 
 	}
 	
@@ -8273,16 +8545,14 @@ Model: cnn
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	[Step 10000] median train step: 580 microseconds
+<pre>	[Step 10000] median train step: 560 microseconds
 
 Results on train-eval:
-	Mean Loss+Regularization (#loss+): 0.218
-	Mean Loss (#loss): 0.0358
-	Mean Accuracy (#acc): 99.08%
+	Mean Loss (#loss): 0.263
+	Mean Accuracy (#acc): 98.90%
 Results on test-eval:
-	Mean Loss+Regularization (#loss+): 0.893
-	Mean Loss (#loss): 0.71
-	Mean Accuracy (#acc): 83.41%
+	Mean Loss (#loss): 0.978
+	Mean Accuracy (#acc): 84.07%
 </pre>
 </div>
 </div>
@@ -8300,9 +8570,9 @@ Results on test-eval:
 <p>The code is in <a href="https://github.com/gomlx/gomlx/blob/main/examples/imdb/model_transformer.go"><code>imdb.TransformerModelGraph</code></a>, and the core of it looks like this:</p>
 <div class="highlight"><pre><span></span><span class="w">    </span><span class="o">...</span>
 <span class="w">	</span><span class="c1">// Add the requested number of attention layers.</span>
-<span class="w">	</span><span class="nx">numAttLayers</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">GetParamOr</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="s">"transformer_num_att_layers"</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
-<span class="w">	</span><span class="nx">numAttHeads</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">GetParamOr</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="s">"transformer_num_att_heads"</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span>
-<span class="w">	</span><span class="nx">attKeySize</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">context</span><span class="p">.</span><span class="nx">GetParamOr</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="s">"transformer_att_key_size"</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="p">)</span>
+<span class="w">	</span><span class="nx">numAttLayers</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">model</span><span class="p">.</span><span class="nx">GetParamOr</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="s">"transformer_num_att_layers"</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<span class="w">	</span><span class="nx">numAttHeads</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">model</span><span class="p">.</span><span class="nx">GetParamOr</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="s">"transformer_num_att_heads"</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span>
+<span class="w">	</span><span class="nx">attKeySize</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">model</span><span class="p">.</span><span class="nx">GetParamOr</span><span class="p">(</span><span class="nx">scope</span><span class="p">,</span><span class="w"> </span><span class="s">"transformer_att_key_size"</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="p">)</span>
 <span class="w">	</span><span class="k">for</span><span class="w"> </span><span class="nx">layerNum</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">range</span><span class="w"> </span><span class="nx">numAttLayers</span><span class="w"> </span><span class="p">{</span>
 <span class="w">		</span><span class="c1">// Each layer in its own scope.</span>
 <span class="w">		</span><span class="nx">scope</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">scope</span><span class="p">.</span><span class="nx">Inf</span><span class="p">(</span><span class="s">"%03d_attention_layer"</span><span class="p">,</span><span class="w"> </span><span class="nx">layerNum</span><span class="p">)</span>
@@ -8341,12 +8611,12 @@ Results on test-eval:
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [7]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython3"><pre><span></span><span class="o">%%</span> <span class="o">--</span><span class="nb">set</span><span class="o">=</span><span class="s2">"model=transformer;normalization=none;activation=swish;l2_regularization=1e-3;cnn_dropout_rate=0.5;fnn_dropout_rate=0.3;learning_rate=1e-4;train_steps=5000"</span>
-<span class="n">scope</span><span class="p">,</span> <span class="n">paramsSet</span> <span class="o">:=</span> <span class="n">ScopeFromSettings</span><span class="p">()</span>
-<span class="n">imdb</span><span class="o">.</span><span class="n">TrainModel</span><span class="p">(</span><span class="n">scope</span><span class="p">,</span> <span class="o">*</span><span class="n">flagDataDir</span><span class="p">,</span> <span class="o">*</span><span class="n">flagCheckpoint</span><span class="p">,</span> <span class="n">paramsSet</span><span class="p">,</span> <span class="o">*</span><span class="n">flagEval</span><span class="p">,</span> <span class="o">*</span><span class="n">flagVerbosity</span><span class="p">)</span>
+<span class="n">store</span><span class="p">,</span> <span class="n">paramsSet</span> <span class="o">:=</span> <span class="n">StoreFromSettings</span><span class="p">()</span>
+<span class="n">imdb</span><span class="o">.</span><span class="n">TrainWithStore</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="o">*</span><span class="n">flagDataDir</span><span class="p">,</span> <span class="o">*</span><span class="n">flagCheckpoint</span><span class="p">,</span> <span class="n">paramsSet</span><span class="p">,</span> <span class="o">*</span><span class="n">flagEval</span><span class="p">,</span> <span class="o">*</span><span class="n">flagVerbosity</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -8361,7 +8631,7 @@ Results on test-eval:
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>&gt; Loading previously generated preprocessed binary file.
 Loaded data from "aclImdb.bin": 100000 examples, 141088 unique tokens, 23727054 tokens in total.
-Backend "stablehlo":	stablehlo:cuda - PJRT "cuda" plugin (/home/janpf/.local/lib/gomlx/pjrt/pjrt_c_api_cuda_plugin.so) v0.76 [StableHLO]
+Backend "xla":	xla:cuda - PJRT "cuda" plugin (/home/janpf/.local/lib/go-xla/nvidia/pjrt_c_api_cuda_plugin.so) v0.100 [StableHLO] [1 device(s)]
 Model: transformer
 </pre>
 </div>
@@ -8374,7 +8644,7 @@ Model: transformer
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold">  14% [====&gt;...................................] (418 steps/s) [2s:10s]</span> [step=724] [loss+=1.34] [~loss+=1.54] [~loss=1.14] [~acc=50.92%]         </pre>
+<pre>      <span class="ansi-bold">  14% [====&gt;...................................] (429 steps/s) [2s:9s]</span> [step=724] [loss=1.16] [~loss=1.2] [~acc=49.66%]          </pre>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8385,7 +8655,7 @@ Model: transformer
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>      <span class="ansi-bold"> 100% [========================================] (697 steps/s)</span> [step=4999] [loss+=0.541] [~loss+=0.626] [~loss=0.286] [~acc=89.05%]                
+<pre>      <span class="ansi-bold"> 100% [========================================] (684 steps/s)</span> [step=4999] [loss=0.625] [~loss=0.582] [~acc=91.01%]                
 </pre>
 </div>
 </div>
@@ -8398,7 +8668,7 @@ Model: transformer
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="d63cc2da"></div>
+<div id="fc7fe851"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8412,8 +8682,8 @@ Model: transformer
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.52680504322052,0.5066558718681335,0.5072829723358154,0.5124550461769104,0.5402949452400208,0.6202234625816345,0.6932973861694336,0.7729853391647339,0.8541246056556702,0.8905036449432373]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.5,0.5,0.5,0.605239987373352,0.5918399691581726,0.6891199946403503,0.7929999828338623,0.8455599546432495,0.879319965839386,0.9082799553871155]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.5,0.5,0.5,0.5400399565696716,0.5286799669265747,0.6346799731254578,0.6933199763298035,0.7930799722671509,0.8278799653053284,0.8606399893760681]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('d63cc2da', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Accuracy","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.4927646815776825,0.5006410479545593,0.49922141432762146,0.5173096060752869,0.5362460017204285,0.6140973567962646,0.7375952005386353,0.8369011878967285,0.8906563520431519,0.9101431369781494]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.5,0.5,0.50027996301651,0.5,0.5,0.681439995765686,0.8209999799728394,0.871679961681366,0.9069199562072754,0.9167599678039551]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Accuracy on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[0.5,0.5,0.5006799697875977,0.5,0.5,0.6733599901199341,0.7782399654388428,0.8244400024414062,0.8592000007629395,0.8614799976348877]}],"layout":{"legend":{},"title":{"text":"accuracy"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('fc7fe851', data);
 
 	}
 	
@@ -8460,7 +8730,7 @@ Model: transformer
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<div id="753233a0"></div>
+<div id="f42e0682"></div>
 </div>
 </div>
 <div class="jp-OutputArea-child">
@@ -8474,8 +8744,8 @@ Model: transformer
 	if (!module) {
 		module = window.Plotly;
 	}
-	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Batch Loss+Regularization","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[3.548882484436035,1.9468510150909424,1.1653386354446411,1.072594404220581,1.0773931741714478,1.0567080974578857,0.9792926907539368,0.812250018119812,0.633646547794342,0.5406325459480286]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss+Regularization","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[8.339265823364258,3.2378551959991455,1.5258185863494873,1.1304655075073242,1.0664317607879639,1.035007357597351,0.9915756583213806,0.8948150277137756,0.7233933210372925,0.6258135437965393]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[7.933467864990234,2.837958812713623,1.1322914361953735,0.7437993288040161,0.6875929236412048,0.6645559072494507,0.6297044157981873,0.5409465432167053,0.3756648898124695,0.28576838970184326]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss+Regularization on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[2.619462490081787,1.2531756162643433,1.091762661933899,1.073803186416626,1.0557771921157837,1.0263773202896118,0.984836757183075,0.8869556784629822,0.7287977337837219,0.6164700388908386]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[2.216050386428833,0.8556900024414062,0.7002630829811096,0.6890788078308105,0.6787495017051697,0.6574711799621582,0.6242779493331909,0.5339714288711548,0.381759375333786,0.2775537371635437]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss+Regularization on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[3.040539026260376,1.3896490335464478,1.1125617027282715,1.0762510299682617,1.0701402425765991,1.0367786884307861,1.0030310153961182,0.9141952991485596,0.7802234888076782,0.6845622658729553]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[2.637127637863159,0.9921634197235107,0.7210608124732971,0.6915265321731567,0.6931121945381165,0.667872965335846,0.6424717307090759,0.561212420463562,0.4331848621368408,0.3456457257270813]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
-	module.newPlot('753233a0', data);
+	let data = JSON.parse('{"data":[{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[3.2328524589538574,1.2687666416168213,1.0500482320785522,1.1657465696334839,1.1009577512741089,1.0329344272613525,0.9536250233650208,0.7556099891662598,0.5917524695396423,0.6245511174201965]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Train: Moving Average Loss","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[4.228225231170654,1.7482571601867676,1.1974759101867676,1.108188509941101,1.0778793096542358,1.0351405143737793,0.9399620890617371,0.7707206010818481,0.6374580264091492,0.5822136402130127]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on train-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[1.319743275642395,1.1300220489501953,1.10970139503479,1.090414047241211,1.0829137563705444,1.0472071170806885,0.952491283416748,0.8045922517776489,0.6703529357910156,0.6078491806983948]},{"type":"scatter","line":{"shape":"linear"},"mode":"lines+markers","name":"Mean Loss on test-eval","x":[201,441,729,1075,1490,1988,2586,3304,4166,5000],"y":[1.3510825634002686,1.1221728324890137,1.1013590097427368,1.0859746932983398,1.0765479803085327,1.047062635421753,0.9676538705825806,0.838656485080719,0.7217880487442017,0.6760317087173462]}],"layout":{"legend":{},"title":{"text":"loss"},"xaxis":{"showgrid":true,"title":{"text":"Steps"},"type":"log"},"yaxis":{"showgrid":true,"type":"log"}}}');
+	module.newPlot('f42e0682', data);
 
 	}
 	
@@ -8516,16 +8786,14 @@ Model: transformer
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>	[Step 5000] median train step: 764 microseconds
+<pre>	[Step 5000] median train step: 689 microseconds
 
 Results on train-eval:
-	Mean Loss+Regularization (#loss+): 0.616
-	Mean Loss (#loss): 0.278
-	Mean Accuracy (#acc): 90.83%
+	Mean Loss (#loss): 0.608
+	Mean Accuracy (#acc): 91.68%
 Results on test-eval:
-	Mean Loss+Regularization (#loss+): 0.685
-	Mean Loss (#loss): 0.346
-	Mean Accuracy (#acc): 86.06%
+	Mean Loss (#loss): 0.676
+	Mean Accuracy (#acc): 86.15%
 </pre>
 </div>
 </div>

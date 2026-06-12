@@ -4,8 +4,8 @@ package sampler
 
 import (
 	"io"
+	"iter"
 	"math/rand/v2"
-	"sync"
 
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -29,19 +29,14 @@ type Dataset struct {
 	numEpochs                int
 	shuffle, withReplacement bool
 	degree                   bool
+	frozen                   bool
+}
 
-	muSample                sync.Mutex
+type samplerState struct {
 	currentEpoch            int
-	frozen                  bool
 	startOfEpoch, exhausted bool
-
-	// Position of the Seeds -- pointers either into the Seeds indices or
-	// into seedsShuffle, if dataset is shuffled.
-	seedsPosition []int32
-
-	// seedsShuffle provides the sampling of the Seeds, if shuffling was used.
-	// These are reshuffled at the start of every epoch.
-	seedsShuffle [][]int32
+	seedsPosition           []int32
+	seedsShuffle            [][]int32
 }
 
 // NewDataset creates a new [Dataset] from the configured [Strategy].
@@ -62,10 +57,6 @@ func (strategy *Strategy) NewDataset(name string) *Dataset {
 		numEpochs:       1,
 		shuffle:         false,
 		withReplacement: false,
-
-		startOfEpoch:  true,
-		exhausted:     false,
-		seedsPosition: make([]int32, len(strategy.Seeds)),
 	}
 }
 
@@ -127,69 +118,71 @@ func (ds *Dataset) Name() string {
 	return ds.name
 }
 
-// Reset implements train.Dataset: it restarts a Dataset after it has been exhausted.
-func (ds *Dataset) Reset() {
-	ds.muSample.Lock()
-	defer ds.muSample.Unlock()
-	ds.frozen = true
-	ds.startOfEpoch = true
-	ds.exhausted = false
-	ds.currentEpoch = 0
-}
+// Iter implements train.Dataset.
+func (ds *Dataset) Iter() iter.Seq2[train.Batch, error] {
+	return func(yield func(train.Batch, error) bool) {
+		ds.frozen = true
 
-// Yield implements train.Dataset.
-// The returned spec is a pointer to the Strategy, and can be used to build a map of the names to the sampled
-// tensors.
-func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
-	ds.muSample.Lock()
-	var unlocked bool
-	defer func() {
-		if !unlocked {
-			ds.muSample.Unlock()
+		state := &samplerState{
+			startOfEpoch:  true,
+			exhausted:     false,
+			seedsPosition: make([]int32, len(ds.strategy.Seeds)),
 		}
-	}()
 
-	spec = ds.strategy
-	if ds.exhausted {
-		err = io.EOF
-		return
-	}
+		nextBatch := func() (inputs []*tensors.Tensor, err error) {
+			if state.exhausted {
+				return nil, io.EOF
+			}
 
-	if ds.strategy.KeepDegrees {
-		// 2 tensors per node (value and mask), plus one tensor per edge (degree).
-		numEdges := len(ds.strategy.Rules) - len(ds.strategy.Seeds)
-		inputs = make([]*tensors.Tensor, 0, 2*len(ds.strategy.Rules)+numEdges)
-	} else {
-		// 2 tensors per node: value and mask.
-		inputs = make([]*tensors.Tensor, 0, 2*len(ds.strategy.Rules))
-	}
-	ds.frozen = true
-	if ds.startOfEpoch {
-		ds.startEpoch()
-	}
+			if ds.strategy.KeepDegrees {
+				numEdges := len(ds.strategy.Rules) - len(ds.strategy.Seeds)
+				inputs = make([]*tensors.Tensor, 0, 2*len(ds.strategy.Rules)+numEdges)
+			} else {
+				inputs = make([]*tensors.Tensor, 0, 2*len(ds.strategy.Rules))
+			}
 
-	// Sample Seeds: requires a lock for the sampling.
-	numSeeds := len(ds.strategy.Seeds)
-	seedsTensors := make([]*tensors.Tensor, 0, 2*numSeeds)
-	for ii, seedsRule := range ds.strategy.Seeds {
-		seeds, mask := ds.sampleSeeds(ii, seedsRule)
-		seedsTensors = append(seedsTensors, seeds, mask)
-	}
+			if state.startOfEpoch {
+				ds.startEpoch(state)
+			}
 
-	// Sampling edges: doesn't require lock.
-	ds.muSample.Unlock()
-	unlocked = true
-	for seedIdx, seedsRule := range ds.strategy.Seeds {
-		seeds, mask := seedsTensors[2*seedIdx], seedsTensors[2*seedIdx+1]
-		inputs = append(inputs, seeds, mask)
-		inputs = recursivelySampleEdges(seedsRule, seeds, mask, inputs)
+			numSeeds := len(ds.strategy.Seeds)
+			seedsTensors := make([]*tensors.Tensor, 0, 2*numSeeds)
+			for ii, seedsRule := range ds.strategy.Seeds {
+				seeds, mask := ds.sampleSeeds(state, ii, seedsRule)
+				seedsTensors = append(seedsTensors, seeds, mask)
+			}
+
+			for seedIdx, seedsRule := range ds.strategy.Seeds {
+				seeds, mask := seedsTensors[2*seedIdx], seedsTensors[2*seedIdx+1]
+				inputs = append(inputs, seeds, mask)
+				inputs = recursivelySampleEdges(seedsRule, seeds, mask, inputs)
+			}
+			return inputs, nil
+		}
+
+		for {
+			inputs, err := nextBatch()
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				yield(train.Batch{}, err)
+				return
+			}
+			batch := train.Batch{
+				Spec:   ds.strategy,
+				Inputs: inputs,
+				Labels: nil,
+			}
+			if !yield(batch, nil) {
+				return
+			}
+		}
 	}
-	return
 }
 
 // sampleSeeds returns the sampled Seeds and their masks.
-// For sampling Seeds, ds.muSample must be locked.
-func (ds *Dataset) sampleSeeds(seedIdx int, rule *Rule) (seeds, mask *tensors.Tensor) {
+func (ds *Dataset) sampleSeeds(state *samplerState, seedIdx int, rule *Rule) (seeds, mask *tensors.Tensor) {
 	seeds = tensors.FromScalarAndDimensions(int32(0), rule.Count)
 	mask = tensors.FromScalarAndDimensions(false, rule.Count)
 
@@ -210,12 +203,12 @@ func (ds *Dataset) sampleSeeds(seedIdx int, rule *Rule) (seeds, mask *tensors.Te
 				}
 			} else if ds.shuffle {
 				// Sample from shuffles of the candidate seed nodes.
-				shuffle := ds.seedsShuffle[seedIdx]
-				pos := ds.seedsPosition[seedIdx]
+				shuffle := state.seedsShuffle[seedIdx]
+				pos := state.seedsPosition[seedIdx]
 				numToSample := int32(min(len(shuffle)-int(pos), rule.Count))
-				ds.seedsPosition[seedIdx] += numToSample
-				if int(ds.seedsPosition[seedIdx]) >= len(shuffle) {
-					ds.epochFinished()
+				state.seedsPosition[seedIdx] += numToSample
+				if int(state.seedsPosition[seedIdx]) >= len(shuffle) {
+					ds.epochFinished(state)
 				}
 				copy(seedsData, shuffle[pos:pos+numToSample])
 				for ii := range numToSample {
@@ -224,14 +217,14 @@ func (ds *Dataset) sampleSeeds(seedIdx int, rule *Rule) (seeds, mask *tensors.Te
 
 			} else {
 				// Sample without changing the original order.
-				pos := ds.seedsPosition[seedIdx]
+				pos := state.seedsPosition[seedIdx]
 				var numToSample int32
 				if len(rule.NodeSet) > 0 {
 					// Sample for given set.
 					numToSample = int32(min(len(rule.NodeSet)-int(pos), rule.Count))
-					ds.seedsPosition[seedIdx] += numToSample
-					if int(ds.seedsPosition[seedIdx]) >= len(rule.NodeSet) {
-						ds.epochFinished()
+					state.seedsPosition[seedIdx] += numToSample
+					if int(state.seedsPosition[seedIdx]) >= len(rule.NodeSet) {
+						ds.epochFinished(state)
 					}
 					for ii := range numToSample {
 						seedsData[ii] = rule.NodeSet[pos+ii]
@@ -241,9 +234,9 @@ func (ds *Dataset) sampleSeeds(seedIdx int, rule *Rule) (seeds, mask *tensors.Te
 				} else {
 					// Sample for all node indices, from 0 to `NumNodes - 1` sequentially.
 					numToSample = min(rule.NumNodes-pos, int32(rule.Count))
-					ds.seedsPosition[seedIdx] += numToSample
-					if ds.seedsPosition[seedIdx] >= rule.NumNodes {
-						ds.epochFinished()
+					state.seedsPosition[seedIdx] += numToSample
+					if state.seedsPosition[seedIdx] >= rule.NumNodes {
+						ds.epochFinished(state)
 					}
 					for ii := range numToSample {
 						seedsData[ii] = pos + ii
@@ -437,15 +430,15 @@ func randKOfNReservoir(values []int32, n int) {
 }
 
 // startEpoch resets position counter and creates shuffle where required.
-func (ds *Dataset) startEpoch() {
-	ds.startOfEpoch = false
+func (ds *Dataset) startEpoch(state *samplerState) {
+	state.startOfEpoch = false
 	if ds.withReplacement {
 		return
 	}
 
 	// Restart the positions.
-	for ii := range ds.seedsPosition {
-		ds.seedsPosition[ii] = 0
+	for ii := range state.seedsPosition {
+		state.seedsPosition[ii] = 0
 	}
 	if !ds.shuffle {
 		return
@@ -453,19 +446,19 @@ func (ds *Dataset) startEpoch() {
 
 	// If the very first time, reserve the space for the shuffles for each rule type.
 	strategy := ds.strategy
-	if ds.seedsShuffle == nil {
-		ds.seedsShuffle = make([][]int32, len(ds.seedsPosition))
+	if state.seedsShuffle == nil {
+		state.seedsShuffle = make([][]int32, len(state.seedsPosition))
 		for ii, rule := range strategy.Seeds {
 			if rule.NodeSet != nil {
-				ds.seedsShuffle[ii] = xslices.Copy(rule.NodeSet)
+				state.seedsShuffle[ii] = xslices.Copy(rule.NodeSet)
 			} else {
-				ds.seedsShuffle[ii] = xslices.Iota[int32](int32(0), int(rule.NumNodes))
+				state.seedsShuffle[ii] = xslices.Iota[int32](int32(0), int(rule.NumNodes))
 			}
 		}
 	}
 
 	// Shuffle Rules for each Seeds set.
-	for _, shuffle := range ds.seedsShuffle {
+	for _, shuffle := range state.seedsShuffle {
 		shuffleLen := len(shuffle)
 		for ii := range shuffle {
 			jj := rand.IntN(shuffleLen)
@@ -474,10 +467,10 @@ func (ds *Dataset) startEpoch() {
 	}
 }
 
-func (ds *Dataset) epochFinished() {
-	ds.startOfEpoch = true
-	ds.currentEpoch++
-	if ds.numEpochs > 0 && ds.currentEpoch >= ds.numEpochs {
-		ds.exhausted = true
+func (ds *Dataset) epochFinished(state *samplerState) {
+	state.startOfEpoch = true
+	state.currentEpoch++
+	if ds.numEpochs > 0 && state.currentEpoch >= ds.numEpochs {
+		state.exhausted = true
 	}
 }

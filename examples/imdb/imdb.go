@@ -8,9 +8,9 @@ package imdb
 
 import (
 	"bytes"
+	"iter"
 	"encoding/gob"
 	"fmt"
-	"io"
 	"math/rand"
 	"os"
 	"path"
@@ -18,7 +18,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gomlx/gomlx/core/tensors"
@@ -376,14 +375,9 @@ type Dataset struct {
 	DatasetType      DatasetType
 	MaxLen, MaxVocab int
 	BatchSize        int
-
-	// muIndices protects the indices, the mutable part of the Dataset, to allow
-	// for concurrent calls to Yield.
-	muIndices       sync.Mutex
-	ExamplesIndices []int32
-	Pos             int
-	Infinite        bool
-	Shuffler        *rand.Rand
+	ExamplesIndices  []int32
+	Infinite         bool
+	Shuffler         *rand.Rand
 }
 
 // Assert *Dataset implements train.Dataset
@@ -419,7 +413,6 @@ func (ds *Dataset) createExamplesIndices() {
 // Shuffle marks dataset to yield shuffled results.
 func (ds *Dataset) Shuffle() *Dataset {
 	ds.Shuffler = rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
-	ds.Reset()
 	return ds
 }
 
@@ -440,79 +433,77 @@ func NewUnsupervisedDataset(name string, maxLen, batchSize int, infinite bool) *
 // Name implements train.Dataset interface.
 func (ds *Dataset) Name() string { return ds.name }
 
-// Yield implements train.Dataset interface. If not infinite, return io.EOF at the end of the dataset.
-//
-// It trims the examples to ds.MaxLen tokens, taken from the end.
-//
-// It returns `spec==nil` always, since `inputs` and `labels` have always the same type of content.
-//
-// It can be called concurrently.
-func (ds *Dataset) Yield() (spec any, inputs, labels []*tensors.Tensor, err error) {
-	// Lock only while selecting the indices for the batch.
-	ds.muIndices.Lock()
-	if ds.Infinite {
-		// Infinite: we only take batches of the specified size, and drop the last ones if not enough to fit the batch.
-		if ds.Pos+ds.BatchSize > len(ds.ExamplesIndices) {
-			// Infinite: needs a reshuffle.
-			ds.resetLocked()
+// Iter implements train.Dataset.
+func (ds *Dataset) Iter() iter.Seq2[train.Batch, error] {
+	return func(yield func(train.Batch, error) bool) {
+		indices := make([]int32, len(ds.ExamplesIndices))
+		copy(indices, ds.ExamplesIndices)
+
+		var shuffler *rand.Rand
+		if ds.Shuffler != nil {
+			shuffler = rand.New(rand.NewSource(ds.Shuffler.Int63()))
 		}
-	} else {
-		// 1 epoch: take the last batch even if there are only one element.
-		if ds.Pos >= len(ds.ExamplesIndices) {
-			ds.muIndices.Unlock()
-			return nil, nil, nil, io.EOF
+
+		pos := 0
+
+		reset := func() {
+			if shuffler != nil {
+				for ii := range indices {
+					jj := shuffler.Intn(len(indices))
+					indices[ii], indices[jj] = indices[jj], indices[ii]
+				}
+			}
+			pos = 0
+		}
+
+		reset()
+
+		for {
+			if ds.Infinite {
+				if pos+ds.BatchSize > len(indices) {
+					reset()
+				}
+			} else {
+				if pos >= len(indices) {
+					return
+				}
+			}
+
+			batchSize := min(ds.BatchSize, len(indices)-pos)
+			batchIndices := indices[pos : pos+batchSize]
+			pos += batchSize
+
+			// Build input tensor.
+			input := tensors.FromScalarAndDimensions(TokenId(0), batchSize, ds.MaxLen)
+			labelsData := make([]int8, batchSize)
+			tensors.MustMutableFlatData(input, func(inputData []TokenId) {
+				for batchIdx, exampleIdx := range batchIndices {
+					ex := LoadedExamples[exampleIdx]
+					labelsData[batchIdx] = int8(ex.Label)
+					exInput := inputData[batchIdx*ds.MaxLen:]
+					content := ex.Content
+					if len(content) > ds.MaxLen {
+						content = content[len(content)-ds.MaxLen:]
+					}
+					copy(exInput[ds.MaxLen-len(content):], content) // Copy at most ds.MaxLen.
+					if len(content) < ds.MaxLen {
+						exInput[ds.MaxLen-len(content)-1] = 1 // Token "<START>"
+					}
+					labelsData[batchIdx] = ex.Label
+				}
+			})
+			inputs := []*tensors.Tensor{input}
+			labels := []*tensors.Tensor{tensors.MustFromAnyValue(labelsData)}
+			batch := train.Batch{
+				Spec:   nil,
+				Inputs: inputs,
+				Labels: labels,
+			}
+			if !yield(batch, nil) {
+				return
+			}
 		}
 	}
-
-	// Effective batch size may be smaller than requested.
-	batchSize := min(ds.BatchSize, len(ds.ExamplesIndices)-ds.Pos)
-	batchIndices := ds.ExamplesIndices[ds.Pos : ds.Pos+batchSize]
-	ds.Pos += batchSize
-	ds.muIndices.Unlock()
-
-	// From now on ds is immutable, and it can be run concurrently.
-
-	// Build input tensor.
-	input := tensors.FromScalarAndDimensions(TokenId(0), batchSize, ds.MaxLen)
-	labelsData := make([]int8, batchSize)
-	tensors.MustMutableFlatData(input, func(inputData []TokenId) {
-		for batchIdx, exampleIdx := range batchIndices {
-			ex := LoadedExamples[exampleIdx]
-			labelsData[batchIdx] = int8(ex.Label)
-			exInput := inputData[batchIdx*ds.MaxLen:]
-			content := ex.Content
-			if len(content) > ds.MaxLen {
-				content = content[len(content)-ds.MaxLen:]
-			}
-			copy(exInput[ds.MaxLen-len(content):], content) // Copy at most ds.MaxLen.
-			if len(content) < ds.MaxLen {
-				exInput[ds.MaxLen-len(content)-1] = 1 // Token "<START>"
-			}
-			labelsData[batchIdx] = ex.Label
-		}
-	})
-	inputs = []*tensors.Tensor{input}
-	labels = []*tensors.Tensor{tensors.MustFromAnyValue(labelsData)}
-	return
-}
-
-// Reset restarts the dataset from the beginning. Can be called after io.EOF is reached,
-// for instance when running another evaluation on a test dataset.
-func (ds *Dataset) Reset() {
-	ds.muIndices.Lock()
-	defer ds.muIndices.Unlock()
-	ds.resetLocked()
-}
-
-// resetLocked implements Reset, when Dataset.muIndices is already locked.
-func (ds *Dataset) resetLocked() {
-	if ds.Shuffler != nil {
-		for ii := range ds.ExamplesIndices {
-			jj := ds.Shuffler.Intn(len(ds.ExamplesIndices))
-			ds.ExamplesIndices[ii], ds.ExamplesIndices[jj] = ds.ExamplesIndices[jj], ds.ExamplesIndices[ii]
-		}
-	}
-	ds.Pos = 0
 }
 
 // InputToString returns a string rendered content of one row (pointed to by batchIdx) of an input.

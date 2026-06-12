@@ -104,14 +104,14 @@ func TestTrainer_DynamicShapes(t *testing.T) {
 		// Run with batch = 2
 		x2Tensor := tensors.MustFromAnyValue([][]float32{{1, 2, 3}, {4, 5, 6}})
 		y2Tensor := tensors.MustFromAnyValue([][]float32{{2}, {5}})
-		metrics2, err := trainer.TrainStep(nil, []*tensors.Tensor{x2Tensor}, []*tensors.Tensor{y2Tensor})
+		metrics2, err := trainer.TrainStep(Batch{Inputs: []*tensors.Tensor{x2Tensor}, Labels: []*tensors.Tensor{y2Tensor}})
 		require.NoError(t, err)
 		require.NotEmpty(t, metrics2)
 
 		// Run with batch = 3 (should not recompile, should just execute and update weights)
 		x3Tensor := tensors.MustFromAnyValue([][]float32{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}})
 		y3Tensor := tensors.MustFromAnyValue([][]float32{{1}, {2}, {3}})
-		metrics3, err := trainer.TrainStep(nil, []*tensors.Tensor{x3Tensor}, []*tensors.Tensor{y3Tensor})
+		metrics3, err := trainer.TrainStep(Batch{Inputs: []*tensors.Tensor{x3Tensor}, Labels: []*tensors.Tensor{y3Tensor}})
 		require.NoError(t, err)
 		require.NotEmpty(t, metrics3)
 	})
@@ -129,7 +129,7 @@ func TestTrainerAliases(t *testing.T) {
 		trainer := NewTrainer(backend, store, modelFn, loss.MeanAbsoluteError, optimizer.StochasticGradientDescent().Done(), nil, nil)
 		xTensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
 		yTensor := tensors.MustFromAnyValue([]float32{2, 3, 4})
-		metrics, err := trainer.TrainStep(nil, []*tensors.Tensor{xTensor}, []*tensors.Tensor{yTensor})
+		metrics, err := trainer.TrainStep(Batch{Inputs: []*tensors.Tensor{xTensor}, Labels: []*tensors.Tensor{yTensor}})
 		require.NoError(t, err)
 		assert.NotEmpty(t, metrics)
 	}
@@ -144,7 +144,7 @@ func TestTrainerAliases(t *testing.T) {
 		trainer := NewTrainer(backend, store, modelFn, loss.MeanAbsoluteError, optimizer.StochasticGradientDescent().Done(), nil, nil)
 		xTensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
 		yTensor := tensors.MustFromAnyValue([]float32{2, 4, 6})
-		metrics, err := trainer.TrainStep(float32(2.0), []*tensors.Tensor{xTensor}, []*tensors.Tensor{yTensor})
+		metrics, err := trainer.TrainStep(Batch{Spec: float32(2.0), Inputs: []*tensors.Tensor{xTensor}, Labels: []*tensors.Tensor{yTensor}})
 		require.NoError(t, err)
 		assert.NotEmpty(t, metrics)
 	}
@@ -159,7 +159,7 @@ func TestTrainerAliases(t *testing.T) {
 		x1Tensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
 		x2Tensor := tensors.MustFromAnyValue([]float32{3, 2, 1})
 		yTensor := tensors.MustFromAnyValue([]float32{4, 4, 4})
-		metrics, err := trainer.TrainStep(nil, []*tensors.Tensor{x1Tensor, x2Tensor}, []*tensors.Tensor{yTensor})
+		metrics, err := trainer.TrainStep(Batch{Inputs: []*tensors.Tensor{x1Tensor, x2Tensor}, Labels: []*tensors.Tensor{yTensor}})
 		require.NoError(t, err)
 		assert.NotEmpty(t, metrics)
 	}
@@ -177,7 +177,7 @@ func TestTrainerAliases(t *testing.T) {
 		xTensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
 		y1Tensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
 		y2Tensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
-		metrics, err := trainer.TrainStep(nil, []*tensors.Tensor{xTensor}, []*tensors.Tensor{y1Tensor, y2Tensor})
+		metrics, err := trainer.TrainStep(Batch{Inputs: []*tensors.Tensor{xTensor}, Labels: []*tensors.Tensor{y1Tensor, y2Tensor}})
 		require.NoError(t, err)
 		assert.NotEmpty(t, metrics)
 	}
@@ -191,8 +191,51 @@ func TestTrainerAliases(t *testing.T) {
 		trainer := NewTrainer(backend, store, modelFn, loss.MeanAbsoluteError, optimizer.StochasticGradientDescent().Done(), nil, nil)
 		xTensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
 		yTensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
-		metrics, err := trainer.TrainStep(nil, []*tensors.Tensor{xTensor}, []*tensors.Tensor{yTensor})
+		metrics, err := trainer.TrainStep(Batch{Inputs: []*tensors.Tensor{xTensor}, Labels: []*tensors.Tensor{yTensor}})
 		require.NoError(t, err)
 		assert.NotEmpty(t, metrics)
 	}
+}
+
+func TestBatchClone(t *testing.T) {
+	xTensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
+	yTensor := tensors.MustFromAnyValue([]float32{4, 5, 6})
+	batch := Batch{
+		Inputs: []*tensors.Tensor{xTensor},
+		Labels: []*tensors.Tensor{yTensor},
+		Spec:   "test-spec",
+	}
+	cloned, err := batch.Clone()
+	require.NoError(t, err)
+	assert.Equal(t, batch.Spec, cloned.Spec)
+	require.Len(t, cloned.Inputs, 1)
+	require.Len(t, cloned.Labels, 1)
+	assert.Equal(t, batch.Inputs[0].Shape(), cloned.Inputs[0].Shape())
+	assert.Equal(t, batch.Labels[0].Shape(), cloned.Labels[0].Shape())
+
+	// Clean up
+	require.NoError(t, batch.Finalize())
+	require.NoError(t, cloned.Finalize())
+}
+
+func TestBatchOnDeviceClone(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	xTensor := tensors.MustFromAnyValue([]float32{1, 2, 3})
+	yTensor := tensors.MustFromAnyValue([]float32{4, 5, 6})
+	batch := Batch{
+		Inputs: []*tensors.Tensor{xTensor},
+		Labels: []*tensors.Tensor{yTensor},
+		Spec:   "test-spec",
+	}
+	cloned, err := batch.OnDeviceClone(backend, 0)
+	require.NoError(t, err)
+	assert.Equal(t, batch.Spec, cloned.Spec)
+	require.Len(t, cloned.Inputs, 1)
+	require.Len(t, cloned.Labels, 1)
+	assert.Equal(t, batch.Inputs[0].Shape(), cloned.Inputs[0].Shape())
+	assert.Equal(t, batch.Labels[0].Shape(), cloned.Labels[0].Shape())
+
+	// Clean up
+	require.NoError(t, batch.Finalize())
+	require.NoError(t, cloned.Finalize())
 }

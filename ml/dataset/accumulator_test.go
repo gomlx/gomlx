@@ -3,7 +3,7 @@
 package dataset
 
 import (
-	"io"
+	"iter"
 	"testing"
 
 	"github.com/gomlx/compute"
@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,80 +21,79 @@ import (
 
 // mockDataset is a simple mock dataset that yields a fixed number of batches.
 type mockDataset struct {
-	name         string
-	numBatches   int
-	currentBatch int
-	inputShape   shapes.Shape
-	labelShape   shapes.Shape
+	name       string
+	numBatches int
+	inputShape shapes.Shape
+	labelShape shapes.Shape
 }
 
 func (ds *mockDataset) Name() string {
 	return ds.name
 }
 
-func (ds *mockDataset) Reset() {
-	ds.currentBatch = 0
-}
+func (ds *mockDataset) Iter() iter.Seq2[train.Batch, error] {
+	return func(yield func(train.Batch, error) bool) {
+		for currentBatch := 0; currentBatch < ds.numBatches; currentBatch++ {
+			// Create trivial input and label tensors
+			input := tensors.FromShape(ds.inputShape)
+			label := tensors.FromShape(ds.labelShape)
 
-func (ds *mockDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	if ds.currentBatch >= ds.numBatches {
-		return nil, nil, nil, io.EOF
+			batch := train.Batch{
+				Inputs: []*tensors.Tensor{input},
+				Labels: []*tensors.Tensor{label},
+			}
+			if !yield(batch, nil) {
+				return
+			}
+		}
 	}
-
-	// Create trivial input and label tensors
-	input := tensors.FromShape(ds.inputShape)
-	label := tensors.FromShape(ds.labelShape)
-
-	// Fill with trivial values (all zeros, but shape is what matters)
-	inputs = []*tensors.Tensor{input}
-	labels = []*tensors.Tensor{label}
-
-	ds.currentBatch++
-	return nil, inputs, labels, nil
 }
 
 // heterogeneousMockDataset yields batches with different shapes.
 type heterogeneousMockDataset struct {
-	name                                   string
-	numBatchesShape1, numBatchesShape2     int
-	currentBatchShape1, currentBatchShape2 int
-	inputShape1, inputShape2               shapes.Shape
-	labelShape1, labelShape2               shapes.Shape
+	name                               string
+	numBatchesShape1, numBatchesShape2 int
+	inputShape1, inputShape2           shapes.Shape
+	labelShape1, labelShape2           shapes.Shape
 }
 
 func (ds *heterogeneousMockDataset) Name() string {
 	return ds.name
 }
 
-func (ds *heterogeneousMockDataset) Reset() {
-	ds.currentBatchShape1 = 0
-	ds.currentBatchShape2 = 0
-}
+func (ds *heterogeneousMockDataset) Iter() iter.Seq2[train.Batch, error] {
+	return func(yield func(train.Batch, error) bool) {
+		currentBatchShape1 := 0
+		currentBatchShape2 := 0
+		for {
+			if currentBatchShape1 >= ds.numBatchesShape1 && currentBatchShape2 >= ds.numBatchesShape2 {
+				return
+			}
 
-func (ds *heterogeneousMockDataset) Yield() (spec any, inputs []*tensors.Tensor, labels []*tensors.Tensor, err error) {
-	if ds.currentBatchShape1 >= ds.numBatchesShape1 && ds.currentBatchShape2 >= ds.numBatchesShape2 {
-		return nil, nil, nil, io.EOF
+			var inputShape, labelShape shapes.Shape
+			if currentBatchShape1 < ds.numBatchesShape1 &&
+				(currentBatchShape1 <= currentBatchShape2 || currentBatchShape2 >= ds.numBatchesShape2) {
+				inputShape = ds.inputShape1
+				labelShape = ds.labelShape1
+				currentBatchShape1++
+			} else {
+				inputShape = ds.inputShape2
+				labelShape = ds.labelShape2
+				currentBatchShape2++
+			}
+
+			input := tensors.FromShape(inputShape)
+			label := tensors.FromShape(labelShape)
+
+			batch := train.Batch{
+				Inputs: []*tensors.Tensor{input},
+				Labels: []*tensors.Tensor{label},
+			}
+			if !yield(batch, nil) {
+				return
+			}
+		}
 	}
-
-	var inputShape, labelShape shapes.Shape
-	if ds.currentBatchShape1 < ds.numBatchesShape1 &&
-		(ds.currentBatchShape1 <= ds.currentBatchShape2 || ds.currentBatchShape2 >= ds.numBatchesShape2) {
-		inputShape = ds.inputShape1
-		labelShape = ds.labelShape1
-		ds.currentBatchShape1++
-	} else {
-		inputShape = ds.inputShape2
-		labelShape = ds.labelShape2
-		ds.currentBatchShape2++
-	}
-
-	input := tensors.FromShape(inputShape)
-	label := tensors.FromShape(labelShape)
-
-	inputs = []*tensors.Tensor{input}
-	labels = []*tensors.Tensor{label}
-
-	return nil, inputs, labels, nil
 }
 
 func TestDistributedAccumulator(t *testing.T) {
@@ -135,12 +135,10 @@ func TestDistributedAccumulator(t *testing.T) {
 
 		// Check that Distributed yields only 50 batches before EOF
 		batchCount := 0
-		for {
-			_, inputs, labels, err := distDS.DistributedYield()
-			if err == io.EOF {
-				break
-			}
+		for batch, err := range distDS.DistributedIter() {
 			require.NoError(t, err)
+			inputs := batch.Inputs
+			labels := batch.Labels
 			require.Len(t, inputs, 1)
 			require.Len(t, labels, 1)
 
@@ -161,23 +159,22 @@ func TestDistributedAccumulator(t *testing.T) {
 			}
 
 			batchCount++
+			_ = batch.Finalize()
 		}
 		assert.Equal(t, 50, batchCount, "Should yield 50 distributed batches from 100 source batches")
 
-		// Reset and restart once
-		distDS.Reset()
+		// Reset and restart once by re-iterating
 		batchCount = 0
-		for {
-			_, inputs, labels, err := distDS.DistributedYield()
-			if err == io.EOF {
-				break
-			}
+		for batch, err := range distDS.DistributedIter() {
 			require.NoError(t, err)
+			inputs := batch.Inputs
+			labels := batch.Labels
 			require.Len(t, inputs, 1)
 			require.Len(t, labels, 1)
 			require.Len(t, inputs[0].Shards(), 2)
 			require.Len(t, labels[0].Shards(), 2)
 			batchCount++
+			_ = batch.Finalize()
 		}
 		assert.Equal(t, 50, batchCount, "After reset, should still yield 50 distributed batches")
 	})
@@ -216,12 +213,10 @@ func TestDistributedAccumulator(t *testing.T) {
 
 		// Check that Distributed yields 100 batches (same as source, since numInputShards = 1)
 		batchCount := 0
-		for {
-			_, inputs, labels, err := distDS.DistributedYield()
-			if err == io.EOF {
-				break
-			}
+		for batch, err := range distDS.DistributedIter() {
 			require.NoError(t, err)
+			inputs := batch.Inputs
+			labels := batch.Labels
 			require.Len(t, inputs, 1)
 			require.Len(t, labels, 1)
 
@@ -242,6 +237,7 @@ func TestDistributedAccumulator(t *testing.T) {
 			}
 
 			batchCount++
+			_ = batch.Finalize()
 		}
 		assert.Equal(t, 100, batchCount, "Should yield 100 distributed batches from 100 source batches (numInputShards = 1)")
 	})
@@ -281,15 +277,11 @@ func TestDistributedAccumulator(t *testing.T) {
 		require.NoError(t, err)
 
 		// Check that Distributed yields 50 batches (100 / 2 input shards)
-		// User requirement: "the Distributed dataset should consume two batches, and yield a distributed batch with 4 shards"
-		// This suggests numInputShards should be 2 (size of "shards" axis), not 4 (total devices)
 		batchCount := 0
-		for {
-			_, inputs, labels, err := distDS.DistributedYield()
-			if err == io.EOF {
-				break
-			}
+		for batch, err := range distDS.DistributedIter() {
 			require.NoError(t, err)
+			inputs := batch.Inputs
+			labels := batch.Labels
 			require.Len(t, inputs, 1)
 			require.Len(t, labels, 1)
 
@@ -310,6 +302,7 @@ func TestDistributedAccumulator(t *testing.T) {
 			}
 
 			batchCount++
+			_ = batch.Finalize()
 		}
 		assert.Equal(t, 50, batchCount,
 			"Should yield 50 distributed batches from 100 source batches (consuming 2 batches per distributed batch)")
@@ -356,12 +349,10 @@ func TestDistributedAccumulator(t *testing.T) {
 		batchCountShape1 := 0
 		batchCountShape2 := 0
 
-		for {
-			_, inputs, labels, err := distDS.DistributedYield()
-			if err == io.EOF {
-				break
-			}
+		for batch, err := range distDS.DistributedIter() {
 			require.NoError(t, err)
+			inputs := batch.Inputs
+			labels := batch.Labels
 			require.Len(t, inputs, 1)
 			require.Len(t, labels, 1)
 
@@ -370,7 +361,6 @@ func TestDistributedAccumulator(t *testing.T) {
 			require.Len(t, labels[0].Shards(), 4)
 
 			// Determine which shape this batch has by checking shard shape
-			// The shard shape matches the source tensor shape since we're providing full tensors as shards
 			shardShape := inputs[0].ShardShape()
 
 			if shardShape.Equal(sourceShape1) {
@@ -380,12 +370,11 @@ func TestDistributedAccumulator(t *testing.T) {
 			} else {
 				t.Fatalf("Unexpected shard shape: %s (expected either %s or %s)", shardShape, sourceShape1, sourceShape2)
 			}
+			_ = batch.Finalize()
 		}
 
 		// Check counts: 81 batches -> 40 distributed batches (81/2 = 40.5, rounded down)
 		// 19 batches -> 9 distributed batches (19/2 = 9.5, rounded down)
-		// Note: This assumes numInputShards = 2 (size of "shards" axis), not 4 (total devices)
-		// If the code uses numInputShards = 4, we'd get 20 and 4 batches instead
 		assert.Equal(t, 40, batchCountShape1, "Should yield 40 distributed batches of first shape (81/2 input shards)")
 		assert.Equal(t, 9, batchCountShape2, "Should yield 9 distributed batches of second shape (19/2 input shards)")
 	})

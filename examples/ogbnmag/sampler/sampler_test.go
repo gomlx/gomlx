@@ -4,6 +4,8 @@ package sampler
 
 import (
 	"fmt"
+	"io"
+	"iter"
 	"path"
 	"testing"
 
@@ -221,21 +223,39 @@ func TestDataset(t *testing.T) {
 		fmt.Printf("> strategy.KeepDegrees=%v\n", strategy.KeepDegrees)
 		ds := strategy.NewDataset("one_epoch_in_order").Epochs(1)
 		{
-			spec, inputs, labels, err := ds.Yield()
-			_ = checkInputsFn(t, spec, inputs, labels, err)
-			spec, inputs, labels, err = ds.Yield()
-			_ = checkInputsFn(t, spec, inputs, labels, err)
+			next, stop := iter.Pull2(ds.Iter())
+			batch1, err1, ok1 := next()
+			require.True(t, ok1)
+			_ = checkInputsFn(t, batch1.Spec, batch1.Inputs, batch1.Labels, err1)
+
+			batch2, err2, ok2 := next()
+			require.True(t, ok2)
+			_ = checkInputsFn(t, batch2.Spec, batch2.Inputs, batch2.Labels, err2)
+
+			_, err3, ok3 := next()
+			require.False(t, ok3)
+			if err3 == nil {
+				err3 = io.EOF
+			}
+			require.Error(t, err3, "Dataset should have been exhausted.")
+			stop()
 		}
-		_, _, _, err := ds.Yield()
-		require.Error(t, err, "Dataset should have been exhausted.")
 
 		ds = strategy.NewDataset("one_epoch_in_order").Infinite().Shuffle()
-		parallelDS := mldata.Parallel(ds)
-		for range 100 { // Sample 100 using parallel datasets, and checks that it works ok.
-			spec, inputs, labels, err := parallelDS.Yield()
-			_ = checkInputsFn(t, spec, inputs, labels, err)
+		parallelDS := mldata.Buffer(ds)
+		{
+			count := 0
+			for batch, err := range parallelDS.Iter() {
+				if err != nil {
+					t.Fatalf("Iter error: %v", err)
+				}
+				_ = checkInputsFn(t, batch.Spec, batch.Inputs, batch.Labels, nil)
+				count++
+				if count >= 100 {
+					break
+				}
+			}
 		}
-		parallelDS.Done()
 	}
 }
 
@@ -271,7 +291,7 @@ func TestSamplingRandomness(t *testing.T) {
 		strategy.NewDataset("infinite").Infinite().Shuffle(),
 		strategy.NewDataset("infinite").WithReplacement(),
 	} {
-		parallelDS := mldata.Parallel(ds)
+		parallelDS := mldata.Buffer(ds)
 
 		// Keep counts.
 		papersCounts := make([]int, numPapers)
@@ -280,38 +300,45 @@ func TestSamplingRandomness(t *testing.T) {
 			authorsPerPapersCounts[ii] = make([]int, numAuthors)
 		}
 
-		for range numSamples {
-			_, inputs, _, err := parallelDS.Yield()
-			require.NoErrorf(t, err, "while testing dataset %q", dsNames[dsIdx])
-			graphSample, remaining := MapInputsToStates[*tensors.Tensor](strategy, inputs)
-			require.Empty(t, remaining)
+		{
+			count := 0
+			for batch, err := range parallelDS.Iter() {
+				require.NoErrorf(t, err, "while testing dataset %q", dsNames[dsIdx])
+				inputs := batch.Inputs
+				graphSample, remaining := MapInputsToStates[*tensors.Tensor](strategy, inputs)
+				require.Empty(t, remaining)
 
-			require.NoErrorf(
-				t,
-				graphSample["seeds"].Value.Shape().CheckDims(1),
-				"while testing dataset %q",
-				dsNames[dsIdx],
-			)
-			sampledPaper := tensors.MustCopyFlatData[int32](graphSample["seeds"].Value)[0]
-			papersCounts[sampledPaper]++
+				require.NoErrorf(
+					t,
+					graphSample["seeds"].Value.Shape().CheckDims(1),
+					"while testing dataset %q",
+					dsNames[dsIdx],
+				)
+				sampledPaper := tensors.MustCopyFlatData[int32](graphSample["seeds"].Value)[0]
+				papersCounts[sampledPaper]++
 
-			require.NoErrorf(
-				t,
-				graphSample["authors"].Value.Shape().CheckDims(1, 2),
-				"while testing dataset %q",
-				dsNames[dsIdx],
-			)
-			require.NoErrorf(
-				t,
-				graphSample["authors"].Mask.Shape().CheckDims(1, 2),
-				"while testing dataset %q",
-				dsNames[dsIdx],
-			)
-			authors := tensors.MustCopyFlatData[int32](graphSample["authors"].Value)
-			authorsMask := tensors.MustCopyFlatData[bool](graphSample["authors"].Mask)
-			for ii, author := range authors {
-				require.True(t, authorsMask[ii])
-				authorsPerPapersCounts[sampledPaper][author]++
+				require.NoErrorf(
+					t,
+					graphSample["authors"].Value.Shape().CheckDims(1, 2),
+					"while testing dataset %q",
+					dsNames[dsIdx],
+				)
+				require.NoErrorf(
+					t,
+					graphSample["authors"].Mask.Shape().CheckDims(1, 2),
+					"while testing dataset %q",
+					dsNames[dsIdx],
+				)
+				authors := tensors.MustCopyFlatData[int32](graphSample["authors"].Value)
+				authorsMask := tensors.MustCopyFlatData[bool](graphSample["authors"].Mask)
+				for ii, author := range authors {
+					require.True(t, authorsMask[ii])
+					authorsPerPapersCounts[sampledPaper][author]++
+				}
+				count++
+				if count >= numSamples {
+					break
+				}
 			}
 		}
 
