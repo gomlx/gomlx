@@ -98,6 +98,12 @@ And a few small renaming:
 - Renamed `FromAnyValue` to `MustFromAnyValue` and added `FromAnyValue` returning `(tensor, error)`.
 
 
+## Other improvements
+
+- Redesigned KVCache implementation (previous was broken) in `ml/layeters/attention/kvcache`: it is used by packages `attention`, `transformer` and `decode`.
+- Many improvements to `ml/zoo/transformer`: it nows support Gemma4 class of transformer models.
+- Added `nn.SoftCap` and in the `ml/layers/attention` added support for attention scores soft-cap (used by Gemma models)
+
 ---
 
 # v0.27.3: Improves sub-byte support, optimized raw-byte data transfers, FNN ensembles, and major transformer updates including BERT and Gemma models.
