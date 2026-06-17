@@ -388,13 +388,13 @@ func TestMultiHeadAttentionScoreSoftCapAndPreProjected(t *testing.T) {
 		exec := model.MustNewExec(backend, store, func(scope *model.Scope, q, k, v *Node) []*Node {
 			// Output with a small soft cap
 			_, coefCapped := MultiHeadAttention(scope.In("capped"), q, k, v, 1, 4).
-				WithPreProjected().
+				WithPreProjected(true).
 				WithScoreSoftCap(1.0).
 				DoneWithCoefficients()
 
 			// Output without soft cap
 			_, coefUncapped := MultiHeadAttention(scope.In("uncapped"), q, k, v, 1, 4).
-				WithPreProjected().
+				WithPreProjected(true).
 				DoneWithCoefficients()
 
 			return []*Node{coefCapped, coefUncapped}
