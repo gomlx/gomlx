@@ -10,6 +10,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/nn"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -170,13 +171,16 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 // (no fused op) and coefficients are returned. When false, the fused op is attempted for
 // the output and coefficients is nil.
 //
+// The scoreSoftCap controls whether to cap the scores (of the attention softmax) using the [nn.SoftCap].
+// A value > 0 enables this feature.
+//
 // Returns:
 //   - output: same shape as query.
 //   - coefficients: attention coefficients (nil when wantCoefficients is false) shaped
 //     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
 func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionMask *Node, dropoutRate *Node,
-	layout AxesLayout, useCausalMask, wantCoefficients bool) (output, coefficients *Node) {
+	layout AxesLayout, useCausalMask, wantCoefficients bool, scoreSoftCap float64) (output, coefficients *Node) {
 	g := query.Graph()
 	numQueryHeads := query.Shape().Dimensions[layout.HeadsAxis()]
 	numKVHeads := key.Shape().Dimensions[layout.HeadsAxis()]
@@ -226,6 +230,10 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 		scores := Einsum(scoreEquation(layout, isGQA), decomposedQuery, key)
 		scores = MulScalar(scores, scale)
 
+		if scoreSoftCap > 0 {
+			scores = nn.SoftCap(scores, scoreSoftCap)
+		}
+
 		if decomposedMask != nil && decomposedMask.DType() != dtypes.Bool {
 			// Additive float mask.
 			scores = Add(scores, decomposedMask)
@@ -254,7 +262,7 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 
 	// When coefficients are requested, use the decomposed path for everything
 	// to avoid computing both paths (fused output + decomposed scores).
-	if wantCoefficients || dropoutActive {
+	if wantCoefficients || dropoutActive || scoreSoftCap > 0 {
 		output, coefficients = decomposedFn()
 	} else {
 		output = InternalFusedOpCaller(

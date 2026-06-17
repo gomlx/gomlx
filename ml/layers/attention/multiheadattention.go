@@ -73,6 +73,11 @@ type MultiHeadAttentionBuilder struct {
 
 	withQKRMSNorm bool
 	qkNormEpsilon float64
+
+	preProjected bool
+
+	scoreSoftCap  float64
+	queryKeyScale float64
 }
 
 // MultiHeadAttention defines a multi-head attention layers, as described in [1], plus some modern extensions.
@@ -87,9 +92,9 @@ type MultiHeadAttentionBuilder struct {
 // - key: `[batch_size, <num_key/value_elements>, inputKeyDim]`.
 // - value: `[batch_size, <num_key/value_elements>, inputValueDim]`.
 //
-// And, when calling IsNil, after another output projection, it returns a node of shape
-// `[batch_size, <num_queries>, inputValueDim]`, if no other settings are given.
-// See settings in MultiHeadAttentionBuilder.to control various aspects.
+// It returns a builder object that can be further configured.
+// When finished configuring, call [MultiHeadAttentionBuilder.Done] to get the output, a node of shape
+// `[batch_size, <num_queries>, inputValueDim]`.
 //
 // Notice it's common to use key=values, and even query=keys=values. For instance for
 // encoding text, one may use the input sequence as all 3 (query, key and value).
@@ -347,6 +352,13 @@ func (b *MultiHeadAttentionBuilder) UseTransposedWeights(transposed bool) *Multi
 	return b
 }
 
+// WithPreProjected configures the builder to assume the query, key, and value inputs are already projected,
+// so they don't need to be projected again internally.
+func (b *MultiHeadAttentionBuilder) WithPreProjected(preProjected bool) *MultiHeadAttentionBuilder {
+	b.preProjected = preProjected
+	return b
+}
+
 // WithQKRMSNorm applies RMSNorm to the query and key projections before attention (used by models like Gemma 2 and Gemma 3).
 func (b *MultiHeadAttentionBuilder) WithQKRMSNorm(epsilon float64) *MultiHeadAttentionBuilder {
 	b.withQKRMSNorm = true
@@ -359,6 +371,19 @@ func (b *MultiHeadAttentionBuilder) WithQKRMSNorm(epsilon float64) *MultiHeadAtt
 // This is used for sliding window attention architectures (like Gemma 3 sliding layers).
 func (b *MultiHeadAttentionBuilder) WithSlidingWindow(window int) *MultiHeadAttentionBuilder {
 	b.slidingWindow = window
+	return b
+}
+
+// WithScoreSoftCap sets the soft cap for the attention score computation.
+// When set to > 0, the attention scores are capped using tanh: cap * tanh(scores / cap) (see [nn.SoftCap]).
+func (b *MultiHeadAttentionBuilder) WithScoreSoftCap(cap float64) *MultiHeadAttentionBuilder {
+	b.scoreSoftCap = cap
+	return b
+}
+
+// WithQueryKeyScale overrides the default scaling factor (1 / sqrt(keyQueryDim)) for the attention scores.
+func (b *MultiHeadAttentionBuilder) WithQueryKeyScale(scale float64) *MultiHeadAttentionBuilder {
+	b.queryKeyScale = scale
 	return b
 }
 
@@ -417,12 +442,20 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	kvHeads := b.effectiveNumKVHeads()
 	var projectedQuery, projectedKey, projectedValue *Node
 
-	if b.useQKVProjection {
-		projectedQuery, projectedKey, projectedValue = b.qkvProject(flatQuery)
+	if b.preProjected {
+		seqLenQ := flatQuery.Shape().Dimensions[1]
+		seqLenKV := flatKey.Shape().Dimensions[1]
+		projectedQuery = Reshape(flatQuery, batchSize, seqLenQ, b.numHeads, b.keyQueryDim)
+		projectedKey = Reshape(flatKey, batchSize, seqLenKV, kvHeads, b.keyQueryDim)
+		projectedValue = Reshape(flatValue, batchSize, seqLenKV, kvHeads, b.valueDim)
 	} else {
-		projectedKey = b.dense(b.scope.In("key"), flatKey, b.useProjectionBias, kvHeads, b.keyQueryDim)
-		projectedQuery = b.dense(b.scope.In("query"), flatQuery, b.useProjectionBias, b.numHeads, b.keyQueryDim)
-		projectedValue = b.dense(b.scope.In("value"), flatValue, b.useProjectionBias, kvHeads, b.valueDim)
+		if b.useQKVProjection {
+			projectedQuery, projectedKey, projectedValue = b.qkvProject(flatQuery)
+		} else {
+			projectedKey = b.dense(b.scope.In("key"), flatKey, b.useProjectionBias, kvHeads, b.keyQueryDim)
+			projectedQuery = b.dense(b.scope.In("query"), flatQuery, b.useProjectionBias, b.numHeads, b.keyQueryDim)
+			projectedValue = b.dense(b.scope.In("value"), flatValue, b.useProjectionBias, kvHeads, b.valueDim)
+		}
 	}
 
 	if b.withQKRMSNorm {
@@ -483,12 +516,15 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	}
 
 	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
+	if b.queryKeyScale != 0 {
+		scale = b.queryKeyScale
+	}
 
 	// Pass causal to Core only when not using KV cache (Core builds a simple lower-triangular mask).
 	// When using KV cache, the position-aware causal mask is already built in buildMask above.
 	useCausalMask := b.useCausalMask && mask == nil
 	attentionOutput, attentionCoefficients = Core(b.scope, projectedQuery, projectedKey, projectedValue,
-		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients)
+		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients, b.scoreSoftCap)
 
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
 	// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_elements>, numHeads*valueDim]

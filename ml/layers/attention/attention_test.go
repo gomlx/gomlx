@@ -6,6 +6,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gomlx/compute"
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
@@ -24,7 +25,7 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 		scale := 1.0 / math.Sqrt(float64(headDim))
 
 		// Compute with BHSD layout (default): q/k/v are [batch, heads, seq, dim]
-		bhsdOut, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, false)
+		bhsdOut, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, false, 0.0)
 
 		// Transpose to BSHD: [batch, seq, heads, dim]
 		qBSHD := TransposeAllDims(q, 0, 2, 1, 3)
@@ -32,7 +33,7 @@ func TestAxesLayoutEquivalence(t *testing.T) {
 		vBSHD := TransposeAllDims(v, 0, 2, 1, 3)
 
 		// Compute with BSHD layout
-		bshdOut, _ := Core(scope, qBSHD, kBSHD, vBSHD, scale, nil, nil, LayoutBSHD, false, false)
+		bshdOut, _ := Core(scope, qBSHD, kBSHD, vBSHD, scale, nil, nil, LayoutBSHD, false, false, 0.0)
 
 		// Transpose BSHD output back to BHSD for comparison
 		bshdOutTransposed := TransposeAllDims(bshdOut, 0, 2, 1, 3)
@@ -75,7 +76,7 @@ func TestCore(t *testing.T) {
 		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, false)
+			output, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, false, 0.0)
 			return output
 		})
 
@@ -97,8 +98,8 @@ func TestCore(t *testing.T) {
 			headDim := q.Shape().Dimensions[3]
 			defaultScale := 1.0 / math.Sqrt(float64(headDim))
 			// Both use the same scale — should produce identical results
-			defaultOut, _ := Core(scope, q, k, v, defaultScale, nil, nil, LayoutBHSD, false, false)
-			explicitOut, _ := Core(scope, q, k, v, 1.0/math.Sqrt(2.0), nil, nil, LayoutBHSD, false, false)
+			defaultOut, _ := Core(scope, q, k, v, defaultScale, nil, nil, LayoutBHSD, false, false, 0.0)
+			explicitOut, _ := Core(scope, q, k, v, 1.0/math.Sqrt(2.0), nil, nil, LayoutBHSD, false, false, 0.0)
 			return []*Node{defaultOut, explicitOut}
 		})
 
@@ -128,7 +129,7 @@ func TestCore(t *testing.T) {
 		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v, mask *Node) *Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, _ := Core(scope, q, k, v, scale, mask, nil, LayoutBHSD, false, false)
+			output, _ := Core(scope, q, k, v, scale, mask, nil, LayoutBHSD, false, false, 0.0)
 			return output
 		})
 
@@ -157,7 +158,7 @@ func TestCore(t *testing.T) {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			// Pass boolean mask directly — Core auto-detects and uses MaskedSoftmax.
-			output, _ := Core(scope, q, k, v, scale, boolMask, nil, LayoutBHSD, false, false)
+			output, _ := Core(scope, q, k, v, scale, boolMask, nil, LayoutBHSD, false, false, 0.0)
 			return output
 		})
 
@@ -184,7 +185,7 @@ func TestCore(t *testing.T) {
 		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			output, coefficients := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, true)
+			output, coefficients := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, true, 0.0)
 			return []*Node{output, coefficients}
 		})
 
@@ -224,9 +225,9 @@ func TestCore(t *testing.T) {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			// Fused path (Done-style): numHeads=2, numKVHeads=1 inferred from shapes.
-			fusedOutput, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, false)
+			fusedOutput, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, false, 0.0)
 			// Decomposed path (DoneWithCoefficients-style):
-			decomposedOutput, coefficients := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, true)
+			decomposedOutput, coefficients := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, false, true, 0.0)
 			return []*Node{fusedOutput, decomposedOutput, coefficients}
 		})
 
@@ -282,8 +283,8 @@ func TestCore(t *testing.T) {
 		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			fusedOutput, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBSHD, false, false)
-			decomposedOutput, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBSHD, false, true)
+			fusedOutput, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBSHD, false, false, 0)
+			decomposedOutput, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBSHD, false, true, 0)
 			return []*Node{fusedOutput, decomposedOutput}
 		})
 
@@ -319,8 +320,8 @@ func TestCore(t *testing.T) {
 		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, q, k, v, boolMask *Node) []*Node {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
-			fusedOutput, _ := Core(scope, q, k, v, scale, boolMask, nil, LayoutBHSD, false, false)
-			decomposedOutput, _ := Core(scope, q, k, v, scale, boolMask, nil, LayoutBHSD, false, true)
+			fusedOutput, _ := Core(scope, q, k, v, scale, boolMask, nil, LayoutBHSD, false, false, 0)
+			decomposedOutput, _ := Core(scope, q, k, v, scale, boolMask, nil, LayoutBHSD, false, true, 0)
 			return []*Node{fusedOutput, decomposedOutput}
 		})
 
@@ -362,7 +363,7 @@ func TestCore(t *testing.T) {
 			headDim := q.Shape().Dimensions[3]
 			scale := 1.0 / math.Sqrt(float64(headDim))
 			// Use causal=true, no explicit mask.
-			output, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, true, false)
+			output, _ := Core(scope, q, k, v, scale, nil, nil, LayoutBHSD, true, false, 0.0)
 			return output
 		})
 
@@ -379,4 +380,42 @@ func TestCore(t *testing.T) {
 		// Position 1 sees both → softmax([1,1]) = [0.5, 0.5] → 15
 		assert.InDelta(t, float32(15), outData[0][0][1][0], 0.1)
 	})
+}
+
+func TestMultiHeadAttentionScoreSoftCapAndPreProjected(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		store := model.NewStore()
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, q, k, v *Node) []*Node {
+			// Output with a small soft cap
+			_, coefCapped := MultiHeadAttention(scope.In("capped"), q, k, v, 1, 4).
+				WithPreProjected().
+				WithScoreSoftCap(1.0).
+				DoneWithCoefficients()
+
+			// Output without soft cap
+			_, coefUncapped := MultiHeadAttention(scope.In("uncapped"), q, k, v, 1, 4).
+				WithPreProjected().
+				DoneWithCoefficients()
+
+			return []*Node{coefCapped, coefUncapped}
+		})
+
+		// Shape: [batchSize=1, seqLen=2, numHeads*headDim=1*4=4]
+		qData := [][][]float32{{{100, 0, 0, 0}, {0, 100, 0, 0}}}
+		kData := qData
+		vData := qData
+
+		outputs := exec.MustCall(qData, kData, vData)
+		coefCapped := outputs[0].Value().([][][][]float32)
+		coefUncapped := outputs[1].Value().([][][][]float32)
+
+		// Uncapped should be extremely sharp (close to 1.0 and 0.0)
+		assert.InDelta(t, float32(1.0), coefUncapped[0][0][0][0], 1e-4)
+		assert.InDelta(t, float32(0.0), coefUncapped[0][0][0][1], 1e-4)
+
+		// Capped should be soft: e / (e + 1) ≈ 0.731058
+		expectedCappedVal := float32(math.E / (math.E + 1.0))
+		assert.InDelta(t, expectedCappedVal, coefCapped[0][0][0][0], 1e-4)
+		assert.InDelta(t, 1.0-expectedCappedVal, coefCapped[0][0][0][1], 1e-4)
+	}, "go")
 }
