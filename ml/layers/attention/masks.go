@@ -4,6 +4,7 @@ package attention
 
 import (
 	"reflect"
+	"slices"
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
@@ -87,7 +88,7 @@ func (b *MultiHeadAttentionBuilder) WithQueryKeyMatrixMask(queryKeyMatrixMask *N
 	if b.keyMask != nil || b.queryMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
 	}
-	if queryKeyMatrixMask.Shape().Equal(b.attentionShape) {
+	if slices.Equal(queryKeyMatrixMask.Shape().Dimensions, b.attentionShape.Dimensions) {
 		// Simplest case: queryKeyMatrixMask provided with attentionShape.
 		b.queryKeyMatrixMask = queryKeyMatrixMask
 		return b
@@ -99,7 +100,7 @@ func (b *MultiHeadAttentionBuilder) WithQueryKeyMatrixMask(queryKeyMatrixMask *N
 		shapeWithoutHeads.Dimensions[ii] = shapeWithoutHeads.Dimensions[ii+1]
 	}
 	shapeWithoutHeads.Dimensions = shapeWithoutHeads.Dimensions[0 : b.attentionShape.Rank()-1]
-	if !queryKeyMatrixMask.Shape().Equal(shapeWithoutHeads) {
+	if !slices.Equal(queryKeyMatrixMask.Shape().Dimensions, shapeWithoutHeads.Dimensions) {
 		Panicf("invalid shape for queryKeyMatrixMask %s: expected either %s (with per-head mask) or %s",
 			queryKeyMatrixMask.Shape(), b.attentionShape, shapeWithoutHeads)
 	}
