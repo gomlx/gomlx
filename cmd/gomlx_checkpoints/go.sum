@@ -30,10 +30,10 @@ github.com/gofrs/uuid v4.4.0+incompatible h1:3qXRTX8/NbyulANqlc0lchS1gqAVxRgsuW1
 github.com/gofrs/uuid v4.4.0+incompatible/go.mod h1:b2aQJv3Z4Fp6yNu3cdSllBxTCLRxnplIgP/c0N/04lM=
 github.com/gomlx/compute v0.0.0-20260615181056-6e3a924a46cb h1:ZclLuMEjLP+N5oV7By2mtrPZOSmX8cSbpAvczuH76HM=
 github.com/gomlx/compute v0.0.0-20260615181056-6e3a924a46cb/go.mod h1:MDTT683Wvq7IMSKXDGLvV3Co7HDpx/Xsgp2RbF5lhNM=
-github.com/gomlx/go-xla v0.2.3-0.20260618142610-28960efdc139 h1:kc12S6z0dWnxVfSTNVtzGYJ51tqEUQUibjbanDOhF+E=
-github.com/gomlx/go-xla v0.2.3-0.20260618142610-28960efdc139/go.mod h1:zMOV0+tZBqrAulL9XG6KWIzEwtavwIVdNkCFV9zi+5U=
-github.com/gomlx/gomlx v0.27.4-0.20260618142625-ae0cb16b6a64 h1:aiF/6aPb8jEl5LgXpLnpzZgSgxQazZvh34PXg4wOmS0=
-github.com/gomlx/gomlx v0.27.4-0.20260618142625-ae0cb16b6a64/go.mod h1:zHaMs9QEaJatpDWXFfS91xByHLb64hhbn3ZIDcqWyuE=
+github.com/gomlx/go-xla v0.2.3-0.20260618145002-7a261bcebd0f h1:fbDdbEBfAwfvXd1B4g7tQKTeocYhAK4fT7Hsq4VhMac=
+github.com/gomlx/go-xla v0.2.3-0.20260618145002-7a261bcebd0f/go.mod h1:zMOV0+tZBqrAulL9XG6KWIzEwtavwIVdNkCFV9zi+5U=
+github.com/gomlx/gomlx v0.27.4-0.20260618145020-70735a4f16ad h1:EjcKP24JxUUfMnYPxOh72XrDxfKY71mhqzuZmd9qpGw=
+github.com/gomlx/gomlx v0.27.4-0.20260618145020-70735a4f16ad/go.mod h1:tALyzMctkjkhlPjjfMqh0aUnMrKwQaybBInoC4tXYfU=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
