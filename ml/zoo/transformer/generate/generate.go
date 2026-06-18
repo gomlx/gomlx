@@ -1,16 +1,26 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package decode
+// Package generate implements a generator for transformer models, including the sampling strategies: greedy, top-k, top-p and beam search.
+//
+// It defines a Generator object that can be initialized with a KVCacheModelFn or NaiveModelFn, depending
+// if you want to use a KVCache (the usual, more performant way) or the "naive" generator (recalculate everything for each new token,
+// waistful in memory and performance, but simpler and useful for testing).
+//
+// See New for details.
+package generate
 
 import (
 	"sync"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/gobackend"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/decode/sample"
+	"github.com/gomlx/gomlx/ml/layers/attention"
+	"github.com/gomlx/gomlx/ml/layers/attention/kvcache"
 	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/zoo/transformer/generate/sample"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -27,46 +37,51 @@ const (
 	ParamStopOnEOS   = "decode_stop_on_eos"
 )
 
-// IterativeModelFn represents a full-sequence model function,
-// that is used iteratively during decoding, by re-feeding the
-// whole previous state.
+// NaiveModelFn represents a full-sequence model function,
+// that is used iteratively during decoding, by re-feeding
+// all the tokens each time.
 //
-// Only use this if your backend supports dynamic shapes, otherwise
-// this will likely be very slow.
+// This is a slow way of generating, since it will re-run all the computation
+// for the whole sequence each time.
 //
 // Parameters:
 //   - scope: Model scope passed along by the Decoder.
-//   - tokens: Input token sequence, shaped [batch, seqLen].
+//   - tokens: Input token sequence, shaped [batch, paddedSeqLen].
+//   - length: Number of tokens that are non-padding.
 //
 // Returns:
 //   - logits: Output logits per candidate token (vocabSize), shaped [batch, seqLen, vocabSize]
-type IterativeModelFn func(scope *model.Scope, tokens *Node) *Node
+type NaiveModelFn func(scope *model.Scope, tokens *Node, length int) *Node
 
-// IncrementalModelFn represents an incremental model function, which is expected to have
-// some form of caching (stored in the variables in the scope).
+// KVCacheModelFn represents an incremental model function, which is expected to have
+// an associated KVCache.
 //
 // It processes new tokens at a specific position, presumably reusing cached previous results
 // (typically in the form of a "KVCache" or cached key/value projections, stored in the scope).
 //
-// Currently, it doesn't support concurrent generation -- it's expected to have only one
-// cache during execution.
-//
 // Parameters:
 //   - scope: Model scope passed along by the Decoder. Likely contains the cache during the execution.
 //   - newTokens: New tokens to process [batch, newLen]
-//   - position: Position in the sequence (for cache indexing)
+//   - position: Position (scalar Int32) in the sequence (for cache indexing)
+//   - cache: KVCache nodes, usually in the form of KeyValueCaches
 //
 // Returns:
 //   - logits: Output logits [batch, newLen, vocabSize]
-type IncrementalModelFn func(scope *model.Scope, newTokens *Node, position int) *Node
+//   - updatedCache: Updated KVCache nodes
+type KVCacheModelFn func(scope *model.Scope, newTokens *Node, position *Node, cache kvcache.KVCacheNodes) (logits *Node, updatedCache kvcache.KVCacheNodes)
 
-// Decoder configures and executes autoregressive text generation.
+// Generator configures and executes autoregressive text generation.
 // Supports multiple sampling strategies (greedy, temperature, top-k, nucleus, beam search)
 // and incremeantal models, usually using some form of cache (e.g.: a "KV-cache").
-type Decoder struct {
+type Generator struct {
 	// Model functions (exactly one should be set)
-	ModelFn            IterativeModelFn   // Standard model for non-cached generation
-	IncrementalModelFn IncrementalModelFn // Incremental model for KV-cached generation
+	naiveModelFn NaiveModelFn   // Standard model for non-cached generation
+	cacheModelFn KVCacheModelFn // Incremental model for KV-cached generation
+
+	KVCache    *kvcache.KVCache
+	numKVHeads int
+	headDim    int
+	dtype      dtypes.DType
 
 	// Generation parameters
 	MaxLength   int
@@ -76,6 +91,7 @@ type Decoder struct {
 	TopP        float32
 	BeamSize    int
 	EosTokenId  int
+	EosTokenIds []int
 	StopOnEOS   bool
 
 	// Internal backend for small operations (concat, reshape)
@@ -83,9 +99,9 @@ type Decoder struct {
 	simpleBackend compute.Backend
 
 	// Cached executors to avoid recompilation
-	promptExec   *model.Exec         // Cached executor for processing initial prompt in incremental generation
-	genExecCache map[int]*model.Exec // Cached executors for each position in incremental generation
-	fullExec     *model.Exec         // Cached executor for non-cached full sequence generation
+	promptExecCache map[int]*model.Exec // Cached executors for processing initial prompt in incremental generation
+	genExecCache    map[int]*model.Exec // Cached executors for each position in incremental generation
+	fullExec        *model.Exec         // Cached executor for non-cached full sequence generation
 
 	// err is a delayed error set during initialization, and returned by Decode.
 	err error
@@ -108,20 +124,23 @@ type Decoder struct {
 //		WithStrategy(sample.StrategyTemperature).WithTemperature(0.8)
 //	output, err := decoder.Decode(prompt)
 func New[M interface {
-	IterativeModelFn | IncrementalModelFn
-}](modelFn M) *Decoder {
-	var decoder *Decoder
+	NaiveModelFn | KVCacheModelFn
+}](modelFn M) *Generator {
+	var decoder *Generator
 	switch typedModelFn := any(modelFn).(type) {
-	case IterativeModelFn:
+	case NaiveModelFn:
 		klog.Warning("Using Decoder to generate text with interactive model is not yet well supported, and will likely be very slow. Consider using an IncrementalModelFn instead.")
-		decoder = &Decoder{
-			ModelFn: typedModelFn,
+		decoder = &Generator{
+			naiveModelFn: typedModelFn,
 		}
-	case IncrementalModelFn:
-		decoder = &Decoder{
-			IncrementalModelFn: typedModelFn,
+	case KVCacheModelFn:
+		decoder = &Generator{
+			cacheModelFn: typedModelFn,
 		}
 	}
+
+	decoder.promptExecCache = make(map[int]*model.Exec)
+	decoder.genExecCache = make(map[int]*model.Exec)
 
 	// Set default parameters
 	decoder.MaxLength = 100
@@ -138,6 +157,20 @@ func New[M interface {
 	decoder.simpleBackend, _ = gobackend.New("decode")
 
 	return decoder
+}
+
+func (gen *Generator) WithKVCache(kvCache *kvcache.KVCache, numKVHeads, headDim int, dtype dtypes.DType) *Generator {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	gen.KVCache = kvCache
+	gen.numKVHeads = numKVHeads
+	gen.headDim = headDim
+	gen.dtype = dtype
+	return gen
+}
+
+func (gen *Generator) wasUsed() bool {
+	return len(gen.promptExecCache) > 0 || len(gen.genExecCache) > 0 || gen.fullExec != nil
 }
 
 // FromScope configures the decoder with hyperparameters from the model.
@@ -161,78 +194,92 @@ func New[M interface {
 //	    "decode_max_length": 200,
 //	})
 //	decoder.FromScope(scope)
-func (dec *Decoder) FromScope(scope *model.Scope) *Decoder {
-	dec.mu.Lock()
-	defer dec.mu.Unlock()
-	if dec.promptExec != nil {
-		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
-		return dec
+func (gen *Generator) FromScope(scope *model.Scope) *Generator {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	if gen.wasUsed() {
+		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return gen
 	}
 	// Optional parameters with defaults
-	dec.MaxLength = model.GetParamOr(scope, ParamMaxLength, dec.MaxLength)
+	gen.MaxLength = model.GetParamOr(scope, ParamMaxLength, gen.MaxLength)
 	strategyName := model.GetParamOr(scope, ParamStrategy, "")
 	if strategyName != "" {
 		var err error
-		dec.Strategy, err = sample.StrategyString(strategyName)
+		gen.Strategy, err = sample.StrategyString(strategyName)
 		if err != nil {
-			dec.err = errors.Wrapf(err, "failed to parse sampling strategy %q, valid values are %v", strategyName, sample.StrategyStrings())
-			return dec
+			gen.err = errors.Wrapf(err, "failed to parse sampling strategy %q, valid values are %v", strategyName, sample.StrategyStrings())
+			return gen
 		}
 	}
-	dec.Temperature = model.GetParamOr(scope, ParamTemperature, dec.Temperature)
-	dec.TopK = model.GetParamOr(scope, ParamTopK, dec.TopK)
-	dec.TopP = model.GetParamOr(scope, ParamTopP, dec.TopP)
-	dec.BeamSize = model.GetParamOr(scope, ParamBeamSize, dec.BeamSize)
-	dec.EosTokenId = model.GetParamOr(scope, ParamEosTokenId, dec.EosTokenId)
-	dec.StopOnEOS = model.GetParamOr(scope, ParamStopOnEOS, dec.StopOnEOS)
-	return dec
+	gen.Temperature = model.GetParamOr(scope, ParamTemperature, gen.Temperature)
+	gen.TopK = model.GetParamOr(scope, ParamTopK, gen.TopK)
+	gen.TopP = model.GetParamOr(scope, ParamTopP, gen.TopP)
+	gen.BeamSize = model.GetParamOr(scope, ParamBeamSize, gen.BeamSize)
+	gen.EosTokenId = model.GetParamOr(scope, ParamEosTokenId, gen.EosTokenId)
+	gen.StopOnEOS = model.GetParamOr(scope, ParamStopOnEOS, gen.StopOnEOS)
+	return gen
 }
 
-// initializePromptExec creates the cached executor for processing prompts in incremental generation.
-// This executor is reused across multiple generation calls to avoid recompilation overhead.
-func (dec *Decoder) initializePromptExec(backend compute.Backend, scope *model.Scope) error {
-	if dec.promptExec != nil || dec.IncrementalModelFn == nil {
-		return nil
+func (gen *Generator) getPromptExec(backend compute.Backend, scope *model.Scope, cacheSeqLen int) (*model.Exec, error) {
+	if gen.promptExecCache == nil {
+		gen.promptExecCache = make(map[int]*model.Exec)
+	}
+	exec, ok := gen.promptExecCache[cacheSeqLen]
+	if ok {
+		return exec, nil
 	}
 
 	var err error
-	dec.promptExec, err = model.NewExec(backend, scope.Store(), func(scope *model.Scope, tokens *Node) *Node {
-		logits := dec.IncrementalModelFn(scope, tokens, 0)
+	exec, err = model.NewExec(backend, scope.Store(), func(scope *model.Scope, inputs []*Node) []*Node {
+		tokens := inputs[0]
+		cacheNodes := inputs[1:]
+		cache := gen.KVCache.DeserializeNodes(cacheNodes)
+		g := tokens.Graph()
+		positionNode := Const(g, int32(0))
+		logits, updatedCache := gen.cacheModelFn(scope, tokens, positionNode, cache)
+		serializedUpdatedCache, err := gen.KVCache.SerializeNodes(updatedCache)
+		if err != nil {
+			panic(err)
+		}
 		lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
-		lastLogits = Squeeze(lastLogits, 1) // [batch, vocab_size]
-		nextToken := sample.SampleWithStrategy(scope, lastLogits, dec.Strategy, float64(dec.Temperature), dec.TopK, float64(dec.TopP))
-		return nextToken
+		lastLogits = Squeeze(lastLogits, 1)
+		nextToken := sample.SampleWithStrategy(scope, lastLogits, gen.Strategy, float64(gen.Temperature), gen.TopK, float64(gen.TopP))
+		res := make([]*Node, 1+len(serializedUpdatedCache))
+		res[0] = nextToken
+		copy(res[1:], serializedUpdatedCache)
+		return res
 	})
 	if err != nil {
-		return errors.WithMessagef(err, "failed to create prompt exec")
+		return nil, errors.WithMessagef(err, "failed to create prompt exec")
 	}
-
-	return nil
+	gen.promptExecCache[cacheSeqLen] = exec
+	return exec, nil
 }
 
 // WithMaxLength sets the maximum generation length (including prompt).
-func (dec *Decoder) WithMaxLength(maxLength int) *Decoder {
-	dec.mu.Lock()
-	defer dec.mu.Unlock()
-	if dec.promptExec != nil {
-		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
-		return dec
+func (gen *Generator) WithMaxLength(maxLength int) *Generator {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	if gen.wasUsed() {
+		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return gen
 	}
-	dec.MaxLength = maxLength
-	return dec
+	gen.MaxLength = maxLength
+	return gen
 }
 
 // WithStrategy sets the sampling strategy.
 // The default strategy is sample.StrategyGreedy, which always take the immediately most likely next token.
-func (dec *Decoder) WithStrategy(strategy sample.Strategy) *Decoder {
-	dec.mu.Lock()
-	defer dec.mu.Unlock()
-	if dec.promptExec != nil {
-		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
-		return dec
+func (gen *Generator) WithStrategy(strategy sample.Strategy) *Generator {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	if gen.wasUsed() {
+		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return gen
 	}
-	dec.Strategy = strategy
-	return dec
+	gen.Strategy = strategy
+	return gen
 }
 
 // WithTemperature sets the temperature for sampling.
@@ -240,87 +287,103 @@ func (dec *Decoder) WithStrategy(strategy sample.Strategy) *Decoder {
 //
 // You have to also set the strategy to sample.StrategyTemperature or sample.StrategyTopK or
 // sample.StrategyTopP to use this parameter
-func (dec *Decoder) WithTemperature(temperature float32) *Decoder {
-	dec.mu.Lock()
-	defer dec.mu.Unlock()
-	if dec.promptExec != nil {
-		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
-		return dec
+func (gen *Generator) WithTemperature(temperature float32) *Generator {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	if gen.wasUsed() {
+		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return gen
 	}
-	dec.Temperature = temperature
-	return dec
+	gen.Temperature = temperature
+	return gen
 }
 
 // WithTopK sets k for top-k sampling.
 // Only the k most likely tokens are considered at each step.
-func (dec *Decoder) WithTopK(topK int) *Decoder {
-	dec.mu.Lock()
-	defer dec.mu.Unlock()
-	if dec.promptExec != nil {
-		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
-		return dec
+func (gen *Generator) WithTopK(topK int) *Generator {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	if gen.wasUsed() {
+		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return gen
 	}
-	dec.TopK = topK
-	return dec
+	gen.TopK = topK
+	return gen
 }
 
 // WithTopP sets p for nucleus sampling.
 // Tokens with cumulative probability up to p are considered.
-func (dec *Decoder) WithTopP(topP float32) *Decoder {
-	dec.mu.Lock()
-	defer dec.mu.Unlock()
-	if dec.promptExec != nil {
-		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
-		return dec
+func (gen *Generator) WithTopP(topP float32) *Generator {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	if gen.wasUsed() {
+		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return gen
 	}
-	dec.TopP = topP
-	return dec
+	gen.TopP = topP
+	return gen
 }
 
 // WithBeamSize sets the beam size for beam search.
 // Higher values explore more candidates but are slower.
-func (dec *Decoder) WithBeamSize(beamSize int) *Decoder {
-	dec.mu.Lock()
-	defer dec.mu.Unlock()
-	if dec.promptExec != nil {
-		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
-		return dec
+func (gen *Generator) WithBeamSize(beamSize int) *Generator {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	if gen.wasUsed() {
+		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return gen
 	}
-	dec.BeamSize = beamSize
-	return dec
+	gen.BeamSize = beamSize
+	return gen
 }
 
 // WithEOS sets the end-of-sequence token ID and enables early stopping.
 // Generation stops when this token is produced.
-func (dec *Decoder) WithEOS(eosTokenId int) *Decoder {
-	dec.mu.Lock()
-	defer dec.mu.Unlock()
-	if dec.promptExec != nil {
-		dec.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
-		return dec
+func (gen *Generator) WithEOS(eosTokenId int) *Generator {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	if gen.wasUsed() {
+		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return gen
 	}
-	dec.EosTokenId = eosTokenId
-	dec.StopOnEOS = true
-	return dec
+	gen.EosTokenId = eosTokenId
+	gen.StopOnEOS = true
+	return gen
+}
+
+// WithStopTokens sets the token IDs that trigger early stopping.
+func (gen *Generator) WithStopTokens(tokenIds ...int) *Generator {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	if gen.wasUsed() {
+		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		return gen
+	}
+	gen.EosTokenIds = append(gen.EosTokenIds, tokenIds...)
+	gen.StopOnEOS = true
+	return gen
 }
 
 // isCached returns true if this decoder uses KV caching.
-func (dec *Decoder) isCached() bool {
-	return dec.IncrementalModelFn != nil
+func (gen *Generator) isCached() bool {
+	return gen.cacheModelFn != nil
 }
 
 // validate checks that the decoder configuration is valid.
 // Returns an error if required fields are missing or invalid.
-func (dec *Decoder) validate() error {
-	if dec.err != nil {
-		return errors.WithMessagef(dec.err, "Decoder failed during configuration")
+func (gen *Generator) validate() error {
+	if gen.err != nil {
+		return errors.WithMessagef(gen.err, "Decoder failed during configuration")
 	}
 	// Exactly one model function must be set
-	if dec.ModelFn != nil && dec.IncrementalModelFn != nil {
+	if gen.naiveModelFn != nil && gen.cacheModelFn != nil {
 		return errors.Errorf("cannot set both ModelFn and IncrementalModelFn")
 	}
-	if dec.ModelFn == nil && dec.IncrementalModelFn == nil {
+	if gen.naiveModelFn == nil && gen.cacheModelFn == nil {
 		return errors.Errorf("must set either ModelFn or IncrementalModelFn")
+	}
+	if gen.cacheModelFn != nil && gen.KVCache == nil {
+		return errors.Errorf("must set KVCache configuration when using IncrementalModelFn")
 	}
 
 	return nil
@@ -342,23 +405,20 @@ func (dec *Decoder) validate() error {
 //
 //	prompt := []int32{1, 2, 3}  // Token IDs
 //	output, err := decoder.Decode(backend, scope, prompt)
-func (dec *Decoder) Decode(
+func (gen *Generator) Decode(
 	backend compute.Backend,
 	scope *model.Scope,
 	prompt any,
 ) (*tensors.Tensor, error) {
-	dec.mu.Lock()
-	defer dec.mu.Unlock()
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
 
 	// Validate configuration
-	if err := dec.validate(); err != nil {
+	if err := gen.validate(); err != nil {
 		return nil, errors.WithMessagef(err, "invalid Decoder config")
 	}
 
-	// Initialize cached executors for incremental generation
-	if err := dec.initializePromptExec(backend, scope); err != nil {
-		return nil, err
-	}
+	// Prompt executors are now retrieved dynamically
 
 	promptTensor, err := tensors.FromAnyValue(prompt)
 	if err != nil {
@@ -380,16 +440,16 @@ func (dec *Decoder) Decode(
 		promptLen = promptShape.Dimensions[1]
 	}
 
-	if promptLen >= dec.MaxLength {
-		return nil, errors.Errorf("prompt length %d >= max length %d", promptLen, dec.MaxLength)
+	if promptLen >= gen.MaxLength {
+		return nil, errors.Errorf("prompt length %d >= max length %d", promptLen, gen.MaxLength)
 	}
 
-	if dec.Strategy == sample.StrategyBeamSearch {
-		return dec.generateBeamSearch(backend, scope, promptTensor)
+	if gen.Strategy == sample.StrategyBeamSearch {
+		return gen.generateBeamSearch(backend, scope, promptTensor)
 	}
 
 	// Regular sampling-based generation
-	return dec.generateSampling(backend, scope, promptTensor)
+	return gen.generateSampling(backend, scope, promptTensor)
 }
 
 // generateSampling performs generation using sampling strategies.
@@ -403,7 +463,7 @@ func (dec *Decoder) Decode(
 // Returns:
 //   - Generated sequence [batch, totalLen] where totalLen <= MaxLength
 //   - Error if generation fails
-func (dec *Decoder) generateSampling(
+func (gen *Generator) generateSampling(
 	backend compute.Backend,
 	scope *model.Scope,
 	prompt *tensors.Tensor,
@@ -432,14 +492,14 @@ func (dec *Decoder) generateSampling(
 		promptLen = promptShape.Dimensions[1]
 	}
 
-	if promptLen >= dec.MaxLength {
-		return nil, errors.Errorf("prompt length %d >= max length %d", promptLen, dec.MaxLength)
+	if promptLen >= gen.MaxLength {
+		return nil, errors.Errorf("prompt length %d >= max length %d", promptLen, gen.MaxLength)
 	}
 
-	if dec.isCached() {
-		return dec.generateSamplingIncremental(backend, scope, prompt, batchSize, promptLen)
+	if gen.isCached() {
+		return gen.generateSamplingIncremental(backend, scope, prompt, batchSize, promptLen)
 	}
-	return dec.generateSamplingFull(backend, scope, prompt, promptLen)
+	return gen.generateSamplingFull(backend, scope, prompt, promptLen)
 }
 
 // generateSamplingFull performs sampling-based generation without KV caching.
@@ -454,13 +514,13 @@ func (dec *Decoder) generateSampling(
 // Returns:
 //   - Generated sequence [batch, totalLen] where totalLen <= MaxLength
 //   - Error if generation fails
-func (dec *Decoder) generateSamplingFull(
+func (gen *Generator) generateSamplingFull(
 	backend compute.Backend,
 	scope *model.Scope,
 	prompt *tensors.Tensor,
 	promptLen int,
 ) (*tensors.Tensor, error) {
-	numTokensToGenerate := dec.MaxLength - promptLen
+	numTokensToGenerate := gen.MaxLength - promptLen
 	if numTokensToGenerate <= 0 {
 		return prompt, nil
 	}
@@ -472,24 +532,27 @@ func (dec *Decoder) generateSamplingFull(
 	// Store generated tokens as int32 values [batch][position]
 	outputTokens := make([][]int32, batchSize)
 	for i := range outputTokens {
-		outputTokens[i] = make([]int32, 0, dec.MaxLength)
+		outputTokens[i] = make([]int32, 0, gen.MaxLength)
 	}
 
 	// Add prompt tokens to output
-	promptValues := prompt.Value().([][]int32)
+	promptValues, err := getPromptValues(prompt.Value())
+	if err != nil {
+		return nil, err
+	}
 	for i := range batchSize {
 		outputTokens[i] = append(outputTokens[i], promptValues[i]...)
 	}
 
 	// Create or reuse cached executor for full sequence generation
-	if dec.fullExec == nil {
+	if gen.fullExec == nil {
 		predScope := scope
 		var err error
-		dec.fullExec, err = model.NewExec(backend, predScope.Store(), func(scope *model.Scope, currentSeq *Node) *Node {
-			logits := dec.ModelFn(scope, currentSeq)
+		gen.fullExec, err = model.NewExec(backend, predScope.Store(), func(scope *model.Scope, currentSeq *Node) *Node {
+			logits := gen.naiveModelFn(scope, currentSeq)
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 			lastLogits = Squeeze(lastLogits, 1) // Remove the seq_len dimension
-			nextToken := sample.SampleWithStrategy(scope, lastLogits, dec.Strategy, float64(dec.Temperature), dec.TopK, float64(dec.TopP))
+			nextToken := sample.SampleWithStrategy(scope, lastLogits, gen.Strategy, float64(gen.Temperature), gen.TopK, float64(gen.TopP))
 			return nextToken
 		})
 		if err != nil {
@@ -501,24 +564,27 @@ func (dec *Decoder) generateSamplingFull(
 		// Build current sequence tensor from accumulated tokens
 		currentSeq := tensors.FromValue(outputTokens)
 
-		outputs, err := dec.fullExec.Exec(currentSeq)
+		outputs, err := gen.fullExec.Exec(currentSeq)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "generation step %d failed", step)
 		}
 
 		nextToken := outputs[0]
-		nextTokenValues := nextToken.Value().([]int32)
+		nextTokenValues, err := get1DTokenValues(nextToken.Value())
+		if err != nil {
+			return nil, err
+		}
 
 		// Check for EOS and append tokens
 		allEOS := true
 		for i := range batchSize {
 			outputTokens[i] = append(outputTokens[i], nextTokenValues[i])
-			if dec.StopOnEOS && dec.EosTokenId >= 0 && int(nextTokenValues[i]) != dec.EosTokenId {
+			if gen.StopOnEOS && !gen.isEOSToken(int(nextTokenValues[i])) {
 				allEOS = false
 			}
 		}
 
-		if dec.StopOnEOS && dec.EosTokenId >= 0 && allEOS {
+		if gen.StopOnEOS && allEOS {
 			break
 		}
 	}
@@ -526,34 +592,45 @@ func (dec *Decoder) generateSamplingFull(
 	return tensors.FromValue(outputTokens), nil
 }
 
-// generateSamplingIncremental performs sampling-based generation with KV caching.
-// Processes only new tokens at each step, reusing cached attention.
-//
-// Parameters:
-//   - backend: Backend for computation
-//   - scope: Scope containing model parameters and KV cache
-//   - prompt: Input token sequence [batch, seqLen]
-//   - batchSize: Batch size (unused, kept for consistency)
-//   - promptLen: Length of the prompt sequence
-//
-// Returns:
-//   - Generated sequence [batch, totalLen] where totalLen <= MaxLength
-//   - Error if generation fails
-func (dec *Decoder) generateSamplingIncremental(
+func (gen *Generator) generateSamplingIncremental(
 	backend compute.Backend,
 	scope *model.Scope,
 	prompt *tensors.Tensor,
-	_, promptLen int,
+	batchSize, promptLen int,
 ) (*tensors.Tensor, error) {
-	// Use cached promptExec (initialized in Decode)
-	outputs, err := dec.promptExec.Exec(prompt)
+	// Initialize cache
+	lt := attention.GlobalLayer
+	if len(gen.KVCache.OrderedScopes) > 0 {
+		lt = gen.KVCache.GetLayerType(gen.KVCache.OrderedScopes[0])
+	}
+	cacheSeqLen := gen.KVCache.CacheSeqLen(lt, promptLen)
+
+	kvCacheTensors := gen.KVCache.InitializeTensors(batchSize, gen.numKVHeads, gen.headDim, gen.dtype, promptLen)
+	kvCacheTensorsSerialized, err := gen.KVCache.SerializeTensors(kvCacheTensors)
+	if err != nil {
+		return nil, err
+	}
+
+	promptExec, err := gen.getPromptExec(backend, scope, cacheSeqLen)
+	if err != nil {
+		return nil, err
+	}
+
+	promptInputs := make([]any, 1+len(kvCacheTensorsSerialized))
+	promptInputs[0] = prompt
+	for i, t := range kvCacheTensorsSerialized {
+		promptInputs[i+1] = t
+	}
+
+	outputs, err := promptExec.Exec(promptInputs...)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to process prompt")
 	}
 
 	firstToken := outputs[0]
+	kvCacheTensors = gen.KVCache.DeserializeTensors(outputs[1:])
 
-	if dec.StopOnEOS && dec.EosTokenId >= 0 && dec.checkEOS(firstToken) {
+	if gen.StopOnEOS && gen.checkEOS(firstToken) {
 		concatExec, _ := NewExec(backend, func(seq, token *Node) *Node {
 			tokenReshaped := ExpandDims(token, -1)
 			return Concatenate([]*Node{seq, tokenReshaped}, 1)
@@ -568,59 +645,86 @@ func (dec *Decoder) generateSamplingIncremental(
 		return result[0], nil
 	}
 
-	// Extract batch size from prompt shape
-	promptShape := prompt.Shape()
-	batchSize := promptShape.Dimensions[0]
-
 	// Store generated tokens as int32 values [batch][position]
 	outputTokens := make([][]int32, batchSize)
 	for i := range outputTokens {
-		outputTokens[i] = make([]int32, 0, dec.MaxLength)
+		outputTokens[i] = make([]int32, 0, gen.MaxLength)
 	}
 
 	// Add prompt tokens to output
-	promptValues := prompt.Value().([][]int32)
+	promptValues, err := getPromptValues(prompt.Value())
+	if err != nil {
+		return nil, err
+	}
 	for i := range batchSize {
 		outputTokens[i] = append(outputTokens[i], promptValues[i]...)
 	}
 
 	// Add first generated token
-	firstTokenValues := firstToken.Value().([]int32)
+	firstTokenValues, err := get1DTokenValues(firstToken.Value())
+	if err != nil {
+		return nil, err
+	}
 	for i := range batchSize {
 		outputTokens[i] = append(outputTokens[i], firstTokenValues[i])
 	}
 
-	numTokensToGenerate := dec.MaxLength - promptLen - 1
+	numTokensToGenerate := gen.MaxLength - promptLen - 1
 	if numTokensToGenerate <= 0 {
 		return tensors.FromValue(outputTokens), nil
 	}
 
 	genScope := scope
 
-	// Initialize cache if needed
-	if dec.genExecCache == nil {
-		dec.genExecCache = make(map[int]*model.Exec)
-	}
-
 	currentPosition := promptLen
 	for step := 0; step < numTokensToGenerate; step++ {
 		position := currentPosition + step
 
-		// Get or create cached executor for this position
-		exec, ok := dec.genExecCache[position]
+		// Pad cache if needed
+		kvCacheTensors, err = gen.KVCache.PadTensors(kvCacheTensors, position)
+		if err != nil {
+			return nil, err
+		}
+		kvCacheTensorsSerialized, err = gen.KVCache.SerializeTensors(kvCacheTensors)
+		if err != nil {
+			return nil, err
+		}
+
+		currentCacheSeqLen := 0
+		if len(kvCacheTensorsSerialized) > 0 {
+			currentCacheSeqLen = kvCacheTensorsSerialized[0].Shape().Dimensions[2]
+		}
+
+		if gen.genExecCache == nil {
+			gen.genExecCache = make(map[int]*model.Exec)
+		}
+
+		// Get or create cached executor for this cache size
+		exec, ok := gen.genExecCache[currentCacheSeqLen]
 		if !ok {
 			var err error
-			exec, err = model.NewExec(backend, genScope.Store(), func(scope *model.Scope, token *Node) *Node {
+			exec, err = model.NewExec(backend, genScope.Store(), func(scope *model.Scope, inputs []*Node) []*Node {
+				token := inputs[0]
+				positionNode := inputs[1]
+				cacheNodes := inputs[2:]
 				tokenReshaped := ExpandDims(token, -1)
-				logits := dec.IncrementalModelFn(scope, tokenReshaped, position)
+				cache := gen.KVCache.DeserializeNodes(cacheNodes)
+				logits, updatedCache := gen.cacheModelFn(scope, tokenReshaped, positionNode, cache)
+				serializedUpdatedCache, err := gen.KVCache.SerializeNodes(updatedCache)
+				if err != nil {
+					panic(err)
+				}
 				lastLogits := Squeeze(logits, 1)
-				nextToken := sample.SampleWithStrategy(scope, lastLogits, dec.Strategy, float64(dec.Temperature), dec.TopK, float64(dec.TopP))
-				return nextToken
+				nextToken := sample.SampleWithStrategy(scope, lastLogits, gen.Strategy, float64(gen.Temperature), gen.TopK, float64(gen.TopP))
+				res := make([]*Node, 1+len(serializedUpdatedCache))
+				res[0] = nextToken
+				copy(res[1:], serializedUpdatedCache)
+				return res
 			})
 			if err != nil {
-				return nil, errors.WithMessagef(err, "failed to create generation exec at position %d", position)
+				return nil, errors.WithMessagef(err, "failed to create generation exec for cache size %d", currentCacheSeqLen)
 			}
-			dec.genExecCache[position] = exec
+			gen.genExecCache[currentCacheSeqLen] = exec
 		}
 
 		// Get previous token from each batch as tensor
@@ -629,25 +733,38 @@ func (dec *Decoder) generateSamplingIncremental(
 			prevTokens[i] = outputTokens[i][len(outputTokens[i])-1]
 		}
 		prevTokenTensor := tensors.FromValue(prevTokens)
+		positionTensor := tensors.FromValue(int32(position))
 
-		outputs, err := exec.Exec(prevTokenTensor)
+		stepInputs := make([]any, 2+len(kvCacheTensorsSerialized))
+		stepInputs[0] = prevTokenTensor
+		stepInputs[1] = positionTensor
+		for i, t := range kvCacheTensorsSerialized {
+			stepInputs[i+2] = t
+		}
+
+		outputs, err := exec.Exec(stepInputs...)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "generation step %d (position %d) failed", step, position)
 		}
 
 		nextToken := outputs[0]
-		nextTokenValues := nextToken.Value().([]int32)
+		kvCacheTensors = gen.KVCache.DeserializeTensors(outputs[1:])
+
+		nextTokenValues, err := get1DTokenValues(nextToken.Value())
+		if err != nil {
+			return nil, err
+		}
 
 		// Check for EOS and append tokens
 		allEOS := true
 		for i := range batchSize {
 			outputTokens[i] = append(outputTokens[i], nextTokenValues[i])
-			if dec.StopOnEOS && dec.EosTokenId >= 0 && int(nextTokenValues[i]) != dec.EosTokenId {
+			if gen.StopOnEOS && !gen.isEOSToken(int(nextTokenValues[i])) {
 				allEOS = false
 			}
 		}
 
-		if dec.StopOnEOS && dec.EosTokenId >= 0 && allEOS {
+		if gen.StopOnEOS && allEOS {
 			break
 		}
 	}
@@ -655,33 +772,45 @@ func (dec *Decoder) generateSamplingIncremental(
 	return tensors.FromValue(outputTokens), nil
 }
 
-// checkEOS returns true if any token in the tensor matches the EOS token ID.
-func (dec *Decoder) checkEOS(token *tensors.Tensor) bool {
+// checkEOS returns true if any token in the tensor matches any EOS token ID.
+func (gen *Generator) checkEOS(token *tensors.Tensor) bool {
 	tokenValue := token.Value()
 	switch v := tokenValue.(type) {
 	case []int32:
 		for _, t := range v {
-			if int(t) == dec.EosTokenId {
+			if gen.isEOSToken(int(t)) {
 				return true
 			}
 		}
 	case int32:
-		return int(v) == dec.EosTokenId
+		return gen.isEOSToken(int(v))
 	case []int64:
 		for _, t := range v {
-			if int(t) == dec.EosTokenId {
+			if gen.isEOSToken(int(t)) {
 				return true
 			}
 		}
 	case int64:
-		return int(v) == dec.EosTokenId
+		return gen.isEOSToken(int(v))
+	}
+	return false
+}
+
+func (gen *Generator) isEOSToken(tokenId int) bool {
+	if gen.EosTokenId >= 0 && tokenId == gen.EosTokenId {
+		return true
+	}
+	for _, id := range gen.EosTokenIds {
+		if id >= 0 && tokenId == id {
+			return true
+		}
 	}
 	return false
 }
 
 // generateBeamSearch performs beam search generation.
 // Dispatches to cached or non-cached implementation based on configuration.
-func (dec *Decoder) generateBeamSearch(
+func (gen *Generator) generateBeamSearch(
 	backend compute.Backend,
 	scope *model.Scope,
 	prompt *tensors.Tensor,
@@ -710,26 +839,26 @@ func (dec *Decoder) generateBeamSearch(
 		promptLen = promptShape.Dimensions[1]
 	}
 
-	if promptLen >= dec.MaxLength {
-		return nil, errors.Errorf("prompt length %d >= max length %d", promptLen, dec.MaxLength)
+	if promptLen >= gen.MaxLength {
+		return nil, errors.Errorf("prompt length %d >= max length %d", promptLen, gen.MaxLength)
 	}
 
 	// Dispatch cached or non-cached
-	if dec.isCached() {
-		return dec.generateBeamSearchCached(backend, scope, prompt, batchSize, promptLen)
+	if gen.isCached() {
+		return gen.generateBeamSearchCached(backend, scope, prompt, batchSize, promptLen)
 	}
-	return dec.generateBeamSearchNonCached(backend, scope, prompt, batchSize, promptLen)
+	return gen.generateBeamSearchNonCached(backend, scope, prompt, batchSize, promptLen)
 }
 
 // generateBeamSearchNonCached performs beam search without KV caching.
 // Maintains multiple beam hypotheses and selects the best sequence.
-func (dec *Decoder) generateBeamSearchNonCached(
+func (gen *Generator) generateBeamSearchNonCached(
 	backend compute.Backend,
 	scope *model.Scope,
 	prompt *tensors.Tensor,
 	batchSize, promptLen int,
 ) (*tensors.Tensor, error) {
-	beamSize := dec.BeamSize
+	beamSize := gen.BeamSize
 	batchBeamSize := batchSize * beamSize
 
 	// Replicate prompt for each beam
@@ -765,13 +894,13 @@ func (dec *Decoder) generateBeamSearchNonCached(
 	currentSequences := replicatedResults[0]
 
 	// Beam search configuration
-	beamConfig := sample.NewBeamSearch(beamSize, dec.EosTokenId).
-		WithMaxLength(dec.MaxLength).
+	beamConfig := sample.NewBeamSearch(beamSize, gen.EosTokenId).
+		WithMaxLength(gen.MaxLength).
 		WithLengthPenalty(1.0)
 
 	// Main loop
 	predScope := scope
-	numSteps := dec.MaxLength - promptLen
+	numSteps := gen.MaxLength - promptLen
 
 	for step := 0; step < numSteps; step++ {
 		currentLength := promptLen + step
@@ -781,14 +910,14 @@ func (dec *Decoder) generateBeamSearchNonCached(
 		// I leave it like this for now as I think we need the dynamic shape support of the simplego backend.
 		exec, err := model.NewExec(backend, predScope.Store(), func(scope *model.Scope, sequences, scores *Node) (*Node, *Node, *Node) {
 			// Run model
-			logits := dec.ModelFn(scope, sequences)
+			logits := gen.naiveModelFn(scope, sequences)
 
 			// Last token logits: [batch_beam_size, vocab_size]
 			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
 			lastLogits = Squeeze(lastLogits, 1)
 
 			// Beam search step
-			nextSeqs, nextScores, isFinished := beamConfig.Step(
+			nextSeqs, nextScores, isFinished, _ := beamConfig.Step(
 				lastLogits,
 				sequences,
 				scores,
@@ -849,16 +978,14 @@ func (dec *Decoder) generateBeamSearchNonCached(
 
 // generateBeamSearchCached performs beam search with KV caching.
 // Each beam maintains its own cache for efficient incremental generation.
-func (dec *Decoder) generateBeamSearchCached(
+func (gen *Generator) generateBeamSearchCached(
 	backend compute.Backend,
 	scope *model.Scope,
 	prompt *tensors.Tensor,
 	batchSize, promptLen int,
 ) (*tensors.Tensor, error) {
-	beamSize := dec.BeamSize
-
-	// Note: KV caches are now automatically managed within the scope by the attention layers.
-	// Each call to WithKVCache in the model function will create/reuse cache variables in the model.
+	beamSize := gen.BeamSize
+	batchBeamSize := batchSize * beamSize
 
 	// Replicate prompt for each beam
 	replicateExec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, prompt *Node) *Node {
@@ -879,22 +1006,36 @@ func (dec *Decoder) generateBeamSearchCached(
 
 	replicatedPrompt := replicatedResults[0]
 
-	// Process prompt to populate caches
-	promptExec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, tokens *Node) *Node {
-		logits := dec.IncrementalModelFn(scope, tokens, 0)
-		lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
-		return Squeeze(lastLogits, 1)
-	})
+	// Initialize KV cache for batchBeamSize
+	lt := attention.GlobalLayer
+	if len(gen.KVCache.OrderedScopes) > 0 {
+		lt = gen.KVCache.GetLayerType(gen.KVCache.OrderedScopes[0])
+	}
+	cacheSeqLen := gen.KVCache.CacheSeqLen(lt, promptLen)
+
+	kvCacheTensors := gen.KVCache.InitializeTensors(batchBeamSize, gen.numKVHeads, gen.headDim, gen.dtype, promptLen)
+	kvCacheTensorsSerialized, err := gen.KVCache.SerializeTensors(kvCacheTensors)
 	if err != nil {
-		return nil, errors.WithMessagef(err, "failed to create prompt exec")
+		return nil, err
 	}
 
-	_, err = promptExec.Exec(replicatedPrompt)
+	promptExec, err := gen.getPromptExec(backend, scope, cacheSeqLen)
+	if err != nil {
+		return nil, err
+	}
+
+	promptInputs := make([]any, 1+len(kvCacheTensorsSerialized))
+	promptInputs[0] = replicatedPrompt
+	for i, t := range kvCacheTensorsSerialized {
+		promptInputs[i+1] = t
+	}
+
+	outputs, err := promptExec.Exec(promptInputs...)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to process prompt")
 	}
 
-	batchBeamSize := batchSize * beamSize
+	kvCacheTensors = gen.KVCache.DeserializeTensors(outputs[1:])
 
 	// Initialize beam scores: first beam 0, others -1e10
 	initialScores := make([]float32, batchBeamSize)
@@ -909,20 +1050,27 @@ func (dec *Decoder) generateBeamSearchCached(
 	currentSequences := replicatedPrompt
 
 	// Beam search configuration
-	beamConfig := sample.NewBeamSearch(beamSize, dec.EosTokenId).
-		WithMaxLength(dec.MaxLength).
+	beamConfig := sample.NewBeamSearch(beamSize, gen.EosTokenId).
+		WithMaxLength(gen.MaxLength).
 		WithLengthPenalty(1.0)
 
 	// Main loop
 	genScope := scope
-	numSteps := dec.MaxLength - promptLen
+	numSteps := gen.MaxLength - promptLen
 
 	for step := 0; step < numSteps; step++ {
 		position := promptLen + step
 
-		// Note: Cannot cache extractExec across decode calls because it would need
-		// to be invalidated when sequences change shape. Creating it per-step is acceptable
-		// since it's a trivial slice operation.
+		// Pad cache if needed
+		kvCacheTensors, err = gen.KVCache.PadTensors(kvCacheTensors, position)
+		if err != nil {
+			return nil, err
+		}
+		kvCacheTensorsSerialized, err = gen.KVCache.SerializeTensors(kvCacheTensors)
+		if err != nil {
+			return nil, err
+		}
+
 		extractExec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, sequences *Node) *Node {
 			// Last token: [batch_beam_size]
 			lastTokens := Slice(sequences, AxisRange(), AxisElem(-1))
@@ -939,31 +1087,61 @@ func (dec *Decoder) generateBeamSearchCached(
 
 		lastTokens := extractResults[0]
 
-		// Note: Cannot cache this exec because position changes each iteration
-		// and is used as a compile-time constant in the graph (passed to IncrementalModelFn)
-		exec, err := model.NewExec(backend, genScope.Store(), func(scope *model.Scope, tokens, scores, sequences *Node) (*Node, *Node, *Node) {
+		positionTensor := tensors.FromValue(int32(position))
+
+		exec, err := model.NewExec(backend, genScope.Store(), func(scope *model.Scope, inputs []*Node) []*Node {
+			tokens := inputs[0]
+			scores := inputs[1]
+			sequences := inputs[2]
+			positionNode := inputs[3]
+			cacheNodes := inputs[4:]
 			// tokens: [batch_beam_size]
 			tokensReshaped := ExpandDims(tokens, -1) // [batch_beam_size, 1]
 
 			// Process with incremental model
-			logits := dec.IncrementalModelFn(scope, tokensReshaped, position)
+			cache := gen.KVCache.DeserializeNodes(cacheNodes)
+			logits, updatedCache := gen.cacheModelFn(scope, tokensReshaped, positionNode, cache)
 			logits = Squeeze(logits, 1) // [batch_beam_size, vocab_size]
 
 			// Beam search step
-			nextSeqs, nextScores, isFinished := beamConfig.Step(
+			nextSeqs, nextScores, isFinished, gatherIndices := beamConfig.Step(
 				logits,
 				sequences,
 				scores,
 				position,
 			)
 
-			return nextSeqs, nextScores, isFinished
+			// Re-order the cache nodes using gatherIndices
+			for kKey, node := range updatedCache {
+				updatedCache[kKey] = Gather(node, gatherIndices)
+			}
+
+			serializedUpdatedCache, err := gen.KVCache.SerializeNodes(updatedCache)
+			if err != nil {
+				panic(err)
+			}
+
+			res := make([]*Node, 3+len(serializedUpdatedCache))
+			res[0] = nextSeqs
+			res[1] = nextScores
+			res[2] = isFinished
+			copy(res[3:], serializedUpdatedCache)
+			return res
 		})
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to create beam step exec")
 		}
 
-		outputs, err := exec.Exec(lastTokens, beamScores, currentSequences)
+		stepInputs := make([]any, 4+len(kvCacheTensorsSerialized))
+		stepInputs[0] = lastTokens
+		stepInputs[1] = beamScores
+		stepInputs[2] = currentSequences
+		stepInputs[3] = positionTensor
+		for i, t := range kvCacheTensorsSerialized {
+			stepInputs[i+4] = t
+		}
+
+		outputs, err := exec.Exec(stepInputs...)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "beam search step %d failed", step)
 		}
@@ -971,6 +1149,7 @@ func (dec *Decoder) generateBeamSearchCached(
 		currentSequences = outputs[0]
 		beamScores = outputs[1]
 		isFinished := outputs[2]
+		kvCacheTensors = gen.KVCache.DeserializeTensors(outputs[3:])
 
 		// Early stopping check
 		if beamConfig.EarlyStopping() {
@@ -984,6 +1163,8 @@ func (dec *Decoder) generateBeamSearchCached(
 						break
 					}
 				}
+			case bool:
+				allFinished = v
 			}
 			if allFinished {
 				break
@@ -991,22 +1172,21 @@ func (dec *Decoder) generateBeamSearchCached(
 		}
 	}
 
-	// Select best sequences
-	selectExec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, sequences, scores *Node) (*Node, *Node) {
-		// Select best sequences (length penalty is applied automatically)
-		bestSeqs, bestScores := beamConfig.SelectBest(sequences, scores)
-		return bestSeqs, bestScores
+	// Select best sequence
+	selectExec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, sequences, scores *Node) *Node {
+		bestSeqs, _ := beamConfig.SelectBest(sequences, scores)
+		return bestSeqs
 	})
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to create select exec")
 	}
 
-	selectResults, err := selectExec.Exec(currentSequences, beamScores)
+	bestResults, err := selectExec.Exec(currentSequences, beamScores)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to select best sequences")
 	}
 
-	return selectResults[0], nil
+	return bestResults[0], nil
 }
 
 // GenerateStreaming performs streaming generation, yielding tokens as they are generated.
@@ -1022,13 +1202,61 @@ func (dec *Decoder) generateBeamSearchCached(
 //   - Error if generation fails
 //
 // Note: This is a placeholder for future streaming support.
-func (dec *Decoder) GenerateStreaming(
+func (gen *Generator) GenerateStreaming(
 	backend compute.Backend,
 	scope *model.Scope,
 	prompt any,
 	callback func(token int) bool,
 ) error {
-	dec.mu.Lock()
-	defer dec.mu.Unlock()
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
 	return errors.Errorf("streaming generation not yet implemented")
+}
+
+func getPromptValues(promptVal any) ([][]int32, error) {
+	switch pVal := promptVal.(type) {
+	case [][]int32:
+		return pVal, nil
+	case [][]int64:
+		res := make([][]int32, len(pVal))
+		for i, row := range pVal {
+			res[i] = make([]int32, len(row))
+			for j, v := range row {
+				res[i][j] = int32(v)
+			}
+		}
+		return res, nil
+	case [][]int:
+		res := make([][]int32, len(pVal))
+		for i, row := range pVal {
+			res[i] = make([]int32, len(row))
+			for j, v := range row {
+				res[i][j] = int32(v)
+			}
+		}
+		return res, nil
+	default:
+		return nil, errors.Errorf("unsupported prompt tensor value type: %T", promptVal)
+	}
+}
+
+func get1DTokenValues(tokenVal any) ([]int32, error) {
+	switch fVal := tokenVal.(type) {
+	case []int32:
+		return fVal, nil
+	case []int64:
+		res := make([]int32, len(fVal))
+		for i, v := range fVal {
+			res[i] = int32(v)
+		}
+		return res, nil
+	case []int:
+		res := make([]int32, len(fVal))
+		for i, v := range fVal {
+			res[i] = int32(v)
+		}
+		return res, nil
+	default:
+		return nil, errors.Errorf("unsupported token tensor value type: %T", tokenVal)
+	}
 }

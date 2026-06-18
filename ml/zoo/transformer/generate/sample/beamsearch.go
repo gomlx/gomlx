@@ -153,7 +153,7 @@ func (c *BeamSearchConfig) Step(
 	currentSequences *Node,
 	beamScores *Node,
 	currentLength int,
-) (nextSequences, nextBeamScores, isFinished *Node) {
+) (nextSequences, nextBeamScores, isFinished, gatherIndices *Node) {
 	g := logits.Graph()
 	vocabSize := logits.Shape().Dimensions[1]
 	batchBeamSize := logits.Shape().Dimensions[0]
@@ -205,7 +205,7 @@ func (c *BeamSearchConfig) Step(
 	batchIndices = MulScalar(batchIndices, float64(c.beamSize))
 	batchIndices = ConvertDType(batchIndices, beamIdx.DType())
 
-	gatherIndices := Add(batchIndices, beamIdx)
+	gatherIndices = Add(batchIndices, beamIdx)
 	gatherIndices = ConvertDType(gatherIndices, dtypes.Int32)
 	gatherIndices = ExpandDims(gatherIndices, -1)
 
@@ -216,7 +216,7 @@ func (c *BeamSearchConfig) Step(
 	isFinished = Equal(tokenIdx, ConstAs(tokenIdx, c.eosTokenId))
 	isFinished = Squeeze(isFinished, -1)
 
-	return nextSequences, nextBeamScores, isFinished
+	return nextSequences, nextBeamScores, isFinished, gatherIndices
 }
 
 // SelectBest selects the top scoring sequences from beam search results.

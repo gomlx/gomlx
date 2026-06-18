@@ -46,10 +46,17 @@ func Temperature(rng RNG, logits *Node, temperature float64) *Node {
 		logits = DivScalar(logits, temperature)
 	}
 
-	uniform := rng.RandomUniform(g, logits.Shape())
+	shapeF32 := logits.Shape().Clone()
+	shapeF32.DType = dtypes.Float32
+	uniform := rng.RandomUniform(g, shapeF32)
+
 	epsilon := ConstAs(uniform, 1e-10)
+	oneMinusEpsilon := ConstAs(uniform, 1.0-1e-7)
 	uniform = Max(uniform, epsilon)
+	uniform = Min(uniform, oneMinusEpsilon)
+
 	gumbel := Neg(Log(Neg(Log(uniform))))
+	gumbel = ConvertDType(gumbel, logits.DType())
 
 	noisyLogits := Add(logits, gumbel)
 	return ArgMax(noisyLogits, -1, dtypes.Int32)

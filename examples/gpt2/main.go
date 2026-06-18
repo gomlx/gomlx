@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/go-huggingface/hub"
 	_ "github.com/gomlx/gomlx/backends/default"
-	"github.com/gomlx/gomlx/ml/decode/sample"
+	"github.com/gomlx/gomlx/ml/zoo/transformer/generate/sample"
 )
 
 var (

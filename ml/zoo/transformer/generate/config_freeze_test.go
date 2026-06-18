@@ -1,4 +1,4 @@
-package decode
+package generate
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/ml/layers/attention/kvcache"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
@@ -17,15 +18,15 @@ func TestDecoderConfigFreeze(t *testing.T) {
 	store := model.NewStore()
 
 	// Create a simple incremental model function
-	var incrementalFn IncrementalModelFn = func(scope *model.Scope, newTokens *graph.Node, position int) *graph.Node {
+	var incrementalFn KVCacheModelFn = func(scope *model.Scope, newTokens *graph.Node, position *graph.Node, cache kvcache.KVCacheNodes) (*graph.Node, kvcache.KVCacheNodes) {
 		g := newTokens.Graph()
 		batchSize := newTokens.Shape().Dimensions[0]
 		seqLen := newTokens.Shape().Dimensions[1]
 		vocabSize := 10
-		return graph.Zeros(g, shapes.Make(dtypes.Float32, batchSize, seqLen, vocabSize))
+		return graph.Zeros(g, shapes.Make(dtypes.Float32, batchSize, seqLen, vocabSize)), cache
 	}
 
-	dec := New(incrementalFn)
+	dec := New(incrementalFn).WithKVCache(kvcache.NewKVCache(), 1, 1, dtypes.Float32)
 
 	// Config before use - should be fine
 	dec.WithMaxLength(50)

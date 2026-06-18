@@ -9,7 +9,6 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/ml/decode"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/attention"
@@ -18,6 +17,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/nn"
+	"github.com/gomlx/gomlx/ml/zoo/transformer/generate"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -586,8 +586,9 @@ func (m *Model) sourceLayerForShared(layerNum int) int {
 // This form can be used to embed full sentences or for training.
 //
 //   - tokens: shaped [batchSize, seqLen], or simply [seqLen]
-//   - mask: optional, if provided the shape must match tokens.Shape(), and it indicates
-//     which tokens are valid (1) and which are padding (0). The attention mask (causal or not)
+//   - mask: optional, shaped [batchSize, seqLen] of some integer dtype or [dtypes.Bool].
+//     If provided the shape must match tokens.Shape(), and it indicates
+//     which tokens are valid (1/true) and which are padding (0/false). The attention mask (causal or not)
 //     is computed taking into consideration the mask.
 //
 // It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize]
@@ -596,11 +597,23 @@ func (m *Model) Logits(scope *model.Scope, tokens, mask *Node) *Node {
 	return m.LogitsFromEmbeddings(scope, embeddings)
 }
 
-// MakeIterativeModelFn returns a "iterative" model function for iteratively (increasing sequence length, no KVCache)
+// MakeNaiveModelFn returns a "naive" model function for iterative (increasing sequence length, no KVCache)
 // generation, using the decode package.
-func MakeIterativeModelFn(m *Model) decode.IterativeModelFn {
-	return func(scope *model.Scope, tokens *Node) *Node {
-		return m.Logits(scope, tokens, nil)
+//
+// It returns a generate.NaiveModel interface.
+func MakeNaiveModelFn(m *Model) generate.NaiveModelFn {
+	return func(scope *model.Scope, tokens *Node, length int) *Node {
+		paddedSeqLen := tokens.Shape().Dimensions[1]
+		if length > paddedSeqLen {
+			exceptions.Panicf("indicated length %d of sequence is larger than the tokens ([batch, seqLen]=%s) length provided", length, tokens.Shape())
+		}
+		var attentionMask *Node
+		if paddedSeqLen != length {
+			g := tokens.Graph()
+			attentionMask = Iota(g, tokens.Shape(), 1)
+			attentionMask = LessThan(attentionMask, ConstAs(attentionMask, length))
+		}
+		return m.Logits(scope, tokens, attentionMask)
 	}
 }
 
@@ -627,9 +640,9 @@ func (m *Model) LogitsWithKVCache(scope *model.Scope, newTokens *Node, positionI
 	return m.Forward(scope, newTokens, positionIds, nil, cache)
 }
 
-// MakeIncrementalModelFn returns a model function used by the decoder for incremental generation with KVCache,
+// MakeKVCacheModelFn returns a model function used by the decoder for incremental generation with KVCache,
 // using the decode package.
-func MakeIncrementalModelFn(m *Model) decode.IncrementalModelFn {
+func MakeKVCacheModelFn(m *Model) generate.KVCacheModelFn {
 	return func(scope *model.Scope, newTokens *Node, position *Node, cache KVCacheNodes) (*Node, KVCacheNodes) {
 		return m.Forward(scope, newTokens, position, nil, cache)
 	}

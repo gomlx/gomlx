@@ -15,7 +15,6 @@ import (
 	"github.com/gomlx/go-huggingface/tokenizers/hftokenizer"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/decode/sample"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/attention"
@@ -23,6 +22,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/zoo/transformer"
+	"github.com/gomlx/gomlx/ml/zoo/transformer/generate/sample"
 )
 
 // GPT2Config holds the architecture configuration for GPT-2.

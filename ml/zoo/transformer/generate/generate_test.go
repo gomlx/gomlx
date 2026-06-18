@@ -1,4 +1,4 @@
-package decode
+package generate
 
 import (
 	"testing"
@@ -7,8 +7,8 @@ import (
 	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/ml/decode/sample"
 	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/zoo/transformer/generate/sample"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +17,7 @@ import (
 // TestDecoder groups config default and builder tests.
 func TestDecoder(t *testing.T) {
 	t.Run("Defaults", func(t *testing.T) {
-		var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node { return tokens }
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node { return tokens }
 		cfg := New(modelFn)
 		assert.Equal(t, 100, cfg.MaxLength)
 		assert.Equal(t, sample.StrategyGreedy, cfg.Strategy)
@@ -30,7 +30,7 @@ func TestDecoder(t *testing.T) {
 	})
 
 	t.Run("Builders", func(t *testing.T) {
-		var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node { return tokens }
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node { return tokens }
 		cfg := New(modelFn).
 			WithMaxLength(50).
 			WithStrategy(sample.StrategyTemperature).
@@ -55,12 +55,12 @@ func TestDecoderSampling(t *testing.T) {
 	t.Run("Greedy", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
 		store := model.NewStore()
-		var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node {
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
-			seqLen := tokens.Shape().Dimensions[1]
+			paddedSeqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
 			g := tokens.Graph()
-			logits := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, vocabSize))
+			logits := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, paddedSeqLen, vocabSize))
 			indices := Iota(g, logits.Shape(), 2)
 			logits = Where(Equal(indices, ConstAs(indices, 5)), ConstAs(logits, 100.0), logits)
 			return logits
@@ -81,7 +81,7 @@ func TestDecoderSampling(t *testing.T) {
 	t.Run("Temperature", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
 		store := model.NewStore()
-		var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node {
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
@@ -104,7 +104,7 @@ func TestDecoderSampling(t *testing.T) {
 	t.Run("OneDPrompt", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
 		store := model.NewStore()
-		var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node {
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
 			batchSize := tokens.Shape().Dimensions[0]
 			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
@@ -123,7 +123,7 @@ func TestDecoderSampling(t *testing.T) {
 	t.Run("PromptTooLong", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
 		store := model.NewStore()
-		var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node { return tokens }
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node { return tokens }
 		cfg := New(modelFn).WithMaxLength(5)
 		prompt := [][]int32{{1, 2, 3, 4, 5, 6, 7, 8}}
 		_, err := cfg.Decode(backend, store.RootScope(), prompt)
@@ -136,7 +136,7 @@ func TestDecoderSampling(t *testing.T) {
 func TestBeamSearch(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	store := model.NewStore()
-	var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node {
+	var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
 		batchSize := tokens.Shape().Dimensions[0]
 		seqLen := tokens.Shape().Dimensions[1]
 		g := tokens.Graph()
@@ -156,7 +156,7 @@ func TestBeamSearch(t *testing.T) {
 func TestStreamingNotImplemented(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	store := model.NewStore()
-	var modelFn IterativeModelFn = func(scope *model.Scope, tokens *Node) *Node { return tokens }
+	var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node { return tokens }
 	cfg := New(modelFn)
 	prompt := []int32{1, 2, 3}
 	err := cfg.GenerateStreaming(backend, store.RootScope(), prompt, func(token int) bool { return true })
