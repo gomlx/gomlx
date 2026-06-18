@@ -10,13 +10,12 @@ go build
 ```
 
 If downloads fail, consider using a mirror by setting `HF_ENDPOINT`.
-One such mirrors from China is `HF_ENDPOINT=https://hf-mirror.com`.
 
 ## Features
 
 - Loads GPT-2 weights from Hugging Face (safetensors format)
 - BPE tokenizer (vocab.json + merges.txt)
-- KV caching for efficient generation
+- It uses the `github.com/gomlx/gomlx/ml/zoo/transformer/generate` library to generate text with KV caching for efficiency.
 - Achieves ~50 tokens/s on CPU (77% of PyTorch performance)
 
 ## Options
