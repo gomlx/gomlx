@@ -972,7 +972,7 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x, a
 			WithNumKVHeads(kvHeads).
 			WithPreProjected(true).
 			WithOutputDim(m.EmbedDim).
-			WithQueryKeyMatrixMask(ConvertDType(customMask, x.DType())).
+			WithQueryKeyMatrixMask(customMask).
 			WithScoreSoftCap(m.AttentionScoreSoftCap).
 			WithQueryKeyScale(m.QueryKeyScale)
 

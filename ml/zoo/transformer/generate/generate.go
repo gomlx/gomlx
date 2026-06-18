@@ -344,7 +344,7 @@ func (gen *Generator) WithStrategy(strategy sample.Strategy) *Generator {
 // WithTemperature sets the temperature for sampling.
 // Higher values (>1.0) increase randomness, lower values (<1.0) make output more deterministic.
 //
-// It sets the sampling strategy to [sample.StrategyTemperature]
+// It sets the sampling strategy to [sample.StrategyTemperature] if temperature is non-zero.
 func (gen *Generator) WithTemperature(temperature float32) *Generator {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
@@ -353,14 +353,16 @@ func (gen *Generator) WithTemperature(temperature float32) *Generator {
 		return gen
 	}
 	gen.Temperature = temperature
-	gen.Strategy = sample.StrategyTemperature
+	if temperature != 0 {
+		gen.Strategy = sample.StrategyTemperature
+	}
 	return gen
 }
 
 // WithTopK sets k for top-k sampling.
 // Only the k most likely tokens are considered at each step, their probabilities are renormalized, and then the next token is sampled from them.
 //
-// It sets the sampling strategy to [sample.StrategyTopK]
+// It sets the sampling strategy to [sample.StrategyTopK] if topK is non-zero.
 func (gen *Generator) WithTopK(topK int) *Generator {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
@@ -369,14 +371,16 @@ func (gen *Generator) WithTopK(topK int) *Generator {
 		return gen
 	}
 	gen.TopK = topK
-	gen.Strategy = sample.StrategyTopK
+	if topK != 0 {
+		gen.Strategy = sample.StrategyTopK
+	}
 	return gen
 }
 
 // WithTopP sets p for nucleus sampling.
 // Tokens with cumulative probability up to p are considered, their probabilities are renormalized, and then the next token is sampled from them.
 //
-// It sets the sampling strategy to [sample.StrategyTopP]
+// It sets the sampling strategy to [sample.StrategyTopP] if topP is non-zero.
 func (gen *Generator) WithTopP(topP float32) *Generator {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
@@ -385,14 +389,16 @@ func (gen *Generator) WithTopP(topP float32) *Generator {
 		return gen
 	}
 	gen.TopP = topP
-	gen.Strategy = sample.StrategyTopP
+	if topP != 0 {
+		gen.Strategy = sample.StrategyTopP
+	}
 	return gen
 }
 
 // WithBeamSize sets the beam size for beam search.
 // Higher values explore more candidates but are slower.
 //
-// It sets the sampling strategy to [sample.StrategyBeamSearch]
+// It sets the sampling strategy to [sample.StrategyBeamSearch] if beamSize is non-zero.
 func (gen *Generator) WithBeamSize(beamSize int) *Generator {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
@@ -401,6 +407,9 @@ func (gen *Generator) WithBeamSize(beamSize int) *Generator {
 		return gen
 	}
 	gen.BeamSize = beamSize
+	if beamSize != 0 {
+		gen.Strategy = sample.StrategyBeamSearch
+	}
 	return gen
 }
 
@@ -441,6 +450,9 @@ func (gen *Generator) isCached() bool {
 func (gen *Generator) validate() error {
 	if gen.err != nil {
 		return errors.WithMessagef(gen.err, "Generator failed during configuration")
+	}
+	if gen.Temperature == 0 && (gen.Strategy == sample.StrategyTemperature || gen.Strategy == sample.StrategyTopK || gen.Strategy == sample.StrategyTopP) {
+		gen.Temperature = 1.0
 	}
 	// Exactly one model function must be set
 	if gen.naiveModelFn != nil && gen.cacheModelFn != nil {
@@ -516,7 +528,7 @@ func (gen *Generator) Decode(
 	}
 
 	// Regular sampling-based generation
-	return gen.generateSampling(backend, scope, promptTensor)
+	return gen.generateSampling(backend, scope, promptTensor, nil)
 }
 
 func finalizeTensors(ts []*tensors.Tensor) {
@@ -642,6 +654,7 @@ func (gen *Generator) generateSampling(
 	backend compute.Backend,
 	scope *model.Scope,
 	prompt *tensors.Tensor,
+	callback func(token int) bool,
 ) (*tensors.Tensor, error) {
 	promptShape := prompt.Shape()
 	var batchSize, promptLen int
@@ -672,9 +685,9 @@ func (gen *Generator) generateSampling(
 	}
 
 	if gen.isCached() {
-		return gen.generateSamplingWithKVCache(backend, scope, prompt, batchSize, promptLen)
+		return gen.generateSamplingWithKVCache(backend, scope, prompt, batchSize, promptLen, callback)
 	}
-	return gen.generateSamplingNaive(backend, scope, prompt, promptLen)
+	return gen.generateSamplingNaive(backend, scope, prompt, promptLen, callback)
 }
 
 // generateSamplingNaive performs sampling-based generation using the "naive"
@@ -694,6 +707,7 @@ func (gen *Generator) generateSamplingNaive(
 	scope *model.Scope,
 	prompt *tensors.Tensor,
 	promptLen int,
+	callback func(token int) bool,
 ) (*tensors.Tensor, error) {
 	numTokensToGenerate := gen.MaxLength - promptLen
 	if numTokensToGenerate <= 0 {
@@ -807,6 +821,13 @@ func (gen *Generator) generateSamplingNaive(
 			}
 		}
 
+		if callback != nil {
+			if !callback(int(nextTokenValues[0])) {
+				nextToken.FinalizeAll()
+				break
+			}
+		}
+
 		if gen.StopOnEOS && allEOS {
 			nextToken.FinalizeAll()
 			break
@@ -850,6 +871,7 @@ func (gen *Generator) generateSamplingWithKVCache(
 	scope *model.Scope,
 	prompt *tensors.Tensor,
 	batchSize, promptLen int,
+	callback func(token int) bool,
 ) (*tensors.Tensor, error) {
 	// Initialize cache
 	lt := attention.GlobalLayer
@@ -940,6 +962,12 @@ func (gen *Generator) generateSamplingWithKVCache(
 	}
 	for i := range batchSize {
 		outputTokens[i] = append(outputTokens[i], firstTokenValues[i])
+	}
+
+	if callback != nil {
+		if !callback(int(firstTokenValues[0])) {
+			return tensors.FromValue(outputTokens), nil
+		}
 	}
 
 	numTokensToGenerate := gen.MaxLength - promptLen - 1
@@ -1041,6 +1069,12 @@ func (gen *Generator) generateSamplingWithKVCache(
 			outputTokens[i] = append(outputTokens[i], nextTokenValues[i])
 			if gen.StopOnEOS && !gen.isEOSToken(int(nextTokenValues[i])) {
 				allEOS = false
+			}
+		}
+
+		if callback != nil {
+			if !callback(int(nextTokenValues[0])) {
+				break
 			}
 		}
 
@@ -1604,7 +1638,26 @@ func (gen *Generator) GenerateStreaming(
 ) error {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
-	return errors.Errorf("streaming generation not yet implemented")
+
+	// Validate configuration
+	if err := gen.validate(); err != nil {
+		return errors.WithMessagef(err, "invalid Generator config")
+	}
+
+	promptTensor, err := tensors.FromAnyValue(prompt)
+	if err != nil {
+		return err
+	}
+	if promptTensor.Rank() != 2 && promptTensor.Rank() != 1 {
+		return errors.Errorf("prompt must be 1D or 2D, got rank %d", promptTensor.Rank())
+	}
+
+	if gen.Strategy == sample.StrategyBeamSearch {
+		return errors.Errorf("streaming generation is not supported with beam search")
+	}
+
+	_, err = gen.generateSampling(backend, scope, promptTensor, callback)
+	return err
 }
 
 func getPromptValues(promptVal any) ([][]int32, error) {
@@ -1636,6 +1689,12 @@ func getPromptValues(promptVal any) ([][]int32, error) {
 
 func get1DTokenValues(tokenVal any) ([]int32, error) {
 	switch fVal := tokenVal.(type) {
+	case int32:
+		return []int32{fVal}, nil
+	case int64:
+		return []int32{int32(fVal)}, nil
+	case int:
+		return []int32{int32(fVal)}, nil
 	case []int32:
 		return fVal, nil
 	case []int64:

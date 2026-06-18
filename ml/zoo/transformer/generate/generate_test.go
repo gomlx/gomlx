@@ -38,8 +38,8 @@ func TestGenerator(t *testing.T) {
 			WithTemperature(0.7).
 			WithTopK(40).
 			WithTopP(0.95).
-			WithStrategy(sample.StrategyTemperature).
 			WithBeamSize(8).
+			WithStrategy(sample.StrategyTemperature).
 			WithEOS(2)
 		assert.Equal(t, 50, cfg.MaxLength)
 		assert.Equal(t, sample.StrategyTemperature, cfg.Strategy)
@@ -171,16 +171,30 @@ func TestBeamSearch(t *testing.T) {
 	assert.Equal(t, []int{1, 10}, result.Shape().Dimensions)
 }
 
-// TestStreamingNotImplemented groups streaming placeholder test.
-func TestStreamingNotImplemented(t *testing.T) {
+// TestStreaming verifies the functional GenerateStreaming method.
+func TestStreaming(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	store := model.NewStore()
-	var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node { return tokens }
-	cfg := New(modelFn)
+	var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
+		vocabSize := 10
+		g := tokens.Graph()
+		vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
+		vocabIota = ExpandDims(vocabIota, 0)
+		vocabIota = ExpandDims(vocabIota, 0)
+		targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
+		targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
+		targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
+		return BroadcastToShape(vocabIota, targetShape)
+	}
+	cfg := New(modelFn).WithMaxLength(10)
 	prompt := []int32{1, 2, 3}
-	err := cfg.GenerateStreaming(backend, store.RootScope(), prompt, func(token int) bool { return true })
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "streaming generation not yet implemented")
+	var generated []int
+	err := cfg.GenerateStreaming(backend, store.RootScope(), prompt, func(token int) bool {
+		generated = append(generated, token)
+		return true
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, generated)
 }
 
 func TestDynamicShapesAndBucketing(t *testing.T) {
