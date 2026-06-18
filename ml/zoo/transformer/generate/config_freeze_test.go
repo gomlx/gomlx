@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDecoderConfigFreeze(t *testing.T) {
+func TestGeneratorConfigFreeze(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	store := model.NewStore()
 
@@ -26,27 +26,27 @@ func TestDecoderConfigFreeze(t *testing.T) {
 		return graph.Zeros(g, shapes.Make(dtypes.Float32, batchSize, seqLen, vocabSize)), cache
 	}
 
-	dec := New(incrementalFn).WithKVCache(kvcache.NewKVCache(), 1, 1, dtypes.Float32)
+	gen := New(incrementalFn).WithKVCache(kvcache.NewKVCache(), 1, 1, dtypes.Float32)
 
 	// Config before use - should be fine
-	dec.WithMaxLength(50)
-	assert.NoError(t, dec.err)
+	gen.WithMaxLength(50)
+	assert.NoError(t, gen.err)
 
 	// Run Decode to trigger initialization of promptExec.
 	// We use a valid prompt.
 	prompt := []int32{1, 2, 3}
 	// The model is dummy, but compatible shapes.
 	// Decode might succeed or fail, but promptExec should be initialized.
-	_, _ = dec.Decode(backend, store.RootScope(), prompt)
+	_, _ = gen.Decode(backend, store.RootScope(), prompt)
 
 	// Config after use - should fail
-	dec.WithMaxLength(60)
-	require.Error(t, dec.err)
-	assert.Contains(t, dec.err.Error(), "cannot change configuration")
+	gen.WithMaxLength(60)
+	require.Error(t, gen.err)
+	assert.Contains(t, gen.err.Error(), "cannot change configuration")
 
 	// Reset error to test another method
-	dec.err = nil
-	dec.WithTemperature(0.5)
-	require.Error(t, dec.err)
-	assert.Contains(t, dec.err.Error(), "cannot change configuration")
+	gen.err = nil
+	gen.WithTemperature(0.5)
+	require.Error(t, gen.err)
+	assert.Contains(t, gen.err.Error(), "cannot change configuration")
 }

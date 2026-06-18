@@ -67,7 +67,7 @@ func createModelStore() *model.Store {
 		optimizer.ParamLearningRate: 0.001,
 
 		// Generation hyperparameters
-		// decode.ParamStrategy is initialized to "greedy" by default.
+		// generate.ParamStrategy is initialized to "greedy" by default.
 		generate.ParamStrategy:    "greedy",
 		generate.ParamTemperature: 1.0,
 		generate.ParamMaxLength:   50,
@@ -196,8 +196,14 @@ func generateText(backend compute.Backend, scope *model.Scope, prompt string) {
 
 	transformerModel := transformer.NewFromScope(scope)
 	modelFn := transformer.MakeKVCacheModelFn(transformerModel)
+	transformerModel.PopulateKVCacheConfigs(scope)
 
 	decoder := generate.New(modelFn).FromScope(scope)
+	numKVHeads := transformerModel.NumKVHeads
+	if numKVHeads == 0 {
+		numKVHeads = transformerModel.NumHeads
+	}
+	decoder.WithKVCache(transformerModel.KVCache, numKVHeads, transformerModel.HeadDim, transformerModel.DType)
 	fmt.Printf("\nGeneration\nStrategy: %s  Temp: %.2f  MaxLen: %d\nPrompt: %q\n\n",
 		decoder.Strategy, decoder.Temperature, decoder.MaxLength, prompt)
 

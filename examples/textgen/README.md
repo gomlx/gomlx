@@ -20,7 +20,7 @@ Try different sampling strategies:
 
 ```bash
 # For multiple scope parameters, enclose them in quotes and separate with semicolons:
-go run main.go -set="decode_strategy=temperature;decode_temperature=1.5"
+go run main.go -set="generate_strategy=temperature;generate_temperature=1.5"
 ```
 
 ## Available Flags
@@ -43,9 +43,9 @@ go run main.go -set="decode_strategy=temperature;decode_temperature=1.5"
 
 ## Implementation
 
-The generation code is in `pkg/ml/layers/generation/`:
-- `decode.go` - Main generation loop
-- `sampling.go` - Sampling strategies
-- `beamsearch.go` - Beam search (planned)
+The generation code is in `ml/zoo/transformer/generate/`:
+- `generate.go` - Main generation loop
+- `sample/sample.go` - Sampling strategies
+- `sample/beamsearch.go` - Beam search
 
-KV caching support in `pkg/ml/layers/attention/`
+KV caching support in `ml/layers/attention/`

@@ -4,9 +4,11 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/gobackend"
 	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors/bucketing"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/zoo/transformer/generate/sample"
 	"github.com/gomlx/gomlx/support/testutil"
@@ -14,8 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDecoder groups config default and builder tests.
-func TestDecoder(t *testing.T) {
+// TestGenerator groups config default and builder tests.
+func TestGenerator(t *testing.T) {
 	t.Run("Defaults", func(t *testing.T) {
 		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node { return tokens }
 		cfg := New(modelFn)
@@ -33,10 +35,10 @@ func TestDecoder(t *testing.T) {
 		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node { return tokens }
 		cfg := New(modelFn).
 			WithMaxLength(50).
-			WithStrategy(sample.StrategyTemperature).
 			WithTemperature(0.7).
 			WithTopK(40).
 			WithTopP(0.95).
+			WithStrategy(sample.StrategyTemperature).
 			WithBeamSize(8).
 			WithEOS(2)
 		assert.Equal(t, 50, cfg.MaxLength)
@@ -50,17 +52,21 @@ func TestDecoder(t *testing.T) {
 	})
 }
 
-// TestDecoderSampling groups non-beam sampling tests.
-func TestDecoderSampling(t *testing.T) {
+// TestGeneratorSampling groups non-beam sampling tests.
+func TestGeneratorSampling(t *testing.T) {
 	t.Run("Greedy", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
 		store := model.NewStore()
 		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
-			batchSize := tokens.Shape().Dimensions[0]
-			paddedSeqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
 			g := tokens.Graph()
-			logits := IotaFull(g, shapes.Make(dtypes.Float32, batchSize, paddedSeqLen, vocabSize))
+			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
+			vocabIota = ExpandDims(vocabIota, 0)
+			vocabIota = ExpandDims(vocabIota, 0)
+			targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
+			targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
+			targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
+			logits := BroadcastToShape(vocabIota, targetShape)
 			indices := Iota(g, logits.Shape(), 2)
 			logits = Where(Equal(indices, ConstAs(indices, 5)), ConstAs(logits, 100.0), logits)
 			return logits
@@ -82,11 +88,15 @@ func TestDecoderSampling(t *testing.T) {
 		backend := testutil.BuildTestBackend()
 		store := model.NewStore()
 		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
-			batchSize := tokens.Shape().Dimensions[0]
-			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
 			g := tokens.Graph()
-			return IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, vocabSize))
+			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
+			vocabIota = ExpandDims(vocabIota, 0)
+			vocabIota = ExpandDims(vocabIota, 0)
+			targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
+			targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
+			targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
+			return BroadcastToShape(vocabIota, targetShape)
 		}
 		cfg := New(modelFn).WithStrategy(sample.StrategyTemperature).WithTemperature(1.5).WithMaxLength(10)
 		prompt := [][]int32{{1, 2, 3}}
@@ -105,11 +115,15 @@ func TestDecoderSampling(t *testing.T) {
 		backend := testutil.BuildTestBackend()
 		store := model.NewStore()
 		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
-			batchSize := tokens.Shape().Dimensions[0]
-			seqLen := tokens.Shape().Dimensions[1]
 			vocabSize := 10
 			g := tokens.Graph()
-			return IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, vocabSize))
+			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
+			vocabIota = ExpandDims(vocabIota, 0)
+			vocabIota = ExpandDims(vocabIota, 0)
+			targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
+			targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
+			targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
+			return BroadcastToShape(vocabIota, targetShape)
 		}
 		cfg := New(modelFn).WithStrategy(sample.StrategyGreedy).WithMaxLength(10)
 		prompt := []int32{1, 2, 3}
@@ -137,10 +151,15 @@ func TestBeamSearch(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	store := model.NewStore()
 	var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
-		batchSize := tokens.Shape().Dimensions[0]
-		seqLen := tokens.Shape().Dimensions[1]
+		vocabSize := 10
 		g := tokens.Graph()
-		return IotaFull(g, shapes.Make(dtypes.Float32, batchSize, seqLen, 10))
+		vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
+		vocabIota = ExpandDims(vocabIota, 0)
+		vocabIota = ExpandDims(vocabIota, 0)
+		targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
+		targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
+		targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
+		return BroadcastToShape(vocabIota, targetShape)
 	}
 	cfg := New(modelFn).WithStrategy(sample.StrategyBeamSearch).WithBeamSize(4).WithMaxLength(10)
 	prompt := [][]int32{{1, 2, 3}}
@@ -162,4 +181,70 @@ func TestStreamingNotImplemented(t *testing.T) {
 	err := cfg.GenerateStreaming(backend, store.RootScope(), prompt, func(token int) bool { return true })
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "streaming generation not yet implemented")
+}
+
+func TestDynamicShapesAndBucketing(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	if backend.Name() != "go" {
+		goBackend, err := gobackend.New("test-go")
+		if err == nil {
+			backend = goBackend
+		}
+	}
+
+	t.Run("DynamicShapesWithNoneStrategy", func(t *testing.T) {
+		if !backend.Capabilities().DynamicAxes {
+			t.Skipf("Backend %q does not support DynamicAxes", backend.Name())
+		}
+
+		store := model.NewStore()
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
+			vocabSize := 10
+			g := tokens.Graph()
+			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
+			vocabIota = ExpandDims(vocabIota, 0)
+			vocabIota = ExpandDims(vocabIota, 0)
+			
+			targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
+			targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
+			targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
+			logits := BroadcastToShape(vocabIota, targetShape)
+			return logits
+		}
+
+		cfg := New(modelFn).WithStrategy(sample.StrategyGreedy).WithMaxLength(10).WithBucketingStrategy(bucketing.None())
+		prompt := [][]int32{{1, 2, 3}}
+		result, err := cfg.Decode(backend, store.RootScope(), prompt)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, []int{1, 10}, result.Shape().Dimensions)
+
+		assert.NotNil(t, cfg.naiveExec)
+	})
+
+	t.Run("BucketingPow2Strategy", func(t *testing.T) {
+		store := model.NewStore()
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
+			vocabSize := 10
+			g := tokens.Graph()
+			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
+			vocabIota = ExpandDims(vocabIota, 0)
+			vocabIota = ExpandDims(vocabIota, 0)
+			
+			targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
+			targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
+			targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
+			logits := BroadcastToShape(vocabIota, targetShape)
+			return logits
+		}
+
+		cfg := New(modelFn).WithStrategy(sample.StrategyGreedy).WithMaxLength(10).WithBucketingStrategy(bucketing.Pow2()).WithPadToken(0)
+		prompt := [][]int32{{1, 2, 3}}
+		result, err := cfg.Decode(backend, store.RootScope(), prompt)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, []int{1, 10}, result.Shape().Dimensions)
+
+		assert.NotNil(t, cfg.naiveExec)
+	})
 }

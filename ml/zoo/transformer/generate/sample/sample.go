@@ -1,6 +1,6 @@
 // Package sample provides various sampling strategies for autoregressive generation.
 //
-// It also includes a BeamSearch implementation in "graph", used by decode.Decoder
+// It also includes a BeamSearch implementation in "graph", used by generate.Generator
 // to implement beam search decoding.
 package sample
 
@@ -28,7 +28,7 @@ const (
 	StrategyTemperature
 	StrategyTopK
 	StrategyTopP
-	StrategyBeamSearch // Requires specialized implementation, see sample.NewBeamSearch or simply use the decode.Decoder with StrategyBeamSearch strategy.
+	StrategyBeamSearch // Requires specialized implementation, see sample.NewBeamSearch or simply use the generate.Generator with StrategyBeamSearch strategy.
 )
 
 // Greedy: select max-logit token.
@@ -159,7 +159,7 @@ func SampleWithStrategy(
 	case StrategyTopP:
 		return TopP(scope, logits, topP, temperature)
 	case StrategyBeamSearch:
-		panic("BeamSearch requires specialized handling, see sample.NewBeamSearch or simply use the decode.Decoder with StrategyBeamSearch strategy.")
+		panic("BeamSearch requires specialized handling, see sample.NewBeamSearch or simply use the generate.Generator with StrategyBeamSearch strategy.")
 	default:
 		// Default to greedy
 		return Greedy(logits)

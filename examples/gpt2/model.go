@@ -213,7 +213,7 @@ func (m *GPT2Model) Generate(
 	}
 
 	// Process prompt (position=0)
-	results, err := m.tokenExec.Exec(
+	results, err := m.tokenExec.Call(
 		[][]int32{promptTokens32},
 		[]int32{0},
 	)
@@ -238,7 +238,7 @@ func (m *GPT2Model) Generate(
 	for step := range config.MaxTokens - 1 {
 		position := currentPosition + step
 		// Get next token from model (includes sampling)
-		results, err := m.tokenExec.Exec(
+		results, err := m.tokenExec.Call(
 			[][]int32{{int32(currentToken)}},
 			[]int32{int32(position)},
 		)
@@ -395,7 +395,7 @@ func setScopeVariableFromTensor(scope *model.Scope, scopePath []string, varName 
 	// Normal case: set single variable
 	scopeScope := scope
 	for _, s := range scopePath {
-		scopeScope = scopeScope.In("%s", s)
+		scopeScope = scopeScope.At("%s", s)
 	}
 
 	scopeScope.VariableWithValue(varName, t)
@@ -408,9 +408,9 @@ func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *t
 	baseScopePath := scopePath[:len(scopePath)-1]
 	baseScope := scope
 	for _, s := range baseScopePath {
-		baseScope = baseScope.In("%s", s)
+		baseScope = baseScope.At("%s", s)
 	}
-	baseScope = baseScope.In("MultiHeadAttention")
+	baseScope = baseScope.At("MultiHeadAttention")
 
 	shape := t.Shape().Dimensions
 	var flatData []float32
@@ -450,9 +450,9 @@ func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *t
 			}
 		}
 
-		baseScope.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, hiddenSize, numHeads, headDim))
-		baseScope.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, hiddenSize, numHeads, headDim))
-		baseScope.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, hiddenSize, numHeads, headDim))
+		baseScope.At("query").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, hiddenSize, numHeads, headDim))
+		baseScope.At("key").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, hiddenSize, numHeads, headDim))
+		baseScope.At("value").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, hiddenSize, numHeads, headDim))
 	} else if len(shape) == 1 {
 		// Bias vector: [3*hiddenSize]
 		totalSize := shape[0]
@@ -477,9 +477,9 @@ func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *t
 			}
 		}
 
-		baseScope.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, numHeads, headDim))
-		baseScope.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, numHeads, headDim))
-		baseScope.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, numHeads, headDim))
+		baseScope.At("query").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, numHeads, headDim))
+		baseScope.At("key").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, numHeads, headDim))
+		baseScope.At("value").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, numHeads, headDim))
 	} else {
 		return fmt.Errorf("unexpected shape for fused QKV: %v", shape)
 	}

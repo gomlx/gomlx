@@ -15,8 +15,10 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/gobackend"
+	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/core/tensors/bucketing"
 	"github.com/gomlx/gomlx/ml/layers/attention"
 	"github.com/gomlx/gomlx/ml/layers/attention/kvcache"
 	"github.com/gomlx/gomlx/ml/model"
@@ -27,25 +29,25 @@ import (
 
 // Hyperparameter keys for scope configuration
 const (
-	ParamMaxLength   = "decode_max_length"
-	ParamStrategy    = "decode_strategy"
-	ParamTemperature = "decode_temperature"
-	ParamTopK        = "decode_top_k"
-	ParamTopP        = "decode_top_p"
-	ParamBeamSize    = "decode_beam_size"
-	ParamEosTokenId  = "decode_eos_token_id"
-	ParamStopOnEOS   = "decode_stop_on_eos"
+	ParamMaxLength   = "generate_max_length"
+	ParamStrategy    = "generate_strategy"
+	ParamTemperature = "generate_temperature"
+	ParamTopK        = "generate_top_k"
+	ParamTopP        = "generate_top_p"
+	ParamBeamSize    = "generate_beam_size"
+	ParamEosTokenId  = "generate_eos_token_id"
+	ParamStopOnEOS   = "generate_stop_on_eos"
 )
 
 // NaiveModelFn represents a full-sequence model function,
-// that is used iteratively during decoding, by re-feeding
+// that is used iteratively during generation, by re-feeding
 // all the tokens each time.
 //
 // This is a slow way of generating, since it will re-run all the computation
 // for the whole sequence each time.
 //
 // Parameters:
-//   - scope: Model scope passed along by the Decoder.
+//   - scope: Model scope passed along by the Generator.
 //   - tokens: Input token sequence, shaped [batch, paddedSeqLen].
 //   - length: Number of tokens that are non-padding.
 //
@@ -60,7 +62,7 @@ type NaiveModelFn func(scope *model.Scope, tokens *Node, length int) *Node
 // (typically in the form of a "KVCache" or cached key/value projections, stored in the scope).
 //
 // Parameters:
-//   - scope: Model scope passed along by the Decoder. Likely contains the cache during the execution.
+//   - scope: Model scope passed along by the Generator. Likely contains the cache during the execution.
 //   - newTokens: New tokens to process [batch, newLen]
 //   - position: Position (scalar Int32) in the sequence (for cache indexing)
 //   - cache: KVCache nodes, usually in the form of KeyValueCaches
@@ -72,7 +74,7 @@ type KVCacheModelFn func(scope *model.Scope, newTokens *Node, position *Node, ca
 
 // Generator configures and executes autoregressive text generation.
 // Supports multiple sampling strategies (greedy, temperature, top-k, nucleus, beam search)
-// and incremeantal models, usually using some form of cache (e.g.: a "KV-cache").
+// and incremental models, usually using some form of cache (e.g.: a "KV-cache").
 type Generator struct {
 	// Model functions (exactly one should be set)
 	naiveModelFn NaiveModelFn   // Standard model for non-cached generation
@@ -84,79 +86,84 @@ type Generator struct {
 	dtype      dtypes.DType
 
 	// Generation parameters
-	MaxLength   int
-	Strategy    sample.Strategy
-	Temperature float32
-	TopK        int
-	TopP        float32
-	BeamSize    int
-	EosTokenId  int
-	EosTokenIds []int
-	StopOnEOS   bool
+	MaxLength         int
+	Strategy          sample.Strategy
+	Temperature       float32
+	TopK              int
+	TopP              float32
+	BeamSize          int
+	EosTokenId        int
+	EosTokenIds       []int
+	StopOnEOS         bool
+	BucketingStrategy bucketing.Strategy
+	PadToken          int
 
 	// Internal backend for small operations (concat, reshape)
 	// Uses simplego for faster compilation and dynamic shape support
 	simpleBackend compute.Backend
 
 	// Cached executors to avoid recompilation
-	promptExecCache map[int]*model.Exec // Cached executors for processing initial prompt in incremental generation
-	genExecCache    map[int]*model.Exec // Cached executors for each position in incremental generation
-	fullExec        *model.Exec         // Cached executor for non-cached full sequence generation
+	promptExec                *model.Exec // Cached executor for processing initial prompt in incremental generation
+	genExec                   *model.Exec // Cached executor for each position in incremental generation
+	naiveExec                 *model.Exec // Cached executor for non-cached full sequence generation
+	beamExec                  *model.Exec // Cached executor for non-cached beam search
+	beamKVCacheExec           *model.Exec // Cached executor for beam search with KV cache
+	updateCurrentSeqExec      *model.Exec // Cached executor to update a single token in currentSeq on accelerator
+	growCurrentSeqExec        *model.Exec // Cached executor to grow currentSeq to a new bucket length on accelerator
+	growCurrentSeqDynamicExec *model.Exec // Cached executor to grow currentSeq dynamically on accelerator
 
 	// err is a delayed error set during initialization, and returned by Decode.
 	err error
 	mu  sync.Mutex
 }
 
-// New creates a decoder for autoregressive text generation.
+// New creates a generator for autoregressive text generation.
 // Accepts either ModelFn (non-cached, full sequence) or IncrementalModelFn (KV-cached).
-// The decoder automatically detects which type is provided and configures itself accordingly.
+// The generator automatically detects which type is provided and configures itself accordingly.
 //
 // Parameters:
 //   - modelFn: Either ModelFn for full-sequence processing or IncrementalModelFn for cached generation
 //
 // Returns:
-//   - Decoder with default generation parameters (greedy sampling, maxLength=100)
+//   - Generator with default generation parameters (greedy sampling, maxLength=100)
 //
 // Example:
 //
-//	decoder := decode.New(model.Incremental()).
+//	generator := generate.New(model.Incremental()).
 //		WithStrategy(sample.StrategyTemperature).WithTemperature(0.8)
-//	output, err := decoder.Decode(prompt)
+//	output, err := generator.Decode(prompt)
 func New[M interface {
 	NaiveModelFn | KVCacheModelFn
 }](modelFn M) *Generator {
-	var decoder *Generator
+	var generator *Generator
 	switch typedModelFn := any(modelFn).(type) {
 	case NaiveModelFn:
-		klog.Warning("Using Decoder to generate text with interactive model is not yet well supported, and will likely be very slow. Consider using an IncrementalModelFn instead.")
-		decoder = &Generator{
+		klog.Warning("Using Generator to generate text with interactive model is not yet well supported, and will likely be very slow. Consider using an IncrementalModelFn instead.")
+		generator = &Generator{
 			naiveModelFn: typedModelFn,
 		}
 	case KVCacheModelFn:
-		decoder = &Generator{
+		generator = &Generator{
 			cacheModelFn: typedModelFn,
 		}
 	}
 
-	decoder.promptExecCache = make(map[int]*model.Exec)
-	decoder.genExecCache = make(map[int]*model.Exec)
-
 	// Set default parameters
-	decoder.MaxLength = 100
-	decoder.Strategy = sample.StrategyGreedy
-	decoder.Temperature = 1.0
-	decoder.TopK = 50
-	decoder.TopP = 0.9
-	decoder.BeamSize = 4
-	decoder.EosTokenId = -1
-	decoder.StopOnEOS = false
+	generator.MaxLength = 100
+	generator.Strategy = sample.StrategyGreedy
+	generator.Temperature = 1.0
+	generator.TopK = 50
+	generator.TopP = 0.9
+	generator.BeamSize = 4
+	generator.EosTokenId = -1
+	generator.StopOnEOS = false
+	generator.PadToken = 0
 
 	// Initialize simplego backend for small operations (concat, reshape)
 	// Faster than XLA for small ops and supports dynamic shapes
-	decoder.simpleBackend, _ = gobackend.New("decode")
+	generator.simpleBackend, _ = gobackend.New("generate")
 
-	return decoder
+	return generator
 }
 
 func (gen *Generator) WithKVCache(kvCache *kvcache.KVCache, numKVHeads, headDim int, dtype dtypes.DType) *Generator {
@@ -170,35 +177,35 @@ func (gen *Generator) WithKVCache(kvCache *kvcache.KVCache, numKVHeads, headDim 
 }
 
 func (gen *Generator) wasUsed() bool {
-	return len(gen.promptExecCache) > 0 || len(gen.genExecCache) > 0 || gen.fullExec != nil
+	return gen.promptExec != nil || gen.genExec != nil || gen.naiveExec != nil || gen.beamExec != nil || gen.beamKVCacheExec != nil || gen.updateCurrentSeqExec != nil || gen.growCurrentSeqExec != nil || gen.growCurrentSeqDynamicExec != nil
 }
 
-// FromScope configures the decoder with hyperparameters from the model.
-// This allows fine-tuning an existing decoder configuration.
+// FromScope configures the generator with hyperparameters from the model.
+// This allows fine-tuning an existing generator configuration.
 //
 // Supported hyperparameters:
-//   - decode_max_length: Maximum generation length (default: unchanged)
-//   - decode_strategy: Sampling strategy ("greedy", "temperature", "top_k", "top_p", "beam_search")
-//   - decode_temperature: Temperature for sampling (default: unchanged)
-//   - decode_top_k: k for top-k sampling (default: unchanged)
-//   - decode_top_p: p for nucleus sampling (default: unchanged)
-//   - decode_beam_size: Beam size for beam search (default: unchanged)
-//   - decode_eos_token_id: End-of-sequence token ID (default: unchanged)
-//   - decode_stop_on_eos: Whether to stop on EOS (default: unchanged)
+//   - generate_max_length: Maximum generation length (default: unchanged)
+//   - generate_strategy: Sampling strategy ("greedy", "temperature", "top_k", "top_p", "beam_search")
+//   - generate_temperature: Temperature for sampling (default: unchanged)
+//   - generate_top_k: k for top-k sampling (default: unchanged)
+//   - generate_top_p: p for nucleus sampling (default: unchanged)
+//   - generate_beam_size: Beam size for beam search (default: unchanged)
+//   - generate_eos_token_id: End-of-sequence token ID (default: unchanged)
+//   - generate_stop_on_eos: Whether to stop on EOS (default: unchanged)
 //
 // Example:
 //
 //	scope.SetParams(map[string]any{
-//	    "decode_strategy": "temperature",
-//	    "decode_temperature": 0.8,
-//	    "decode_max_length": 200,
+//	    "generate_strategy": "temperature",
+//	    "generate_temperature": 0.8,
+//	    "generate_max_length": 200,
 //	})
-//	decoder.FromScope(scope)
+//	generator.FromScope(scope)
 func (gen *Generator) FromScope(scope *model.Scope) *Generator {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
 	if gen.wasUsed() {
-		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		gen.err = errors.Errorf("cannot change configuration of generate.Generator, once it was used for generation -- create a new Generator if you need a different configuration.")
 		return gen
 	}
 	// Optional parameters with defaults
@@ -222,16 +229,12 @@ func (gen *Generator) FromScope(scope *model.Scope) *Generator {
 }
 
 func (gen *Generator) getPromptExec(backend compute.Backend, scope *model.Scope, cacheSeqLen int) (*model.Exec, error) {
-	if gen.promptExecCache == nil {
-		gen.promptExecCache = make(map[int]*model.Exec)
-	}
-	exec, ok := gen.promptExecCache[cacheSeqLen]
-	if ok {
-		return exec, nil
+	if gen.promptExec != nil {
+		return gen.promptExec, nil
 	}
 
 	var err error
-	exec, err = model.NewExec(backend, scope.Store(), func(scope *model.Scope, inputs []*Node) []*Node {
+	gen.promptExec, err = model.NewExec(backend, scope.Store(), func(scope *model.Scope, inputs []*Node) []*Node {
 		tokens := inputs[0]
 		cacheNodes := inputs[1:]
 		cache := gen.KVCache.DeserializeNodes(cacheNodes)
@@ -253,8 +256,7 @@ func (gen *Generator) getPromptExec(backend compute.Backend, scope *model.Scope,
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to create prompt exec")
 	}
-	gen.promptExecCache[cacheSeqLen] = exec
-	return exec, nil
+	return gen.promptExec, nil
 }
 
 // WithMaxLength sets the maximum generation length (including prompt).
@@ -262,20 +264,77 @@ func (gen *Generator) WithMaxLength(maxLength int) *Generator {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
 	if gen.wasUsed() {
-		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		gen.err = errors.Errorf("cannot change configuration of generate.Generator, once it was used for generation -- create a new Generator if you need a different configuration.")
 		return gen
 	}
 	gen.MaxLength = maxLength
 	return gen
 }
 
+// WithBucketingStrategy sets the bucketing strategy to reduce the number of unique compiled graphs.
+//
+// This is used for naive generation (not is using KVCache), and defaults to [bucketing.Pow2] -- tokens tensor doubles
+// each time it runs out of space -- or [bucketing.None] is the backend supports dynamic shapes, in which case bucketing is not needed.
+func (gen *Generator) WithBucketingStrategy(strategy bucketing.Strategy) *Generator {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	if gen.wasUsed() {
+		gen.err = errors.Errorf("cannot change configuration of generate.Generator, once it was used for generation -- create a new Generator if you need a different configuration.")
+		return gen
+	}
+	gen.BucketingStrategy = strategy
+	return gen
+}
+
+// WithPadToken sets the padding token ID (default to 0).
+func (gen *Generator) WithPadToken(padToken int) *Generator {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	if gen.wasUsed() {
+		gen.err = errors.Errorf("cannot change configuration of generate.Generator, once it was used for generation -- create a new Generator if you need a different configuration.")
+		return gen
+	}
+	gen.PadToken = padToken
+	return gen
+}
+
+// getBucketingStrategy resolves the bucketing strategy to use.
+// If not explicitly set, it defaults to None if the backend supports dynamic shapes,
+// as dynamic shapes avoid the need for bucketing.
+// Otherwise, default to bucketing.Pow2.
+func (gen *Generator) getBucketingStrategy(backend compute.Backend) bucketing.Strategy {
+	if gen.BucketingStrategy != nil {
+		return gen.BucketingStrategy
+	}
+	if backend.Capabilities().DynamicAxes {
+		return bucketing.None()
+	}
+	return bucketing.Pow2()
+}
+
+// padAndMakeTensor pads outputTokens slices to bucketedLen using PadToken, and returns a new Tensor.
+func (gen *Generator) padAndMakeTensor(outputTokens [][]int32, bucketedLen int) *tensors.Tensor {
+	batchSize := len(outputTokens)
+	padded := make([][]int32, batchSize)
+	for i := range batchSize {
+		padded[i] = make([]int32, bucketedLen)
+		copy(padded[i], outputTokens[i])
+		for j := len(outputTokens[i]); j < bucketedLen; j++ {
+			padded[i][j] = int32(gen.PadToken)
+		}
+	}
+	return tensors.FromValue(padded)
+}
+
 // WithStrategy sets the sampling strategy.
-// The default strategy is sample.StrategyGreedy, which always take the immediately most likely next token.
+// The default strategy is [sample.StrategyGreedy], which always take the immediately most likely next token.
+//
+// Alternatively, simply use [WithTemperature], [WithTopK], [WithTopP], or [WithBeamSize] to set the strategy and relevant parameters.
 func (gen *Generator) WithStrategy(strategy sample.Strategy) *Generator {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
 	if gen.wasUsed() {
-		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		gen.err = errors.Errorf("cannot change configuration of generate.Generator, once it was used for generation -- create a new Generator if you need a different configuration.")
 		return gen
 	}
 	gen.Strategy = strategy
@@ -285,52 +344,60 @@ func (gen *Generator) WithStrategy(strategy sample.Strategy) *Generator {
 // WithTemperature sets the temperature for sampling.
 // Higher values (>1.0) increase randomness, lower values (<1.0) make output more deterministic.
 //
-// You have to also set the strategy to sample.StrategyTemperature or sample.StrategyTopK or
-// sample.StrategyTopP to use this parameter
+// It sets the sampling strategy to [sample.StrategyTemperature]
 func (gen *Generator) WithTemperature(temperature float32) *Generator {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
 	if gen.wasUsed() {
-		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		gen.err = errors.Errorf("cannot change configuration of generate.Generator, once it was used for generation -- create a new Generator if you need a different configuration.")
 		return gen
 	}
 	gen.Temperature = temperature
+	gen.Strategy = sample.StrategyTemperature
 	return gen
 }
 
 // WithTopK sets k for top-k sampling.
-// Only the k most likely tokens are considered at each step.
+// Only the k most likely tokens are considered at each step, their probabilities are renormalized, and then the next token is sampled from them.
+//
+// It sets the sampling strategy to [sample.StrategyTopK]
 func (gen *Generator) WithTopK(topK int) *Generator {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
 	if gen.wasUsed() {
-		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		gen.err = errors.Errorf("cannot change configuration of generate.Generator, once it was used for generation -- create a new Generator if you need a different configuration.")
 		return gen
 	}
 	gen.TopK = topK
+	gen.Strategy = sample.StrategyTopK
 	return gen
 }
 
 // WithTopP sets p for nucleus sampling.
-// Tokens with cumulative probability up to p are considered.
+// Tokens with cumulative probability up to p are considered, their probabilities are renormalized, and then the next token is sampled from them.
+//
+// It sets the sampling strategy to [sample.StrategyTopP]
 func (gen *Generator) WithTopP(topP float32) *Generator {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
 	if gen.wasUsed() {
-		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		gen.err = errors.Errorf("cannot change configuration of generate.Generator, once it was used for generation -- create a new Generator if you need a different configuration.")
 		return gen
 	}
 	gen.TopP = topP
+	gen.Strategy = sample.StrategyTopP
 	return gen
 }
 
 // WithBeamSize sets the beam size for beam search.
 // Higher values explore more candidates but are slower.
+//
+// It sets the sampling strategy to [sample.StrategyBeamSearch]
 func (gen *Generator) WithBeamSize(beamSize int) *Generator {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
 	if gen.wasUsed() {
-		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		gen.err = errors.Errorf("cannot change configuration of generate.Generator, once it was used for generation -- create a new Generator if you need a different configuration.")
 		return gen
 	}
 	gen.BeamSize = beamSize
@@ -343,7 +410,7 @@ func (gen *Generator) WithEOS(eosTokenId int) *Generator {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
 	if gen.wasUsed() {
-		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		gen.err = errors.Errorf("cannot change configuration of generate.Generator, once it was used for generation -- create a new Generator if you need a different configuration.")
 		return gen
 	}
 	gen.EosTokenId = eosTokenId
@@ -356,7 +423,7 @@ func (gen *Generator) WithStopTokens(tokenIds ...int) *Generator {
 	gen.mu.Lock()
 	defer gen.mu.Unlock()
 	if gen.wasUsed() {
-		gen.err = errors.Errorf("cannot change configuration of decode.Decoder, once it was used for generation -- create a new Decoder if you need a different configuration.")
+		gen.err = errors.Errorf("cannot change configuration of generate.Generator, once it was used for generation -- create a new Generator if you need a different configuration.")
 		return gen
 	}
 	gen.EosTokenIds = append(gen.EosTokenIds, tokenIds...)
@@ -364,16 +431,16 @@ func (gen *Generator) WithStopTokens(tokenIds ...int) *Generator {
 	return gen
 }
 
-// isCached returns true if this decoder uses KV caching.
+// isCached returns true if this generator uses KV caching.
 func (gen *Generator) isCached() bool {
 	return gen.cacheModelFn != nil
 }
 
-// validate checks that the decoder configuration is valid.
+// validate checks that the generator configuration is valid.
 // Returns an error if required fields are missing or invalid.
 func (gen *Generator) validate() error {
 	if gen.err != nil {
-		return errors.WithMessagef(gen.err, "Decoder failed during configuration")
+		return errors.WithMessagef(gen.err, "Generator failed during configuration")
 	}
 	// Exactly one model function must be set
 	if gen.naiveModelFn != nil && gen.cacheModelFn != nil {
@@ -404,7 +471,7 @@ func (gen *Generator) validate() error {
 // Example:
 //
 //	prompt := []int32{1, 2, 3}  // Token IDs
-//	output, err := decoder.Decode(backend, scope, prompt)
+//	output, err := generator.Decode(backend, scope, prompt)
 func (gen *Generator) Decode(
 	backend compute.Backend,
 	scope *model.Scope,
@@ -415,7 +482,7 @@ func (gen *Generator) Decode(
 
 	// Validate configuration
 	if err := gen.validate(); err != nil {
-		return nil, errors.WithMessagef(err, "invalid Decoder config")
+		return nil, errors.WithMessagef(err, "invalid Generator config")
 	}
 
 	// Prompt executors are now retrieved dynamically
@@ -452,6 +519,114 @@ func (gen *Generator) Decode(
 	return gen.generateSampling(backend, scope, promptTensor)
 }
 
+func finalizeTensors(ts []*tensors.Tensor) {
+	for _, t := range ts {
+		if t != nil {
+			t.FinalizeAll()
+		}
+	}
+}
+
+func finalizeKVCache(cache kvcache.KVCacheTensors) {
+	for _, t := range cache {
+		if t != nil {
+			t.FinalizeAll()
+		}
+	}
+}
+
+// updateCurrentSeq updates currentSeq in-place at position with nextToken on the accelerator.
+//
+// Expected shapes:
+//   - currentSeq: [batchSize, seqLen]
+//   - nextToken: [batchSize]
+func (gen *Generator) updateCurrentSeq(backend compute.Backend, scope *model.Scope, currentSeq *tensors.Tensor, nextToken *tensors.Tensor, position int32) (*tensors.Tensor, error) {
+	if gen.updateCurrentSeqExec == nil {
+		var err error
+		gen.updateCurrentSeqExec, err = model.NewExec(backend, scope.Store(), func(scope *model.Scope, currentSeqNode, nextTokenNode, positionNode *Node) *Node {
+			g := currentSeqNode.Graph()
+			update := ExpandDims(nextTokenNode, -1) // [batchSize] -> [batchSize, 1]
+			batchIdx := Const(g, int32(0))
+			updatedSeq := DynamicUpdateSlice(currentSeqNode, update, []*Node{batchIdx, positionNode})
+			return updatedSeq
+		})
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to create updateCurrentSeqExec")
+		}
+		if backend.Capabilities().DynamicAxes {
+			gen.updateCurrentSeqExec.WithDynamicAxes([]string{"batch", "seq_len"}, []string{""}, []string{})
+		}
+	}
+	res, err := gen.updateCurrentSeqExec.Call(currentSeq, nextToken, tensors.FromValue(position))
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to run updateCurrentSeqExec")
+	}
+	return res[0], nil
+}
+
+// growCurrentSeq grows currentSeq by appending PadToken values on the accelerator.
+// The returned grown length is defined by the bucketing strategy.
+//
+// Expected shapes:
+//   - currentSeq: [batchSize, currentSeqLen]
+func (gen *Generator) growCurrentSeq(backend compute.Backend, scope *model.Scope, currentSeq *tensors.Tensor) (*tensors.Tensor, error) {
+	if gen.growCurrentSeqExec == nil {
+		var err error
+		gen.growCurrentSeqExec, err = model.NewExec(backend, scope.Store(), func(scope *model.Scope, currentSeqNode *Node) *Node {
+			g := currentSeqNode.Graph()
+			backend := g.Backend()
+			strategy := gen.getBucketingStrategy(backend)
+			batchSize := currentSeqNode.Shape().Dimensions[0]
+			currentSeqLen := currentSeqNode.Shape().Dimensions[1]
+			targetLen := strategy.Bucket(currentSeqLen + 1)
+			paddingLen := targetLen - currentSeqLen
+
+			// Create padding filled with PadToken
+			scalarNode := Const(g, int32(gen.PadToken))
+			padding := BroadcastToShape(scalarNode, shapes.Make(dtypes.Int32, batchSize, paddingLen))
+
+			return Concatenate([]*Node{currentSeqNode, padding}, 1)
+		})
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to create growCurrentSeqExec")
+		}
+		if backend.Capabilities().DynamicAxes {
+			gen.growCurrentSeqExec.WithDynamicAxes([]string{"batch", "seq_len"})
+		}
+	}
+	res, err := gen.growCurrentSeqExec.Call(currentSeq)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to run growCurrentSeqExec")
+	}
+	return res[0], nil
+}
+
+// growCurrentSeqDynamic grows currentSeq by 1 by appending nextToken on the accelerator.
+//
+// Expected shapes:
+//   - currentSeq: [batchSize, currentSeqLen]
+//   - nextToken: [batchSize]
+func (gen *Generator) growCurrentSeqDynamic(backend compute.Backend, scope *model.Scope, currentSeq *tensors.Tensor, nextToken *tensors.Tensor) (*tensors.Tensor, error) {
+	if gen.growCurrentSeqDynamicExec == nil {
+		var err error
+		gen.growCurrentSeqDynamicExec, err = model.NewExec(backend, scope.Store(), func(scope *model.Scope, currentSeqNode *Node, nextTokenNode *Node) *Node {
+			update := ExpandDims(nextTokenNode, -1) // [batchSize] -> [batchSize, 1]
+			return Concatenate([]*Node{currentSeqNode, update}, 1)
+		})
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to create growCurrentSeqDynamicExec")
+		}
+		if backend.Capabilities().DynamicAxes {
+			gen.growCurrentSeqDynamicExec.WithDynamicAxes([]string{"batch", "seq_len"}, []string{""})
+		}
+	}
+	res, err := gen.growCurrentSeqDynamicExec.Call(currentSeq, nextToken)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to run growCurrentSeqDynamicExec")
+	}
+	return res[0], nil
+}
+
 // generateSampling performs generation using sampling strategies.
 // Handles both cached and non-cached generation.
 //
@@ -480,7 +655,7 @@ func (gen *Generator) generateSampling(
 			return nil, errors.WithMessagef(err, "failed to create reshape exec")
 		}
 
-		reshapeResults, err := reshapeExec.Exec(prompt)
+		reshapeResults, err := reshapeExec.Call(prompt)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to reshape prompt")
 		}
@@ -497,13 +672,13 @@ func (gen *Generator) generateSampling(
 	}
 
 	if gen.isCached() {
-		return gen.generateSamplingIncremental(backend, scope, prompt, batchSize, promptLen)
+		return gen.generateSamplingWithKVCache(backend, scope, prompt, batchSize, promptLen)
 	}
-	return gen.generateSamplingFull(backend, scope, prompt, promptLen)
+	return gen.generateSamplingNaive(backend, scope, prompt, promptLen)
 }
 
-// generateSamplingFull performs sampling-based generation without KV caching.
-// Processes the full sequence at each step.
+// generateSamplingNaive performs sampling-based generation using the "naive"
+// processes the full sequence at each step algorithm.
 //
 // Parameters:
 //   - backend: Backend for computation
@@ -514,7 +689,7 @@ func (gen *Generator) generateSampling(
 // Returns:
 //   - Generated sequence [batch, totalLen] where totalLen <= MaxLength
 //   - Error if generation fails
-func (gen *Generator) generateSamplingFull(
+func (gen *Generator) generateSamplingNaive(
 	backend compute.Backend,
 	scope *model.Scope,
 	prompt *tensors.Tensor,
@@ -544,27 +719,74 @@ func (gen *Generator) generateSamplingFull(
 		outputTokens[i] = append(outputTokens[i], promptValues[i]...)
 	}
 
-	// Create or reuse cached executor for full sequence generation
-	if gen.fullExec == nil {
-		predScope := scope
-		var err error
-		gen.fullExec, err = model.NewExec(backend, predScope.Store(), func(scope *model.Scope, currentSeq *Node) *Node {
-			logits := gen.naiveModelFn(scope, currentSeq)
-			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
-			lastLogits = Squeeze(lastLogits, 1) // Remove the seq_len dimension
-			nextToken := sample.SampleWithStrategy(scope, lastLogits, gen.Strategy, float64(gen.Temperature), gen.TopK, float64(gen.TopP))
-			return nextToken
+	// Checks whether to use dynamic shapes (if available) or bucketing.
+	strategy := gen.getBucketingStrategy(backend)
+	_, isNoneStrategy := strategy.(bucketing.NoneStrategy)
+	useDynamic := isNoneStrategy && backend.Capabilities().DynamicAxes
+
+	// Initialize currentSeq on accelerator
+	var currentSeq *tensors.Tensor
+	if useDynamic {
+		currentSeq = prompt
+	} else {
+		bucketedLen := strategy.Bucket(promptLen)
+		if bucketedLen > promptLen {
+			currentSeq = gen.padAndMakeTensor(outputTokens, bucketedLen)
+		} else {
+			currentSeq = prompt
+		}
+	}
+
+	defer func() {
+		if currentSeq != nil && currentSeq != prompt {
+			currentSeq.FinalizeAll()
+		}
+	}()
+
+	// Create or reuse cached executor for sequence generation
+	if gen.naiveExec == nil {
+		gen.naiveExec, err = model.NewExec(backend, scope.Store(), func(scope *model.Scope, inputs []*Node) *Node {
+			currentSeqNode := inputs[0]
+			if useDynamic {
+				seqLenNode := inputs[1]
+				logits := gen.naiveModelFn(scope, currentSeqNode, -1)
+				lastIndex := Sub(seqLenNode, ConstAs(seqLenNode, 1))
+				transposed := Transpose(logits, 0, 1)
+				lastLogits := Gather(transposed, lastIndex)
+				nextToken := sample.SampleWithStrategy(scope, lastLogits, gen.Strategy, float64(gen.Temperature), gen.TopK, float64(gen.TopP))
+				return nextToken
+			} else {
+				lengthDummy := inputs[1]
+				currentSeqLen := lengthDummy.Shape().Dimensions[0]
+				logits := gen.naiveModelFn(scope, currentSeqNode, currentSeqLen)
+				g := logits.Graph()
+				lastIndex := Const(g, int32(currentSeqLen-1))
+				transposed := Transpose(logits, 0, 1)
+				lastLogits := Gather(transposed, lastIndex)
+				nextToken := sample.SampleWithStrategy(scope, lastLogits, gen.Strategy, float64(gen.Temperature), gen.TopK, float64(gen.TopP))
+				return nextToken
+			}
 		})
 		if err != nil {
-			return nil, errors.WithMessagef(err, "failed to create generation exec")
+			return nil, errors.WithMessagef(err, "failed to create naiveExec")
+		}
+		if backend.Capabilities().DynamicAxes {
+			gen.naiveExec.WithDynamicAxes([]string{"batch", "seq_len"}, []string{""})
 		}
 	}
 
 	for step := range numTokensToGenerate {
-		// Build current sequence tensor from accumulated tokens
-		currentSeq := tensors.FromValue(outputTokens)
+		currentSeqLen := promptLen + step
 
-		outputs, err := gen.fullExec.Exec(currentSeq)
+		var outputs []*tensors.Tensor
+		if useDynamic {
+			outputs, err = gen.naiveExec.Call(currentSeq, tensors.FromValue(int32(currentSeqLen)))
+		} else {
+			lengthDummy := tensors.FromShape(shapes.Make(dtypes.Int32, currentSeqLen))
+			outputs, err = gen.naiveExec.Call(currentSeq, lengthDummy)
+			lengthDummy.FinalizeAll()
+		}
+
 		if err != nil {
 			return nil, errors.WithMessagef(err, "generation step %d failed", step)
 		}
@@ -572,6 +794,7 @@ func (gen *Generator) generateSamplingFull(
 		nextToken := outputs[0]
 		nextTokenValues, err := get1DTokenValues(nextToken.Value())
 		if err != nil {
+			nextToken.FinalizeAll()
 			return nil, err
 		}
 
@@ -585,14 +808,44 @@ func (gen *Generator) generateSamplingFull(
 		}
 
 		if gen.StopOnEOS && allEOS {
+			nextToken.FinalizeAll()
 			break
 		}
+
+		// Update or grow currentSeq on accelerator
+		var nextSeq *tensors.Tensor
+		if useDynamic {
+			nextSeq, err = gen.growCurrentSeqDynamic(backend, scope, currentSeq, nextToken)
+		} else {
+			bucketedLen := strategy.Bucket(currentSeqLen)
+			nextBucketedLen := strategy.Bucket(currentSeqLen + 1)
+			if nextBucketedLen > bucketedLen {
+				grownSeq, err := gen.growCurrentSeq(backend, scope, currentSeq)
+				if err != nil {
+					nextToken.FinalizeAll()
+					return nil, err
+				}
+				if currentSeq != prompt {
+					currentSeq.FinalizeAll()
+				}
+				currentSeq = grownSeq
+			}
+			nextSeq, err = gen.updateCurrentSeq(backend, scope, currentSeq, nextToken, int32(currentSeqLen))
+		}
+		nextToken.FinalizeAll()
+		if err != nil {
+			return nil, err
+		}
+		if currentSeq != prompt {
+			currentSeq.FinalizeAll()
+		}
+		currentSeq = nextSeq
 	}
 
 	return tensors.FromValue(outputTokens), nil
 }
 
-func (gen *Generator) generateSamplingIncremental(
+func (gen *Generator) generateSamplingWithKVCache(
 	backend compute.Backend,
 	scope *model.Scope,
 	prompt *tensors.Tensor,
@@ -613,6 +866,7 @@ func (gen *Generator) generateSamplingIncremental(
 
 	promptExec, err := gen.getPromptExec(backend, scope, cacheSeqLen)
 	if err != nil {
+		finalizeKVCache(kvCacheTensors)
 		return nil, err
 	}
 
@@ -622,13 +876,29 @@ func (gen *Generator) generateSamplingIncremental(
 		promptInputs[i+1] = t
 	}
 
-	outputs, err := promptExec.Exec(promptInputs...)
+	outputs, err := promptExec.Call(promptInputs...)
 	if err != nil {
+		finalizeKVCache(kvCacheTensors)
 		return nil, errors.WithMessagef(err, "failed to process prompt")
 	}
 
 	firstToken := outputs[0]
+	// Clean up initial serialized cache tensors
+	finalizeTensors(kvCacheTensorsSerialized)
+	// Eagerly finalize previous kvCacheTensors
+	for _, t := range kvCacheTensors {
+		t.FinalizeAll()
+	}
+
 	kvCacheTensors = gen.KVCache.DeserializeTensors(outputs[1:])
+
+	defer func() {
+		for _, t := range kvCacheTensors {
+			if t != nil {
+				t.FinalizeAll()
+			}
+		}
+	}()
 
 	if gen.StopOnEOS && gen.checkEOS(firstToken) {
 		concatExec, _ := NewExec(backend, func(seq, token *Node) *Node {
@@ -638,6 +908,7 @@ func (gen *Generator) generateSamplingIncremental(
 
 		concatExec.SetMaxCache(-1)
 		result, err := concatExec.Call(prompt, firstToken)
+		firstToken.FinalizeAll()
 		if err != nil {
 			return nil, errors.WithMessagef(err, "final concatenation failed")
 		}
@@ -654,6 +925,7 @@ func (gen *Generator) generateSamplingIncremental(
 	// Add prompt tokens to output
 	promptValues, err := getPromptValues(prompt.Value())
 	if err != nil {
+		firstToken.FinalizeAll()
 		return nil, err
 	}
 	for i := range batchSize {
@@ -662,6 +934,7 @@ func (gen *Generator) generateSamplingIncremental(
 
 	// Add first generated token
 	firstTokenValues, err := get1DTokenValues(firstToken.Value())
+	firstToken.FinalizeAll()
 	if err != nil {
 		return nil, err
 	}
@@ -681,29 +954,27 @@ func (gen *Generator) generateSamplingIncremental(
 		position := currentPosition + step
 
 		// Pad cache if needed
-		kvCacheTensors, err = gen.KVCache.PadTensors(kvCacheTensors, position)
+		paddedKVCacheTensors, err := gen.KVCache.PadTensors(kvCacheTensors, position)
 		if err != nil {
 			return nil, err
 		}
+		// Finalize old tensors that were replaced by padded ones
+		for path, oldT := range kvCacheTensors {
+			if newT, ok := paddedKVCacheTensors[path]; ok && newT != oldT {
+				oldT.FinalizeAll()
+			}
+		}
+		kvCacheTensors = paddedKVCacheTensors
+
 		kvCacheTensorsSerialized, err = gen.KVCache.SerializeTensors(kvCacheTensors)
 		if err != nil {
 			return nil, err
 		}
 
-		currentCacheSeqLen := 0
-		if len(kvCacheTensorsSerialized) > 0 {
-			currentCacheSeqLen = kvCacheTensorsSerialized[0].Shape().Dimensions[2]
-		}
-
-		if gen.genExecCache == nil {
-			gen.genExecCache = make(map[int]*model.Exec)
-		}
-
-		// Get or create cached executor for this cache size
-		exec, ok := gen.genExecCache[currentCacheSeqLen]
-		if !ok {
+		// Get or create cached executor
+		if gen.genExec == nil {
 			var err error
-			exec, err = model.NewExec(backend, genScope.Store(), func(scope *model.Scope, inputs []*Node) []*Node {
+			gen.genExec, err = model.NewExec(backend, genScope.Store(), func(scope *model.Scope, inputs []*Node) []*Node {
 				token := inputs[0]
 				positionNode := inputs[1]
 				cacheNodes := inputs[2:]
@@ -722,9 +993,8 @@ func (gen *Generator) generateSamplingIncremental(
 				return res
 			})
 			if err != nil {
-				return nil, errors.WithMessagef(err, "failed to create generation exec for cache size %d", currentCacheSeqLen)
+				return nil, errors.WithMessagef(err, "failed to create genExec")
 			}
-			gen.genExecCache[currentCacheSeqLen] = exec
 		}
 
 		// Get previous token from each batch as tensor
@@ -742,15 +1012,24 @@ func (gen *Generator) generateSamplingIncremental(
 			stepInputs[i+2] = t
 		}
 
-		outputs, err := exec.Exec(stepInputs...)
+		outputs, err := gen.genExec.Call(stepInputs...)
+		prevTokenTensor.FinalizeAll()
+		positionTensor.FinalizeAll()
 		if err != nil {
 			return nil, errors.WithMessagef(err, "generation step %d (position %d) failed", step, position)
 		}
 
 		nextToken := outputs[0]
-		kvCacheTensors = gen.KVCache.DeserializeTensors(outputs[1:])
+		newKVCacheTensors := gen.KVCache.DeserializeTensors(outputs[1:])
+
+		// Now we can finalize all the old cache tensors!
+		for _, t := range kvCacheTensors {
+			t.FinalizeAll()
+		}
+		kvCacheTensors = newKVCacheTensors
 
 		nextTokenValues, err := get1DTokenValues(nextToken.Value())
+		nextToken.FinalizeAll()
 		if err != nil {
 			return nil, err
 		}
@@ -827,7 +1106,7 @@ func (gen *Generator) generateBeamSearch(
 			return nil, errors.WithMessagef(err, "failed to create reshape exec")
 		}
 
-		reshapeResults, err := reshapeExec.Exec(prompt)
+		reshapeResults, err := reshapeExec.Call(prompt)
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to reshape prompt")
 		}
@@ -845,14 +1124,14 @@ func (gen *Generator) generateBeamSearch(
 
 	// Dispatch cached or non-cached
 	if gen.isCached() {
-		return gen.generateBeamSearchCached(backend, scope, prompt, batchSize, promptLen)
+		return gen.generateBeamSearchWithKVCache(backend, scope, prompt, batchSize, promptLen)
 	}
-	return gen.generateBeamSearchNonCached(backend, scope, prompt, batchSize, promptLen)
+	return gen.generateBeamSearchNaive(backend, scope, prompt, batchSize, promptLen)
 }
 
-// generateBeamSearchNonCached performs beam search without KV caching.
+// generateBeamSearchNaive performs beam search with the naive model.
 // Maintains multiple beam hypotheses and selects the best sequence.
-func (gen *Generator) generateBeamSearchNonCached(
+func (gen *Generator) generateBeamSearchNaive(
 	backend compute.Backend,
 	scope *model.Scope,
 	prompt *tensors.Tensor,
@@ -876,7 +1155,7 @@ func (gen *Generator) generateBeamSearchNonCached(
 		return nil, errors.WithMessagef(err, "failed to create replicate exec")
 	}
 
-	replicatedResults, err := replicateExec.Exec(prompt)
+	replicatedResults, err := replicateExec.Call(prompt)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to replicate prompt")
 	}
@@ -902,47 +1181,77 @@ func (gen *Generator) generateBeamSearchNonCached(
 	predScope := scope
 	numSteps := gen.MaxLength - promptLen
 
-	for step := 0; step < numSteps; step++ {
-		currentLength := promptLen + step
+	for step := range numSteps {
+		if gen.beamExec == nil {
+			var err error
+			gen.beamExec, err = model.NewExec(backend, predScope.Store(), func(scope *model.Scope, sequences, scores *Node) (*Node, *Node, *Node) {
+				g := sequences.Graph()
+				backend := g.Backend()
+				strategy := gen.getBucketingStrategy(backend)
+				currentLength := sequences.Shape().Dimensions[1]
+				bucketedLen := strategy.Bucket(currentLength)
 
-		// TODO: It seems I cannot cache this exec because currentLength changes each iteration
-		// and is used as a compile-time constant in the graph (passed to beamConfig.Step)
-		// I leave it like this for now as I think we need the dynamic shape support of the simplego backend.
-		exec, err := model.NewExec(backend, predScope.Store(), func(scope *model.Scope, sequences, scores *Node) (*Node, *Node, *Node) {
-			// Run model
-			logits := gen.naiveModelFn(scope, sequences)
+				// Run model
+				var paddedSequences *Node
+				if bucketedLen != currentLength {
+					padVals := make([]int32, batchBeamSize*(bucketedLen-currentLength))
+					if gen.PadToken != 0 {
+						for i := range padVals {
+							padVals[i] = int32(gen.PadToken)
+						}
+					}
+					padding := ConstAs(sequences, padVals)
+					padding = Reshape(padding, batchBeamSize, bucketedLen-currentLength)
+					paddedSequences = Concatenate([]*Node{sequences, padding}, 1)
+				} else {
+					paddedSequences = sequences
+				}
+				logits := gen.naiveModelFn(scope, paddedSequences, currentLength)
 
-			// Last token logits: [batch_beam_size, vocab_size]
-			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
-			lastLogits = Squeeze(lastLogits, 1)
+				// Last token logits: [batch_beam_size, vocab_size]
+				lastIndex := Const(g, int32(currentLength-1))
+				transposed := Transpose(logits, 0, 1)
+				lastLogits := Gather(transposed, lastIndex)
 
-			// Beam search step
-			nextSeqs, nextScores, isFinished, _ := beamConfig.Step(
-				lastLogits,
-				sequences,
-				scores,
-				currentLength,
-			)
+				// Beam search step
+				nextSeqs, nextScores, isFinished, _ := beamConfig.Step(
+					lastLogits,
+					sequences,
+					scores,
+					currentLength,
+				)
 
-			return nextSeqs, nextScores, isFinished
-		})
-		if err != nil {
-			return nil, errors.WithMessagef(err, "failed to create beam search exec at step %d", step)
+				return nextSeqs, nextScores, isFinished
+			})
+			if err != nil {
+				currentSequences.FinalizeAll()
+				beamScores.FinalizeAll()
+				return nil, errors.WithMessagef(err, "failed to create beam search exec")
+			}
 		}
 
-		outputs, err := exec.Exec(currentSequences, beamScores)
+		outputs, err := gen.beamExec.Call(currentSequences, beamScores)
 		if err != nil {
+			currentSequences.FinalizeAll()
+			beamScores.FinalizeAll()
 			return nil, errors.WithMessagef(err, "beam search step %d failed", step)
 		}
 
-		currentSequences = outputs[0]
-		beamScores = outputs[1]
+		nextSequences := outputs[0]
+		nextScores := outputs[1]
 		isFinished := outputs[2]
 
+		currentSequences.FinalizeAll()
+		beamScores.FinalizeAll()
+
+		currentSequences = nextSequences
+		beamScores = nextScores
+
 		// All beams finished?
+		var allFinished bool
 		if beamConfig.EarlyStopping() {
 			finishedValue := isFinished.Value()
-			allFinished := true
+			allFinished = true
 			switch v := finishedValue.(type) {
 			case []bool:
 				for _, f := range v {
@@ -951,10 +1260,14 @@ func (gen *Generator) generateBeamSearchNonCached(
 						break
 					}
 				}
+			case bool:
+				allFinished = v
 			}
-			if allFinished {
-				break
-			}
+		}
+		isFinished.FinalizeAll()
+
+		if beamConfig.EarlyStopping() && allFinished {
+			break
 		}
 	}
 
@@ -965,20 +1278,27 @@ func (gen *Generator) generateBeamSearchNonCached(
 		return bestSeqs, bestScores
 	})
 	if err != nil {
+		currentSequences.FinalizeAll()
+		beamScores.FinalizeAll()
 		return nil, errors.WithMessagef(err, "failed to create select exec")
 	}
 
-	selectResults, err := selectExec.Exec(currentSequences, beamScores)
+	selectResults, err := selectExec.Call(currentSequences, beamScores)
+	currentSequences.FinalizeAll()
+	beamScores.FinalizeAll()
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to select best sequences")
 	}
 
-	return selectResults[0], nil
+	bestSeqs := selectResults[0]
+	bestScores := selectResults[1]
+	bestScores.FinalizeAll()
+	return bestSeqs, nil
 }
 
-// generateBeamSearchCached performs beam search with KV caching.
+// generateBeamSearchWithKVCache performs beam search with KV caching.
 // Each beam maintains its own cache for efficient incremental generation.
-func (gen *Generator) generateBeamSearchCached(
+func (gen *Generator) generateBeamSearchWithKVCache(
 	backend compute.Backend,
 	scope *model.Scope,
 	prompt *tensors.Tensor,
@@ -999,7 +1319,7 @@ func (gen *Generator) generateBeamSearchCached(
 		return nil, errors.WithMessagef(err, "failed to create replicate exec")
 	}
 
-	replicatedResults, err := replicateExec.Exec(prompt)
+	replicatedResults, err := replicateExec.Call(prompt)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to replicate prompt")
 	}
@@ -1016,11 +1336,14 @@ func (gen *Generator) generateBeamSearchCached(
 	kvCacheTensors := gen.KVCache.InitializeTensors(batchBeamSize, gen.numKVHeads, gen.headDim, gen.dtype, promptLen)
 	kvCacheTensorsSerialized, err := gen.KVCache.SerializeTensors(kvCacheTensors)
 	if err != nil {
+		replicatedPrompt.FinalizeAll()
 		return nil, err
 	}
 
 	promptExec, err := gen.getPromptExec(backend, scope, cacheSeqLen)
 	if err != nil {
+		replicatedPrompt.FinalizeAll()
+		finalizeKVCache(kvCacheTensors)
 		return nil, err
 	}
 
@@ -1030,9 +1353,18 @@ func (gen *Generator) generateBeamSearchCached(
 		promptInputs[i+1] = t
 	}
 
-	outputs, err := promptExec.Exec(promptInputs...)
+	outputs, err := promptExec.Call(promptInputs...)
 	if err != nil {
+		replicatedPrompt.FinalizeAll()
+		finalizeKVCache(kvCacheTensors)
 		return nil, errors.WithMessagef(err, "failed to process prompt")
+	}
+
+	// Finalize outputs[0] (first prompt-pred token) because it's leaked/not used
+	outputs[0].FinalizeAll()
+	finalizeTensors(kvCacheTensorsSerialized)
+	for _, t := range kvCacheTensors {
+		t.FinalizeAll()
 	}
 
 	kvCacheTensors = gen.KVCache.DeserializeTensors(outputs[1:])
@@ -1062,12 +1394,25 @@ func (gen *Generator) generateBeamSearchCached(
 		position := promptLen + step
 
 		// Pad cache if needed
-		kvCacheTensors, err = gen.KVCache.PadTensors(kvCacheTensors, position)
+		paddedKVCacheTensors, err := gen.KVCache.PadTensors(kvCacheTensors, position)
 		if err != nil {
+			currentSequences.FinalizeAll()
+			beamScores.FinalizeAll()
+			finalizeKVCache(kvCacheTensors)
 			return nil, err
 		}
+		for path, oldT := range kvCacheTensors {
+			if newT, ok := paddedKVCacheTensors[path]; ok && newT != oldT {
+				oldT.FinalizeAll()
+			}
+		}
+		kvCacheTensors = paddedKVCacheTensors
+
 		kvCacheTensorsSerialized, err = gen.KVCache.SerializeTensors(kvCacheTensors)
 		if err != nil {
+			currentSequences.FinalizeAll()
+			beamScores.FinalizeAll()
+			finalizeKVCache(kvCacheTensors)
 			return nil, err
 		}
 
@@ -1077,59 +1422,71 @@ func (gen *Generator) generateBeamSearchCached(
 			return lastTokens
 		})
 		if err != nil {
+			currentSequences.FinalizeAll()
+			beamScores.FinalizeAll()
+			finalizeKVCache(kvCacheTensors)
 			return nil, errors.WithMessagef(err, "failed to create extract exec")
 		}
 
-		extractResults, err := extractExec.Exec(currentSequences)
+		extractResults, err := extractExec.Call(currentSequences)
 		if err != nil {
+			currentSequences.FinalizeAll()
+			beamScores.FinalizeAll()
+			finalizeKVCache(kvCacheTensors)
 			return nil, errors.WithMessagef(err, "failed to extract last tokens")
 		}
 
 		lastTokens := extractResults[0]
-
 		positionTensor := tensors.FromValue(int32(position))
 
-		exec, err := model.NewExec(backend, genScope.Store(), func(scope *model.Scope, inputs []*Node) []*Node {
-			tokens := inputs[0]
-			scores := inputs[1]
-			sequences := inputs[2]
-			positionNode := inputs[3]
-			cacheNodes := inputs[4:]
-			// tokens: [batch_beam_size]
-			tokensReshaped := ExpandDims(tokens, -1) // [batch_beam_size, 1]
+		if gen.beamKVCacheExec == nil {
+			gen.beamKVCacheExec, err = model.NewExec(backend, genScope.Store(), func(scope *model.Scope, inputs []*Node) []*Node {
+				tokens := inputs[0]
+				scores := inputs[1]
+				sequences := inputs[2]
+				positionNode := inputs[3]
+				cacheNodes := inputs[4:]
+				tokensReshaped := ExpandDims(tokens, -1) // [batch_beam_size, 1]
 
-			// Process with incremental model
-			cache := gen.KVCache.DeserializeNodes(cacheNodes)
-			logits, updatedCache := gen.cacheModelFn(scope, tokensReshaped, positionNode, cache)
-			logits = Squeeze(logits, 1) // [batch_beam_size, vocab_size]
+				// Process with incremental model
+				cache := gen.KVCache.DeserializeNodes(cacheNodes)
+				logits, updatedCache := gen.cacheModelFn(scope, tokensReshaped, positionNode, cache)
+				logits = Squeeze(logits, 1) // [batch_beam_size, vocab_size]
 
-			// Beam search step
-			nextSeqs, nextScores, isFinished, gatherIndices := beamConfig.Step(
-				logits,
-				sequences,
-				scores,
-				position,
-			)
+				// Beam search step
+				positionVal := sequences.Shape().Dimensions[1]
+				nextSeqs, nextScores, isFinished, gatherIndices := beamConfig.Step(
+					logits,
+					sequences,
+					scores,
+					positionVal,
+				)
 
-			// Re-order the cache nodes using gatherIndices
-			for kKey, node := range updatedCache {
-				updatedCache[kKey] = Gather(node, gatherIndices)
-			}
+				// Re-order the cache nodes using gatherIndices
+				for kKey, node := range updatedCache {
+					updatedCache[kKey] = Gather(node, gatherIndices)
+				}
 
-			serializedUpdatedCache, err := gen.KVCache.SerializeNodes(updatedCache)
+				serializedUpdatedCache, err := gen.KVCache.SerializeNodes(updatedCache)
+				if err != nil {
+					panic(err)
+				}
+
+				res := make([]*Node, 3+len(serializedUpdatedCache))
+				res[0] = nextSeqs
+				res[1] = nextScores
+				res[2] = isFinished
+				copy(res[3:], serializedUpdatedCache)
+				return res
+			})
 			if err != nil {
-				panic(err)
+				currentSequences.FinalizeAll()
+				beamScores.FinalizeAll()
+				lastTokens.FinalizeAll()
+				positionTensor.FinalizeAll()
+				finalizeKVCache(kvCacheTensors)
+				return nil, errors.WithMessagef(err, "failed to create beamKVCacheExec")
 			}
-
-			res := make([]*Node, 3+len(serializedUpdatedCache))
-			res[0] = nextSeqs
-			res[1] = nextScores
-			res[2] = isFinished
-			copy(res[3:], serializedUpdatedCache)
-			return res
-		})
-		if err != nil {
-			return nil, errors.WithMessagef(err, "failed to create beam step exec")
 		}
 
 		stepInputs := make([]any, 4+len(kvCacheTensorsSerialized))
@@ -1141,20 +1498,36 @@ func (gen *Generator) generateBeamSearchCached(
 			stepInputs[i+4] = t
 		}
 
-		outputs, err := exec.Exec(stepInputs...)
+		outputs, err := gen.beamKVCacheExec.Call(stepInputs...)
+		lastTokens.FinalizeAll()
+		positionTensor.FinalizeAll()
 		if err != nil {
+			currentSequences.FinalizeAll()
+			beamScores.FinalizeAll()
+			finalizeKVCache(kvCacheTensors)
 			return nil, errors.WithMessagef(err, "beam search step %d failed", step)
 		}
 
-		currentSequences = outputs[0]
-		beamScores = outputs[1]
+		nextSeqs := outputs[0]
+		nextScores := outputs[1]
 		isFinished := outputs[2]
-		kvCacheTensors = gen.KVCache.DeserializeTensors(outputs[3:])
+		newKVCacheTensors := gen.KVCache.DeserializeTensors(outputs[3:])
+
+		currentSequences.FinalizeAll()
+		beamScores.FinalizeAll()
+		for _, t := range kvCacheTensors {
+			t.FinalizeAll()
+		}
+
+		currentSequences = nextSeqs
+		beamScores = nextScores
+		kvCacheTensors = newKVCacheTensors
 
 		// Early stopping check
+		var allFinished bool
 		if beamConfig.EarlyStopping() {
 			finishedValue := isFinished.Value()
-			allFinished := true
+			allFinished = true
 			switch v := finishedValue.(type) {
 			case []bool:
 				for _, f := range v {
@@ -1166,9 +1539,11 @@ func (gen *Generator) generateBeamSearchCached(
 			case bool:
 				allFinished = v
 			}
-			if allFinished {
-				break
-			}
+		}
+		isFinished.FinalizeAll()
+
+		if beamConfig.EarlyStopping() && allFinished {
+			break
 		}
 	}
 
@@ -1178,10 +1553,16 @@ func (gen *Generator) generateBeamSearchCached(
 		return bestSeqs
 	})
 	if err != nil {
+		currentSequences.FinalizeAll()
+		beamScores.FinalizeAll()
+		finalizeKVCache(kvCacheTensors)
 		return nil, errors.WithMessagef(err, "failed to create select exec")
 	}
 
-	bestResults, err := selectExec.Exec(currentSequences, beamScores)
+	bestResults, err := selectExec.Call(currentSequences, beamScores)
+	currentSequences.FinalizeAll()
+	beamScores.FinalizeAll()
+	finalizeKVCache(kvCacheTensors)
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to select best sequences")
 	}
@@ -1191,6 +1572,8 @@ func (gen *Generator) generateBeamSearchCached(
 
 // GenerateStreaming performs streaming generation, yielding tokens as they are generated.
 // The callback function is called for each generated token and can return false to stop generation.
+//
+// It doesn't work with [sampling.StrategyBeamSearch].
 //
 // Parameters:
 //   - backend: Backend for computation
