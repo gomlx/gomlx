@@ -9,9 +9,9 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/compute v0.0.0-20260615181056-6e3a924a46cb
-	github.com/gomlx/go-huggingface v0.3.6-0.20260618145247-60bc60cd439a
-	github.com/gomlx/gomlx v0.27.4-0.20260618145130-4c4b55779da9
-	github.com/gomlx/onnx-gomlx v0.4.3-0.20260618145318-7c7d0b5b211a
+	github.com/gomlx/go-huggingface v0.3.6-0.20260618155152-e347ceaf82b5
+	github.com/gomlx/gomlx v0.27.4-0.20260618155024-15822614dd53
+	github.com/gomlx/onnx-gomlx v0.4.3-0.20260618155227-89ebdf94cf79
 	github.com/janpfeifer/gonb v0.11.3
 	github.com/janpfeifer/must v0.2.0
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
@@ -39,7 +39,7 @@ require (
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/gomlx/bsplines v0.2.0 // indirect
 	github.com/gomlx/exceptions v0.0.3 // indirect
-	github.com/gomlx/go-xla v0.2.3-0.20260618145002-7a261bcebd0f // indirect
+	github.com/gomlx/go-xla v0.2.3-0.20260618154843-d9c3ca970fe6 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
