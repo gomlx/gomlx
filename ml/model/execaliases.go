@@ -131,7 +131,7 @@ func CallOnceN[F ExecGraphFn](backend compute.Backend, store *Store, graphFn F, 
 		return nil, err
 	}
 	defer e.Finalize()
-	return e.Exec(args...)
+	return e.Call(args...)
 }
 
 // MustCallOnceN builds the graph and executes it with the given arguments and returns various output.

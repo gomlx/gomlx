@@ -327,7 +327,7 @@ func (s *Store) InitializeVariables(backend compute.Backend, configExec func(ini
 		}
 	}
 	e.isInitializeVariablesExec = true
-	values, err := e.Exec()
+	values, err := e.Call()
 	if err != nil {
 		return errors.WithMessagef(err, "failed to compile/run variable initialization graph")
 	}
