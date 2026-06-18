@@ -283,8 +283,13 @@ func ConstAsDType(g *Graph, dtype dtypes.DType, x any) *Node {
 	return output
 }
 
-// ConstAs creates a constant (slice or scalar) of the same DType and on the same Graph as
-// the given base.
+// ConstAs creates a constant of the same DType and on the same Graph as
+// the given base node, and converts X to that dtype.
+//
+// Example:
+//
+//	ConstAs(batchNode, 5) // If batchNode has dtype Float32 it results in a scalar constant node representing Float32(5).
+//	ConstAs(batchNode, []int{1, 3}) // If batchNode has dtype Float64 it results in a 1D constant node representing [2]Float64{1.0, 3.0}.
 func ConstAs(base *Node, x any) *Node {
 	return ConstAsDType(base.Graph(), base.DType(), x)
 }
@@ -559,7 +564,7 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 		exceptions.Panicf("BroadcastToShape: rank mismatch: x shape %s has rank %d, target shape %s has rank %d",
 			xShape, xShape.Rank(), shape, shape.Rank())
 	}
-	
+
 	resultAxisNames := make([]string, shape.Rank())
 	for i := range shape.Rank() {
 		if i < xShape.Rank() {
@@ -578,7 +583,7 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 			resultAxisNames[i] = shape.AxisName(i)
 		}
 	}
-	
+
 	outShape := shapes.MakeDynamic(x.DType(), shape.Dimensions, resultAxisNames)
 	if xShape.IsScalar() && outShape.IsScalar() {
 		return x
