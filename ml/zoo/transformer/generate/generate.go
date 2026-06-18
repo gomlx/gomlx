@@ -873,7 +873,12 @@ func (gen *Generator) generateSamplingWithKVCache(
 	promptInputs := make([]any, 1+len(kvCacheTensorsSerialized))
 	promptInputs[0] = prompt
 	for i, t := range kvCacheTensorsSerialized {
-		promptInputs[i+1] = t
+		donated, err := DonateTensorBuffer(t, backend, 0)
+		if err != nil {
+			finalizeKVCache(kvCacheTensors)
+			return nil, err
+		}
+		promptInputs[i+1] = donated
 	}
 
 	outputs, err := promptExec.Call(promptInputs...)
@@ -883,12 +888,7 @@ func (gen *Generator) generateSamplingWithKVCache(
 	}
 
 	firstToken := outputs[0]
-	// Clean up initial serialized cache tensors
-	finalizeTensors(kvCacheTensorsSerialized)
-	// Eagerly finalize previous kvCacheTensors
-	for _, t := range kvCacheTensors {
-		t.FinalizeAll()
-	}
+	// Clean up initial serialized cache tensors is no longer needed since they were donated.
 
 	kvCacheTensors = gen.KVCache.DeserializeTensors(outputs[1:])
 
@@ -1009,7 +1009,11 @@ func (gen *Generator) generateSamplingWithKVCache(
 		stepInputs[0] = prevTokenTensor
 		stepInputs[1] = positionTensor
 		for i, t := range kvCacheTensorsSerialized {
-			stepInputs[i+2] = t
+			donated, err := DonateTensorBuffer(t, backend, 0)
+			if err != nil {
+				return nil, err
+			}
+			stepInputs[i+2] = donated
 		}
 
 		outputs, err := gen.genExec.Call(stepInputs...)
@@ -1022,10 +1026,7 @@ func (gen *Generator) generateSamplingWithKVCache(
 		nextToken := outputs[0]
 		newKVCacheTensors := gen.KVCache.DeserializeTensors(outputs[1:])
 
-		// Now we can finalize all the old cache tensors!
-		for _, t := range kvCacheTensors {
-			t.FinalizeAll()
-		}
+		// No need to finalize the old cache tensors because they were donated.
 		kvCacheTensors = newKVCacheTensors
 
 		nextTokenValues, err := get1DTokenValues(nextToken.Value())
@@ -1350,7 +1351,13 @@ func (gen *Generator) generateBeamSearchWithKVCache(
 	promptInputs := make([]any, 1+len(kvCacheTensorsSerialized))
 	promptInputs[0] = replicatedPrompt
 	for i, t := range kvCacheTensorsSerialized {
-		promptInputs[i+1] = t
+		donated, err := DonateTensorBuffer(t, backend, 0)
+		if err != nil {
+			replicatedPrompt.FinalizeAll()
+			finalizeKVCache(kvCacheTensors)
+			return nil, err
+		}
+		promptInputs[i+1] = donated
 	}
 
 	outputs, err := promptExec.Call(promptInputs...)
@@ -1362,10 +1369,7 @@ func (gen *Generator) generateBeamSearchWithKVCache(
 
 	// Finalize outputs[0] (first prompt-pred token) because it's leaked/not used
 	outputs[0].FinalizeAll()
-	finalizeTensors(kvCacheTensorsSerialized)
-	for _, t := range kvCacheTensors {
-		t.FinalizeAll()
-	}
+	// Clean up of initial serialized cache tensors is no longer needed since they were donated.
 
 	kvCacheTensors = gen.KVCache.DeserializeTensors(outputs[1:])
 
@@ -1495,7 +1499,16 @@ func (gen *Generator) generateBeamSearchWithKVCache(
 		stepInputs[2] = currentSequences
 		stepInputs[3] = positionTensor
 		for i, t := range kvCacheTensorsSerialized {
-			stepInputs[i+4] = t
+			donated, err := DonateTensorBuffer(t, backend, 0)
+			if err != nil {
+				currentSequences.FinalizeAll()
+				beamScores.FinalizeAll()
+				lastTokens.FinalizeAll()
+				positionTensor.FinalizeAll()
+				finalizeKVCache(kvCacheTensors)
+				return nil, err
+			}
+			stepInputs[i+4] = donated
 		}
 
 		outputs, err := gen.beamKVCacheExec.Call(stepInputs...)
@@ -1515,9 +1528,7 @@ func (gen *Generator) generateBeamSearchWithKVCache(
 
 		currentSequences.FinalizeAll()
 		beamScores.FinalizeAll()
-		for _, t := range kvCacheTensors {
-			t.FinalizeAll()
-		}
+		// No need to finalize kvCacheTensors because they were donated.
 
 		currentSequences = nextSeqs
 		beamScores = nextScores
