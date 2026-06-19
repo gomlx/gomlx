@@ -9,13 +9,15 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/ml/decode"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/attention"
+	"github.com/gomlx/gomlx/ml/layers/attention/kvcache"
 	"github.com/gomlx/gomlx/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/nn"
+	"github.com/gomlx/gomlx/ml/zoo/transformer/generate"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -35,12 +37,16 @@ const (
 	// Deprecated: use ParamNormalization instead.
 	ParamUseLayerNorm = "transformer_use_layer_norm"
 
-	ParamUseBias       = "transformer_use_bias"
-	ParamArchitecture  = "transformer_architecture"
-	ParamNormalization = "transformer_normalization"
-	ParamNormEpsilon   = "transformer_norm_epsilon"
-	ParamActivation    = "transformer_activation"
-	ParamNumKVHeads    = "transformer_num_kv_heads"
+	ParamUseBias               = "transformer_use_bias"
+	ParamArchitecture          = "transformer_architecture"
+	ParamNormalization         = "transformer_normalization"
+	ParamNormEpsilon           = "transformer_norm_epsilon"
+	ParamActivation            = "transformer_activation"
+	ParamNumKVHeads            = "transformer_num_kv_heads"
+	ParamGlobalHeadDim         = "transformer_global_head_dim"
+	ParamNumKVSharedLayers     = "transformer_num_kv_shared_layers"
+	ParamAttentionScoreSoftCap = "transformer_attention_score_soft_cap"
+	ParamFinalLogitSoftCap     = "transformer_final_logit_soft_cap"
 
 	// Legacy RoPE parameters, used to configure PosEmbed if set.
 	ParamUseRoPE       = "transformer_use_rope"
@@ -58,17 +64,26 @@ const (
 	ArchitectureStandard Architecture = iota
 	ArchitectureGemma
 	ArchitectureGemma3
+	ArchitectureGemma4
 )
 
 //go:generate go tool enumer -type Architecture -trimprefix=Architecture -output=gen_architecture_enumer.go transformer.go
 
-// LayerType represents the type of attention mechanism used in a transformer layer.
-type LayerType int
+type LayerType = attention.LayerType
 
 const (
-	FullAttention LayerType = iota
-	SlidingAttention
+	GlobalLayer = attention.GlobalLayer
+	LocalLayer  = attention.LocalLayer
 )
+
+type KVCacheNodes = kvcache.KVCacheNodes
+
+type KVCache = kvcache.KVCache
+
+// NewKVCache creates a new kvcache.KVCache.
+func NewKVCache() *kvcache.KVCache {
+	return kvcache.NewKVCache()
+}
 
 // Model configures a cached transformer model.
 type Model struct {
@@ -96,38 +111,102 @@ type Model struct {
 	posEncoder       pos.Encoder         // Positional encoder (e.g. RoPE). If nil, standard absolute positional embeddings are used.
 	layerPosEncoders map[int]pos.Encoder // Custom positional encoders per layer
 
-	LayerTypes    []LayerType // Defines the type per layer (e.g. FullAttention, SlidingAttention)
-	SlidingWindow int         // Size of the sliding window for SlidingAttention layers
+	LayerTypes    []LayerType // Defines the type per layer (e.g. GlobalLayer, LocalLayer)
+	SlidingWindow int         // Size of the sliding window for LocalLayer layers
 
 	// TransposedProjections indicates whether to assume linear weights are transposed (as [out_features, in_features]),
 	// which is standard for PyTorch nn.Linear. This enables dropping in PyTorch models directly.
 	TransposedProjections bool
+
+	KVCache *kvcache.KVCache
+
+	NumKVSharedLayers int // Number of KV shared layers at the end of the model
+
+	AttentionScoreSoftCap float64 // Softcap for attention scores
+	FinalLogitSoftCap     float64 // Logit softcap for vocabulary prediction
+
+	// Per-Layer Embeddings (PLE) configuration for Gemma 4
+	VocabSizePerLayerInput       int
+	HiddenSizePerLayerInput      int
+	PerLayerInputScale           float64
+	PerLayerModelProjectionScale float64
+	RMSNormOffset                float64 // Offset added to RMSNorm weights, default is 1.0 (Gemma 1/2/3). Set to 0.0 for Gemma 4.
+	GlobalHeadDim                int
+	QueryKeyScale                float64
 }
 
 // New creates a default transformer configuration.
 func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
 	return &Model{
-		VocabSize:            vocabSize,
-		EmbedDim:             embedDim,
-		NumLayers:            numLayers,
-		NumHeads:             numHeads,
-		HeadDim:              headDim,
-		FFNDim:               embedDim * 4, // 4x expansion
-		MaxPosEmbed:          512,
-		DType:                dtypes.Float32,
-		Dropout:              0.0,
-		UseBias:              true,
-		UseCausalMask:        true,
-		ScaleTokenEmbeddings: false,
-		EmbedNormalization:   layers.NormalizationNone,
-		FinalNormalization:   layers.NormalizationNone,
-		Architecture:         ArchitectureStandard,
-		Normalization:        layers.NormalizationLayerNorm,
-		NormEpsilon:          1e-5,
-		Activation:           activation.TypeGelu,
-		NumKVHeads:           0,
-		posEncoder:           nil,
+		VocabSize:                    vocabSize,
+		EmbedDim:                     embedDim,
+		NumLayers:                    numLayers,
+		NumHeads:                     numHeads,
+		HeadDim:                      headDim,
+		FFNDim:                       embedDim * 4, // 4x expansion
+		MaxPosEmbed:                  512,
+		DType:                        dtypes.Float32,
+		Dropout:                      0.0,
+		UseBias:                      true,
+		UseCausalMask:                true,
+		ScaleTokenEmbeddings:         false,
+		EmbedNormalization:           layers.NormalizationNone,
+		FinalNormalization:           layers.NormalizationNone,
+		Architecture:                 ArchitectureStandard,
+		Normalization:                layers.NormalizationLayerNorm,
+		NormEpsilon:                  1e-5,
+		Activation:                   activation.TypeGelu,
+		NumKVHeads:                   0,
+		posEncoder:                   nil,
+		KVCache:                      NewKVCache(),
+		PerLayerInputScale:           1,
+		PerLayerModelProjectionScale: 1,
+		RMSNormOffset:                1,
 	}
+}
+
+func (m *Model) populateOrderedScopes(scope *model.Scope) {
+	if len(m.KVCache.OrderedScopes) > 0 {
+		return
+	}
+	scopes := make([]string, m.NumLayers)
+	for i := range m.NumLayers {
+		var path string
+		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
+			path = scope.At("layer_%d", i).At("self_attn").Scope()
+		} else {
+			path = scope.At("layer_%d", i).At("attn").Scope()
+		}
+		scopes[i] = path
+	}
+	m.KVCache.OrderedScopes = scopes
+}
+
+func (m *Model) populateLayerTypes(scope *model.Scope) {
+	if len(m.KVCache.LayerTypes) > 0 {
+		return
+	}
+	for i := range m.NumLayers {
+		var path string
+		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
+			path = scope.At("layer_%d", i).At("self_attn").Scope()
+		} else {
+			path = scope.At("layer_%d", i).At("attn").Scope()
+		}
+
+		lt := GlobalLayer
+		if i < len(m.LayerTypes) {
+			lt = m.LayerTypes[i]
+		}
+		m.KVCache.LayerTypes[path] = lt
+	}
+}
+
+// PopulateKVCacheConfigs initializes the internal KVCache configuration's OrderedScopes
+// and LayerTypes based on the model's architecture and the execution scope.
+func (m *Model) PopulateKVCacheConfigs(scope *model.Scope) {
+	m.populateOrderedScopes(scope)
+	m.populateLayerTypes(scope)
 }
 
 // NewFromScope creates a transformer model configured from the hyperparameters in Scope:
@@ -219,6 +298,10 @@ func (m *Model) FromScope(scope *model.Scope) *Model {
 	m.NormEpsilon = model.GetParamOr(scope, ParamNormEpsilon, m.NormEpsilon)
 	m.Activation = activation.FromName(model.GetParamOr(scope, ParamActivation, m.Activation.String()))
 	m.NumKVHeads = model.GetParamOr(scope, ParamNumKVHeads, m.NumKVHeads)
+	m.GlobalHeadDim = model.GetParamOr(scope, ParamGlobalHeadDim, m.GlobalHeadDim)
+	m.NumKVSharedLayers = model.GetParamOr(scope, ParamNumKVSharedLayers, m.NumKVSharedLayers)
+	m.AttentionScoreSoftCap = model.GetParamOr(scope, ParamAttentionScoreSoftCap, m.AttentionScoreSoftCap)
+	m.FinalLogitSoftCap = model.GetParamOr(scope, ParamFinalLogitSoftCap, m.FinalLogitSoftCap)
 
 	// Legacy RoPE configuration from scope
 	useRoPE := model.GetParamOr(scope, ParamUseRoPE, false)
@@ -285,16 +368,22 @@ func (m *Model) WithLayerPositionalEncoder(layerNum int, encoder pos.Encoder) *M
 	return m
 }
 
-// WithLayerTypes sets the layer types (FullAttention, SlidingAttention) for each layer.
+// WithLayerTypes sets the layer types (GlobalLayer, LocalLayer) for each layer.
 func (m *Model) WithLayerTypes(layerTypes []LayerType) *Model {
 	m.LayerTypes = layerTypes
 	return m
 }
 
 // WithSlidingWindow sets the sliding window size for local attention layers.
-// This is applied for all layers of type SlidingAttention.
+// This is applied for all layers of type LocalLayer.
 func (m *Model) WithSlidingWindow(window int) *Model {
 	m.SlidingWindow = window
+	return m
+}
+
+// WithGlobalHeadDim sets the global head dimension for full attention layers.
+func (m *Model) WithGlobalHeadDim(dim int) *Model {
+	m.GlobalHeadDim = dim
 	return m
 }
 
@@ -344,7 +433,7 @@ func (m *Model) WithScalingOfTokenEmbeddings(useScaling bool) *Model {
 // WithArchitecture sets the architectural style.
 func (m *Model) WithArchitecture(arch Architecture) *Model {
 	m.Architecture = arch
-	if arch == ArchitectureGemma || arch == ArchitectureGemma3 {
+	if arch == ArchitectureGemma || arch == ArchitectureGemma3 || arch == ArchitectureGemma4 {
 		m.WithScalingOfTokenEmbeddings(true)
 	}
 	return m
@@ -382,11 +471,102 @@ func (m *Model) WithNumKVHeads(num int) *Model {
 	return m
 }
 
+// WithQueryKeyScale sets the query-key scaling factor. If 0, uses the default 1/sqrt(headDim).
+func (m *Model) WithQueryKeyScale(scale float64) *Model {
+	m.QueryKeyScale = scale
+	return m
+}
+
+// WithVocabSizePerLayerInput sets the vocab size for per-layer inputs.
+//
+// See detailed explanation of per-layer embedding (PLE) in [Model.WithHiddenSizePerLayerInput].
+func (m *Model) WithVocabSizePerLayerInput(v int) *Model {
+	m.VocabSizePerLayerInput = v
+	return m
+}
+
+// WithHiddenSizePerLayerInput sets the hidden size for per-layer inputs.
+// Setting this to a value > 0 triggers the usage of Per-Layer Embedding (PLE), commonly used in Gemma 4.
+//
+// When active, PLE provides a dynamic, layer-specific token representation which is combined with a gate
+// and added to the residual stream at each layer. It operates as follows:
+//
+//  1. A layer-specific embedding token representation is looked up from `token_embed_per_layer`.
+//  2. The initial model representation (token embeddings + positional encodings) is projected, scaled by
+//     PerLayerModelProjectionScale, and normalized via RMSNorm.
+//  3. These two representations are added, and if PerLayerInputScale != 1, scaled by PerLayerInputScale.
+//  4. In each layer, the current layer's state is projected to compute a gate (`pleGate`), which is multiplied
+//     by the layer's specific input segment. The result is projected to the main model embedding dimension,
+//     normalized, and added to the residual stream.
+func (m *Model) WithHiddenSizePerLayerInput(v int) *Model {
+	m.HiddenSizePerLayerInput = v
+	return m
+}
+
+// WithPerLayerInputScale sets the scale factor for combining context aware per-layer-embedding and token identity.
+//
+// See detailed explanation of per-layer embedding (PLE) in [Model.WithHiddenSizePerLayerInput].
+func (m *Model) WithPerLayerInputScale(v float64) *Model {
+	m.PerLayerInputScale = v
+	return m
+}
+
+// WithPerLayerModelProjectionScale sets the scale factor for per-layer-embedding projection.
+//
+// See detailed explanation of per-layer embedding (PLE) in [Model.WithHiddenSizePerLayerInput].
+func (m *Model) WithPerLayerModelProjectionScale(v float64) *Model {
+	m.PerLayerModelProjectionScale = v
+	return m
+}
+
 // WithTransposedWeights configures the model to assume linear weights are transposed (as [out_features, in_features]),
 // which is the format used by PyTorch nn.Linear. This enables loading PyTorch models directly.
 func (m *Model) WithTransposedWeights(transposed bool) *Model {
 	m.TransposedProjections = transposed
 	return m
+}
+
+// WithNumKVSharedLayers sets the number of layers (from the top/last layers) that share KV projection states.
+func (m *Model) WithNumKVSharedLayers(num int) *Model {
+	m.NumKVSharedLayers = num
+	return m
+}
+
+// WithScoreSoftCap sets the soft cap for the attention score computation (see [nn.SoftCap]).
+func (m *Model) WithScoreSoftCap(cap float64) *Model {
+	m.AttentionScoreSoftCap = cap
+	return m
+}
+
+// WithFinalLogitSoftCap sets the logit softcap for the final output logits.
+func (m *Model) WithFinalLogitSoftCap(cap float64) *Model {
+	m.FinalLogitSoftCap = cap
+	return m
+}
+
+// WithRMSNormOffset sets the offset added to the RMSNorm scale weight.
+// The default is 1.0 (used in Gemma 1/2/3). Set to 0.0 for Gemma 4.
+func (m *Model) WithRMSNormOffset(offset float64) *Model {
+	m.RMSNormOffset = offset
+	return m
+}
+
+func (m *Model) getLayerType(layerNum int) LayerType {
+	if layerNum < len(m.LayerTypes) {
+		return m.LayerTypes[layerNum]
+	}
+	return GlobalLayer
+}
+
+func (m *Model) sourceLayerForShared(layerNum int) int {
+	firstSharedLayer := m.NumLayers - m.NumKVSharedLayers
+	targetType := m.getLayerType(layerNum)
+	for i := firstSharedLayer - 1; i >= 0; i-- {
+		if m.getLayerType(i) == targetType {
+			return i
+		}
+	}
+	panic(fmt.Sprintf("No matching non-shared layer of type %v found for shared layer %d", targetType, layerNum))
 }
 
 // Logits builds the model including the last logits projection to predict the next token,
@@ -400,38 +580,71 @@ func (m *Model) WithTransposedWeights(transposed bool) *Model {
 //     is computed taking into consideration the mask.
 //
 // It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize]
+// Logits builds the model including the last logits projection to predict the next token,
+// for each element of the sequence.
+//
+// This form can be used to embed full sentences or for training.
+//
+//   - tokens: shaped [batchSize, seqLen], or simply [seqLen]
+//   - mask: optional, shaped [batchSize, seqLen] of some integer dtype or [dtypes.Bool].
+//     If provided the shape must match tokens.Shape(), and it indicates
+//     which tokens are valid (1/true) and which are padding (0/false). The attention mask (causal or not)
+//     is computed taking into consideration the mask.
+//
+// It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize]
 func (m *Model) Logits(scope *model.Scope, tokens, mask *Node) *Node {
-	embeddings, _ := m.AllLayers(scope, tokens, mask, false, 0)
+	embeddings, _, _ := m.AllLayers(scope, tokens, nil, mask, nil)
 	return m.LogitsFromEmbeddings(scope, embeddings)
 }
 
-// MakeIterativeModelFn returns a "iterative" model function for iteratively (increasing sequence length, no KVCache)
+// MakeNaiveModelFn returns a "naive" model function for iterative (increasing sequence length, no KVCache)
 // generation, using the decode package.
-func MakeIterativeModelFn(m *Model) decode.IterativeModelFn {
-	return func(scope *model.Scope, tokens *Node) *Node {
-		return m.Logits(scope, tokens, nil)
+//
+// It returns a generate.NaiveModel interface.
+func MakeNaiveModelFn(m *Model) generate.NaiveModelFn {
+	return func(scope *model.Scope, tokens *Node, length int) *Node {
+		paddedSeqLen := tokens.Shape().Dimensions[1]
+		if length > paddedSeqLen {
+			exceptions.Panicf("indicated length %d of sequence is larger than the tokens ([batch, seqLen]=%s) length provided", length, tokens.Shape())
+		}
+		var attentionMask *Node
+		if paddedSeqLen != length {
+			g := tokens.Graph()
+			attentionMask = Iota(g, tokens.Shape(), 1)
+			attentionMask = LessThan(attentionMask, ConstAs(attentionMask, length))
+		}
+		return m.Logits(scope, tokens, attentionMask)
 	}
 }
 
-// LogitsWithKVCache returns the forward path for the newTokens sequence, using the KV cache.
+// Forward returns the forward path for the model.
 //
-// - newTokens: shaped [batchSize, 1] with the new tokens to be processed.
-// - position: the position of the new tokens in the sequence, only used for KV cache.
+// - tokens: shaped [batchSize, seqLen]
+// - positionIds: shaped [batchSize, seqLen], or nil (which defaults to sequential positions)
+// - attentionMask: shaped [batchSize, seqLen], or nil
+// - cache: KVCacheNodes, or nil if no KV cache is used.
 //
-// **Experimental**: likely the KVCache will change in the future.
-//
-// It returns the logits of the last layer, typically shaped [batchSize, 1, vocabSize],
-// and updates the KVCache stored as variables in the cache.
-func (m *Model) LogitsWithKVCache(scope *model.Scope, newTokens *Node, position int) *Node {
-	embeddings, _ := m.AllLayers(scope, newTokens, nil, true, position)
-	return m.LogitsFromEmbeddings(scope, embeddings)
+// It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize],
+// and the updated KV cache.
+func (m *Model) Forward(scope *model.Scope,
+	tokens, positionIds *Node,
+	attentionMask *Node,
+	cache KVCacheNodes,
+) (logits *Node, updatedCache KVCacheNodes) {
+	embeddings, _, updatedCache := m.AllLayers(scope, tokens, positionIds, attentionMask, cache)
+	return m.LogitsFromEmbeddings(scope, embeddings), updatedCache
 }
 
-// MakeIncrementalModelFn returns a model function used by the decoder for incremental generation with KVCache,
+// LogitsWithKVCache returns the forward path for the newTokens sequence, using the KV cache.
+func (m *Model) LogitsWithKVCache(scope *model.Scope, newTokens *Node, positionIds *Node, cache KVCacheNodes) (*Node, KVCacheNodes) {
+	return m.Forward(scope, newTokens, positionIds, nil, cache)
+}
+
+// MakeKVCacheModelFn returns a model function used by the decoder for incremental generation with KVCache,
 // using the decode package.
-func MakeIncrementalModelFn(m *Model) decode.IncrementalModelFn {
-	return func(scope *model.Scope, newTokens *Node, position int) *Node {
-		return m.LogitsWithKVCache(scope, newTokens, position)
+func MakeKVCacheModelFn(m *Model) generate.KVCacheModelFn {
+	return func(scope *model.Scope, newTokens *Node, position *Node, cache KVCacheNodes) (*Node, KVCacheNodes) {
+		return m.Forward(scope, newTokens, position, nil, cache)
 	}
 }
 
@@ -439,32 +652,101 @@ func MakeIncrementalModelFn(m *Model) decode.IncrementalModelFn {
 // returning the last layer and all the intermediate layers.
 //
 //   - tokens: shaped [batchSize, seqLen], or simply [seqLen]
-//   - mask: optional, if provided the shape must match tokens.Shape(), and it indicates
-//     which tokens are valid (1) and which are padding (0). The attention mask (causal or not)
-//     is computed taking into consideration the mask.
-//   - useKVCache: whether to use KV cache for the attention layers.
-//   - position: the position of the new tokens in the sequence, only used for KV cache.
-//
-// See also Logits() or LogitsFromEmbeddings()if you want to get the logits for predicting the next token.
+//   - positionIds: shaped [batchSize, seqLen], or nil
+//   - attentionMask: optional, if provided the shape must match tokens.Shape(), and it indicates
+//     which tokens are valid (1) and which are padding (0).
+//   - cache: the KVCacheNodes map containing cached key/value nodes.
 //
 // It returns:
 //
 //   - lastLayer: the final hidden state of the last layer, shaped [batchSize, seqLen,hiddenSize].
 //   - allLayers: the input to the first layer and the output of each layer.
-//     It follows the HuggingFace convention, where the allLayers[0] is the input to the first attention layer,
-//     and the following nodes in allLayers are the outputs of all NumHiddenLayers attention layers.
-func (m *Model) AllLayers(scope *model.Scope, tokens, mask *Node, useKVCache bool, position int) (lastLayer *Node, allLayers []*Node) {
+//   - updatedCache: the updated KVCacheNodes map.
+func (m *Model) AllLayers(scope *model.Scope, tokens, positionIds *Node, attentionMask *Node, cache KVCacheNodes) (lastLayer *Node, allLayers []*Node, updatedCache KVCacheNodes) {
+	if tokens.Rank() == 1 {
+		tokens = ExpandAxes(tokens, 0)
+	}
+	g := tokens.Graph()
+	seqLen := tokens.Shape().Dimensions[1]
+
+	if positionIds == nil {
+		posIdx := Iota(g, shapes.Make(dtypes.Int32, seqLen), 0)
+		positionIds = ExpandDims(posIdx, 0)
+		positionIds = BroadcastToDims(positionIds, tokens.Shape().Dimensions...)
+	}
+
+	m.populateOrderedScopes(scope)
+	m.populateLayerTypes(scope)
+	if cache != nil {
+		updatedCache = make(KVCacheNodes)
+		for k, v := range cache {
+			updatedCache[k] = v
+		}
+	}
+
 	allLayers = make([]*Node, 0, m.NumLayers+1)
 	x := m.EmbedTokens(scope, tokens)
-	x = m.PrePositionalEncoder(scope, x, position, useKVCache)
+
+	if m.posEncoder != nil {
+		if preEnc, ok := m.posEncoder.(pos.PreEncoder); ok {
+			x = preEnc.PreEncode(x, positionIds, 1)
+		}
+	}
+
 	if m.EmbedNormalization != layers.NormalizationNone {
 		x = m.normalize(scope.In("embed_norm"), x, m.EmbedNormalization)
 	}
 	allLayers = append(allLayers, x)
+
+	var positionNode *Node
+	if positionIds != nil {
+		if positionIds.Rank() == 2 {
+			positionNode = Squeeze(Slice(positionIds, AxisElem(0), AxisElem(0)))
+		} else if positionIds.Rank() == 1 {
+			positionNode = Squeeze(Slice(positionIds, AxisElem(0)))
+		} else if positionIds.Rank() == 0 {
+			positionNode = positionIds
+		} else {
+			panic(fmt.Sprintf("positionIds must be rank 0, 1 or 2, got rank %d", positionIds.Rank()))
+		}
+	} else {
+		positionNode = ScalarZero(g, dtypes.Int32)
+	}
+
+	var perLayerInputs *Node
+	if m.HiddenSizePerLayerInput > 0 {
+		// Per-layer Embedding (PLE): see explanation in [Model.WithHiddenSizePerLayerInput].
+		embeddedPLE := layers.Embedding(scope.In("token_embed_per_layer"), tokens, m.DType, m.VocabSizePerLayerInput, m.NumLayers*m.HiddenSizePerLayerInput)
+		pleScale := Scalar(embeddedPLE.Graph(), m.DType, math.Sqrt(float64(m.HiddenSizePerLayerInput)))
+		embeddedPLE = Mul(embeddedPLE, pleScale)
+		batchSize := tokens.Shape().Dimensions[0]
+		embeddedPLE = Reshape(embeddedPLE, batchSize, seqLen, m.NumLayers, m.HiddenSizePerLayerInput)
+
+		perLayerProjection := m.dense(scope.In("per_layer_model_projection"), x, false, m.NumLayers*m.HiddenSizePerLayerInput)
+		perLayerProjectionScale := Scalar(perLayerProjection.Graph(), m.DType, m.PerLayerModelProjectionScale)
+		perLayerProjection = Mul(perLayerProjection, perLayerProjectionScale)
+		perLayerProjection = Reshape(perLayerProjection, batchSize, seqLen, m.NumLayers, m.HiddenSizePerLayerInput)
+		perLayerProjection = m.normalize(scope.In("per_layer_projection_norm"), perLayerProjection, layers.NormalizationRMSNorm)
+
+		perLayerInputs = Add(perLayerProjection, embeddedPLE)
+		if m.PerLayerInputScale != 1 {
+			perLayerInputs = MulScalar(perLayerInputs, m.PerLayerInputScale)
+		}
+	}
+
+	var sharedKVs KVCacheNodes
+	if cache == nil && m.NumKVSharedLayers > 0 {
+		sharedKVs = make(KVCacheNodes)
+	}
+
 	// Apply all layers.
 	for layerNum := range m.NumLayers {
 		layerScope := scope.In("layer_%d", layerNum)
-		x = m.ForwardLayer(layerScope, layerNum, x, mask, useKVCache, position)
+		var perLayerInput *Node
+		if perLayerInputs != nil {
+			perLayerInput = Squeeze(Slice(perLayerInputs, AxisRange(), AxisRange(), AxisElem(layerNum), AxisRange()), 2)
+		}
+		x = m.ForwardLayer(layerScope, layerNum, x, attentionMask, positionNode, updatedCache, perLayerInput, sharedKVs)
 		allLayers = append(allLayers, x)
 	}
 	if m.FinalNormalization != layers.NormalizationNone {
@@ -473,7 +755,7 @@ func (m *Model) AllLayers(scope *model.Scope, tokens, mask *Node, useKVCache boo
 			allLayers[len(allLayers)-1] = x
 		}
 	}
-	return x, allLayers
+	return x, allLayers, updatedCache
 }
 
 // EmbedTokens returns the token embeddings for the given tokens using a lookup table.
@@ -558,95 +840,180 @@ func (m *Model) PrePositionalEncoder(scope *model.Scope, x *Node, position int, 
 // This step is done automatically by Logits (which builds the full forward path from the tokens), but if needed, it can
 // be used separately by calling this method.
 func (m *Model) LogitsFromEmbeddings(scope *model.Scope, embeddings *Node) *Node {
-	return layers.Dense(scope.In("output"), embeddings, false, m.VocabSize)
+	logits := layers.Dense(scope.In("output"), embeddings, false, m.VocabSize)
+	if m.FinalLogitSoftCap > 0 {
+		logits = nn.SoftCap(logits, m.FinalLogitSoftCap)
+	}
+	return logits
 }
 
-// ForwardLayer executes a single transformer layer block depending on the configured architecture.
+// // ForwardLayer executes a single transformer layer block depending on the configured architecture.
 //
 // - scope: scope must be already scoped for the layer, e.g. scope.In("layer_0")
 // - x: features coming from the previous layer (or token embedding table), shape [batchSize, seqLen, embedDim]
-// - mask: (optional, can be nil) shaped [batchSize, seqLen]
-// - useCache: if true, use KV cache -- Experimental: KVCache will change.
-// - position: position of the first token in the sequence, used only if using KV cache, otherwise we assum 0.
+// - attentionMask: (optional, can be nil) shaped [batchSize, seqLen]
+// - position: position node (scalar int32) indicating the current absolute position
+// - cache: updated KVCacheNodes map
+// - sharedKVs: optional, map of shared key/values for layers that don't project their own KVs
 //
 // It returns the output of the layer, shape [batchSize, seqLen, embedDim].
-//
-// This step is done automatically by AllLayers or Logits, but if needed, it can
-// be used separately by calling this method.
-func (m *Model) ForwardLayer(scope *model.Scope, layerNum int, x, mask *Node, useCache bool, position int) *Node {
-	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
-		return m.forwardLayerGemma(scope, layerNum, x, mask, useCache, position)
+func (m *Model) ForwardLayer(scope *model.Scope, layerNum int, x, attentionMask *Node, position *Node, cache KVCacheNodes, perLayerInput *Node, sharedKVs KVCacheNodes) *Node {
+	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
+		return m.forwardLayerGemma(scope, layerNum, x, attentionMask, position, cache, perLayerInput, sharedKVs)
 	}
-	return m.forwardLayerStandard(scope, layerNum, x, mask, useCache, position)
+	return m.forwardLayerStandard(scope, layerNum, x, attentionMask, position, cache, perLayerInput, sharedKVs)
 }
 
-func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x, mask *Node, useCache bool, position int) *Node {
+func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x, attentionMask *Node, position *Node, cache KVCacheNodes, perLayerInput *Node, sharedKVs KVCacheNodes) *Node {
 	residual := x
 	var attn *Node
 
-	if useCache {
-		positionNode := Const(x.Graph(), int32(position))
-		attnBuilder := attention.SelfAttention(layerScope.In("attn"), x, m.NumHeads, m.HeadDim).
-			WithKVCache(m.MaxPosEmbed, positionNode).
-			UseTransposedWeights(m.TransposedProjections)
-		if mask != nil {
-			attnBuilder = attnBuilder.WithMask(mask)
+	// Projections
+	kvHeads := m.NumKVHeads
+	if kvHeads == 0 {
+		kvHeads = m.NumHeads
+	}
+
+	layerType := GlobalLayer
+	if layerNum < len(m.LayerTypes) {
+		layerType = m.LayerTypes[layerNum]
+	}
+	headDim := m.HeadDim
+	if layerType == GlobalLayer && m.GlobalHeadDim > 0 {
+		headDim = m.GlobalHeadDim
+	}
+
+	attnScope := layerScope.In("attn")
+	mhaScope := attnScope.At("MultiHeadAttention")
+	queryProjected := m.dense(mhaScope.In("query"), x, m.UseBias, m.NumHeads, headDim)
+
+	firstSharedLayer := m.NumLayers - m.NumKVSharedLayers
+	isShared := m.NumKVSharedLayers > 0 && layerNum >= firstSharedLayer
+
+	var keyProjected, valueProjected *Node
+	var sourceLayerNum int
+	var sourceLayerScopePath string
+	if isShared {
+		sourceLayerNum = m.sourceLayerForShared(layerNum)
+		sourceLayerScopePath = m.KVCache.OrderedScopes[sourceLayerNum]
+	}
+
+	if !isShared {
+		keyProjected = m.dense(mhaScope.In("key"), x, m.UseBias, kvHeads, headDim)
+		valueProjected = m.dense(mhaScope.In("value"), x, m.UseBias, kvHeads, headDim)
+	} else if cache == nil {
+		var ok bool
+		keyProjected, ok = sharedKVs[fmt.Sprintf("%d_k", sourceLayerNum)]
+		if !ok {
+			panic(fmt.Sprintf("Shared key projection not found for source layer %d in layer %d", sourceLayerNum, layerNum))
+		}
+		valueProjected, ok = sharedKVs[fmt.Sprintf("%d_v", sourceLayerNum)]
+		if !ok {
+			panic(fmt.Sprintf("Shared value projection not found for source layer %d in layer %d", sourceLayerNum, layerNum))
+		}
+	}
+
+	// Apply RoPE positional encoding if configured
+	posEncoder := m.posEncoder
+	if enc := m.layerPosEncoders[layerNum]; enc != nil {
+		posEncoder = enc
+	}
+	if posEncoder != nil {
+		if qkEncoder, ok := posEncoder.(pos.QKEncoder); ok {
+			g := x.Graph()
+			seqLen := x.Shape().Dimensions[1]
+			posIndices := pos.SequentialPositions(g, position, seqLen)
+			if isShared {
+				queryProjected, _ = qkEncoder.EncodeQK(queryProjected, queryProjected, posIndices, 1)
+			} else {
+				queryProjected, keyProjected = qkEncoder.EncodeQK(queryProjected, keyProjected, posIndices, 1)
+			}
+		}
+	}
+
+	if cache == nil && !isShared && sharedKVs != nil {
+		sharedKVs[fmt.Sprintf("%d_k", layerNum)] = keyProjected
+		sharedKVs[fmt.Sprintf("%d_v", layerNum)] = valueProjected
+	}
+
+	if cache != nil {
+		var fullKey, fullValue *Node
+		if isShared {
+			fullKey, fullValue = m.KVCache.Get(cache, sourceLayerScopePath)
+		} else {
+			m.KVCache.Update(attnScope, cache, keyProjected, valueProjected, position)
+			fullKey, fullValue = m.KVCache.Get(cache, attnScope.Scope())
+		}
+		batchSize := x.Shape().Dimensions[0]
+		seqLen := x.Shape().Dimensions[1]
+		cacheSeqLen := fullKey.Shape().Dimensions[2]
+
+		fullKey = TransposeAllDims(fullKey, 0, 2, 1, 3)
+		fullValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
+
+		qReshaped := Reshape(queryProjected, batchSize, seqLen, m.NumHeads*headDim)
+		kReshaped := Reshape(fullKey, batchSize, cacheSeqLen, kvHeads*headDim)
+		vReshaped := Reshape(fullValue, batchSize, cacheSeqLen, kvHeads*headDim)
+
+		slidingWindow := 0
+		if layerType == LocalLayer {
+			slidingWindow = m.SlidingWindow
+		}
+		customMask := m.KVCache.BuildAttentionMask(attnScope, cache, x, position, m.UseCausalMask, slidingWindow)
+
+		if attentionMask != nil {
+			expandedMask := ExpandDims(attentionMask, 1)
+			expandedMask = BroadcastToDims(expandedMask, customMask.Shape().Dimensions...)
+			customMask = LogicalAnd(customMask, expandedMask)
 		}
 
-		posEncoder := m.posEncoder
-		if enc := m.layerPosEncoders[layerNum]; enc != nil {
-			posEncoder = enc
-		}
-		if posEncoder != nil {
-			attnBuilder = attnBuilder.WithPositionalEncoder(posEncoder)
-		}
-		layerType := FullAttention
-		if layerNum < len(m.LayerTypes) {
-			layerType = m.LayerTypes[layerNum]
-		}
-		if layerType == SlidingAttention && m.SlidingWindow > 0 {
-			attnBuilder = attnBuilder.WithSlidingWindow(m.SlidingWindow)
-		}
+		attnBuilder := attention.MultiHeadAttention(attnScope, qReshaped, kReshaped, vReshaped, m.NumHeads, headDim).
+			UseTransposedWeights(m.TransposedProjections).
+			WithNumKVHeads(kvHeads).
+			WithPreProjected(true).
+			WithOutputDim(m.EmbedDim).
+			WithQueryKeyMatrixMask(customMask).
+			WithScoreSoftCap(m.AttentionScoreSoftCap).
+			WithQueryKeyScale(m.QueryKeyScale)
 
 		if !m.UseBias {
-			attnBuilder = attnBuilder.UseProjectionBias(false)
+			attnBuilder.UseProjectionBias(false)
 		}
 		if m.Dropout > 0 {
 			dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
-			attnBuilder = attnBuilder.WithDropout(dropoutRate)
+			attnBuilder.WithDropout(dropoutRate)
 		}
 		attn = attnBuilder.Done()
 	} else {
-		attnBuilder := attention.SelfAttention(layerScope.In("attn"), x, m.NumHeads, m.HeadDim).
-			UseTransposedWeights(m.TransposedProjections)
-		if mask != nil {
-			attnBuilder = attnBuilder.WithMask(mask)
+		batchSize := x.Shape().Dimensions[0]
+		seqLen := x.Shape().Dimensions[1]
+		qReshaped := Reshape(queryProjected, batchSize, seqLen, m.NumHeads*headDim)
+		kReshaped := Reshape(keyProjected, batchSize, seqLen, kvHeads*headDim)
+		vReshaped := Reshape(valueProjected, batchSize, seqLen, kvHeads*headDim)
+
+		attnBuilder := attention.MultiHeadAttention(attnScope, qReshaped, kReshaped, vReshaped, m.NumHeads, headDim).
+			UseTransposedWeights(m.TransposedProjections).
+			WithNumKVHeads(kvHeads).
+			WithPreProjected(true).
+			WithOutputDim(m.EmbedDim).
+			WithScoreSoftCap(m.AttentionScoreSoftCap).
+			WithQueryKeyScale(m.QueryKeyScale)
+		if attentionMask != nil {
+			attnBuilder.WithMask(attentionMask)
 		}
 		if m.UseCausalMask {
-			attnBuilder = attnBuilder.WithCausalMask(true)
+			attnBuilder.WithCausalMask(true)
 		}
 
-		posEncoder := m.posEncoder
-		if enc := m.layerPosEncoders[layerNum]; enc != nil {
-			posEncoder = enc
+		if layerType == LocalLayer && m.SlidingWindow > 0 {
+			attnBuilder.WithSlidingWindow(m.SlidingWindow)
 		}
-		if posEncoder != nil {
-			attnBuilder = attnBuilder.WithPositionalEncoder(posEncoder)
-		}
-		layerType := FullAttention
-		if layerNum < len(m.LayerTypes) {
-			layerType = m.LayerTypes[layerNum]
-		}
-		if layerType == SlidingAttention && m.SlidingWindow > 0 {
-			attnBuilder = attnBuilder.WithSlidingWindow(m.SlidingWindow)
-		}
-
 		if !m.UseBias {
-			attnBuilder = attnBuilder.UseProjectionBias(false)
+			attnBuilder.UseProjectionBias(false)
 		}
 		if m.Dropout > 0 {
 			dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
-			attnBuilder = attnBuilder.WithDropout(dropoutRate)
+			attnBuilder.WithDropout(dropoutRate)
 		}
 		attn = attnBuilder.Done()
 	}
@@ -706,8 +1073,10 @@ func (m *Model) normalize(scope *model.Scope, operand *Node, normType string) *N
 	switch normType {
 	case layers.NormalizationRMSNorm:
 		builder := norm.RMSNorm(scope, operand).WithEpsilon(m.NormEpsilon)
-		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 {
-			builder = builder.WithScaleOffset(1.0)
+		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
+			if m.RMSNormOffset != 0 {
+				builder = builder.WithScaleOffset(m.RMSNormOffset)
+			}
 		}
 		return builder.Done()
 	case layers.NormalizationLayerNorm:
@@ -718,55 +1087,183 @@ func (m *Model) normalize(scope *model.Scope, operand *Node, normType string) *N
 	}
 }
 
-func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x, mask *Node, useCache bool, position int) *Node {
+func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x, attentionMask *Node, position *Node, cache KVCacheNodes, perLayerInput *Node, sharedKVs KVCacheNodes) *Node {
 	residual := x
 
 	// Pre-attention normalization.
 	x = m.normalize(layerScope.In("input_norm"), x, m.Normalization)
 
-	// Attention.
-	var attn *Node
-	attnBuilder := attention.SelfAttention(layerScope.In("self_attn"), x, m.NumHeads, m.HeadDim).
-		UseTransposedWeights(m.TransposedProjections)
-	if mask != nil {
-		attnBuilder.WithMask(mask)
-	}
-	if m.NumKVHeads > 0 && m.NumKVHeads != m.NumHeads {
-		attnBuilder.WithNumKVHeads(m.NumKVHeads)
-	}
-	if useCache {
-		positionNode := Const(x.Graph(), int32(position))
-		attnBuilder.WithKVCache(m.MaxPosEmbed, positionNode)
-	} else if m.UseCausalMask {
-		attnBuilder.WithCausalMask(true)
+	// Projections
+	kvHeads := m.NumKVHeads
+	if kvHeads == 0 {
+		kvHeads = m.NumHeads
 	}
 
+	layerType := GlobalLayer
+	if layerNum < len(m.LayerTypes) {
+		layerType = m.LayerTypes[layerNum]
+	}
+	headDim := m.HeadDim
+	if layerType == GlobalLayer && m.GlobalHeadDim > 0 {
+		headDim = m.GlobalHeadDim
+	}
+
+	selfAttnScope := layerScope.In("self_attn")
+	mhaScope := selfAttnScope.At("MultiHeadAttention")
+	queryProjected := m.dense(mhaScope.In("query"), x, m.UseBias, m.NumHeads, headDim)
+
+	firstSharedLayer := m.NumLayers - m.NumKVSharedLayers
+	isShared := m.NumKVSharedLayers > 0 && layerNum >= firstSharedLayer
+
+	var keyProjected, valueProjected *Node
+	var sourceLayerNum int
+	var sourceLayerScopePath string
+	if isShared {
+		sourceLayerNum = m.sourceLayerForShared(layerNum)
+		sourceLayerScopePath = m.KVCache.OrderedScopes[sourceLayerNum]
+	}
+
+	if !isShared {
+		keyProjected = m.dense(mhaScope.In("key"), x, m.UseBias, kvHeads, headDim)
+		valueProjected = m.dense(mhaScope.In("value"), x, m.UseBias, kvHeads, headDim)
+	} else if cache == nil {
+		var ok bool
+		keyProjected, ok = sharedKVs[fmt.Sprintf("%d_k", sourceLayerNum)]
+		if !ok {
+			panic(fmt.Sprintf("Shared key projection not found for source layer %d in layer %d", sourceLayerNum, layerNum))
+		}
+		valueProjected, ok = sharedKVs[fmt.Sprintf("%d_v", sourceLayerNum)]
+		if !ok {
+			panic(fmt.Sprintf("Shared value projection not found for source layer %d in layer %d", sourceLayerNum, layerNum))
+		}
+	}
+
+	// Apply QK RMSNorm if Gemma 3 or Gemma 4
+	if m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
+		queryBuilder := norm.RMSNorm(mhaScope.Shared("query"), queryProjected).WithEpsilon(m.NormEpsilon).WithNormalizationAxes(-1)
+		if m.RMSNormOffset != 0 {
+			queryBuilder = queryBuilder.WithScaleOffset(m.RMSNormOffset)
+		}
+		queryProjected = queryBuilder.Done()
+		if !isShared {
+			keyBuilder := norm.RMSNorm(mhaScope.Shared("key"), keyProjected).WithEpsilon(m.NormEpsilon).WithNormalizationAxes(-1)
+			if m.RMSNormOffset != 0 {
+				keyBuilder = keyBuilder.WithScaleOffset(m.RMSNormOffset)
+			}
+			keyProjected = keyBuilder.Done()
+
+			if m.Architecture == ArchitectureGemma4 {
+				valueProjected = norm.RMSNorm(mhaScope.Shared("value"), valueProjected).WithEpsilon(m.NormEpsilon).WithNormalizationAxes(-1).WithScale(false).Done()
+			}
+		}
+	}
+
+	// Apply RoPE positional encoding if configured
 	posEncoder := m.posEncoder
 	if enc := m.layerPosEncoders[layerNum]; enc != nil {
 		posEncoder = enc
 	}
 	if posEncoder != nil {
-		attnBuilder.WithPositionalEncoder(posEncoder)
-	}
-	layerType := FullAttention
-	if layerNum < len(m.LayerTypes) {
-		layerType = m.LayerTypes[layerNum]
-	}
-	if layerType == SlidingAttention && m.SlidingWindow > 0 {
-		attnBuilder.WithSlidingWindow(m.SlidingWindow)
+		if qkEncoder, ok := posEncoder.(pos.QKEncoder); ok {
+			g := x.Graph()
+			seqLen := x.Shape().Dimensions[1]
+			posIndices := pos.SequentialPositions(g, position, seqLen)
+			if isShared {
+				queryProjected, _ = qkEncoder.EncodeQK(queryProjected, queryProjected, posIndices, 1)
+			} else {
+				queryProjected, keyProjected = qkEncoder.EncodeQK(queryProjected, keyProjected, posIndices, 1)
+			}
+		}
 	}
 
-	if !m.UseBias {
-		attnBuilder.UseProjectionBias(false)
+	if cache == nil && !isShared && sharedKVs != nil {
+		sharedKVs[fmt.Sprintf("%d_k", layerNum)] = keyProjected
+		sharedKVs[fmt.Sprintf("%d_v", layerNum)] = valueProjected
 	}
-	if m.Architecture == ArchitectureGemma3 {
-		attnBuilder.WithQKRMSNorm(m.NormEpsilon)
+
+	var attn *Node
+	if cache != nil {
+		var fullKey, fullValue *Node
+		if isShared {
+			fullKey, fullValue = m.KVCache.Get(cache, sourceLayerScopePath)
+		} else {
+			m.KVCache.Update(selfAttnScope, cache, keyProjected, valueProjected, position)
+			fullKey, fullValue = m.KVCache.Get(cache, selfAttnScope.Scope())
+		}
+
+		fullKey = TransposeAllDims(fullKey, 0, 2, 1, 3)
+		fullValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
+
+		batchSize := x.Shape().Dimensions[0]
+		seqLen := x.Shape().Dimensions[1]
+		cacheSeqLen := fullKey.Shape().Dimensions[1]
+
+		qReshaped := Reshape(queryProjected, batchSize, seqLen, m.NumHeads*headDim)
+		kReshaped := Reshape(fullKey, batchSize, cacheSeqLen, kvHeads*headDim)
+		vReshaped := Reshape(fullValue, batchSize, cacheSeqLen, kvHeads*headDim)
+
+		slidingWindow := 0
+		if layerType == LocalLayer {
+			slidingWindow = m.SlidingWindow
+		}
+		customMask := m.KVCache.BuildAttentionMask(selfAttnScope, cache, x, position, m.UseCausalMask, slidingWindow)
+
+		if attentionMask != nil {
+			expandedMask := ExpandDims(attentionMask, 1)
+			expandedMask = BroadcastToDims(expandedMask, customMask.Shape().Dimensions...)
+			customMask = LogicalAnd(expandedMask, customMask)
+		}
+
+		attnBuilder := attention.MultiHeadAttention(selfAttnScope, qReshaped, kReshaped, vReshaped, m.NumHeads, headDim).
+			UseTransposedWeights(m.TransposedProjections).
+			WithNumKVHeads(kvHeads).
+			WithPreProjected(true).
+			WithOutputDim(m.EmbedDim).
+			WithQueryKeyMatrixMask(customMask).
+			WithScoreSoftCap(m.AttentionScoreSoftCap).
+			WithQueryKeyScale(m.QueryKeyScale)
+
+		if !m.UseBias {
+			attnBuilder.UseProjectionBias(false)
+		}
+		if m.Dropout > 0 {
+			dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
+			attnBuilder.WithDropout(dropoutRate)
+		}
+		attn = attnBuilder.Done()
+	} else {
+		batchSize := x.Shape().Dimensions[0]
+		seqLen := x.Shape().Dimensions[1]
+		qReshaped := Reshape(queryProjected, batchSize, seqLen, m.NumHeads*headDim)
+		kReshaped := Reshape(keyProjected, batchSize, seqLen, kvHeads*headDim)
+		vReshaped := Reshape(valueProjected, batchSize, seqLen, kvHeads*headDim)
+
+		attnBuilder := attention.MultiHeadAttention(selfAttnScope, qReshaped, kReshaped, vReshaped, m.NumHeads, headDim).
+			UseTransposedWeights(m.TransposedProjections).
+			WithNumKVHeads(kvHeads).
+			WithPreProjected(true).
+			WithOutputDim(m.EmbedDim).
+			WithScoreSoftCap(m.AttentionScoreSoftCap).
+			WithQueryKeyScale(m.QueryKeyScale)
+		if attentionMask != nil {
+			attnBuilder.WithMask(attentionMask)
+		}
+		if m.UseCausalMask {
+			attnBuilder.WithCausalMask(true)
+		}
+
+		if layerType == LocalLayer && m.SlidingWindow > 0 {
+			attnBuilder.WithSlidingWindow(m.SlidingWindow)
+		}
+		if !m.UseBias {
+			attnBuilder.UseProjectionBias(false)
+		}
+		if m.Dropout > 0 {
+			dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
+			attnBuilder.WithDropout(dropoutRate)
+		}
+		attn = attnBuilder.Done()
 	}
-	if m.Dropout > 0 {
-		dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
-		attnBuilder.WithDropout(dropoutRate)
-	}
-	attn = attnBuilder.Done()
 
 	// Post-attention normalization.
 	attn = m.normalize(layerScope.In("post_attention_norm"), attn, m.Normalization)
@@ -791,6 +1288,26 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x, mask
 	// Post-feedforward normalization
 	ff = m.normalize(layerScope.In("post_feedforward_norm"), ff, m.Normalization)
 	x = Add(residual, ff)
+
+	if perLayerInput != nil {
+		residualLayer := x
+		pleGate := m.dense(layerScope.In("per_layer_input_gate"), x, false, m.HiddenSizePerLayerInput)
+		pleGate = activation.Apply(m.Activation, pleGate) // act_fn (GELU)
+		pleGated := Mul(pleGate, perLayerInput)
+		pleProj := m.dense(layerScope.In("per_layer_projection"), pleGated, false, m.EmbedDim)
+		pleBuilder := norm.RMSNorm(layerScope.In("post_per_layer_input_norm"), pleProj).WithEpsilon(m.NormEpsilon)
+		if m.RMSNormOffset != 0 {
+			pleBuilder = pleBuilder.WithScaleOffset(m.RMSNormOffset)
+		}
+		pleProj = pleBuilder.Done()
+		x = Add(residualLayer, pleProj)
+	}
+
+	if m.HiddenSizePerLayerInput > 0 {
+		layerScalarVar := layerScope.VariableWithShape("layer_scalar", shapes.Make(m.DType, 1))
+		x = Mul(x, Squeeze(layerScalarVar.NodeValue(x.Graph())))
+	}
+
 	return x
 }
 

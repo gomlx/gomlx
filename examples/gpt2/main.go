@@ -13,29 +13,20 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/go-huggingface/hub"
 	_ "github.com/gomlx/gomlx/backends/default"
-	"github.com/gomlx/gomlx/ml/decode/sample"
 )
 
 var (
-	flagPrompt      = flag.String("prompt", "Once upon a time", "Input prompt for text generation")
+	flagPrompt      = flag.String("prompt", "Once upon a time there was ", "Input prompt for text generation")
 	flagMaxTokens   = flag.Int("max-tokens", 50, "Maximum number of tokens to generate")
-	flagTemperature = flag.Float64("temperature", 0.8, "Sampling temperature (higher = more random)")
-	flagTopP        = flag.Float64("top-p", 0.95, "Nucleus sampling threshold")
+	flagTemperature = flag.Float64("temperature", 0.0, "Sampling temperature (higher = more random)")
+	flagTopP        = flag.Float64("top-p", 0.0, "Nucleus sampling threshold")
 	flagTopK        = flag.Int("top-k", 0, "Top-k sampling (0 = disabled)")
-	flagStrategy    = flag.String("strategy", "temperature",
-		fmt.Sprintf("Sampling strategy: %q", sample.StrategyStrings()))
 	flagDownloadOnly = flag.Bool("download-only", false, "Only download weights, don't run inference")
 	flagBackend      = flag.String("backend", "", "Backend to use (default: auto-detect)")
 )
 
 func main() {
 	flag.Parse()
-
-	// Validate sampling strategy
-	strategy, err := sample.StrategyString(*flagStrategy)
-	if err != nil {
-		log.Fatalf("Unknown strategy: %s (must be greedy, temperature, top_k, or top_p)", *flagStrategy)
-	}
 
 	// Initialize backend
 	if *flagBackend != "" {
@@ -80,7 +71,6 @@ func main() {
 	fmt.Print(*flagPrompt)
 	config := GenerationConfig{
 		MaxTokens:   *flagMaxTokens,
-		Strategy:    strategy,
 		Temperature: *flagTemperature,
 		TopK:        *flagTopK,
 		TopP:        *flagTopP,

@@ -54,12 +54,7 @@ type MultiHeadAttentionBuilder struct {
 	queryKeyMatrixMask *Node
 	useCausalMask      bool
 
-	// KV cache and incremental generation support.
-	// kvCacheShape is the shape of the KV cache: [batch, heads, maxSeqLen, headDim].
-	// If set, enables caching of key/value projections for incremental generation.
-	kvCacheShape   shapes.Shape
-	position       *Node // Position as a graph node (scalar int32) for graph caching
-	actualCacheLen *Node // Actual filled cache length (scalar int32)
+	position *Node // Position as a graph node (scalar int32) for graph caching
 
 	// Positional Encoder to be used, e.g: RoPE.
 	positionalEncoder pos.Encoder
@@ -73,6 +68,11 @@ type MultiHeadAttentionBuilder struct {
 
 	withQKRMSNorm bool
 	qkNormEpsilon float64
+
+	preProjected bool
+
+	scoreSoftCap  float64
+	queryKeyScale float64
 }
 
 // MultiHeadAttention defines a multi-head attention layers, as described in [1], plus some modern extensions.
@@ -87,9 +87,9 @@ type MultiHeadAttentionBuilder struct {
 // - key: `[batch_size, <num_key/value_elements>, inputKeyDim]`.
 // - value: `[batch_size, <num_key/value_elements>, inputValueDim]`.
 //
-// And, when calling IsNil, after another output projection, it returns a node of shape
-// `[batch_size, <num_queries>, inputValueDim]`, if no other settings are given.
-// See settings in MultiHeadAttentionBuilder.to control various aspects.
+// It returns a builder object that can be further configured.
+// When finished configuring, call [MultiHeadAttentionBuilder.Done] to get the output, a node of shape
+// `[batch_size, <num_queries>, inputValueDim]`.
 //
 // Notice it's common to use key=values, and even query=keys=values. For instance for
 // encoding text, one may use the input sequence as all 3 (query, key and value).
@@ -235,64 +235,11 @@ func (b *MultiHeadAttentionBuilder) WithDropout(rate *Node) *MultiHeadAttentionB
 	return b
 }
 
-// WithKVCache enables incremental generation mode with KV caching.
-// This is used for efficient token-by-token generation where past key/value
-// projections are cached and reused, avoiding redundant computation.
-//
-// How it works:
-//   - Input: Only the embeddings/features for the current token(s) being generated
-//   - Output: The attention output for the current token(s)
-//   - Side effect: New key/value projections are automatically stored in the cache
-//   - Attention: Computed against all cached keys/values (including the new ones)
-//
-// Parameters:
-//   - maxSeqLen: Maximum sequence length the cache can hold. The cache shape is
-//     derived automatically from the attention configuration (batchSize, numHeads,
-//     headDim, dtype are taken from the builder).
-//   - position: Scalar Node (int32) representing the current position in the sequence.
-//     This allows the same compiled graph to be reused for different positions.
-//     For the initial prompt, position=0. For subsequent tokens, position increments.
-//
-// Returns:
-//   - The builder for method chaining
-//
-// Usage pattern:
-//
-//		// Build generation graph:
-//		attention := attention.MultiHeadAttention(scope, embeddings, embeddings, embeddings, numHeads, headDim).
-//		    WithKVCache(maxSeqLen, position).
-//		    WithPositionalEncoder(pos.NewRoPE(10000.0))
-//	 logits := attention.Done()
-//
-//		// Generate tokens:
-//		// 1. First call with full prompt (e.g., 10 tokens), position=0
-//		// 2. Each subsequent call with 1 new token, position=10, 11, 12, ...
-//
-//		// Before generating a new response, reset all caches in the model:
-//		attention.KVCacheReset(scope)
-//
-// The cache supports circular/rotating mode: when position exceeds maxSeqLen,
-// new entries wrap around and overwrite the oldest entries. This allows efficient
-// generation for sequences longer than maxSeqLen. Automatically enables causal masking.
-func (b *MultiHeadAttentionBuilder) WithKVCache(maxSeqLen int, position *Node) *MultiHeadAttentionBuilder {
-	// Derive cache shape from attention configuration.
-	// KV cache stores with numKVHeads (not numHeads) to save memory with GQA.
-	batchSize := b.query.Shape().Dimensions[0]
-	dtype := b.query.DType()
-	b.kvCacheShape = shapes.Make(dtype, batchSize, b.effectiveNumKVHeads(), maxSeqLen, b.keyQueryDim)
+// WithPosition sets the position of the input sequence in the generated sequence.
+// This is used by positional encoders (like RoPE) to compute the correct positional indices.
+func (b *MultiHeadAttentionBuilder) WithPosition(position *Node) *MultiHeadAttentionBuilder {
 	b.position = position
-	// When using KV cache, automatically enable causal mask for proper attention
-	b.useCausalMask = true
-	// Rebuild attention shape with cache dimensions
-	b.buildAttentionShape()
 	return b
-}
-
-// KVCacheShape returns the shape of the KV cache configured for this attention layer.
-// Shape is [batchSize, numKVHeads, maxSeqLen, headDim] (numKVHeads equals numHeads unless SetNumKVHeads was called).
-// Returns an invalid shape if WithKVCache was not called.
-func (b *MultiHeadAttentionBuilder) KVCacheShape() shapes.Shape {
-	return b.kvCacheShape
 }
 
 // WithRoPE enables Rotary Position Embeddings on query and key projections.
@@ -347,6 +294,13 @@ func (b *MultiHeadAttentionBuilder) UseTransposedWeights(transposed bool) *Multi
 	return b
 }
 
+// WithPreProjected configures the builder to assume the query, key, and value inputs are already projected,
+// so they don't need to be projected again internally.
+func (b *MultiHeadAttentionBuilder) WithPreProjected(preProjected bool) *MultiHeadAttentionBuilder {
+	b.preProjected = preProjected
+	return b
+}
+
 // WithQKRMSNorm applies RMSNorm to the query and key projections before attention (used by models like Gemma 2 and Gemma 3).
 func (b *MultiHeadAttentionBuilder) WithQKRMSNorm(epsilon float64) *MultiHeadAttentionBuilder {
 	b.withQKRMSNorm = true
@@ -359,6 +313,19 @@ func (b *MultiHeadAttentionBuilder) WithQKRMSNorm(epsilon float64) *MultiHeadAtt
 // This is used for sliding window attention architectures (like Gemma 3 sliding layers).
 func (b *MultiHeadAttentionBuilder) WithSlidingWindow(window int) *MultiHeadAttentionBuilder {
 	b.slidingWindow = window
+	return b
+}
+
+// WithScoreSoftCap sets the soft cap for the attention score computation.
+// When set to > 0, the attention scores are capped using tanh: cap * tanh(scores / cap) (see [nn.SoftCap]).
+func (b *MultiHeadAttentionBuilder) WithScoreSoftCap(cap float64) *MultiHeadAttentionBuilder {
+	b.scoreSoftCap = cap
+	return b
+}
+
+// WithQueryKeyScale overrides the default scaling factor (1 / sqrt(keyQueryDim)) for the attention scores.
+func (b *MultiHeadAttentionBuilder) WithQueryKeyScale(scale float64) *MultiHeadAttentionBuilder {
+	b.queryKeyScale = scale
 	return b
 }
 
@@ -417,12 +384,20 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	kvHeads := b.effectiveNumKVHeads()
 	var projectedQuery, projectedKey, projectedValue *Node
 
-	if b.useQKVProjection {
-		projectedQuery, projectedKey, projectedValue = b.qkvProject(flatQuery)
+	if b.preProjected {
+		seqLenQ := flatQuery.Shape().Dimensions[1]
+		seqLenKV := flatKey.Shape().Dimensions[1]
+		projectedQuery = Reshape(flatQuery, batchSize, seqLenQ, b.numHeads, b.keyQueryDim)
+		projectedKey = Reshape(flatKey, batchSize, seqLenKV, kvHeads, b.keyQueryDim)
+		projectedValue = Reshape(flatValue, batchSize, seqLenKV, kvHeads, b.valueDim)
 	} else {
-		projectedKey = b.dense(b.scope.In("key"), flatKey, b.useProjectionBias, kvHeads, b.keyQueryDim)
-		projectedQuery = b.dense(b.scope.In("query"), flatQuery, b.useProjectionBias, b.numHeads, b.keyQueryDim)
-		projectedValue = b.dense(b.scope.In("value"), flatValue, b.useProjectionBias, kvHeads, b.valueDim)
+		if b.useQKVProjection {
+			projectedQuery, projectedKey, projectedValue = b.qkvProject(flatQuery)
+		} else {
+			projectedKey = b.dense(b.scope.In("key"), flatKey, b.useProjectionBias, kvHeads, b.keyQueryDim)
+			projectedQuery = b.dense(b.scope.In("query"), flatQuery, b.useProjectionBias, b.numHeads, b.keyQueryDim)
+			projectedValue = b.dense(b.scope.In("value"), flatValue, b.useProjectionBias, kvHeads, b.valueDim)
+		}
 	}
 
 	if b.withQKRMSNorm {
@@ -447,29 +422,7 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 		}
 	}
 
-	// Handle KV cache if in incremental generation mode
-	if b.kvCacheShape.Ok() {
-		// Cache expects shape: [batch, numHeads, seqLen, headDim]
-		// projectedKey/Value shape: [batch, seqLen, numHeads, headDim]
-		// Transpose: (0,1,2,3) -> (0,2,1,3)
-		keyForCache := TransposeAllDims(projectedKey, 0, 2, 1, 3)
-		valueForCache := TransposeAllDims(projectedValue, 0, 2, 1, 3)
 
-		// Update cache and get full key/value (including past)
-		// KV cache variables are stored in the scope under "kv_cache" scope
-		// Pass b.position so the cache knows where to write the new keys/values
-		cacheScope := b.scope.At("kv_cache")
-		KVCacheUpdate(cacheScope, b.g, b.kvCacheShape, b.position, keyForCache, valueForCache)
-		fullKey, fullValue := getKVCache(cacheScope, b.g, b.kvCacheShape)
-
-		// b.position holds the current position in the sequence
-		b.actualCacheLen = b.position
-
-		// Transpose back to attention format: (0,2,1,3) -> (0,1,2,3)
-		// Result: [batch, maxSeqLen, numHeads, headDim]
-		projectedKey = TransposeAllDims(fullKey, 0, 2, 1, 3)
-		projectedValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
-	}
 
 	// Build the mask before any flattening, since buildMask uses the original attentionShape.
 	// Mask shape: [batch, <query_elements>, num_heads, <key_elements>]
@@ -483,12 +436,15 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	}
 
 	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
+	if b.queryKeyScale != 0 {
+		scale = b.queryKeyScale
+	}
 
 	// Pass causal to Core only when not using KV cache (Core builds a simple lower-triangular mask).
 	// When using KV cache, the position-aware causal mask is already built in buildMask above.
 	useCausalMask := b.useCausalMask && mask == nil
 	attentionOutput, attentionCoefficients = Core(b.scope, projectedQuery, projectedKey, projectedValue,
-		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients)
+		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients, b.scoreSoftCap)
 
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
 	// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_elements>, numHeads*valueDim]
@@ -591,14 +547,8 @@ func (b *MultiHeadAttentionBuilder) qkvProject(x *Node) (projectedQuery, project
 // buildAttentionShape returns the shape of the attention coefficients and mask, and sets it to b.attentionShape.
 // attentionShape is `[batch, <query_elements>, num_heads, <key_elements>]`.
 func (b *MultiHeadAttentionBuilder) buildAttentionShape() {
-	// Determine effective key length (may be larger than current key when caching)
-	var keyLen int
-	if b.kvCacheShape.Ok() {
-		// In cache mode, key length is the full cache size (kvCacheShape is [batch, heads, maxSeqLen, headDim])
-		keyLen = b.kvCacheShape.Dimensions[2]
-	} else {
-		keyLen = b.key.Shape().Dimensions[1]
-	}
+	// Determine effective key length
+	keyLen := b.key.Shape().Dimensions[1]
 
 	finalDims := make([]int, 2+b.innerQueryAxes+b.innerKeyAxes)
 	pos := 0

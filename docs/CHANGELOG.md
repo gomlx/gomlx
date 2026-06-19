@@ -4,7 +4,7 @@ It hasn't reached yet a 1.0 release yet (it is close), so instead we use every m
 
 ---
 
-# (In progress) v0.28.0: Large API and Packages Cleanup and Reorganization:
+# (In progress) v0.28.0: Large API and Packages Improvementes, Cleanup and Reorganization:
 
 To faciliate conversion to this updated API, we added the CLI tool `cmd/convert_v0.28`.
 It won't fully fix the code (mostly because of the `context.Context` to `model.Store`/`model.Scope` redesign),
@@ -97,6 +97,12 @@ And a few small renaming:
 ## Tensors (github.com/gomlx/gomlx/core/tensors):
 - Renamed `FromAnyValue` to `MustFromAnyValue` and added `FromAnyValue` returning `(tensor, error)`.
 
+
+## Other improvements
+
+- Redesigned KVCache implementation (previous was broken) in `ml/layers/attention/kvcache`: it is used by packages `attention`, `transformer` and `decode`.
+- Many improvements to `ml/zoo/transformer`: it nows support Gemma4 class of transformer models.
+- Added `nn.SoftCap` and in the `ml/layers/attention` added support for attention scores soft-cap (used by Gemma models).
 
 ---
 

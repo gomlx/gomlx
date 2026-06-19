@@ -15,14 +15,16 @@ import (
 	"github.com/gomlx/go-huggingface/tokenizers/hftokenizer"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/decode/sample"
 	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/attention"
+	"github.com/gomlx/gomlx/ml/layers/attention/kvcache"
 	"github.com/gomlx/gomlx/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/ml/layers/norm"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/zoo/transformer"
+	"github.com/gomlx/gomlx/ml/zoo/transformer/generate"
+	"github.com/gomlx/gomlx/ml/zoo/transformer/generate/sample"
 )
 
 // GPT2Config holds the architecture configuration for GPT-2.
@@ -62,16 +64,19 @@ type GPT2Model struct {
 	scope            *model.Scope
 	config           GPT2Config
 	transformerModel *transformer.Model
-
-	// Single cached exec for all token generations
-	tokenExec *model.Exec
+	kvCache          *kvcache.KVCache
+	generator        *generate.Generator
 }
 
 // forwardGPT2 implements GPT-2's forward pass with pre-norm architecture.
-func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node) *Node {
+func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node, cache kvcache.KVCacheNodes) *Node {
 	tm := m.transformerModel
 	g := tokens.Graph()
 	currentSeqLen := tokens.Shape().Dimensions[1]
+
+	if position.Rank() > 0 {
+		position = Squeeze(position)
+	}
 
 	// Token + positional embeddings
 	embedded := layers.Embedding(scope.In("token_embed"), tokens, tm.DType, tm.VocabSize, tm.EmbedDim)
@@ -95,10 +100,33 @@ func (m *GPT2Model) forwardGPT2(scope *model.Scope, tokens *Node, position *Node
 			Epsilon(m.config.NormEps).Done()
 
 		// Self-attention with KV cache
-		attn := attention.SelfAttention(layerScope.In("attn"), attnInput, tm.NumHeads, tm.HeadDim).
-			WithKVCache(tm.MaxPosEmbed, position).
+		attnScope := layerScope.In("attn")
+		mhaScope := attnScope.At("MultiHeadAttention")
+
+		queryProjected := layers.Dense(mhaScope.In("query"), attnInput, true, tm.NumHeads, tm.HeadDim)
+		keyProjected := layers.Dense(mhaScope.In("key"), attnInput, true, tm.NumHeads, tm.HeadDim)
+		valueProjected := layers.Dense(mhaScope.In("value"), attnInput, true, tm.NumHeads, tm.HeadDim)
+
+		m.kvCache.Update(attnScope, cache, keyProjected, valueProjected, position)
+		fullKey, fullValue := m.kvCache.Get(cache, attnScope.Scope())
+
+		batchSize := attnInput.Shape().Dimensions[0]
+		seqLen := attnInput.Shape().Dimensions[1]
+		cacheSeqLen := fullKey.Shape().Dimensions[2]
+
+		fullKey = TransposeAllDims(fullKey, 0, 2, 1, 3)
+		fullValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
+
+		qReshaped := Reshape(queryProjected, batchSize, seqLen, tm.NumHeads*tm.HeadDim)
+		kReshaped := Reshape(fullKey, batchSize, cacheSeqLen, tm.NumHeads*tm.HeadDim)
+		vReshaped := Reshape(fullValue, batchSize, cacheSeqLen, tm.NumHeads*tm.HeadDim)
+
+		customMask := m.kvCache.BuildAttentionMask(attnScope, cache, attnInput, position, true, 0)
+
+		attn := attention.MultiHeadAttention(attnScope, qReshaped, kReshaped, vReshaped, tm.NumHeads, tm.HeadDim).
 			UseProjectionBias(true).
-			WithCausalMask(true).
+			WithPreProjected(true).
+			WithQueryKeyMatrixMask(customMask).
 			Done()
 		x = Add(x, attn)
 
@@ -150,36 +178,45 @@ func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenize
 		WithMaxPosEmbed(config.MaxPosEmbed).
 		WithDType(config.DType).
 		WithPositionalEncoder(posEmbedder)
+	var orderedScopes []string
+	for layer := range config.NumLayers {
+		orderedScopes = append(orderedScopes, scope.In("layer_%d", layer).In("attn").Scope())
+	}
+	kvCache := kvcache.NewKVCache().
+		WithMinSeqLenPerLayerType([]int{config.MaxPosEmbed}).
+		WithMaxSeqLenPerLayerType([]int{config.MaxPosEmbed}).
+		WithOrderedScopes(orderedScopes).
+		WithSinkPositions(0)
+
 	gpt2Model := &GPT2Model{
 		backend:          backend,
 		scope:            scope,
 		config:           config,
 		transformerModel: transformerModel,
+		kvCache:          kvCache,
 	}
 
-	// Create the generation exec once during loading (saves JIT compilation on first Generate call)
-	var err error
-	gpt2Model.tokenExec, err = model.NewExec(backend, scope.Store(),
-		func(scope *model.Scope, tokens *Node, position *Node) *Node {
-			logits := gpt2Model.forwardGPT2(scope, tokens, position)
-			lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
-			lastLogits = Squeeze(lastLogits, 1)
-			return sample.SampleWithStrategy(
-				scope, lastLogits,
-				gpt2Model.config.Strategy,
-				gpt2Model.config.Temperature,
-				gpt2Model.config.TopK,
-				gpt2Model.config.TopP,
-			)
-		})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create generation exec: %w", err)
+	// Define the KVCacheModelFn
+	var modelFn generate.KVCacheModelFn = func(scope *model.Scope, newTokens *Node, position *Node, cache kvcache.KVCacheNodes) (*Node, kvcache.KVCacheNodes) {
+		logits := gpt2Model.forwardGPT2(scope, newTokens, position, cache)
+		return logits, cache
 	}
+
+	// Create and configure the Generator
+	gpt2Model.generator = generate.New(modelFn).
+		WithKVCache(kvCache, config.NumHeads, config.HiddenSize/config.NumHeads, config.DType)
 
 	// Load tokenizer - distilgpt2 doesn't have tokenizer_class, so use hftokenizer directly
 	tokenizer, err := hftokenizer.New(nil, repo)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load tokenizer: %w", err)
+	}
+
+	if eosTokenId, err := tokenizer.SpecialTokenID(api.TokEndOfSentence); err == nil {
+		gpt2Model.generator.WithEOS(eosTokenId)
+	} else {
+		// Fallback to hardcoded EOS for GPT2 (50256)
+		gpt2Model.generator.WithEOS(50256)
 	}
 
 	return gpt2Model, tokenizer, nil
@@ -188,7 +225,6 @@ func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenize
 // GenerationConfig holds parameters for text generation.
 type GenerationConfig struct {
 	MaxTokens   int
-	Strategy    sample.Strategy
 	Temperature float64
 	TopK        int
 	TopP        float64
@@ -200,11 +236,25 @@ func (m *GPT2Model) Generate(
 	config GenerationConfig,
 	callback func(token int) bool,
 ) error {
-	// Copy sampling config to model for use in exec graphs
-	m.config.Strategy = config.Strategy
-	m.config.Temperature = config.Temperature
-	m.config.TopK = config.TopK
-	m.config.TopP = config.TopP
+	// Reset to greedy by default, then configure based on provided options.
+	m.generator.Strategy = sample.StrategyGreedy
+	m.generator.MaxLength = config.MaxTokens + len(promptTokens)
+
+	if config.Temperature != 0 {
+		m.generator.WithTemperature(float32(config.Temperature))
+	} else {
+		m.generator.Temperature = 0
+	}
+	if config.TopK != 0 {
+		m.generator.WithTopK(config.TopK)
+	} else {
+		m.generator.TopK = 0
+	}
+	if config.TopP != 0 {
+		m.generator.WithTopP(float32(config.TopP))
+	} else {
+		m.generator.TopP = 0
+	}
 
 	// Convert prompt tokens to int32
 	promptTokens32 := make([]int32, len(promptTokens))
@@ -212,50 +262,16 @@ func (m *GPT2Model) Generate(
 		promptTokens32[i] = int32(token)
 	}
 
-	// Process prompt (position=0)
-	results, err := m.tokenExec.Exec(
-		[][]int32{promptTokens32},
-		[]int32{0},
-	)
-	if err != nil {
-		return fmt.Errorf("failed to process prompt: %w", err)
-	}
-
-	// Get first generated token
-	firstToken := int(results[0].Value().([]int32)[0])
-	if callback != nil && !callback(firstToken) {
-		return nil
-	}
-
-	// Start timing for token generation
 	startTime := time.Now()
-	tokensGenerated := 1 // Count the first token
 
-	// Generate remaining tokens one by one
-	currentPosition := len(promptTokens)
-	currentToken := firstToken
-
-	for step := range config.MaxTokens - 1 {
-		position := currentPosition + step
-		// Get next token from model (includes sampling)
-		results, err := m.tokenExec.Exec(
-			[][]int32{{int32(currentToken)}},
-			[]int32{int32(position)},
-		)
-		if err != nil {
-			return fmt.Errorf("failed to generate token at step %d: %w", step, err)
-		}
-
-		nextToken := int(results[0].Value().([]int32)[0])
-		if callback != nil && !callback(nextToken) {
-			break
-		}
-		currentToken = nextToken
-		tokensGenerated++
+	// Run generation using GenerateStreaming
+	err := m.generator.GenerateStreaming(m.backend, m.scope, promptTokens32, callback)
+	if err != nil {
+		return err
 	}
 
-	// Calculate and print timing statistics
 	duration := time.Since(startTime)
+	tokensGenerated := config.MaxTokens
 	tokensPerSecond := float64(tokensGenerated) / duration.Seconds()
 	fmt.Printf("\n\nGenerated %d tokens in %.2fs (%.1f tokens/s)\n", tokensGenerated, duration.Seconds(), tokensPerSecond)
 
@@ -395,7 +411,7 @@ func setScopeVariableFromTensor(scope *model.Scope, scopePath []string, varName 
 	// Normal case: set single variable
 	scopeScope := scope
 	for _, s := range scopePath {
-		scopeScope = scopeScope.In("%s", s)
+		scopeScope = scopeScope.At("%s", s)
 	}
 
 	scopeScope.VariableWithValue(varName, t)
@@ -408,9 +424,9 @@ func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *t
 	baseScopePath := scopePath[:len(scopePath)-1]
 	baseScope := scope
 	for _, s := range baseScopePath {
-		baseScope = baseScope.In("%s", s)
+		baseScope = baseScope.At("%s", s)
 	}
-	baseScope = baseScope.In("MultiHeadAttention")
+	baseScope = baseScope.At("MultiHeadAttention")
 
 	shape := t.Shape().Dimensions
 	var flatData []float32
@@ -450,9 +466,9 @@ func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *t
 			}
 		}
 
-		baseScope.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, hiddenSize, numHeads, headDim))
-		baseScope.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, hiddenSize, numHeads, headDim))
-		baseScope.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, hiddenSize, numHeads, headDim))
+		baseScope.At("query").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, hiddenSize, numHeads, headDim))
+		baseScope.At("key").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, hiddenSize, numHeads, headDim))
+		baseScope.At("value").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, hiddenSize, numHeads, headDim))
 	} else if len(shape) == 1 {
 		// Bias vector: [3*hiddenSize]
 		totalSize := shape[0]
@@ -477,9 +493,9 @@ func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *t
 			}
 		}
 
-		baseScope.In("query").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, numHeads, headDim))
-		baseScope.In("key").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, numHeads, headDim))
-		baseScope.In("value").In("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, numHeads, headDim))
+		baseScope.At("query").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, numHeads, headDim))
+		baseScope.At("key").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, numHeads, headDim))
+		baseScope.At("value").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, numHeads, headDim))
 	} else {
 		return fmt.Errorf("unexpected shape for fused QKV: %v", shape)
 	}

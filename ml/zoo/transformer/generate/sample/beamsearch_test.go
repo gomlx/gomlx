@@ -52,7 +52,7 @@ func TestBeamSearchStep(t *testing.T) {
 		currentLength := 3
 
 		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, logits, sequences, scores *Node) []*Node {
-			nextSeqs, nextScores, isFinished := config.Step(logits, sequences, scores, currentLength)
+			nextSeqs, nextScores, isFinished, _ := config.Step(logits, sequences, scores, currentLength)
 			return []*Node{nextSeqs, nextScores, isFinished}
 		})
 
@@ -90,7 +90,7 @@ func TestBeamSearchStep(t *testing.T) {
 		currentLength := 3
 
 		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, logits, sequences, scores *Node) []*Node {
-			nextSeqs, nextScores, isFinished := config.Step(logits, sequences, scores, currentLength)
+			nextSeqs, nextScores, isFinished, _ := config.Step(logits, sequences, scores, currentLength)
 			return []*Node{nextSeqs, nextScores, isFinished}
 		})
 
@@ -122,7 +122,7 @@ func TestBeamSearchStep(t *testing.T) {
 		currentLength := 5
 
 		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, logits, sequences, scores *Node) []*Node {
-			nextSeqs, nextScores, isFinished := config.Step(logits, sequences, scores, currentLength)
+			nextSeqs, nextScores, isFinished, _ := config.Step(logits, sequences, scores, currentLength)
 			return []*Node{nextSeqs, nextScores, isFinished}
 		})
 
@@ -151,7 +151,7 @@ func TestBeamSearchStep(t *testing.T) {
 		currentLength := 2
 
 		exec := model.MustNewExec(backend, scope, func(scope *model.Scope, logits, sequences, scores *Node) []*Node {
-			nextSeqs, nextScores, isFinished := config.Step(logits, sequences, scores, currentLength)
+			nextSeqs, nextScores, isFinished, _ := config.Step(logits, sequences, scores, currentLength)
 			return []*Node{nextSeqs, nextScores, isFinished}
 		})
 

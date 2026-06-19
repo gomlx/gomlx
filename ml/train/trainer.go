@@ -622,7 +622,7 @@ func (r *Trainer) callGraphFn(
 	}
 
 	// Collect metrics:
-	metrics, err = exec.Exec(inputsAndLabels...)
+	metrics, err = exec.Call(inputsAndLabels...)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to execute train/eval step")
 	}

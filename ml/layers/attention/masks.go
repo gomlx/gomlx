@@ -4,6 +4,7 @@ package attention
 
 import (
 	"reflect"
+	"slices"
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
@@ -87,7 +88,7 @@ func (b *MultiHeadAttentionBuilder) WithQueryKeyMatrixMask(queryKeyMatrixMask *N
 	if b.keyMask != nil || b.queryMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
 	}
-	if queryKeyMatrixMask.Shape().Equal(b.attentionShape) {
+	if slices.Equal(queryKeyMatrixMask.Shape().Dimensions, b.attentionShape.Dimensions) {
 		// Simplest case: queryKeyMatrixMask provided with attentionShape.
 		b.queryKeyMatrixMask = queryKeyMatrixMask
 		return b
@@ -99,7 +100,7 @@ func (b *MultiHeadAttentionBuilder) WithQueryKeyMatrixMask(queryKeyMatrixMask *N
 		shapeWithoutHeads.Dimensions[ii] = shapeWithoutHeads.Dimensions[ii+1]
 	}
 	shapeWithoutHeads.Dimensions = shapeWithoutHeads.Dimensions[0 : b.attentionShape.Rank()-1]
-	if !queryKeyMatrixMask.Shape().Equal(shapeWithoutHeads) {
+	if !slices.Equal(queryKeyMatrixMask.Shape().Dimensions, shapeWithoutHeads.Dimensions) {
 		Panicf("invalid shape for queryKeyMatrixMask %s: expected either %s (with per-head mask) or %s",
 			queryKeyMatrixMask.Shape(), b.attentionShape, shapeWithoutHeads)
 	}
@@ -157,13 +158,9 @@ func (b *MultiHeadAttentionBuilder) buildAttentionMask() (mask *Node) {
 
 	// Causal mask is usually left to be calculated by Core, but if KV cache is used, or if it needs to be combined
 	// with another mask, it is built here.
-	if b.useCausalMask && (b.kvCacheShape.Ok() || mask != nil) {
+	if b.useCausalMask && mask != nil {
 		causalMask := b.buildCausalAttentionMask()
-		if mask == nil {
-			mask = causalMask
-		} else {
-			mask = LogicalAnd(mask, causalMask)
-		}
+		mask = LogicalAnd(mask, causalMask)
 	}
 	return
 }
@@ -195,12 +192,7 @@ func (b *MultiHeadAttentionBuilder) buildAttentionMaskFromSplitMasks() (mask *No
 }
 
 // buildCausalAttentionMask creates a mask where queries can only attend to keys with "smaller index" than itself.
-// When using KV cache (incremental generation), the mask accounts for the current position.
 func (b *MultiHeadAttentionBuilder) buildCausalAttentionMask() (mask *Node) {
-	if b.kvCacheShape.Ok() {
-		return b.buildCausalAttentionMaskForKVCache()
-	}
-
 	queryShape := b.query.Shape()
 	queryLen := queryShape.Dimensions[1]
 	keyShape := b.key.Shape()
@@ -214,18 +206,22 @@ func (b *MultiHeadAttentionBuilder) buildCausalAttentionMask() (mask *Node) {
 		Panicf("MultiHeadAttention's WithCausalMask requires inner shapes of query and key be the same,"+
 			" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
 	}
-	if queryLen != keyLen {
-		Panicf("causal mask in training mode requires query and key lengths to match, got query=%d, key=%d",
-			queryLen, keyLen)
-	}
-	mask = LowerTriangular(b.g, queryLen)
 
-	// If using a sliding window, we must also apply a band mask.
-	// Since queryLen == keyLen, the difference q - k should be < slidingWindow.
+	// queryIndices: [0, 1, 2, ..., queryLen-1] -> shaped [queryLen, 1]
+	queryIndices := Iota(b.g, shapes.Make(dtypes.Int32, queryLen), 0)
+	queryIndices = ExpandDims(queryIndices, -1) // [queryLen, 1]
+
+	// keyIndices: [0, 1, 2, ..., keyLen-1] -> shaped [1, keyLen]
+	keyIndices := Iota(b.g, shapes.Make(dtypes.Int32, keyLen), 0)
+	keyIndices = ExpandDims(keyIndices, 0) // [1, keyLen]
+
+	mask = GreaterOrEqual(queryIndices, keyIndices) // [queryLen, keyLen]
+
+	// If using a sliding window, add distance mask: (q - k) < slidingWindow
 	if b.slidingWindow > 0 {
 		qIndices := Iota(b.g, shapes.Make(dtypes.Int32, queryLen), 0)
-		kIndices := Iota(b.g, shapes.Make(dtypes.Int32, keyLen), 0)
 		qIndices = ExpandDims(qIndices, -1) // [queryLen, 1]
+		kIndices := Iota(b.g, shapes.Make(dtypes.Int32, keyLen), 0)
 		kIndices = ExpandDims(kIndices, 0)  // [1, keyLen]
 		qMinusK := Sub(qIndices, kIndices)
 		slidingMask := LessThan(qMinusK, Const(b.g, int32(b.slidingWindow)))
@@ -239,71 +235,5 @@ func (b *MultiHeadAttentionBuilder) buildCausalAttentionMask() (mask *Node) {
 	// Add dimension for numHeads at position 2 (after batch and query)
 	mask = ExpandDims(mask, 2)                                   // [1, queryLen, 1, keyLen]
 	mask = BroadcastToDims(mask, b.attentionShape.Dimensions...) // Broadcast to target dimensions
-	return mask
-}
-
-// buildCausalAttentionMaskForKVCache creates a mask where queries can only attend to keys with "smaller index" than itself,
-// accounting for the current position when using KV cache (incremental generation).
-func (b *MultiHeadAttentionBuilder) buildCausalAttentionMaskForKVCache() (mask *Node) {
-	queryShape := b.query.Shape()
-	queryLen := queryShape.Dimensions[1]
-	keyLen := b.kvCacheShape.Dimensions[2] // Static shape for graph building
-
-	// Build position-aware causal mask for incremental generation
-	// Query positions: [position, position+1, ..., position+queryLen-1]
-	// Key positions: [0, 1, ..., actualCacheLen-1]
-	// mask[q, k] = (q_pos >= k_pos) AND (k < actualCacheLen)
-
-	queryPositions := Iota(b.g, shapes.Make(dtypes.Int32, queryLen), 0)
-	// Add position offset using the position Node
-	positionInt32 := ConvertDType(b.position, dtypes.Int32)
-	if positionInt32.Rank() > 0 {
-		positionInt32 = Squeeze(positionInt32) // Ensure scalar
-	}
-	positionBroadcast := ExpandDims(positionInt32, 0) // [1]
-	positionBroadcast = BroadcastToShape(positionBroadcast, shapes.Make(dtypes.Int32, queryLen))
-	queryPositions = Add(queryPositions, positionBroadcast)
-	queryPositions = ExpandDims(queryPositions, -1) // [queryLen, 1]
-
-	keyPositions := Iota(b.g, shapes.Make(dtypes.Int32, keyLen), 0)
-	keyPositions = ExpandDims(keyPositions, 0) // [1, keyLen]
-
-	causalMask := GreaterOrEqual(queryPositions, keyPositions) // [queryLen, keyLen]
-
-	// If using a sliding window, add distance mask: (q - k) < slidingWindow
-	if b.slidingWindow > 0 {
-		qMinusK := Sub(queryPositions, keyPositions)
-		slidingMask := LessThan(qMinusK, Const(b.g, int32(b.slidingWindow)))
-		causalMask = LogicalAnd(causalMask, slidingMask)
-	}
-
-	// Additional mask for valid cached positions: k < actualCacheLen
-	// actualCacheLen is scalar, broadcast to [keyLen]
-	keyIndices := Iota(b.g, shapes.Make(dtypes.Int32, keyLen), 0)
-	actualLenBroadcast := BroadcastToShape(b.actualCacheLen, keyIndices.Shape())
-	validMask := LessThan(keyIndices, actualLenBroadcast) // [keyLen]
-
-	// Broadcast to [queryLen, keyLen] and combine with causal mask
-	validMask = ExpandDims(validMask, 0) // [1, keyLen]
-	validMask = BroadcastToShape(validMask, causalMask.Shape())
-
-	mask = LogicalAnd(causalMask, validMask) // [queryLen, keyLen]
-
-	// Broadcast mask to target shape: [batch, <query_elements>, numHeads, <key_elements>]
-	// mask is currently [queryLen, keyLen], need to add batch and numHeads dimensions
-	// InsertAxes at beginning for batch dimension
-	mask = ExpandDims(mask, 0) // [1, queryLen, keyLen]
-	// Add dimension for numHeads at position 2 (after batch and query)
-	mask = ExpandDims(mask, 2)                                   // [1, queryLen, 1, keyLen]
-	mask = BroadcastToDims(mask, b.attentionShape.Dimensions...) // Broadcast to target dimensions
-
-	// Combine with cache validity mask if using cache
-	cacheValidMask := createKVCacheAttentionMask(b.g, b.kvCacheShape, b.position, queryLen, keyLen)
-	// cacheValidMask shape: [batch, 1, queryLen, keyLen]
-	// Remove the '1' dimension at position 1 and add numHeads dimension at position 2
-	cacheValidMask = Squeeze(cacheValidMask, 1)    // [batch, queryLen, keyLen]
-	cacheValidMask = ExpandDims(cacheValidMask, 2) // [batch, queryLen, 1, keyLen]
-	cacheValidMask = BroadcastToDims(cacheValidMask, b.attentionShape.Dimensions...)
-	mask = LogicalAnd(mask, cacheValidMask)
 	return mask
 }

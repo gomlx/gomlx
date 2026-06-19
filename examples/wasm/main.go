@@ -62,7 +62,7 @@ func main() {
 		}
 	}()
 
-	// With simplego imported, MustNew picks the pure-Go backend under WASM.
+	// With the Go backend imported, MustNew picks the pure-Go backend under WASM.
 	be := compute.MustNew()
 
 	// Prepare cached executors for fast, repeated runs.

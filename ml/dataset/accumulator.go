@@ -15,6 +15,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/support/xsync"
 	"github.com/pkg/errors"
 )
 
@@ -65,17 +66,8 @@ type DistributedAccumulator struct {
 	inputShardingSpecs, labelShardingSpecs []*distributed.ShardingSpec
 	deviceAssignment                       []compute.DeviceNum
 
-	mu       sync.Mutex
-	stopChan chan struct{}
-
-	// Bucketing system - no mutex needed, only one goroutine modifies buckets
-	buckets map[string]*bucket
-
-	// Statistics - protected by sync.Map for concurrent access
-	stats sync.Map // key (string) -> count (int) of source inputs seen
-
-	// Channel for next prepared batch (size 1)
-	nextBatch chan *distributedBatch
+	// Statistics - protected by SyncMap for concurrent access
+	stats xsync.SyncMap[string, int] // key (string) -> count (int) of source inputs seen
 }
 
 // Compile time check that DistributedAccumulator implements both train.Dataset and train.DistributedDataset.
@@ -189,36 +181,20 @@ func (ds *DistributedAccumulator) Name() string {
 	return "Distributed(" + ds.source.Name() + ")"
 }
 
-// stopIteration stops the background reader and cleans up resources.
-func (ds *DistributedAccumulator) stopIteration() {
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
-	if ds.stopChan != nil {
-		select {
-		case <-ds.stopChan:
-			// Already closed
-		default:
-			close(ds.stopChan)
+// finalize finalizes (frees) all tensors in the batch.
+func (b *distributedBatch) finalize() {
+	if b == nil {
+		return
+	}
+	for _, t := range b.inputs {
+		if t != nil {
+			_ = t.FinalizeAll()
 		}
 	}
-	// Drain nextBatch to unblock any waiting sender before we exit
-	if ds.nextBatch != nil {
-		for range ds.nextBatch {
+	for _, t := range b.labels {
+		if t != nil {
+			_ = t.FinalizeAll()
 		}
-	}
-	// Finalize leftover buckets
-	if ds.buckets != nil {
-		for _, b := range ds.buckets {
-			for _, sb := range b.shards {
-				for _, t := range sb.inputs {
-					t.FinalizeAll()
-				}
-				for _, t := range sb.labels {
-					t.FinalizeAll()
-				}
-			}
-		}
-		ds.buckets = nil
 	}
 }
 
@@ -256,21 +232,7 @@ func bucketKeyString(key bucketKey) string {
 	return sb.String()
 }
 
-// getOrCreateBucket gets or creates a bucket for the given key.
-// No synchronization needed - only called from single reader goroutine.
-func (ds *DistributedAccumulator) getOrCreateBucket(key bucketKey) *bucket {
-	keyStr := bucketKeyString(key)
 
-	b, exists := ds.buckets[keyStr]
-	if !exists {
-		b = &bucket{
-			key:    key,
-			shards: make([]shardBatch, 0, ds.numInputShards),
-		}
-		ds.buckets[keyStr] = b
-	}
-	return b
-}
 
 // numShardsForSpec calculates the number of shards needed for a given ShardingSpec.
 // This is the product of sizes of mesh axes that are actually used (sharded) in the spec.
@@ -557,31 +519,42 @@ func (ds *DistributedAccumulator) moveShardsToDevices(shards []*tensors.Tensor) 
 
 // runReader is the background goroutine that reads from source dataset, accumulates shards,
 // aggregates them, and sends ready batches to the channel.
-func (ds *DistributedAccumulator) runReader(next func() (train.Batch, error, bool), stop func()) {
-	defer stop()
-	defer func() {
-		ds.mu.Lock()
-		defer ds.mu.Unlock()
-		if ds.nextBatch != nil {
-			close(ds.nextBatch)
-		}
-	}()
-
-	for {
-		batch, err, ok := next()
-		if !ok {
-			// End of source dataset - check if we have any ready buckets to send
-			ds.sendReadyBatch()
-			select {
-			case ds.nextBatch <- &distributedBatch{err: io.EOF}:
-			case <-ds.stopChan:
+// finalizeBuckets finalizes (frees) all tensors in the given buckets map and clears it.
+func finalizeBuckets(buckets map[string]*bucket) {
+	for _, b := range buckets {
+		for _, sb := range b.shards {
+			for _, t := range sb.inputs {
+				t.FinalizeAll()
 			}
-			return
+			for _, t := range sb.labels {
+				t.FinalizeAll()
+			}
 		}
+	}
+	clear(buckets)
+}
+
+// runReader is the background goroutine that reads from source dataset, accumulates shards,
+// aggregates them, and sends ready batches to the channel.
+func (ds *DistributedAccumulator) runReader(stopLatch *xsync.Latch, nextBatch chan *distributedBatch) {
+	defer close(nextBatch)
+
+	// Local buckets for this iteration - no synchronization needed.
+	buckets := make(map[string]*bucket)
+
+	for batch, err := range ds.source.Iter() {
+		select {
+		case <-stopLatch.WaitChan():
+			finalizeBuckets(buckets)
+			return
+		default:
+		}
+
 		if err != nil {
+			finalizeBuckets(buckets)
 			select {
-			case ds.nextBatch <- &distributedBatch{err: err}:
-			case <-ds.stopChan:
+			case nextBatch <- &distributedBatch{err: err}:
+			case <-stopLatch.WaitChan():
 			}
 			return
 		}
@@ -607,13 +580,20 @@ func (ds *DistributedAccumulator) runReader(next func() (train.Batch, error, boo
 		// Update statistics
 		keyStr := bucketKeyString(key)
 		if val, ok := ds.stats.Load(keyStr); ok {
-			ds.stats.Store(keyStr, val.(int)+1)
+			ds.stats.Store(keyStr, val+1)
 		} else {
 			ds.stats.Store(keyStr, 1)
 		}
 
 		// Get or create bucket
-		b := ds.getOrCreateBucket(key)
+		b, exists := buckets[keyStr]
+		if !exists {
+			b = &bucket{
+				key:    key,
+				shards: make([]shardBatch, 0, ds.numInputShards),
+			}
+			buckets[keyStr] = b
+		}
 
 		// Add shard to bucket
 		b.shards = append(b.shards, shardBatch{
@@ -632,26 +612,39 @@ func (ds *DistributedAccumulator) runReader(next func() (train.Batch, error, boo
 			// Aggregate shards
 			db, err := ds.aggregateShards(shardsToUse, sourceSpec)
 			if err != nil {
+				finalizeBuckets(buckets)
 				select {
-				case ds.nextBatch <- &distributedBatch{err: err}:
-				case <-ds.stopChan:
+				case nextBatch <- &distributedBatch{err: err}:
+				case <-stopLatch.WaitChan():
 				}
 				return
 			}
 
 			// Send to channel (blocking if channel is full)
 			select {
-			case ds.nextBatch <- db:
-			case <-ds.stopChan:
+			case nextBatch <- db:
+			case <-stopLatch.WaitChan():
+				finalizeBuckets(buckets)
 				return
 			}
 		}
 	}
+
+	// End of source dataset - check if we have any ready buckets to send
+	ds.sendReadyBatch(buckets, stopLatch, nextBatch)
+
+	// Clean up any remaining shards in the buckets (which didn't form full batches)
+	finalizeBuckets(buckets)
+
+	select {
+	case nextBatch <- &distributedBatch{err: io.EOF}:
+	case <-stopLatch.WaitChan():
+	}
 }
 
 // sendReadyBatch checks all buckets and sends the first ready batch if available.
-func (ds *DistributedAccumulator) sendReadyBatch() {
-	for _, b := range ds.buckets {
+func (ds *DistributedAccumulator) sendReadyBatch(buckets map[string]*bucket, stopLatch *xsync.Latch, nextBatch chan *distributedBatch) {
+	for _, b := range buckets {
 		if len(b.shards) >= ds.numInputShards {
 			shardsToUse := make([]shardBatch, ds.numInputShards)
 			copy(shardsToUse, b.shards[:ds.numInputShards])
@@ -660,15 +653,15 @@ func (ds *DistributedAccumulator) sendReadyBatch() {
 			batch, err := ds.aggregateShards(shardsToUse, shardsToUse[0].spec)
 			if err != nil {
 				select {
-				case ds.nextBatch <- &distributedBatch{err: err}:
-				case <-ds.stopChan:
+				case nextBatch <- &distributedBatch{err: err}:
+				case <-stopLatch.WaitChan():
 				}
 				return
 			}
 
 			select {
-			case ds.nextBatch <- batch:
-			case <-ds.stopChan:
+			case nextBatch <- batch:
+			case <-stopLatch.WaitChan():
 			}
 			return
 		}
@@ -686,25 +679,29 @@ func (ds *DistributedAccumulator) Iter() iter.Seq2[train.Batch, error] {
 // DistributedIter implements train.DistributedDataset.
 func (ds *DistributedAccumulator) DistributedIter() iter.Seq2[train.DistributedBatch, error] {
 	return func(yield func(train.DistributedBatch, error) bool) {
-		ds.stopIteration()
+		stopLatch := xsync.NewLatch()
+		nextBatch := make(chan *distributedBatch, 1)
 
-		ds.mu.Lock()
-		ds.buckets = make(map[string]*bucket)
-		ds.stats = sync.Map{}
-		ds.nextBatch = make(chan *distributedBatch, 1)
-		ds.stopChan = make(chan struct{})
-		ds.mu.Unlock()
+		var wg sync.WaitGroup
+		defer func() {
+			stopLatch.Trigger()
+			// Drain nextBatch to unblock runReader if it is sending, and finalize the tensors.
+			for batch := range nextBatch {
+				batch.finalize()
+			}
+			wg.Wait()
+		}()
 
-		next, stop := iter.Pull2(ds.source.Iter())
-		go ds.runReader(next, stop)
-
-		defer ds.stopIteration()
+		// Start background goroutine to read and aggregate shards
+		wg.Go(func() {
+			ds.runReader(stopLatch, nextBatch)
+		})
 
 		for {
 			var batch *distributedBatch
 			select {
-			case batch = <-ds.nextBatch:
-			case <-ds.stopChan:
+			case batch = <-nextBatch:
+			case <-stopLatch.WaitChan():
 				return
 			}
 			if batch == nil {
@@ -732,8 +729,8 @@ func (ds *DistributedAccumulator) DistributedIter() iter.Seq2[train.DistributedB
 // Stats returns information on the number of source inputs of each shape/number seen so far.
 func (ds *DistributedAccumulator) Stats() map[string]int {
 	result := make(map[string]int)
-	ds.stats.Range(func(key, value any) bool {
-		result[key.(string)] = value.(int)
+	ds.stats.Range(func(key string, value int) bool {
+		result[key] = value
 		return true
 	})
 	return result

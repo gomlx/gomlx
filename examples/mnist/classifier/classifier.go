@@ -87,7 +87,7 @@ func New(checkpointDir string) (*Classifier, error) {
 // TODO: resize image to 32x32, used by the model.
 func (c *Classifier) Classify(img image.Image) (int32, error) {
 	input := images.ToTensor(dtypes.Float32).Single(img)
-	outputs, err := c.exec.Exec(input)
+	outputs, err := c.exec.Call(input)
 	if err != nil {
 		return 0, err
 	}

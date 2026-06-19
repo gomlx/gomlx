@@ -489,7 +489,7 @@ type donateBuffer struct {
 	shape  shapes.Shape
 }
 
-// DonateTensorBuffer can be used by Graph.Run, Graph.RunOnDevice, or as input to Exec.Exec or Exec.MustExec,
+// DonateTensorBuffer can be used by Graph.Run, Graph.RunOnDevice, or as input to Exec.Call,
 // and it marks the Tensor to donate its on-device buffer to the execution.
 //
 // This allows the accelerator (GPU) to reuse the space of the donated buffer, which saves space if the original
@@ -502,7 +502,7 @@ type donateBuffer struct {
 // Example:
 //
 //	myBuf, err := myState.DonateBuffer(backend, deviceNum)
-//	myState, err := myExec.Exec(myBuf)[0]
+//	myState, err := myExec.Call(myBuf)[0]
 //
 // It requires the backend and the deviceNum (defaults to 0) of the device buffer to donate.
 //

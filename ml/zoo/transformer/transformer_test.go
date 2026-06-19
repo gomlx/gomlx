@@ -10,7 +10,9 @@ import (
 	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default"
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/attention/kvcache"
 	"github.com/gomlx/gomlx/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
@@ -152,7 +154,7 @@ func TestTransformerBuilder(t *testing.T) {
 		g := NewGraph(backend, "BuildGraphWithKVCache")
 		prompt := IotaFull(g, shapes.Make(dtypes.Int32, 2, 5))
 		prompt = Mod(prompt, Const(g, int32(model.VocabSize)))
-		logits := model.LogitsWithKVCache(scope, prompt, 0)
+		logits, _ := model.LogitsWithKVCache(scope, prompt, nil, nil)
 		require.NotNil(t, logits)
 		assert.Equal(t, []int{2, 5, 100}, logits.Shape().Dimensions)
 	})
@@ -168,9 +170,70 @@ func TestTransformerVariants(t *testing.T) {
 		g := NewGraph(backend, "WithRoPE")
 		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 1, 4))
 		tokens = Mod(tokens, Const(g, int32(model.VocabSize)))
-		logits := model.LogitsWithKVCache(scope, tokens, 0)
+		logits, _ := model.LogitsWithKVCache(scope, tokens, nil, nil)
 		require.NotNil(t, logits)
 		assert.Equal(t, []int{1, 4, 100}, logits.Shape().Dimensions)
+	})
+
+	t.Run("ExplicitKVCacheExecution", func(t *testing.T) {
+		backend := testutil.BuildTestBackend()
+		store := model.NewStore()
+		scope := store.RootScope()
+		m := New(100, 64, 2, 4, 16).WithFFNDim(128).WithMaxPosEmbed(128)
+		
+		// 1. Initialize Cache
+		m.populateOrderedScopes(scope)
+		m.populateLayerTypes(scope)
+		cacheTensors := m.KVCache.InitializeTensors(2, 4, 16, dtypes.Float32, 5) // batch=2, numKVHeads=4, headDim=16, seqLen=5
+		
+		// 2. Build graph for prompt execution
+		exec, err := model.NewExec(backend, store, func(scope *model.Scope, inputs []*Node) []*Node {
+			tokens := inputs[0]
+			cacheNodes := inputs[1:]
+			cache := m.KVCache.DeserializeNodes(cacheNodes)
+			logits, updatedCache := m.Forward(scope, tokens, nil, nil, cache)
+			serializedCache, err := m.KVCache.SerializeNodes(updatedCache)
+			if err != nil {
+				panic(err)
+			}
+			res := make([]*Node, 1+len(serializedCache))
+			res[0] = logits
+			copy(res[1:], serializedCache)
+			return res
+		})
+		require.NoError(t, err)
+		defer exec.Finalize()
+		
+		// 3. Prepare inputs
+		promptTensor := tensors.FromValue([][]int32{
+			{1, 2, 3, 4, 5},
+			{5, 4, 3, 2, 1},
+		})
+		
+		serializedCacheTensors, err := m.KVCache.SerializeTensors(cacheTensors)
+		require.NoError(t, err)
+		
+		args := make([]any, 0, 1+len(serializedCacheTensors))
+		args = append(args, promptTensor)
+		for _, tensor := range serializedCacheTensors {
+			args = append(args, tensor)
+		}
+		
+		// 4. Run Execution
+		results, err := exec.Call(args...)
+		require.NoError(t, err)
+		
+		logits := results[0]
+		assert.Equal(t, []int{2, 5, 100}, logits.Shape().Dimensions)
+		
+		updatedCacheTensors := m.KVCache.DeserializeTensors(results[1:])
+		assert.Equal(t, 2*len(m.KVCache.OrderedScopes), len(results)-1)
+		
+		// Verify shapes of updated cache
+		for _, scopePath := range m.KVCache.OrderedScopes {
+			kTensor := updatedCacheTensors[scopePath+kvcache.KeySuffix]
+			assert.Equal(t, []int{2, 4, 32, 16}, kTensor.Shape().Dimensions) // padded from 5 to 32
+		}
 	})
 
 	t.Run("WithoutLayerNorm", func(t *testing.T) {

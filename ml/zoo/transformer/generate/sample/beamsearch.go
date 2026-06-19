@@ -64,7 +64,7 @@ type BeamSearchConfig struct {
 //	    WithNumReturnSequences(3)   // return top 3 sequences
 //
 // Then one would use beamCfg.Step() in a loop to generate tokens.
-// See decode.Decoder.Decode() for a higher-level API.
+// See generate.Generator.Decode() for a higher-level API.
 func NewBeamSearch(beamSize, eosTokenId int) *BeamSearchConfig {
 	return &BeamSearchConfig{
 		beamSize:      beamSize,
@@ -147,13 +147,13 @@ func (c *BeamSearchConfig) EarlyStopping() bool {
 //   - isFinished: Boolean mask indicating which beams hit EOS [batch*beam]
 //
 // Note: This method is typically called in a loop by higher-level generation code.
-// Most users should use decode.Decoder.Decode() with strategy="beam_search" instead.
+// Most users should use generate.Generator.Decode() with strategy="beam_search" instead.
 func (c *BeamSearchConfig) Step(
 	logits *Node,
 	currentSequences *Node,
 	beamScores *Node,
 	currentLength int,
-) (nextSequences, nextBeamScores, isFinished *Node) {
+) (nextSequences, nextBeamScores, isFinished, gatherIndices *Node) {
 	g := logits.Graph()
 	vocabSize := logits.Shape().Dimensions[1]
 	batchBeamSize := logits.Shape().Dimensions[0]
@@ -205,7 +205,7 @@ func (c *BeamSearchConfig) Step(
 	batchIndices = MulScalar(batchIndices, float64(c.beamSize))
 	batchIndices = ConvertDType(batchIndices, beamIdx.DType())
 
-	gatherIndices := Add(batchIndices, beamIdx)
+	gatherIndices = Add(batchIndices, beamIdx)
 	gatherIndices = ConvertDType(gatherIndices, dtypes.Int32)
 	gatherIndices = ExpandDims(gatherIndices, -1)
 
@@ -216,7 +216,7 @@ func (c *BeamSearchConfig) Step(
 	isFinished = Equal(tokenIdx, ConstAs(tokenIdx, c.eosTokenId))
 	isFinished = Squeeze(isFinished, -1)
 
-	return nextSequences, nextBeamScores, isFinished
+	return nextSequences, nextBeamScores, isFinished, gatherIndices
 }
 
 // SelectBest selects the top scoring sequences from beam search results.

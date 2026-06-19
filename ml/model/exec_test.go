@@ -194,7 +194,7 @@ func TestExec(t *testing.T) {
 
 		// Run with batch=2
 		x2 := [][]float64{{1, 2, 3}, {4, 5, 6}}
-		out2, err := exec.Exec(x2)
+		out2, err := exec.Call(x2)
 		require.NoError(t, err)
 		require.Len(t, out2, 1)
 		val2 := out2[0].Value().([][]float64)
@@ -203,7 +203,7 @@ func TestExec(t *testing.T) {
 
 		// Run with batch=3
 		x3 := [][]float64{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}}
-		out3, err := exec.Exec(x3)
+		out3, err := exec.Call(x3)
 		require.NoError(t, err)
 		require.Len(t, out3, 1)
 		val3 := out3[0].Value().([][]float64)
@@ -233,7 +233,7 @@ func TestAutoSharding(t *testing.T) {
 			WithOutputShardingSpecs(replicatedSpec)
 		require.NoError(t, e.SetDefaultShardingSpec(replicatedSpec))
 		require.NoError(t, store.ResetRNGState())
-		shardedResults, err := e.Exec()
+		shardedResults, err := e.Call()
 		require.NoError(t, err)
 		require.Len(t, shardedResults, 2)
 		fmt.Println("x:")
@@ -271,7 +271,7 @@ func TestAutoSharding(t *testing.T) {
 			WithOutputShardingSpecs(shardedSpec)
 		require.NoError(t, e.SetDefaultShardingSpec(replicatedSpec))
 		require.NoError(t, store.ResetRNGState())
-		shardedResults, err := e.Exec()
+		shardedResults, err := e.Call()
 		require.NoError(t, err)
 		require.Len(t, shardedResults, 4)
 		a := must.M1(dtensor.NewTensor(shardedSpec, []*tensors.Tensor{shardedResults[0], shardedResults[2]}))
@@ -302,7 +302,7 @@ func TestAutoSharding(t *testing.T) {
 		require.NoError(t, e.SetDefaultShardingSpec(replicatedSpec))
 		require.NoError(t, store.ResetRNGState())
 
-		shardedResults, err := e.Exec()
+		shardedResults, err := e.Call()
 		require.NoError(t, err)
 		require.Len(t, shardedResults, 2)
 		fmt.Println("\tVariable:")

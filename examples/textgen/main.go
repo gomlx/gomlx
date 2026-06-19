@@ -27,13 +27,13 @@ import (
 	_ "github.com/gomlx/gomlx/backends/default"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
-	"github.com/gomlx/gomlx/ml/decode"
 	"github.com/gomlx/gomlx/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/ml/train/loss"
 	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/ml/zoo/transformer"
+	"github.com/gomlx/gomlx/ml/zoo/transformer/generate"
 	"github.com/gomlx/gomlx/ui/commandline"
 )
 
@@ -67,10 +67,10 @@ func createModelStore() *model.Store {
 		optimizer.ParamLearningRate: 0.001,
 
 		// Generation hyperparameters
-		// decode.ParamStrategy is initialized to "greedy" by default.
-		decode.ParamStrategy:    "greedy",
-		decode.ParamTemperature: 1.0,
-		decode.ParamMaxLength:   50,
+		// generate.ParamStrategy is initialized to "greedy" by default.
+		generate.ParamStrategy:    "greedy",
+		generate.ParamTemperature: 1.0,
+		generate.ParamMaxLength:   50,
 	})
 	return store
 }
@@ -195,9 +195,15 @@ func generateText(backend compute.Backend, scope *model.Scope, prompt string) {
 	}
 
 	transformerModel := transformer.NewFromScope(scope)
-	modelFn := transformer.MakeIncrementalModelFn(transformerModel)
+	modelFn := transformer.MakeKVCacheModelFn(transformerModel)
+	transformerModel.PopulateKVCacheConfigs(scope)
 
-	decoder := decode.New(modelFn).FromScope(scope)
+	decoder := generate.New(modelFn).FromScope(scope)
+	numKVHeads := transformerModel.NumKVHeads
+	if numKVHeads == 0 {
+		numKVHeads = transformerModel.NumHeads
+	}
+	decoder.WithKVCache(transformerModel.KVCache, numKVHeads, transformerModel.HeadDim, transformerModel.DType)
 	fmt.Printf("\nGeneration\nStrategy: %s  Temp: %.2f  MaxLen: %d\nPrompt: %q\n\n",
 		decoder.Strategy, decoder.Temperature, decoder.MaxLength, prompt)
 

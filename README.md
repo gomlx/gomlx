@@ -215,7 +215,7 @@ If you want to manually pre-install for building production dockers, a specific 
 see [github.com/gomlx/go-xla](https://github.com/gomlx/go-xla) for details, 
 there is a self-explanatory simple installer program.
 
-If you want to use only a pure **Go backend**, simply do `import _ "github.com/gomlx/gomlx/backends/simplego"` and 
+If you want to use only a pure **Go backend**, simply do `import _ "github.com/gomlx/compute/gobackend"` and 
 there is no need to install anything.
 
 ## 🐳  [Pre-built Docker](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
@@ -297,7 +297,7 @@ without linking GoMLX -- it will save a little executable size.
 - **What are the environment variables used by GoMLX?** 
   - `GOMLX_BACKEND`: defines the backend engine to use (if using `backends.New()`). The value is formatted as "<backend_name>[:<backend_config>]",
     with the config part being optional. Examples:
-    - `GOMLX_BACKEND=go`: Use the `SimpleGo` backend, the pure Go implementation that is very portable but slow.
+    - `GOMLX_BACKEND=go`: Use the Go backend, the pure Go implementation that is very portable but slow.
     - `GOMLX_BACKEND="xla:cpu"`: Use XLA (the faster backend, only runs on Linux now) for CPU
     - `GOMLX_BACKEND="xla:cuda"`: Use XLA for for Nvidia CUDA
     - `GOMLX_BACKEND="xla:/path/to/my/pjrt_plugin.so"`: Use XLA with an arbitrary PJRT. PJRT is a plugin system for XLA to support different hardware.
@@ -317,9 +317,9 @@ without linking GoMLX -- it will save a little executable size.
     Set this to a number to change this default.
 - **What backends to include when using GoMLX?**
   - The recommendation is to use `import _ "github.com/gomlx/gomlx/backends/default"` which will import `xla` (or the alias `stablehlo`) and
-    `go` (_SimpleGo_) backends. If you add `-tags=noxla` to the compiler it won't include the XLA backend.
-  - `import _ "github.com/gomlx/gomlx/backends/simplego"` to include only `go` (no C++ dependencies)
-  - `import _ "github.com/gomlx/gomlx/backends/xla"` to import only XLA.
+    `go` backends. If you add `-tags=noxla` to the compiler it won't include the XLA backend.
+  - `import _ "github.com/gomlx/compute/gobackend"` to include only `go` (no C++ dependencies)
+  - `import _ "github.com/gomlx/go-xla/compute/xla"` to import only XLA.
 - **Where are AI context files for (Gemini, Claude, SKILLS.md, etc.)**
   - To prevent cluttering the root folder of the project, they are all moved to the `.agents/` directory and also included in the `.gitignore`. This way
     one can simply symbolic link whichever AI configuration file they use to the root directory of their local copy to use them.
