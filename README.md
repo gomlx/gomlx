@@ -17,28 +17,24 @@
 **GoMLX** is an easy-to-use set of Machine Learning and generic math libraries and tools. 
 It can be seen as a **PyTorch/Jax/TensorFlow for Go**.
 
-It can be used to train, fine-tune, modify, and combine machine learning models. 
+It can be used to train, fine-tune, modify, and combine machine learning models (it reads models from HuggingFace,
+with a growing list of model support). 
 It provides all the tools to make that work easy: from a complete set of differentiable operators, 
-all the way to UItools to plot metrics while training in a notebook.
+all the way to UI tools to plot metrics while training in a notebook.
 
 It runs almost everywhere Go runs, using a pure Go backend. 
 It runs even in the browser with WASM ([see demo created with GoMLX](https://janpfeifer.github.io/hiveGo/www/hive/)). 
-Likely, it will work in embedded devices as well (see [Tamago](https://github.com/usbarmory/tamago)).
 
-It also supports a very optimized backend engine based on [OpenXLA](https://github.com/openxla/xla) 
+It supports a very optimized backend engine based on [OpenXLA](https://github.com/openxla/xla) 
 that uses just-in-time compilation to CPU, GPUs (Nvidia, and likely AMD ROCm, Intel, Macs) and Google's TPUs.
 It also supports modern distributed execution (**new, still being actively improved**) for multi-TPU or multi-GPU
 using XLA Shardy, an evolution of the [GSPMD distribution](https://arxiv.org/abs/2105.04663)).
-
 It's the same engine that powers Google's [Jax](https://github.com/google/jax), 
 [TensorFlow](https://tensorflow.org/) and [Pytorch/XLA](https://docs.pytorch.org/xla/master/learn/xla-overview.html),
-and it has the same speed in many cases. 
-Use this backend to train large models or with large datasets.
+and it has the same speed in many cases (*). 
 
 > [!Tip]
 > * See our 🎓 [**tutorial**](https://gomlx.github.io/gomlx/notebooks/tutorial.html) 🎓
-> * See _Eli Bendersky_'s blog post ["GoMLX: ML in Go without Python"](https://eli.thegreenplace.net/2024/gomlx-ml-in-go-without-python/), 
->   (a bit outdated, but still useful)
 > * A [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
 > * A simple [GoMLX slide deck](https://docs.google.com/presentation/d/1QWp_N9_7_n7gQKePHfmb5AFFBXnN6DTqjpWxNC0Ecpk/edit?usp=sharing) with small sample code.  
 
@@ -298,7 +294,8 @@ without linking GoMLX -- it will save a little executable size.
 3. To be a robust and reliable platform for production. Some subgoals:
    - Support modern accelerator hardware like TPUs and GPUs.
    - Multiple backends beyond XLA, e.g:  llamacpp, WebNN (with Wasm), pure Go version, etc.
-   - Import pre-trained models from [Hugging Face Hub](https://huggingface.co/models) and allow fine-tuning -- ONNX versions already working for many models in [onnx-gomlx](https://github.com/gomlx/onnx-gomlx).  
+   - Import pre-trained models from [Hugging Face Hub](https://huggingface.co/models) and allow fine-tuning.
+     Already working for many models, including ONNX suppot in [onnx-gomlx](https://github.com/gomlx/onnx-gomlx).  
    - Compile models to binary as in C-libraries and/or WebAssembly, to be linked and consumed (inference) anywhere
      (any language).
 
