@@ -89,22 +89,9 @@ a tool that facilitates the changes needed to move to the new API -- details in 
 from the bottom to the top of the stack. But it is still only a slice of what a major ML library/framework should provide 
 (like TensorFlow, Jax, or PyTorch).
 
-### Examples developed using GoMLX
+### GoMLX Examples
 
-  * **🚀 NEW 🚀** [KaLM-Gema3 12B parameters](https://github.com/gomlx/go-huggingface/tree/main/examples/kalmgemma3): Tecent's top-ranked sentence encoder
-    for RAGs, using [go-huggingface](https://github.com/gomlx/go-huggingface/) to load the model and tokenizer, and **GoMLX** to execute it.
-  * **🚀 NEW 🚀** [Gemma 3 270M](https://github.com/gomlx/gomlx/tree/main/examples/gemma3): Demonstrates ONNX-converted
-    text generation (LLM) using the [onnx-community/gemma-3-270m-it-ONNX](https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX) 
-    model with GoMLX. 
-    It uses the [`gomlx/onnx-gomlx`](https://github.com/gomlx/onnx-gomlx) package to convert the model, and [`gomlx/go-huggingface`](https://github.com/gomlx/go-huggingface) to download the model and run the   * **🚀 NEW 🚀** [GPT-2](https://github.com/gomlx/gomlx/tree/main/examples/gpt2): Demonstrates text generation using the
-    the new (experimental) transformer and generator packages.
-tokenizer.
-  * **🚀 NEW 🚀** [BERT-base-NER](https://github.com/gomlx/gomlx/tree/main/examples/BERT-base-NER): A BERT-base model fine-tuned
-    for Named Entity Recognition. It's also a ONNX-converted model from [dslim/bert-base-NER model](https://huggingface.co/dslim/bert-base-NER) from HuggingFace.
-  - **🚀 NEW 🚀** [MixedBread Reranker v1](https://github.com/gomlx/gomlx/tree/main/examples/mxbai-rerank): A cross-encoder reranking 
-    example, see [HuggingFace MixedBread Reranker v1 page](https://huggingface.co/mixedbread-ai/mxbai-rerank-base-v1).
-    It uses the [`gomlx/onnx-gomlx`](https://github.com/gomlx/onnx-gomlx) package to convert the model, and [`gomlx/go-huggingface`](https://github.com/gomlx/go-huggingface) to download the model and run the tokenizer.
-
+**Training examples:**
   * [Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html);
   * [How do KANs learn ?](https://gomlx.github.io/gomlx/notebooks/kan_shapes.html); 
   * [Cifar-10 demo](https://gomlx.github.io/gomlx/notebooks/cifar.html); 
@@ -119,6 +106,26 @@ tokenizer.
   * [Triplet Losses](https://github.com/gomlx/gomlx/blob/main/ml/train/losses/triplet.go): various negative sampling strategies as well as various distance metrics.
   * [AlphaZero AI for the game of Hive](https://github.com/janpfeifer/hiveGo/): it uses a trivial GNN to evaluate
     positions on the board. It includes a [WASM demo (runs GoMLX in the browser!)](https://janpfeifer.github.io/hiveGo/www/hive/) and a command-line UI to test your skills!
+
+**Inference Examples:**
+
+  * **🚀 NEW 🚀** [Gemma4-4B-it library and demo](https://github.com/gomlx/go-huggingface/tree/main/examples/gemma4-e4bit): 
+    Google's new free generative LLM, instrunction tuned. See also [HuggingFace's "google/gemma-4-E4B-it" model page](https://huggingface.co/google/gemma-4-E4B-it).
+  * [KaLM-Gema3 12B parameters](https://github.com/gomlx/go-huggingface/tree/main/examples/kalmgemma3): 
+    Tecent's top-ranked sentence encoder for RAGs, using [go-huggingface](https://github.com/gomlx/go-huggingface/) to 
+    load the model and tokenizer, and **GoMLX** to execute it. 
+  * [Gemma 3 270M](https://github.com/gomlx/gomlx/tree/main/examples/gemma3): Demonstrates ONNX-converted
+    text generation (LLM) using the [onnx-community/gemma-3-270m-it-ONNX](https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX) 
+    model with GoMLX. 
+    It uses the [`gomlx/onnx-gomlx`](https://github.com/gomlx/onnx-gomlx) package to convert the model, and [`gomlx/go-huggingface`](https://github.com/gomlx/go-huggingface) to download the model and run the   * **🚀 NEW 🚀** [GPT-2](https://github.com/gomlx/gomlx/tree/main/examples/gpt2): Demonstrates text generation using the
+    the new (experimental) transformer and generator packages.
+tokenizer.
+  * [BERT-base-NER](https://github.com/gomlx/gomlx/tree/main/examples/BERT-base-NER): A BERT-base model fine-tuned
+    for Named Entity Recognition. It's also a ONNX-converted model from [dslim/bert-base-NER model](https://huggingface.co/dslim/bert-base-NER) from HuggingFace.
+  * [MixedBread Reranker v1](https://github.com/gomlx/gomlx/tree/main/examples/mxbai-rerank): A cross-encoder reranking 
+    example, see [HuggingFace MixedBread Reranker v1 page](https://huggingface.co/mixedbread-ai/mxbai-rerank-base-v1).
+    It uses the [`gomlx/onnx-gomlx`](https://github.com/gomlx/onnx-gomlx) package to convert the model, and [`gomlx/go-huggingface`](https://github.com/gomlx/go-huggingface) to download the model and run the tokenizer.
+
 
 ### Backends
 
@@ -158,37 +165,40 @@ different implementations (more planed in the future):
 
 ### Highlights
 
-* Converting ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for `onnxruntime` (leveraging XLA),
-  but also to further fine-tune models. See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace.
-* [Docker "gomlx_jupyterlab"](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab) with integrated JupyterLab and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
+Some selected highlights:
+
+* HuggingFace Go compatibility with [go-huggingface](https://github.com/gomlx/go-huggingface):
+  - Download files from models/datasets sharing the same cache framework as the python version.
+  - Tokenizers for various classes in pure Go, downloaded directly from HuggingFace.
+  - Datasets iterators (using Apache's Parquet format), to experiment with standard datasets.
+  - Model parameters reading from GGUF or `safetensors` format.
+  - Model conversion to GoMLX (some models at least) with a compatible `transformer` library. Includes support to
+    sentence embedding (equivalent to `sentence_transformer` Python library). 
+* Convert ONNX models to GoMLX with [onnx-gomlx](https://github.com/gomlx/onnx-gomlx): both as an alternative for 
+  `onnxruntime` (leveraging XLA), but also to further fine-tune models. 
+* [Docker "gomlx_jupyterlab"](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab) with integrated JupyterLab 
+  and [GoNB](https://github.com/janpfeifer/gonb) (a Go kernel for Jupyter notebooks)
 * Autodiff: automatic differentiation—only gradients for now, no jacobian.
-* Scope: automatic variable management for ML models.
-* ML layers library with some of the most popular machine learning "layers": FFN layers,  
+* `Store` and `Scope`: simple variable management for ML models.
+* ML layers library with the most popular machine learning "layers": FFN layers,  
   various activation functions, layer and batch normalization, convolutions, pooling, dropout, Multi-Head-Attention
-  (for transformer layers), LSTM, KAN (B-Splines, [GR-KAN/KAT networks](https://arxiv.org/abs/2409.10594), Discrete-KAN, PiecewiseLinear KAN),
-  PiecewiseLinear (for calibration and normalization), various regularizations,
+  (for transformer layers), LSTM, KAN (B-Splines, [GR-KAN/KAT networks](https://arxiv.org/abs/2409.10594), 
+  Discrete-KAN, PiecewiseLinear KAN), PiecewiseLinear (for calibration and normalization), various regularizations,
   FFT (reverse/differentiable), learnable rational functions (both for activations and [GR-KAN/KAT networks](https://arxiv.org/abs/2409.10594)),
   VNN (Vector Neural Networks) for SO(3)-Equivariant/Invariant layers, etc.
-* Training library, with some pretty-printing. Including plots for Jupyter notebook, using [GoNB, a Go Kernel](https://github.com/janpfeifer/gonb).
-  * Also, various debugging tools: collecting values for particular nodes for plotting, simply logging  the value
+* Training library, with some pretty-printing: 
+  * Plots for Jupyter notebook, using [GoNB, a Go Kernel](https://github.com/janpfeifer/gonb).
+  * Various debugging tools: collecting values for particular nodes for plotting, simply logging the value
     of nodes during training, stack-trace of the code where nodes are created.
 * `gomlx_checkpoints`, the command line tool to inspect checkpoint of train(-ing) models, **generate plots**
   with loss and arbitrary evaluation metrics using Plotly.
   See [example of training session](https://gomlx.github.io/gomlx/notebooks/gomlx_checkpoints_plot_example.html),
   with the effects of a learning rate change during the training.
   It also allows plotting different models together, to compare their evolution.
-* SGD and Adam (AdamW and Adamax) optimizer.
+* Various optimizers: SGD, Adam (AdamW and Adamax).
 * Various losses and metrics.
-* Pre-Trained models to use: InceptionV3 (image model), many more from HuggingFace using [onnx-gomlx](https://github.com/gomlx/onnx-gomlx).
-  See also [go-huggingface](https://github.com/gomlx/go-huggingface) to easily download ONNX model files from HuggingFace. 
 * Read Numpy arrays into GoMLX tensors -- see package `github.com/gomlx/gomlx/core/tensors/numpy`.
-* (**Experimental**) Support static linking of PJRT: slower to build the Go program, but deploying it doesn't require installing a PJRT plugin in the machine you are deploying it. It requires you to compile your own static PJRT plugin from XLA sources.
-  Use `go build --tags=pjrt_cpu_static` or include `import _ "github.com/gomlx/gomlx/backends/xla/cpu/static"`.
-* **Auto-installation of XLA PJRT plugins** (for CPU, GPU and TPUs; Linux and Macs)
-  in the user'slocal lib directory (`$HOME/.local/lib` in Linux and `$HOME/Library/Application Support/XLA` in Mac).
-  It can be disabled by setting `GOMLX_NO_AUTO_INSTALL` or programmatically by 
-  calling `xla.EnableAutoInstall(false)`).
-* **Distributed Execution** (across multiple GPUs or TPUs) with little hints from the user.
+* **Distributed Execution** (**experimental) across multiple GPUs or TPUs with little hints from the user.
   One only needs to configure a distributed dataset, and the trainer picks up from there.
   See code change in [UCI-Adult demo](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/main.go#L222). **Experimental**, 
   pls report any issues and help us improve it.
