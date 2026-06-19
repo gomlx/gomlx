@@ -53,11 +53,11 @@ Documentation is kept up to date (if it is not well-documented, it is as if the 
 and error messages are useful (always with a stack-trace) and try to make it easy to solve issues.
 </div>
 
-## 🔮 Upcoming Features & Plans 🔮
+## 🔮 Upcoming 🔮
 
 <img align="right" src="docs/gomlx_gopher_hiking.jpeg" alt="GoMLX Gopher" width="220px"/>
 
-**Large API and package re-organization coming soon in v0.28 release:**
+**Large API and package re-organization coming soon in v0.28 release (already in the `main` branch):**
 
 - `backends` moved to `github.com/gomlx/compute` repository!
   - Packages `backends`, `dtypes`, `shapes` and `distributed` moved to `github.com/gomlx/compute`.
