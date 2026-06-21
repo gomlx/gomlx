@@ -34,7 +34,7 @@ var (
 		"AllReduce", "ArgMinMax", "Broadcast", "BroadcastInDim",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
 		"Ceil", "Concatenate", "ConvertDType", "ConvGeneral", "DotGeneral",
-		"FFT", "Floor", "Gather", "Iota",
+		"FFT", "Floor", "Gather", "Iota", "OptimizationBarrier",
 		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum", "ReduceWindow",
 
 		// Reduce of logical/bitwise operators:
