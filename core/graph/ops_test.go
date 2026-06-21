@@ -1502,3 +1502,23 @@ func TestBitcast(t *testing.T) {
 		float32(math.Inf(1)),
 	}, -1)
 }
+
+func TestBarriers(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "Barriers", func(g *Graph) (inputs, outputs []*Node) {
+		inputs = append(inputs,
+			Const(g, []float64{1.0, 2.0}),
+			Const(g, []float64{3.0, 4.0}),
+		)
+		opt1 := OptimizationBarrier(inputs[0])
+		optSlice := OptimizationBarriers(inputs[0], inputs[1])
+		sched := SchedulingBarrier(inputs[0], inputs[1])
+		outputs = append(outputs, opt1, optSlice[0], optSlice[1], sched)
+		return
+	}, []any{
+		[]float64{1.0, 2.0},
+		[]float64{1.0, 2.0},
+		[]float64{3.0, 4.0},
+		[]float64{1.0, 2.0},
+	}, -1)
+}
+

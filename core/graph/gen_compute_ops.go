@@ -98,6 +98,7 @@ const (
 	NodeTypeNeg
 	NodeTypeNotEqual
 	NodeTypeNotEqualTotalOrder
+	NodeTypeOptimizationBarrier
 	NodeTypePad
 	NodeTypeParameter
 	NodeTypePow
@@ -123,6 +124,7 @@ const (
 	NodeTypeScatterMax
 	NodeTypeScatterMin
 	NodeTypeScatterSum
+	NodeTypeSchedulingBarrier
 	NodeTypeSelectAndScatterMax
 	NodeTypeSelectAndScatterMin
 	NodeTypeShiftLeft
@@ -3461,6 +3463,48 @@ func NotEqualTotalOrder(lhs *Node, rhs *Node) (
 	return
 }
 
+// nodeInputsOptimizationBarrier holds the inputs used for the call to compute.OptimizationBarrier.
+type nodeInputsOptimizationBarrier struct {
+	operands []*Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsOptimizationBarrier) Type() NodeType {
+	return NodeTypeOptimizationBarrier
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsOptimizationBarrier) String() string {
+	return fmt.Sprintf("%s(operands=[#%s])",
+		ni.Type(),
+		strings.Join(xslices.Map(ni.operands, func(node *Node) string { return fmt.Sprintf("#%d", node.Id()) }), ", "),
+	)
+}
+
+// backendOptimizationBarrier is a Graph wrapper for the backend.Builder.OptimizationBarrier method.
+func backendOptimizationBarrier(operands ...*Node) []*Node {
+	inputNodes := []*Node{}
+	inputNodes = append(inputNodes, operands...)
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsOptimizationBarrier{
+		operands: slices.Clone(operands),
+	}
+	results, err := g.currentFunc.backendFunc.OptimizationBarrier(xslices.Map(operands, func(node *Node) compute.Value { return node.outputOps[0] })...)
+	if err != nil {
+		panic(err)
+	}
+	node := &Node{
+		outputOps: results,
+		outputShapes: xslices.Map(results,
+			func(op compute.Value) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
+		graph:      g,
+		inputs:     inputs,
+		inputNodes: inputNodes,
+	}
+	g.registerNode(node)
+	return splitNode(node)
+}
+
 // nodeInputsPad holds the inputs used for the call to compute.Pad.
 type nodeInputsPad struct {
 	x          *Node
@@ -4540,6 +4584,52 @@ func backendScatterSum(operand *Node, scatterIndices *Node, updates *Node, index
 		uniqueIndices:            uniqueIndices,
 	}
 	result, err := g.currentFunc.backendFunc.ScatterSum(operand.outputOps[0], scatterIndices.outputOps[0], updates.outputOps[0], inputs.indexVectorAxis, inputs.updateWindowAxes, inputs.insertedWindowAxes, inputs.scatterAxesToOperandAxes, inputs.indicesAreSorted, inputs.uniqueIndices)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsSchedulingBarrier holds the inputs used for the call to compute.SchedulingBarrier.
+type nodeInputsSchedulingBarrier struct {
+	operand      *Node
+	dependencies []*Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsSchedulingBarrier) Type() NodeType {
+	return NodeTypeSchedulingBarrier
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsSchedulingBarrier) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], dependencies=[#%s])",
+		ni.Type(),
+		ni.operand.Id(),
+		strings.Join(xslices.Map(ni.dependencies, func(node *Node) string { return fmt.Sprintf("#%d", node.Id()) }), ", "),
+	)
+}
+
+// SchedulingBarrier introduces a scheduling barrier.
+// Returned value is identity to the operand, but it is guaranteed to depend on all the dependencies.
+func SchedulingBarrier(operand *Node, dependencies ...*Node) (
+	node *Node) {
+	inputNodes := []*Node{operand}
+	inputNodes = append(inputNodes, dependencies...)
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsSchedulingBarrier{
+		operand:      operand,
+		dependencies: slices.Clone(dependencies),
+	}
+	result, err := g.currentFunc.backendFunc.SchedulingBarrier(operand.outputOps[0], xslices.Map(dependencies, func(node *Node) compute.Value { return node.outputOps[0] })...)
 	if err != nil {
 		panic(err)
 	}

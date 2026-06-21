@@ -1772,3 +1772,22 @@ func InternalBatchNormGradient(
 	axis = MustAdjustAxis(axis, operand)
 	return backendBatchNormGradient(operand, scale, mean, variance, gradOutput, epsilon, axis)
 }
+
+// OptimizationBarrier creates an optimization barrier for a single node.
+// It returns a new Node that is mathematically equal to the input operand,
+// but prevents the compiler from optimizing across the barrier.
+func OptimizationBarrier(operand *Node) *Node {
+	outs := backendOptimizationBarrier(operand)
+	return outs[0]
+}
+
+// OptimizationBarriers creates an optimization barrier for multiple nodes.
+// It returns a slice of Nodes that are mathematically equal to the input operands,
+// but prevents the compiler from optimizing across the barrier.
+func OptimizationBarriers(operands ...*Node) []*Node {
+	if len(operands) == 0 {
+		return nil
+	}
+	return backendOptimizationBarrier(operands...)
+}
+

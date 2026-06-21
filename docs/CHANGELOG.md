@@ -93,6 +93,8 @@ And a few small renaming:
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
   - New `Exec` wrappers for fixed number of outputs: `NewExec1`, `NewExec2` and `NewExec3` for graphs with one, two or
     three outputs.
+- New ops:
+  - `SchedulingBarrier` and `OptimizationBarrier`: they are implemented in the Go and XLA backends. 
 
 ## Tensors (github.com/gomlx/gomlx/core/tensors):
 - Renamed `FromAnyValue` to `MustFromAnyValue` and added `FromAnyValue` returning `(tensor, error)`.
