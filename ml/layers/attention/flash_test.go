@@ -30,6 +30,41 @@ func randFlat(n int, seed int64) []float32 {
 	return out
 }
 
+// TestFlashAttentionFallback checks that on a non-cuDNN backend FlashAttention transparently
+// falls back to the decomposed reference instead of emitting an unexecutable custom_call. The
+// fallback is naiveCausalAttention itself, so output and gradients match near-exactly. Runs on
+// the default (non-cuda) test backend, so it guards the fallback in ordinary CI.
+func TestFlashAttentionFallback(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	if isCUDABackend(backend) {
+		t.Skip("fallback test is for non-cuda backends; this backend runs the flash kernel")
+	}
+
+	const (
+		B, S, H, D = 1, 64, 2, 64
+		scale      = 0.125
+	)
+	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 1), B, S, H, D)
+	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 2), B, S, H, D)
+	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 3), B, S, H, D)
+
+	fn := func(qIn, kIn, vIn *Node) []*Node {
+		flashOut := ConvertDType(FlashAttention(qIn, kIn, vIn, scale), dtypes.Float32)
+		refOut := naiveCausalAttention(qIn, kIn, vIn, scale)
+		fg := Gradient(ReduceAllSum(flashOut), qIn, kIn, vIn)
+		ng := Gradient(ReduceAllSum(refOut), qIn, kIn, vIn)
+		relMax := func(got, want *Node) *Node {
+			return Div(ReduceAllMax(Abs(Sub(got, want))), AddScalar(ReduceAllMax(Abs(want)), 1e-6))
+		}
+		return []*Node{relMax(flashOut, refOut), relMax(fg[0], ng[0]), relMax(fg[1], ng[1]), relMax(fg[2], ng[2])}
+	}
+	out := MustNewExec(backend, fn).MustCall(q, k, v)
+	for i, name := range []string{"output", "dQ", "dK", "dV"} {
+		rel := float64(tensors.ToScalar[float32](out[i]))
+		require.LessOrEqualf(t, rel, 1e-5, "%s relative error %.2e (fallback should match the reference)", name, rel)
+	}
+}
+
 // TestFlashAttentionParity checks that the cuDNN flash attention forward output and its
 // (flash-kernel) gradients match a decomposed float32 reference. Both paths see the same
 // bfloat16-rounded inputs, so the only difference is flash's internal precision. Requires a
