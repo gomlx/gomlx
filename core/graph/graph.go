@@ -427,6 +427,14 @@ func (g *Graph) registerNode(node *Node) (id NodeId) {
 			node.scope = scope
 		}
 	}
+	// Propagate needsRematerialization flag contagiously:
+	for _, input := range node.inputNodes {
+		if input.needsRematerialization {
+			node.needsRematerialization = true
+			break
+		}
+	}
+
 	id = NodeId(len(g.nodes))
 	g.nodes = append(g.nodes, node)
 	node.id = id

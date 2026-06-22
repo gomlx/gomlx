@@ -3,11 +3,13 @@
 package graph_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -114,4 +116,68 @@ func TestCloneWithInputs(t *testing.T) {
 		assert.Equal(t, int32(5), gotOriginal)
 		assert.Equal(t, int32(3), gotCloned)
 	})
+}
+
+func TestGradientCheckpointing(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+
+	// 1. Without checkpointing
+	gNoCheck := NewGraph(backend, "no_checkpoint")
+	xVal := Const(gNoCheck, []float32{1.0, 2.0, 3.0})
+	wVal := Parameter(gNoCheck, "w", shapes.Make(dtypes.Float32, 3))
+
+	residual := xVal
+	x := Mul(xVal, wVal)
+	y := Add(x, residual)
+	loss := ReduceAllSum(y)
+	gradsNoCheck := Gradient(loss, wVal)
+	fmt.Printf("Graph without checkpointing:\n%s\n\n", gNoCheck.String())
+
+	// 2. With checkpointing
+	gCheck := NewGraph(backend, "with_checkpoint")
+	xVal2 := Const(gCheck, []float32{1.0, 2.0, 3.0})
+	wVal2 := Parameter(gCheck, "w", shapes.Make(dtypes.Float32, 3))
+
+	checkpointX := xVal2.Checkpoint()
+	residualCheck := checkpointX
+	x2 := Mul(checkpointX, wVal2)
+	y2 := Add(x2, residualCheck)
+	checkpointY := y2.StopCheckpoint()
+	lossCheck := ReduceAllSum(checkpointY)
+	gradsCheck := Gradient(lossCheck, wVal2)
+	fmt.Printf("Graph without checkpointing:\n%s\n\n", gCheck.String())
+
+	// Compile both
+	err := gNoCheck.Compile(loss, gradsNoCheck[0])
+	assert.NoError(t, err)
+
+	err = gCheck.Compile(lossCheck, gradsCheck[0])
+	assert.NoError(t, err)
+
+	// Execute with w = [0.5, 1.5, 2.5]
+	wInit := tensors.MustFromAnyValue([]float32{0.5, 1.5, 2.5})
+
+	resNoCheck := gNoCheck.Run(wInit)
+	resCheck := gCheck.Run(wInit)
+
+	assert.True(t, resNoCheck[0].InDelta(resCheck[0], 1e-5))
+	assert.True(t, resNoCheck[1].InDelta(resCheck[1], 1e-5))
+
+	// Introspect graphs: check that with_checkpoint has barriers, no_checkpoint does not.
+	var hasSchedulingBarrier bool
+	var hasOptimizationBarrier bool
+	for _, node := range gCheck.Nodes() {
+		if node.Type() == NodeTypeSchedulingBarrier {
+			hasSchedulingBarrier = true
+		}
+		if node.Type() == NodeTypeOptimizationBarrier {
+			hasOptimizationBarrier = true
+		}
+	}
+	assert.True(t, hasSchedulingBarrier, "Graph with checkpointing must include a SchedulingBarrier")
+	assert.True(t, hasOptimizationBarrier, "Graph with checkpointing must include OptimizationBarriers")
+
+	for _, node := range gNoCheck.Nodes() {
+		assert.NotEqual(t, NodeTypeSchedulingBarrier, node.Type(), "Graph without checkpointing must not include a SchedulingBarrier")
+	}
 }

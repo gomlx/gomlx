@@ -126,6 +126,8 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 	// we will need to find something akin to a matrix identity for possibly higher dimensional tensors.
 	rOutput.AccumulatedVJP = Ones(output.graph, shapes.Make(outputShape.DType))
 
+	rematSweep := newRematerializationSweep()
+
 	// Whether we need the gradient for the node.
 	needGradientForNode := func(node *Node) bool {
 		if node.stopGradient {
@@ -240,7 +242,25 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 		if node.NumOutputs() == 1 {
 			vjpsForOutputs = []*Node{rNode.AccumulatedVJP}
 		}
-		inputsVJPs := vjpFn(node, vjpsForOutputs, outputShape)
+
+		nodeToUse := node
+		if node.needsRematerialization {
+			var trigger *Node
+			if node.NumOutputs() == 1 {
+				trigger = rNode.AccumulatedVJP
+			} else {
+				for _, vjp := range rNode.VJPsForMultiOutputs {
+					if vjp != nil {
+						trigger = vjp
+						break
+					}
+				}
+			}
+			rematInputs := rematSweep.forwardInputs(node, trigger)
+			nodeToUse = node.CloneWithInputs(rematInputs...)
+		}
+
+		inputsVJPs := vjpFn(nodeToUse, vjpsForOutputs, outputShape)
 		if len(inputsVJPs) != len(node.Inputs()) {
 			Panicf("AccumulatedVJP(%s) returned %d VJPs, but it has %d inputNodes, implementation of auto-differentiation for node failed",
 				node, len(inputsVJPs), len(node.Inputs()))
