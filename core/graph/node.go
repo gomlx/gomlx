@@ -66,6 +66,24 @@ type Node struct {
 	// decomposed equivalent.
 	vjpAlternateOutputs []*Node
 
+	// Flags used for gradient checkpointing (rematerialization blocks):
+	//
+	// isCheckpointed indicates that this node's forward activation is saved in memory
+	// and acts as a firewall boundary during backward propagation. The recursive rematerialization
+	// generator (getRematerialization) will stop crawling backward when it hits an isCheckpointed node.
+	// It is set to true by both Node.Checkpoint() and Node.StopCheckpoint().
+	//
+	// needsRematerialization is a contagious flag set to true during graph building
+	// if any of the node's inputs have needsRematerialization == true. It signals to the
+	// autodiff engine that this node's forward activation will be discarded by XLA and
+	// must be recomputed on-the-fly during the backward pass.
+	//
+	// Node.Checkpoint() starts or continues a block by setting both flags to true.
+	// Node.StopCheckpoint() ends a block; it saves its own output (isCheckpointed=true)
+	// but clears the contagion (needsRematerialization=false) so downstream parts of
+	// the graph can continue normally.
+	isCheckpointed, needsRematerialization bool
+
 	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.
 }
 
@@ -77,6 +95,9 @@ type NodeInputs interface {
 
 	// String prints a descriptive representation of the node, using its parameters.
 	String() string
+
+	// CloneWithInputs recreates the node using the given inputs instead of the original ones.
+	CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node
 }
 
 // Graph that holds this Node.
@@ -241,4 +262,21 @@ func (n *Node) StopGradient() bool {
 // CustomGradient returns a registered custom gradient for the Node. See IdentityWithCustomGradient.
 func (n *Node) CustomGradient() VJP {
 	return n.customVJP
+}
+
+// CloneWithInputs creates a clone of the node but using the given new inputs instead.
+//
+// It also propagates some generic attributes like stopGradient, customVJP, alias.
+// But it **does not** propagate extra functionality ones, like `logMessage`, `isCheckpointed`, `needsRematerialization`.
+func (n *Node) CloneWithInputs(newInputs ...*Node) *Node {
+	n.AssertValid()
+	cloned := n.inputs.CloneWithInputs(n, newInputs...)
+	if cloned != nil {
+		// Propagate:
+		cloned.stopGradient = n.stopGradient
+		cloned.customVJP = n.customVJP
+		cloned.alias = n.alias
+		// Do not propagate: logMessage, isCheckpointed and needsRematerialization.
+	}
+	return cloned
 }

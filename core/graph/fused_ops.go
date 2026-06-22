@@ -97,6 +97,43 @@ func (ni *nodeInputsFusedQuantizedDense) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedQuantizedDense) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// inputNodes ordering from BackendFusedQuantizedDense is:
+	// [x, weights, scale?, zeroPoint?, bias?]
+	idx := 0
+	newX := newInputs[idx]
+	idx++
+	newWeights := newInputs[idx]
+	idx++
+	var newScale *Node
+	if ni.wq.Scale != nil {
+		newScale = newInputs[idx]
+		idx++
+	}
+	var newZeroPoint *Node
+	if ni.wq.ZeroPoint != nil {
+		newZeroPoint = newInputs[idx]
+		idx++
+	}
+	var newBias *Node
+	if ni.bias != nil {
+		newBias = newInputs[idx]
+		idx++
+	}
+	// Note: We need a new Quantization spec because Scale and ZeroPoint might have changed.
+	newWq := &Quantization{
+		Scale:     newScale,
+		ZeroPoint: newZeroPoint,
+		Scheme:    ni.wq.Scheme,
+		BlockAxis: ni.wq.BlockAxis,
+		BlockSize: ni.wq.BlockSize,
+		GGMLType:  ni.wq.GGMLType,
+	}
+	return BackendFusedQuantizedDense(newX, newWeights, newBias, newWq, ni.activation)
+}
+
+
 // BackendFusedSoftmax computes softmax along the specified axis.
 // Internal: prefer graph.Softmax which handles fallback and gradients.
 func BackendFusedSoftmax(x *Node, axis int) *Node { return backendFusedSoftmax(x, axis) }
@@ -201,6 +238,13 @@ func (ni *nodeInputsQuantizedEmbeddingLookup) String() string {
 		ni.tq.GGMLType,
 	)
 }
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsQuantizedEmbeddingLookup) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// inputNodes ordering from BackendQuantizedEmbeddingLookup is: [data, indices]
+	return BackendQuantizedEmbeddingLookup(newInputs[0], newInputs[1], ni.tq)
+}
+
 
 // BackendQuantizedEmbeddingLookup performs a quantized embedding lookup (row gather)
 // with on-the-fly dequantization.

@@ -158,6 +158,15 @@ func (ni *nodeInputsAbs) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsAbs) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Abs(new_x)
+}
+
 // Abs returns the Op that represents the output of the corresponding operation.
 func Abs(x *Node) (
 	node *Node) {
@@ -199,6 +208,17 @@ func (ni *nodeInputsAdd) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsAdd) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return Add(new_lhs, new_rhs)
 }
 
 // Add returns the element-wise sum of the two values.
@@ -246,6 +266,16 @@ func (ni *nodeInputsAllReduce) String() string {
 		ni.reductionType,
 		ni.replicaGroups,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsAllReduce) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operands := newInputs[idx : idx+len(ni.operands)]
+	idx += len(ni.operands)
+	r := backendAllReduce(new_operands, ni.reductionType, ni.replicaGroups)
+	return r[0].inputNodes[0]
 }
 
 // backendAllReduce is a Graph wrapper for the backend.Builder.AllReduce method.
@@ -298,6 +328,15 @@ func (ni *nodeInputsArgMinMax) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsArgMinMax) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendArgMinMax(new_x, ni.axis, ni.outputDType, ni.isMin)
+}
+
 // backendArgMinMax is a Graph wrapper for the backend.Builder.ArgMinMax method.
 func backendArgMinMax(x *Node, axis int, outputDType dtypes.DType, isMin bool) (
 	node *Node) {
@@ -342,6 +381,17 @@ func (ni *nodeInputsAtan2) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsAtan2) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return Atan2(new_lhs, new_rhs)
 }
 
 // Atan2 returns element-wise the arc tangent of y/x, using the signs of both arguments to determine
@@ -400,6 +450,23 @@ func (ni *nodeInputsBatchNormForInference) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsBatchNormForInference) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	new_scale := newInputs[idx]
+	idx++
+	new_offset := newInputs[idx]
+	idx++
+	new_mean := newInputs[idx]
+	idx++
+	new_variance := newInputs[idx]
+	idx++
+	return backendBatchNormForInference(new_operand, new_scale, new_offset, new_mean, new_variance, ni.epsilon, ni.featureAxis)
+}
+
 // backendBatchNormForInference is a Graph wrapper for the backend.Builder.BatchNormForInference method.
 func backendBatchNormForInference(operand *Node, scale *Node, offset *Node, mean *Node, variance *Node, epsilon float32, featureAxis int) (
 	node *Node) {
@@ -453,6 +520,20 @@ func (ni *nodeInputsBatchNormForTraining) String() string {
 		ni.epsilon,
 		ni.featureAxis,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsBatchNormForTraining) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	new_scale := newInputs[idx]
+	idx++
+	new_offset := newInputs[idx]
+	idx++
+	r0, _, _ := backendBatchNormForTraining(new_operand, new_scale, new_offset, ni.epsilon, ni.featureAxis)
+	return r0.inputNodes[0]
 }
 
 // backendBatchNormForTraining is a Graph wrapper for the backend.Builder.BatchNormForTraining method.
@@ -514,6 +595,24 @@ func (ni *nodeInputsBatchNormGradient) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsBatchNormGradient) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	new_scale := newInputs[idx]
+	idx++
+	new_mean := newInputs[idx]
+	idx++
+	new_variance := newInputs[idx]
+	idx++
+	new_gradOutput := newInputs[idx]
+	idx++
+	r0, _, _ := backendBatchNormGradient(new_operand, new_scale, new_mean, new_variance, new_gradOutput, ni.epsilon, ni.featureAxis)
+	return r0.inputNodes[0]
+}
+
 // backendBatchNormGradient is a Graph wrapper for the backend.Builder.BatchNormGradient method.
 func backendBatchNormGradient(operand *Node, scale *Node, mean *Node, variance *Node, gradOutput *Node, epsilon float32, featureAxis int) (
 	gradOperand, gradScale, gradOffset *Node) {
@@ -563,6 +662,15 @@ func (ni *nodeInputsBitCount) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsBitCount) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	return BitCount(new_operand)
+}
+
 // BitCount returns the number of bits that are set to one.
 // Also known as Population Count ("Popcnt") or Hamming Weight.
 func BitCount(operand *Node) (
@@ -605,6 +713,15 @@ func (ni *nodeInputsBitcast) String() string {
 		ni.operand.Id(),
 		ni.targetDType,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsBitcast) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	return Bitcast(new_operand, ni.targetDType)
 }
 
 // Bitcast performs an elementwise bitcast operation from a dtype to another dtype.
@@ -665,6 +782,17 @@ func (ni *nodeInputsBitwiseAnd) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsBitwiseAnd) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return BitwiseAnd(new_lhs, new_rhs)
+}
+
 // BitwiseAnd returns the element-wise bitwise AND operation.
 func BitwiseAnd(lhs *Node, rhs *Node) (
 	node *Node) {
@@ -705,6 +833,15 @@ func (ni *nodeInputsBitwiseNot) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsBitwiseNot) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return BitwiseNot(new_x)
 }
 
 // BitwiseNot returns the element-wise bitwise AND operation.
@@ -750,6 +887,17 @@ func (ni *nodeInputsBitwiseOr) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsBitwiseOr) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return BitwiseOr(new_lhs, new_rhs)
+}
+
 // BitwiseOr returns the element-wise bitwise OR operation.
 func BitwiseOr(lhs *Node, rhs *Node) (
 	node *Node) {
@@ -792,6 +940,17 @@ func (ni *nodeInputsBitwiseXor) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsBitwiseXor) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return BitwiseXor(new_lhs, new_rhs)
 }
 
 // BitwiseXor returns the element-wise bitwise XOR operator.
@@ -840,6 +999,15 @@ func (ni *nodeInputsBroadcastInDim) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsBroadcastInDim) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendBroadcastInDim(new_x, ni.outputShape, ni.broadcastAxes)
+}
+
 // backendBroadcastInDim is a Graph wrapper for the backend.Builder.BroadcastInDim method.
 func backendBroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []int) (
 	node *Node) {
@@ -881,6 +1049,15 @@ func (ni *nodeInputsCeil) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsCeil) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendCeil(new_x)
 }
 
 // backendCeil is a Graph wrapper for the backend.Builder.Ceil method.
@@ -928,6 +1105,19 @@ func (ni *nodeInputsClamp) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsClamp) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_min := newInputs[idx]
+	idx++
+	new_x := newInputs[idx]
+	idx++
+	new_max := newInputs[idx]
+	idx++
+	return Clamp(new_min, new_x, new_max)
+}
+
 // Clamp returns the element-wise clamping operation.
 //
 // The values max and min can either be a scalar or have the same shape as x.
@@ -973,6 +1163,15 @@ func (ni *nodeInputsClz) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsClz) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Clz(new_x)
+}
+
 // Clz returns element-wise the "count leading zeros" bits of input node x -- for integer values.
 func Clz(x *Node) (
 	node *Node) {
@@ -1014,6 +1213,17 @@ func (ni *nodeInputsComplex) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsComplex) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return Complex(new_lhs, new_rhs)
 }
 
 // Complex returns the complex number taking x0 as the real part and x1 as the imaginary part.
@@ -1065,6 +1275,15 @@ func (ni *nodeInputsConcatenate) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsConcatenate) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operands := newInputs[idx : idx+len(ni.operands)]
+	idx += len(ni.operands)
+	return backendConcatenate(ni.axis, new_operands...)
+}
+
 // backendConcatenate is a Graph wrapper for the backend.Builder.Concatenate method.
 func backendConcatenate(axis int, operands ...*Node) (
 	node *Node) {
@@ -1106,6 +1325,15 @@ func (ni *nodeInputsConj) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsConj) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Conj(new_x)
 }
 
 // Conj returns the conjugate of a complex number. E.g: Conj(1+3i) = 1-3i
@@ -1165,6 +1393,17 @@ func (ni *nodeInputsConvGeneral) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsConvGeneral) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_input := newInputs[idx]
+	idx++
+	new_kernel := newInputs[idx]
+	idx++
+	return backendConvGeneral(new_input, new_kernel, ni.axes, ni.strides, ni.paddings, ni.inputDilations, ni.kernelDilations, ni.channelGroupCount, ni.batchGroupCount)
+}
+
 // backendConvGeneral is a Graph wrapper for the backend.Builder.ConvGeneral method.
 func backendConvGeneral(input *Node, kernel *Node, axes compute.ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilations []int, kernelDilations []int, channelGroupCount int, batchGroupCount int) (
 	node *Node) {
@@ -1216,6 +1455,15 @@ func (ni *nodeInputsConvertDType) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsConvertDType) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendConvertDType(new_x, ni.dtype)
+}
+
 // backendConvertDType is a Graph wrapper for the backend.Builder.ConvertDType method.
 func backendConvertDType(x *Node, dtype dtypes.DType) (
 	node *Node) {
@@ -1256,6 +1504,15 @@ func (ni *nodeInputsCos) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsCos) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Cos(new_x)
 }
 
 // Cos returns the Op that represents the output of the corresponding operation.
@@ -1299,6 +1556,17 @@ func (ni *nodeInputsDiv) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsDiv) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return Div(new_lhs, new_rhs)
 }
 
 // Div returns the element-wise division of the two values.
@@ -1356,6 +1624,17 @@ func (ni *nodeInputsDotGeneral) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsDotGeneral) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return backendDotGeneral(new_lhs, ni.lhsContractingAxes, ni.lhsBatchAxes, new_rhs, ni.rhsContractingAxes, ni.rhsBatchAxes, ni.config)
+}
+
 // backendDotGeneral is a Graph wrapper for the backend.Builder.DotGeneral method.
 func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, rhs *Node, rhsContractingAxes []int, rhsBatchAxes []int, config compute.DotGeneralConfig) (
 	node *Node) {
@@ -1405,6 +1684,15 @@ func (ni *nodeInputsDynamicDimensionSize) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsDynamicDimensionSize) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	return DynamicDimensionSize(new_operand, ni.axis)
+}
+
 // DynamicDimensionSize returns the dimension of the given axis of the operand as a dynamic scalar value.
 // This is only supported by backends that support dynamic shapes (see Capabilities.DynamicAxes).
 func DynamicDimensionSize(operand *Node, axis int) (
@@ -1446,6 +1734,15 @@ func (ni *nodeInputsDynamicShape) String() string {
 		ni.Type(),
 		ni.operand.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsDynamicShape) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	return DynamicShape(new_operand)
 }
 
 // DynamicShape returns the shape of the operand as a dynamic value.
@@ -1492,6 +1789,17 @@ func (ni *nodeInputsDynamicSlice) String() string {
 		strings.Join(xslices.Map(ni.startIndices, func(node *Node) string { return fmt.Sprintf("#%d", node.Id()) }), ", "),
 		ni.sliceDims,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsDynamicSlice) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	new_startIndices := newInputs[idx : idx+len(ni.startIndices)]
+	idx += len(ni.startIndices)
+	return DynamicSlice(new_operand, new_startIndices, ni.sliceDims)
 }
 
 // DynamicSlice extracts a slice from the operand at the startIndices position and the given sliceSizes.
@@ -1552,6 +1860,19 @@ func (ni *nodeInputsDynamicUpdateSlice) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsDynamicUpdateSlice) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	new_update := newInputs[idx]
+	idx++
+	new_startIndices := newInputs[idx : idx+len(ni.startIndices)]
+	idx += len(ni.startIndices)
+	return DynamicUpdateSlice(new_operand, new_update, new_startIndices)
+}
+
 // DynamicUpdateSlice updates the operand with the values given in update, at the position given by startIndices.
 //
 // - operand: original value that to be updated.
@@ -1609,6 +1930,17 @@ func (ni *nodeInputsEqual) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsEqual) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return Equal(new_lhs, new_rhs)
+}
+
 // Equal performs element-wise equality check, returns boolean results with the same dimensions as input.
 func Equal(lhs *Node, rhs *Node) (
 	node *Node) {
@@ -1652,6 +1984,17 @@ func (ni *nodeInputsEqualTotalOrder) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsEqualTotalOrder) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return EqualTotalOrder(new_lhs, new_rhs)
 }
 
 // EqualTotalOrder returns the element-wise operation.
@@ -1699,6 +2042,15 @@ func (ni *nodeInputsErf) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsErf) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Erf(new_x)
+}
+
 // Erf returns the "error function", defined as erf(x) = 2/Pi * \int_{0}^{x}{e^{-t^2}dt}.
 func Erf(x *Node) (
 	node *Node) {
@@ -1740,6 +2092,15 @@ func (ni *nodeInputsExp) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsExp) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Exp(new_x)
+}
+
 // Exp returns the Op that represents the output of the corresponding operation.
 func Exp(x *Node) (
 	node *Node) {
@@ -1779,6 +2140,15 @@ func (ni *nodeInputsExpm1) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsExpm1) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Expm1(new_x)
 }
 
 // Expm1 returns the Op that represents the output of the corresponding operation.
@@ -1826,6 +2196,15 @@ func (ni *nodeInputsFFT) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFFT) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	return backendFFT(new_operand, ni.fftType, ni.fftLength)
+}
+
 // backendFFT is a Graph wrapper for the backend.Builder.FFT method.
 func backendFFT(operand *Node, fftType compute.FFTType, fftLength []int) (
 	node *Node) {
@@ -1867,6 +2246,15 @@ func (ni *nodeInputsFloor) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFloor) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendFloor(new_x)
 }
 
 // backendFloor is a Graph wrapper for the backend.Builder.Floor method.
@@ -1920,6 +2308,33 @@ func (ni *nodeInputsFusedAttentionQKVProjection) String() string {
 		ni.queryDim,
 		ni.keyValueDim,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedAttentionQKVProjection) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	new_wQKV := newInputs[idx]
+	idx++
+	var new_biasQ *Node
+	if ni.biasQ != nil {
+		new_biasQ = newInputs[idx]
+		idx++
+	}
+	var new_biasK *Node
+	if ni.biasK != nil {
+		new_biasK = newInputs[idx]
+		idx++
+	}
+	var new_biasV *Node
+	if ni.biasV != nil {
+		new_biasV = newInputs[idx]
+		idx++
+	}
+	r0, _, _ := backendFusedAttentionQKVProjection(new_x, new_wQKV, new_biasQ, new_biasK, new_biasV, ni.queryDim, ni.keyValueDim)
+	return r0.inputNodes[0]
 }
 
 // backendFusedAttentionQKVProjection is a Graph wrapper for the backend.Builder.FusedAttentionQKVProjection method.
@@ -1998,6 +2413,22 @@ func (ni *nodeInputsFusedDense) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedDense) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	new_weight := newInputs[idx]
+	idx++
+	var new_bias *Node
+	if ni.bias != nil {
+		new_bias = newInputs[idx]
+		idx++
+	}
+	return backendFusedDense(new_x, new_weight, new_bias, ni.activation)
+}
+
 // backendFusedDense is a Graph wrapper for the backend.Builder.FusedDense method.
 func backendFusedDense(x *Node, weight *Node, bias *Node, activation compute.ActivationType) (
 	node *Node) {
@@ -2051,6 +2482,15 @@ func (ni *nodeInputsFusedGelu) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedGelu) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendFusedGelu(new_x, ni.exact)
+}
+
 // backendFusedGelu is a Graph wrapper for the backend.Builder.FusedGelu method.
 func backendFusedGelu(x *Node, exact bool) (
 	node *Node) {
@@ -2099,6 +2539,25 @@ func (ni *nodeInputsFusedLayerNorm) String() string {
 		strNillableNode(ni.gamma),
 		strNillableNode(ni.beta),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedLayerNorm) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	var new_gamma *Node
+	if ni.gamma != nil {
+		new_gamma = newInputs[idx]
+		idx++
+	}
+	var new_beta *Node
+	if ni.beta != nil {
+		new_beta = newInputs[idx]
+		idx++
+	}
+	return backendFusedLayerNorm(new_x, ni.axes, ni.epsilon, new_gamma, new_beta)
 }
 
 // backendFusedLayerNorm is a Graph wrapper for the backend.Builder.FusedLayerNorm method.
@@ -2178,6 +2637,24 @@ func (ni *nodeInputsFusedScaledDotProductAttention) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedScaledDotProductAttention) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_query := newInputs[idx]
+	idx++
+	new_key := newInputs[idx]
+	idx++
+	new_value := newInputs[idx]
+	idx++
+	var new_mask *Node
+	if ni.mask != nil {
+		new_mask = newInputs[idx]
+		idx++
+	}
+	return backendFusedScaledDotProductAttention(new_query, new_key, new_value, new_mask, ni.numHeads, ni.numKVHeads, ni.axesLayout, ni.scale, ni.causal, ni.options)
+}
+
 // backendFusedScaledDotProductAttention is a Graph wrapper for the backend.Builder.FusedScaledDotProductAttention method.
 func backendFusedScaledDotProductAttention(query *Node, key *Node, value *Node, mask *Node, numHeads int, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (
 	node *Node) {
@@ -2237,6 +2714,15 @@ func (ni *nodeInputsFusedSoftmax) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedSoftmax) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendFusedSoftmax(new_x, ni.axis)
+}
+
 // backendFusedSoftmax is a Graph wrapper for the backend.Builder.FusedSoftmax method.
 func backendFusedSoftmax(x *Node, axis int) (
 	node *Node) {
@@ -2293,6 +2779,17 @@ func (ni *nodeInputsGather) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsGather) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	new_startIndices := newInputs[idx]
+	idx++
+	return backendGather(new_operand, new_startIndices, ni.indexVectorAxis, ni.offsetOutputAxes, ni.collapsedSliceAxes, ni.startIndexMap, ni.sliceSizes, ni.indicesAreSorted)
+}
+
 // backendGather is a Graph wrapper for the backend.Builder.Gather method.
 func backendGather(operand *Node, startIndices *Node, indexVectorAxis int, offsetOutputAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (
 	node *Node) {
@@ -2343,6 +2840,17 @@ func (ni *nodeInputsGreaterOrEqual) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsGreaterOrEqual) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return GreaterOrEqual(new_lhs, new_rhs)
+}
+
 // GreaterOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
 func GreaterOrEqual(lhs *Node, rhs *Node) (
 	node *Node) {
@@ -2386,6 +2894,17 @@ func (ni *nodeInputsGreaterOrEqualTotalOrder) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsGreaterOrEqualTotalOrder) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return GreaterOrEqualTotalOrder(new_lhs, new_rhs)
 }
 
 // GreaterOrEqualTotalOrder returns the element-wise operation.
@@ -2435,6 +2954,17 @@ func (ni *nodeInputsGreaterThan) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsGreaterThan) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return GreaterThan(new_lhs, new_rhs)
+}
+
 // GreaterThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 func GreaterThan(lhs *Node, rhs *Node) (
 	node *Node) {
@@ -2478,6 +3008,17 @@ func (ni *nodeInputsGreaterThanTotalOrder) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsGreaterThanTotalOrder) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return GreaterThanTotalOrder(new_lhs, new_rhs)
 }
 
 // GreaterThanTotalOrder returns the element-wise operation.
@@ -2525,6 +3066,15 @@ func (ni *nodeInputsIdentity) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsIdentity) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Identity(new_x)
+}
+
 // Identity returns an Op whose output is the same as its input.
 // It's a no-op that can serve as a place-holder.
 func Identity(x *Node) (
@@ -2565,6 +3115,15 @@ func (ni *nodeInputsImag) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsImag) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Imag(new_x)
 }
 
 // Imag returns the imaginary part of a complex number. It returns 0 if the x is a float number.
@@ -2610,6 +3169,11 @@ func (ni *nodeInputsIota) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsIota) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	return backendIota(originalNode.Graph(), ni.shape, ni.iotaAxis)
+}
+
 // backendIota is a Graph wrapper for the backend.Builder.Iota method.
 func backendIota(g *Graph, shape shapes.Shape, iotaAxis int) (
 	node *Node) {
@@ -2648,6 +3212,15 @@ func (ni *nodeInputsIsFinite) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsIsFinite) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return IsFinite(new_x)
 }
 
 // IsFinite tests whether each element of operand is finite, i.e., if it is not positive nor negative infinity, and it is not NaN.
@@ -2693,6 +3266,15 @@ func (ni *nodeInputsIsNaN) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsIsNaN) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return IsNaN(new_x)
+}
+
 // IsNaN tests whether each element of operand is NaN, i.e., if it is not a finite number.
 func IsNaN(x *Node) (
 	node *Node) {
@@ -2734,6 +3316,17 @@ func (ni *nodeInputsLessOrEqual) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsLessOrEqual) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return LessOrEqual(new_lhs, new_rhs)
 }
 
 // LessOrEqual performs element-wise comparison, returns boolean results with the same dimensions as input.
@@ -2779,6 +3372,17 @@ func (ni *nodeInputsLessOrEqualTotalOrder) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsLessOrEqualTotalOrder) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return LessOrEqualTotalOrder(new_lhs, new_rhs)
 }
 
 // LessOrEqualTotalOrder returns the element-wise operation.
@@ -2828,6 +3432,17 @@ func (ni *nodeInputsLessThan) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsLessThan) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return LessThan(new_lhs, new_rhs)
+}
+
 // LessThan performs element-wise comparison, returns boolean results with the same dimensions as input.
 func LessThan(lhs *Node, rhs *Node) (
 	node *Node) {
@@ -2871,6 +3486,17 @@ func (ni *nodeInputsLessThanTotalOrder) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsLessThanTotalOrder) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return LessThanTotalOrder(new_lhs, new_rhs)
 }
 
 // LessThanTotalOrder returns the element-wise operation.
@@ -2918,6 +3544,15 @@ func (ni *nodeInputsLog) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsLog) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Log(new_x)
+}
+
 // Log returns the Op that represents the output of the corresponding operation.
 func Log(x *Node) (
 	node *Node) {
@@ -2957,6 +3592,15 @@ func (ni *nodeInputsLog1p) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsLog1p) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Log1p(new_x)
 }
 
 // Log1p returns the expression log(x+1).
@@ -3002,6 +3646,17 @@ func (ni *nodeInputsLogicalAnd) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsLogicalAnd) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return LogicalAnd(new_lhs, new_rhs)
+}
+
 // LogicalAnd returns the element-wise logical AND operation.
 func LogicalAnd(lhs *Node, rhs *Node) (
 	node *Node) {
@@ -3042,6 +3697,15 @@ func (ni *nodeInputsLogicalNot) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsLogicalNot) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return LogicalNot(new_x)
 }
 
 // LogicalNot returns the Op that represents the output of the corresponding operation.
@@ -3088,6 +3752,17 @@ func (ni *nodeInputsLogicalOr) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsLogicalOr) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return LogicalOr(new_lhs, new_rhs)
+}
+
 // LogicalOr returns the element-wise logical OR operation.
 func LogicalOr(lhs *Node, rhs *Node) (
 	node *Node) {
@@ -3132,6 +3807,17 @@ func (ni *nodeInputsLogicalXor) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsLogicalXor) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return LogicalXor(new_lhs, new_rhs)
+}
+
 // LogicalXor returns the element-wise logical XOR operator.
 func LogicalXor(lhs *Node, rhs *Node) (
 	node *Node) {
@@ -3172,6 +3858,15 @@ func (ni *nodeInputsLogistic) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsLogistic) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Logistic(new_x)
 }
 
 // Logistic returns the element-wise expression 1/(1+exp(-x)). Also known as the Sigmoid function.
@@ -3215,6 +3910,17 @@ func (ni *nodeInputsMax) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsMax) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return Max(new_lhs, new_rhs)
 }
 
 // Max returns the element-wise highest value among the two.
@@ -3261,6 +3967,17 @@ func (ni *nodeInputsMin) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsMin) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return Min(new_lhs, new_rhs)
+}
+
 // Min returns the element-wise smallest value among the two.
 func Min(lhs *Node, rhs *Node) (
 	node *Node) {
@@ -3303,6 +4020,17 @@ func (ni *nodeInputsMul) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsMul) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return Mul(new_lhs, new_rhs)
 }
 
 // Mul returns the element-wise multiplication of the two values.
@@ -3348,6 +4076,15 @@ func (ni *nodeInputsNeg) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsNeg) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Neg(new_x)
+}
+
 // Neg returns the Op that represents the output of the corresponding operation.
 func Neg(x *Node) (
 	node *Node) {
@@ -3389,6 +4126,17 @@ func (ni *nodeInputsNotEqual) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsNotEqual) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return NotEqual(new_lhs, new_rhs)
 }
 
 // NotEqual performs element-wise inequality check, returns boolean results with the same dimensions as input.
@@ -3436,6 +4184,17 @@ func (ni *nodeInputsNotEqualTotalOrder) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsNotEqualTotalOrder) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return NotEqualTotalOrder(new_lhs, new_rhs)
+}
+
 // NotEqualTotalOrder returns the element-wise operation.
 // Standard broadcasting rules apply (see documentation).
 // The "TotalOrder" version of the operation enforces `-NaN < -Inf < -Finite < -0 < +0 < +Finite < +Inf < +NaN`.
@@ -3479,6 +4238,16 @@ func (ni *nodeInputsOptimizationBarrier) String() string {
 		ni.Type(),
 		strings.Join(xslices.Map(ni.operands, func(node *Node) string { return fmt.Sprintf("#%d", node.Id()) }), ", "),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsOptimizationBarrier) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operands := newInputs[idx : idx+len(ni.operands)]
+	idx += len(ni.operands)
+	r := backendOptimizationBarrier(new_operands...)
+	return r[0].inputNodes[0]
 }
 
 // backendOptimizationBarrier is a Graph wrapper for the backend.Builder.OptimizationBarrier method.
@@ -3525,6 +4294,17 @@ func (ni *nodeInputsPad) String() string {
 		ni.fillValue.Id(),
 		ni.axesConfig,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsPad) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	new_fillValue := newInputs[idx]
+	idx++
+	return Pad(new_x, new_fillValue, ni.axesConfig...)
 }
 
 // Pad injects padding on the start, end, or interior (in between each element) of the given operand.
@@ -3577,6 +4357,17 @@ func (ni *nodeInputsPow) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsPow) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return Pow(new_lhs, new_rhs)
+}
+
 // Pow returns the Op that represents the output of the corresponding operation.
 func Pow(lhs *Node, rhs *Node) (
 	node *Node) {
@@ -3619,6 +4410,16 @@ func (ni *nodeInputsRNGBitGenerator) String() string {
 		ni.state.Id(),
 		ni.shape,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsRNGBitGenerator) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_state := newInputs[idx]
+	idx++
+	r0, _ := backendRNGBitGenerator(new_state, ni.shape)
+	return r0.inputNodes[0]
 }
 
 // backendRNGBitGenerator is a Graph wrapper for the backend.Builder.RNGBitGenerator method.
@@ -3665,6 +4466,15 @@ func (ni *nodeInputsReal) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReal) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Real(new_x)
+}
+
 // Real return the real part of a complex number. It returns x if the x is a float number.
 func Real(x *Node) (
 	node *Node) {
@@ -3706,6 +4516,15 @@ func (ni *nodeInputsReduceBitwiseAnd) String() string {
 		ni.x.Id(),
 		ni.axes,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReduceBitwiseAnd) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendReduceBitwiseAnd(new_x, ni.axes...)
 }
 
 // backendReduceBitwiseAnd is a Graph wrapper for the backend.Builder.ReduceBitwiseAnd method.
@@ -3752,6 +4571,15 @@ func (ni *nodeInputsReduceBitwiseOr) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReduceBitwiseOr) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendReduceBitwiseOr(new_x, ni.axes...)
+}
+
 // backendReduceBitwiseOr is a Graph wrapper for the backend.Builder.ReduceBitwiseOr method.
 func backendReduceBitwiseOr(x *Node, axes ...int) (
 	node *Node) {
@@ -3794,6 +4622,15 @@ func (ni *nodeInputsReduceBitwiseXor) String() string {
 		ni.x.Id(),
 		ni.axes,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReduceBitwiseXor) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendReduceBitwiseXor(new_x, ni.axes...)
 }
 
 // backendReduceBitwiseXor is a Graph wrapper for the backend.Builder.ReduceBitwiseXor method.
@@ -3840,6 +4677,15 @@ func (ni *nodeInputsReduceLogicalAnd) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReduceLogicalAnd) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendReduceLogicalAnd(new_x, ni.axes...)
+}
+
 // backendReduceLogicalAnd is a Graph wrapper for the backend.Builder.ReduceLogicalAnd method.
 func backendReduceLogicalAnd(x *Node, axes ...int) (
 	node *Node) {
@@ -3882,6 +4728,15 @@ func (ni *nodeInputsReduceLogicalOr) String() string {
 		ni.x.Id(),
 		ni.axes,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReduceLogicalOr) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendReduceLogicalOr(new_x, ni.axes...)
 }
 
 // backendReduceLogicalOr is a Graph wrapper for the backend.Builder.ReduceLogicalOr method.
@@ -3928,6 +4783,15 @@ func (ni *nodeInputsReduceLogicalXor) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReduceLogicalXor) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendReduceLogicalXor(new_x, ni.axes...)
+}
+
 // backendReduceLogicalXor is a Graph wrapper for the backend.Builder.ReduceLogicalXor method.
 func backendReduceLogicalXor(x *Node, axes ...int) (
 	node *Node) {
@@ -3970,6 +4834,15 @@ func (ni *nodeInputsReduceMax) String() string {
 		ni.x.Id(),
 		ni.axes,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReduceMax) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendReduceMax(new_x, ni.axes...)
 }
 
 // backendReduceMax is a Graph wrapper for the backend.Builder.ReduceMax method.
@@ -4016,6 +4889,15 @@ func (ni *nodeInputsReduceMin) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReduceMin) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendReduceMin(new_x, ni.axes...)
+}
+
 // backendReduceMin is a Graph wrapper for the backend.Builder.ReduceMin method.
 func backendReduceMin(x *Node, axes ...int) (
 	node *Node) {
@@ -4060,6 +4942,15 @@ func (ni *nodeInputsReduceProduct) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReduceProduct) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendReduceProduct(new_x, ni.axes...)
+}
+
 // backendReduceProduct is a Graph wrapper for the backend.Builder.ReduceProduct method.
 func backendReduceProduct(x *Node, axes ...int) (
 	node *Node) {
@@ -4102,6 +4993,15 @@ func (ni *nodeInputsReduceSum) String() string {
 		ni.x.Id(),
 		ni.axes,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReduceSum) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendReduceSum(new_x, ni.axes...)
 }
 
 // backendReduceSum is a Graph wrapper for the backend.Builder.ReduceSum method.
@@ -4158,6 +5058,15 @@ func (ni *nodeInputsReduceWindow) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReduceWindow) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_input := newInputs[idx]
+	idx++
+	return backendReduceWindow(new_input, ni.reductionType, ni.windowDimensions, ni.strides, ni.inputDilations, ni.windowDilations, ni.paddings)
+}
+
 // backendReduceWindow is a Graph wrapper for the backend.Builder.ReduceWindow method.
 func backendReduceWindow(input *Node, reductionType ReduceOpType, windowDimensions []int, strides []int, inputDilations []int, windowDilations []int, paddings [][2]int) (
 	node *Node) {
@@ -4207,6 +5116,17 @@ func (ni *nodeInputsRem) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsRem) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return Rem(new_lhs, new_rhs)
+}
+
 // Rem returns the remainder operation, also known as modulo (or Mod for short).
 // Notice despite the name XLA implements Mod not IEEE754 Remainder operation.
 func Rem(lhs *Node, rhs *Node) (
@@ -4250,6 +5170,15 @@ func (ni *nodeInputsReshape) String() string {
 		ni.x.Id(),
 		ni.dimensions,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReshape) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendReshape(new_x, ni.dimensions...)
 }
 
 // backendReshape is a Graph wrapper for the backend.Builder.Reshape method.
@@ -4296,6 +5225,15 @@ func (ni *nodeInputsReverse) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsReverse) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendReverse(new_x, ni.axes...)
+}
+
 // backendReverse is a Graph wrapper for the backend.Builder.Reverse method.
 func backendReverse(x *Node, axes ...int) (
 	node *Node) {
@@ -4338,6 +5276,15 @@ func (ni *nodeInputsRound) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsRound) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Round(new_x)
+}
+
 // Round returns the Op that represents the output of the corresponding operation.
 // This operation rounds to the nearest even.
 func Round(x *Node) (
@@ -4378,6 +5325,15 @@ func (ni *nodeInputsRsqrt) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsRsqrt) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Rsqrt(new_x)
 }
 
 // Rsqrt returns the element-wise reciprocal of square root operation 1/sqrt(x).
@@ -4435,6 +5391,19 @@ func (ni *nodeInputsScatterMax) String() string {
 		ni.indicesAreSorted,
 		ni.uniqueIndices,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsScatterMax) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	new_scatterIndices := newInputs[idx]
+	idx++
+	new_updates := newInputs[idx]
+	idx++
+	return backendScatterMax(new_operand, new_scatterIndices, new_updates, ni.indexVectorAxis, ni.updateWindowAxes, ni.insertedWindowAxes, ni.scatterAxesToOperandAxes, ni.indicesAreSorted, ni.uniqueIndices)
 }
 
 // backendScatterMax is a Graph wrapper for the backend.Builder.ScatterMax method.
@@ -4502,6 +5471,19 @@ func (ni *nodeInputsScatterMin) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsScatterMin) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	new_scatterIndices := newInputs[idx]
+	idx++
+	new_updates := newInputs[idx]
+	idx++
+	return backendScatterMin(new_operand, new_scatterIndices, new_updates, ni.indexVectorAxis, ni.updateWindowAxes, ni.insertedWindowAxes, ni.scatterAxesToOperandAxes, ni.indicesAreSorted, ni.uniqueIndices)
+}
+
 // backendScatterMin is a Graph wrapper for the backend.Builder.ScatterMin method.
 func backendScatterMin(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (
 	node *Node) {
@@ -4567,6 +5549,19 @@ func (ni *nodeInputsScatterSum) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsScatterSum) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	new_scatterIndices := newInputs[idx]
+	idx++
+	new_updates := newInputs[idx]
+	idx++
+	return backendScatterSum(new_operand, new_scatterIndices, new_updates, ni.indexVectorAxis, ni.updateWindowAxes, ni.insertedWindowAxes, ni.scatterAxesToOperandAxes, ni.indicesAreSorted, ni.uniqueIndices)
+}
+
 // backendScatterSum is a Graph wrapper for the backend.Builder.ScatterSum method.
 func backendScatterSum(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (
 	node *Node) {
@@ -4616,6 +5611,17 @@ func (ni *nodeInputsSchedulingBarrier) String() string {
 		ni.operand.Id(),
 		strings.Join(xslices.Map(ni.dependencies, func(node *Node) string { return fmt.Sprintf("#%d", node.Id()) }), ", "),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsSchedulingBarrier) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	new_dependencies := newInputs[idx : idx+len(ni.dependencies)]
+	idx += len(ni.dependencies)
+	return SchedulingBarrier(new_operand, new_dependencies...)
 }
 
 // SchedulingBarrier introduces a scheduling barrier.
@@ -4668,6 +5674,17 @@ func (ni *nodeInputsSelectAndScatterMax) String() string {
 		ni.windowStrides,
 		ni.paddings,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsSelectAndScatterMax) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	new_source := newInputs[idx]
+	idx++
+	return backendSelectAndScatterMax(new_operand, new_source, ni.windowDimensions, ni.windowStrides, ni.paddings)
 }
 
 // backendSelectAndScatterMax is a Graph wrapper for the backend.Builder.SelectAndScatterMax method.
@@ -4723,6 +5740,17 @@ func (ni *nodeInputsSelectAndScatterMin) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsSelectAndScatterMin) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	new_source := newInputs[idx]
+	idx++
+	return backendSelectAndScatterMin(new_operand, new_source, ni.windowDimensions, ni.windowStrides, ni.paddings)
+}
+
 // backendSelectAndScatterMin is a Graph wrapper for the backend.Builder.SelectAndScatterMin method.
 func backendSelectAndScatterMin(operand *Node, source *Node, windowDimensions []int, windowStrides []int, paddings [][2]int) (
 	node *Node) {
@@ -4770,6 +5798,17 @@ func (ni *nodeInputsShiftLeft) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsShiftLeft) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return backendShiftLeft(new_lhs, new_rhs)
+}
+
 // backendShiftLeft is a Graph wrapper for the backend.Builder.ShiftLeft method.
 func backendShiftLeft(lhs *Node, rhs *Node) (
 	node *Node) {
@@ -4812,6 +5851,17 @@ func (ni *nodeInputsShiftRightArithmetic) String() string {
 		ni.lhs.Id(),
 		ni.rhs.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsShiftRightArithmetic) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return backendShiftRightArithmetic(new_lhs, new_rhs)
 }
 
 // backendShiftRightArithmetic is a Graph wrapper for the backend.Builder.ShiftRightArithmetic method.
@@ -4858,6 +5908,17 @@ func (ni *nodeInputsShiftRightLogical) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsShiftRightLogical) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return backendShiftRightLogical(new_lhs, new_rhs)
+}
+
 // backendShiftRightLogical is a Graph wrapper for the backend.Builder.ShiftRightLogical method.
 func backendShiftRightLogical(lhs *Node, rhs *Node) (
 	node *Node) {
@@ -4900,6 +5961,15 @@ func (ni *nodeInputsSign) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsSign) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendSign(new_x)
+}
+
 // backendSign is a Graph wrapper for the backend.Builder.Sign method.
 func backendSign(x *Node) (
 	node *Node) {
@@ -4939,6 +6009,15 @@ func (ni *nodeInputsSin) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsSin) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Sin(new_x)
 }
 
 // Sin returns the Op that represents the output of the corresponding operation.
@@ -4988,6 +6067,15 @@ func (ni *nodeInputsSlice) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsSlice) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendSlice(new_x, ni.starts, ni.limits, ni.strides)
+}
+
 // backendSlice is a Graph wrapper for the backend.Builder.Slice method.
 func backendSlice(x *Node, starts []int, limits []int, strides []int) (
 	node *Node) {
@@ -5030,6 +6118,15 @@ func (ni *nodeInputsSqrt) String() string {
 		ni.Type(),
 		ni.x.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsSqrt) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Sqrt(new_x)
 }
 
 // Sqrt returns the Op that represents the output of the corresponding operation.
@@ -5075,6 +6172,17 @@ func (ni *nodeInputsSub) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsSub) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_lhs := newInputs[idx]
+	idx++
+	new_rhs := newInputs[idx]
+	idx++
+	return Sub(new_lhs, new_rhs)
+}
+
 // Sub returns the element-wise subtraction of the two values.
 // Standard broadcasting rules apply (see documentation).
 func Sub(lhs *Node, rhs *Node) (
@@ -5118,6 +6226,15 @@ func (ni *nodeInputsTanh) String() string {
 	)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsTanh) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return Tanh(new_x)
+}
+
 // Tanh returns the Op that represents the output of the corresponding operation.
 func Tanh(x *Node) (
 	node *Node) {
@@ -5159,6 +6276,15 @@ func (ni *nodeInputsTranspose) String() string {
 		ni.x.Id(),
 		ni.permutation,
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsTranspose) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendTranspose(new_x, ni.permutation...)
 }
 
 // backendTranspose is a Graph wrapper for the backend.Builder.Transpose method.
@@ -5205,6 +6331,19 @@ func (ni *nodeInputsWhere) String() string {
 		ni.onTrue.Id(),
 		ni.onFalse.Id(),
 	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsWhere) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_condition := newInputs[idx]
+	idx++
+	new_onTrue := newInputs[idx]
+	idx++
+	new_onFalse := newInputs[idx]
+	idx++
+	return backendWhere(new_condition, new_onTrue, new_onFalse)
 }
 
 // backendWhere is a Graph wrapper for the backend.Builder.Where method.

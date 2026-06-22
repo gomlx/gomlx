@@ -108,6 +108,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				Name:        param.Name,
 				BackendType: param.Type,
 				Printable:   true,
+				IsVariadic:  strings.HasPrefix(param.Type, "..."),
 			}
 			mi.Inputs = append(mi.Inputs, pi)
 			switch pi.BackendType {
@@ -262,6 +263,7 @@ type ParameterInfo struct {
 	Format, FormatValue                   string
 	Printable                             bool
 	IsNillable                            bool
+	IsVariadic                            bool
 }
 
 const (
@@ -336,6 +338,43 @@ func (ni *nodeInputs{{.BackendName}}) String() string {
 {{- end }}
 	)
 }
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputs{{.BackendName}}) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	{{if .HasGraph -}}
+	return {{.GraphName}}(originalNode.Graph(), {{range .Inputs}}ni.{{.Name}}{{if .IsVariadic}}...{{end}}, {{end}})
+	{{- else -}}
+	// Reconstruct inputs from newInputs
+	idx := 0
+	{{- range .Inputs}}
+	{{- if eq .GraphType "*Node"}}
+		{{- if .IsNillable}}
+		var new_{{.Name}} *Node
+		if ni.{{.Name}} != nil {
+			new_{{.Name}} = newInputs[idx]
+			idx++
+		}
+		{{- else}}
+		new_{{.Name}} := newInputs[idx]
+		idx++
+		{{- end}}
+	{{- else if or (eq .GraphType "[]*Node") (eq .GraphType "...*Node") (eq .NodeInputType "[]*Node")}}
+		new_{{.Name}} := newInputs[idx : idx+len(ni.{{.Name}})]
+		idx += len(ni.{{.Name}})
+	{{- end}}
+	{{- end}}
+	{{- if .HasMultipleOutputs}}
+	{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{if eq $ii 0}}r0{{else}}_{{end}}{{end}} := {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*Node") (eq .GraphType "[]*Node") (eq .GraphType "...*Node") (eq .NodeInputType "[]*Node")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.Name}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
+	return r0.inputNodes[0]
+	{{- else if .IsOutputSlice}}
+	r := {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*Node") (eq .GraphType "[]*Node") (eq .GraphType "...*Node") (eq .NodeInputType "[]*Node")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.Name}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
+	return r[0].inputNodes[0]
+	{{- else}}
+	return {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*Node") (eq .GraphType "[]*Node") (eq .GraphType "...*Node") (eq .NodeInputType "[]*Node")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.Name}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
+	{{- end}}
+	{{- end}}
+}
+
 
 {{- if not .Exported}}
 // {{.GraphName}} is a Graph wrapper for the backend.Builder.{{.BackendName}} method.

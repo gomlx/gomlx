@@ -409,6 +409,38 @@ func (ni *nodeInputsCall) String() string {
 	return fmt.Sprintf("Call(%s, %d inputs)", ni.f.name, len(ni.inputs))
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsCall) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	g := originalNode.Graph()
+	// Prepare backend inputs
+	inputOps := make([]compute.Value, len(newInputs))
+	for i, n := range newInputs {
+		inputOps[i] = n.outputOps[0]
+	}
+	results, err := g.currentFunc.backendFunc.Call(ni.f.backendFunc, inputOps...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "Failed to call function %q", ni.f.name))
+	}
+	outputShapes := make([]shapes.Shape, len(results))
+	for i, res := range results {
+		outputShapes[i] = mustNoError(g.builder.OpShape(res))
+	}
+	newNi := &nodeInputsCall{
+		f:      ni.f,
+		inputs: newInputs,
+	}
+	node := &Node{
+		graph:        g,
+		outputOps:    results,
+		outputShapes: outputShapes,
+		inputs:       newNi,
+		inputNodes:   newInputs,
+	}
+	g.registerNode(node)
+	return node
+}
+
+
 // Call a function with the given inputs.
 //
 // The function f must be from the same graph.

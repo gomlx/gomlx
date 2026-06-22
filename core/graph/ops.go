@@ -41,6 +41,12 @@ func (ni *nodeInputsParameter) String() string {
 	return fmt.Sprintf("%s(name=%q, shape=%s)", ni.Type(), ni.name, ni.shape)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsParameter) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	return originalNode
+}
+
+
 // mustNoError converts an error to a panic.
 func mustNoError[T any](v T, err error) T {
 	if err != nil {
@@ -123,6 +129,26 @@ func (ni *nodeInputsSplitNode) String() string {
 	return fmt.Sprintf("%s(multiOutputNode=[#%d], index=%d)", ni.Type(), ni.multiOutputNode.Id(), ni.index)
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsSplitNode) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	newMultiOutputNode := newInputs[0]
+	g := newMultiOutputNode.Graph()
+	inputs := &nodeInputsSplitNode{
+		multiOutputNode: newMultiOutputNode,
+		index:           ni.index,
+	}
+	node := &Node{
+		outputOps:    []compute.Value{newMultiOutputNode.outputOps[ni.index]},
+		outputShapes: []shapes.Shape{newMultiOutputNode.outputShapes[ni.index]},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   []*Node{newMultiOutputNode},
+	}
+	g.registerNode(node)
+	return node
+}
+
+
 // splitNode splits a Node that has multiple outputs into multiple nodes with one output only.
 // Internal only: users should only need to handle nodes with one output, so any method that returns many outputs
 // must call splitNode before returning to the user.
@@ -183,6 +209,12 @@ func (ni *nodeInputsConstant) String() string {
 		return fmt.Sprintf("%s(%s: %v)", ni.Type(), ni.shape, ni.tensor.Value())
 	}
 }
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsConstant) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	return originalNode
+}
+
 
 // ConstTensor returns a newly created constant node for the tensor t.
 //
