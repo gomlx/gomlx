@@ -177,7 +177,36 @@ func TestGradientCheckpointing(t *testing.T) {
 	assert.True(t, hasSchedulingBarrier, "Graph with checkpointing must include a SchedulingBarrier")
 	assert.True(t, hasOptimizationBarrier, "Graph with checkpointing must include OptimizationBarriers")
 
+	// Verify that any path from gradsCheck[0] to checkpointX is blocked by a SchedulingBarrier
+	reachableWithoutCrossingBarriers := isReachable(gradsCheck[0], checkpointX, false, make(map[NodeId]bool))
+	assert.False(t, reachableWithoutCrossingBarriers, "Gradient of loss w.r.t. weights must not reach checkpointX without crossing a SchedulingBarrier")
+
+	reachableWithCrossingBarriers := isReachable(gradsCheck[0], checkpointX, true, make(map[NodeId]bool))
+	assert.True(t, reachableWithCrossingBarriers, "Gradient of loss w.r.t. weights must reach checkpointX when crossing SchedulingBarriers")
+
 	for _, node := range gNoCheck.Nodes() {
 		assert.NotEqual(t, NodeTypeSchedulingBarrier, node.Type(), "Graph without checkpointing must not include a SchedulingBarrier")
 	}
 }
+
+// isReachable checks if target is reachable from start by traversing inputs backwards.
+// If traverseBarriers is false, the search stops at SchedulingBarrier nodes.
+func isReachable(start, target *Node, traverseBarriers bool, visited map[NodeId]bool) bool {
+	if start.Id() == target.Id() {
+		return true
+	}
+	if !traverseBarriers && start.Type() == NodeTypeSchedulingBarrier {
+		return false
+	}
+	if visited[start.Id()] {
+		return false
+	}
+	visited[start.Id()] = true
+	for _, input := range start.Inputs() {
+		if isReachable(input, target, traverseBarriers, visited) {
+			return true
+		}
+	}
+	return false
+}
+
