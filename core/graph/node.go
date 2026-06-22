@@ -66,6 +66,24 @@ type Node struct {
 	// decomposed equivalent.
 	vjpAlternateOutputs []*Node
 
+	// Flags used for gradient checkpointing (rematerialization blocks):
+	//
+	// isCheckpointed indicates that this node's forward activation is saved in memory
+	// and acts as a firewall boundary during backward propagation. The recursive rematerialization
+	// generator (getRematerialization) will stop crawling backward when it hits an isCheckpointed node.
+	// It is set to true by both Node.Checkpoint() and Node.StopCheckpoint().
+	//
+	// needsRematerialization is a contagious flag set to true during graph building
+	// if any of the node's inputs have needsRematerialization == true. It signals to the
+	// autodiff engine that this node's forward activation will be discarded by XLA and
+	// must be recomputed on-the-fly during the backward pass.
+	//
+	// Node.Checkpoint() starts or continues a block by setting both flags to true.
+	// Node.StopCheckpoint() ends a block; it saves its own output (isCheckpointed=true)
+	// but clears the contagion (needsRematerialization=false) so downstream parts of
+	// the graph can continue normally.
+	isCheckpointed, needsRematerialization bool
+
 	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.
 }
 
