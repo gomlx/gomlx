@@ -724,3 +724,45 @@ func TestGradientQKVProjectionDecomposed(t *testing.T) {
 		},
 	)
 }
+
+func TestGradientBarriers(t *testing.T) {
+	// Test single optimization barrier
+	testGradients(t, "OptimizationBarrier",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			x := Const(g, []float64{1, 2, 3})
+			y := OptimizationBarrier(x)
+			output = ReduceAllSum(y)
+			return output, []*Node{x}
+		}, []any{
+			[]float64{1, 1, 1},
+		},
+	)
+
+	// Test multiple optimization barriers
+	testGradients(t, "OptimizationBarriers",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			x := Const(g, []float64{1, 2, 3})
+			y := Const(g, []float64{4, 5, 6})
+			barriers := OptimizationBarriers(x, y)
+			output = Add(ReduceAllSum(barriers[0]), ReduceAllSum(barriers[1]))
+			return output, []*Node{x, y}
+		}, []any{
+			[]float64{1, 1, 1},
+			[]float64{1, 1, 1},
+		},
+	)
+
+	// Test scheduling barrier
+	testGradients(t, "SchedulingBarrier",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			x := Const(g, []float64{1, 2, 3})
+			dep := Const(g, []float64{10, 20, 30})
+			y := SchedulingBarrier(x, dep)
+			output = ReduceAllSum(y)
+			return output, []*Node{x, dep}
+		}, []any{
+			[]float64{1, 1, 1},
+			[]float64{0, 0, 0}, // dependency has gradient zero (nil)
+		},
+	)
+}
