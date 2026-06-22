@@ -429,29 +429,31 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeConj:    vjpForSingleOutput(conjVJP),
 	NodeTypeComplex: vjpForSingleOutput(complexVJP),
 
-	NodeTypeMax:                vjpForSingleOutput(minMaxVJP),
-	NodeTypeMin:                vjpForSingleOutput(minMaxVJP),
-	NodeTypeReshape:            vjpForSingleOutput(reshapeVJP),
-	NodeTypeReduceSum:          vjpForSingleOutput(reduceSumVJP),
-	NodeTypeReduceMax:          vjpForSingleOutput(reduceMaxVJP),
-	NodeTypeReduceMin:          vjpForSingleOutput(reduceMinVJP),
-	NodeTypeLogistic:           vjpForSingleOutput(logisticVJP),
-	NodeTypeDotGeneral:         vjpForSingleOutput(dotGeneralVJP),
-	NodeTypeSlice:              vjpForSingleOutput(sliceVJP),
-	NodeTypeGather:             vjpForSingleOutput(gatherVJP),
-	NodeTypeScatterSum:         vjpForSingleOutput(scatterSumVJP),
-	NodeTypeScatterMax:         vjpForSingleOutput(scatterMaxOrMinVJP),
-	NodeTypeScatterMin:         vjpForSingleOutput(scatterMaxOrMinVJP),
-	NodeTypeConcatenate:        vjpForSingleOutput(concatenateVJP),
-	NodeTypeConvGeneral:        vjpForSingleOutput(convGeneralVJP),
-	NodeTypeReduceWindow:       vjpForSingleOutput(reduceWindowVJP),
-	NodeTypeTranspose:          vjpForSingleOutput(transposeVJP),
-	NodeTypeBroadcastInDim:     vjpForSingleOutput(broadcastInDimVJP),
-	NodeTypeFFT:                vjpForSingleOutput(fftVJP),
-	NodeTypeDynamicSlice:       vjpForSingleOutput(dynamicSliceVJP),
-	NodeTypeDynamicUpdateSlice: vjpForSingleOutput(dynamicUpdateSliceVJP),
+	NodeTypeMax:                  vjpForSingleOutput(minMaxVJP),
+	NodeTypeMin:                  vjpForSingleOutput(minMaxVJP),
+	NodeTypeReshape:              vjpForSingleOutput(reshapeVJP),
+	NodeTypeReduceSum:            vjpForSingleOutput(reduceSumVJP),
+	NodeTypeReduceMax:            vjpForSingleOutput(reduceMaxVJP),
+	NodeTypeReduceMin:            vjpForSingleOutput(reduceMinVJP),
+	NodeTypeLogistic:             vjpForSingleOutput(logisticVJP),
+	NodeTypeDotGeneral:           vjpForSingleOutput(dotGeneralVJP),
+	NodeTypeSlice:                vjpForSingleOutput(sliceVJP),
+	NodeTypeGather:               vjpForSingleOutput(gatherVJP),
+	NodeTypeScatterSum:           vjpForSingleOutput(scatterSumVJP),
+	NodeTypeScatterMax:           vjpForSingleOutput(scatterMaxOrMinVJP),
+	NodeTypeScatterMin:           vjpForSingleOutput(scatterMaxOrMinVJP),
+	NodeTypeConcatenate:          vjpForSingleOutput(concatenateVJP),
+	NodeTypeConvGeneral:          vjpForSingleOutput(convGeneralVJP),
+	NodeTypeReduceWindow:         vjpForSingleOutput(reduceWindowVJP),
+	NodeTypeTranspose:            vjpForSingleOutput(transposeVJP),
+	NodeTypeBroadcastInDim:       vjpForSingleOutput(broadcastInDimVJP),
+	NodeTypeFFT:                  vjpForSingleOutput(fftVJP),
+	NodeTypeDynamicSlice:         vjpForSingleOutput(dynamicSliceVJP),
+	NodeTypeDynamicUpdateSlice:   vjpForSingleOutput(dynamicUpdateSliceVJP),
 	NodeTypeDynamicDimensionSize: vjpForSingleOutput(zeroVJP),
 	NodeTypeDynamicShape:         vjpForSingleOutput(zeroVJP),
+	NodeTypeOptimizationBarrier:  vjpOptimizationBarrier,
+	NodeTypeSchedulingBarrier:    vjpForSingleOutput(vjpSchedulingBarrier),
 }
 
 // nilVJP returns no gradient, for functions without any inputNodes.
@@ -1013,5 +1015,21 @@ func dynamicUpdateSliceVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// No gradients wrt. the startIndices, only wrt. the operand and the update.
 	vjps[0] = vjpOperand
 	vjps[1] = vjpUpdate
+	return vjps
+}
+
+// vjpOptimizationBarrier generates the "vector dot jacobian" w.r.t. the inputs of OptimizationBarrier.
+// Since OptimizationBarrier is mathematically an identity function for each of its inputs,
+// its gradient is just the identity function of the output gradients.
+func vjpOptimizationBarrier(node *Node, vjpOutputs []*Node, _ shapes.Shape) []*Node {
+	return vjpOutputs
+}
+
+// vjpSchedulingBarrier generates the "vector dot jacobian" w.r.t. the inputs of SchedulingBarrier.
+// Since SchedulingBarrier is mathematically an identity function of the first operand,
+// its gradient is just the incoming gradient for the operand, and nil (zero) for the dependencies.
+func vjpSchedulingBarrier(node, v *Node, _ shapes.Shape) []*Node {
+	vjps := make([]*Node, len(node.inputNodes))
+	vjps[0] = v
 	return vjps
 }
