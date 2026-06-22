@@ -29,6 +29,12 @@ go run <path_to_gomlx>/cmd/convert_v0.28/main.go [-dir <directory>]
 - Packages in `pkg/support` moved to `github.com/gomlx/compute/support`:
   - The following packages were moved: `xslices`, `xsync`, `sets` and `humanize`.
 
+Highlights:
+- Experimental SIMD support for amd64 for the Go backend.
+- Gradiend Checkpointing: needed when training large models, to trade-off memory usage for recomputation.
+- Transformers library that support many more classes of LLMs.
+- LLM generator (that works this time), with KVCache support.
+
 ## Reoganization of packages -- removed the `pkg` top-level directory
 
 In Go making the exported packages under `pkg` was a reasonable convention before
@@ -95,10 +101,11 @@ And a few small renaming:
     three outputs.
 - New ops:
   - `SchedulingBarrier` and `OptimizationBarrier`: they are implemented in the Go and XLA backends. 
+- Gradient Checkpointing: Added `Node.Checkpoint()` and `Node.StopCheckpoint()`.
+  
 
 ## Tensors (github.com/gomlx/gomlx/core/tensors):
 - Renamed `FromAnyValue` to `MustFromAnyValue` and added `FromAnyValue` returning `(tensor, error)`.
-
 
 ## Other improvements
 

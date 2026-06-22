@@ -163,6 +163,8 @@ different implementations (more planed in the future):
 
 Some selected highlights:
 
+* **🚀 NEW 🚀**: **Gradient checkpointing**: trade-off memory usage for recomputation when training large models, with a very simple API.
+
 * HuggingFace Go compatibility with [go-huggingface](https://github.com/gomlx/go-huggingface):
   - Download files from models/datasets sharing the same cache framework as the python version.
   - Tokenizers for various classes in pure Go, downloaded directly from HuggingFace.
