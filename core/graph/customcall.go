@@ -26,17 +26,15 @@ func (ni *nodeInputsCustomCall) Type() NodeType { return NodeTypeCustomCall }
 func (ni *nodeInputsCustomCall) String() string { return "CustomCall(" + ni.spec.Target + ")" }
 
 // CustomCall emits a backend-specific StableHLO custom_call (see compute.Function.CustomCall):
-// an escape hatch to a target the backend recognizes by name (e.g. cuDNN flash attention,
-// "__cudnn$fmhaSoftmax"). It is multi-output — a target may return several buffers (e.g. an
-// attention output plus a scratch workspace) — so it returns one node per spec.OutputShapes entry.
+// an escape hatch to a target named at runtime (e.g. cuDNN flash attention, "__cudnn$fmhaSoftmax").
+// It is multi-output, returning one node per spec.OutputShapes entry.
 //
-// CustomCall has no default gradient: a custom_call is opaque to autodiff. To make it
-// differentiable, pass a non-nil vjpFn that returns the gradient with respect to each operand
-// (typically by emitting the target's backward custom_call). Pass nil for a non-differentiable
-// call; differentiating through it then panics with a clear message.
+// A custom_call is opaque to autodiff, so it has no default gradient. Pass a non-nil vjpFn that
+// returns the gradient for each operand (typically by emitting the target's backward custom_call);
+// pass nil for a non-differentiable call, which then panics if differentiated.
 //
-// Backends that don't support custom calls (e.g. SimpleGo) make this panic with a wrapped
-// compute.ErrNotImplemented, so a caller can recover and fall back to a decomposed implementation.
+// Backends without custom-call support (e.g. SimpleGo) panic with a wrapped compute.ErrNotImplemented,
+// so callers can recover and fall back to a decomposed implementation.
 func CustomCall(spec compute.CustomCallSpec, vjpFn VJP, operands ...*Node) []*Node {
 	if len(operands) == 0 {
 		exceptions.Panicf("CustomCall requires at least one operand")
