@@ -28,6 +28,42 @@ func (ni *nodeInputsWhile) String() string {
 	return "While"
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsWhile) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	g := originalNode.Graph()
+	// Convert inputs to backend values
+	inputValues := make([]compute.Value, len(newInputs))
+	for i, input := range newInputs {
+		inputValues[i] = input.outputOps[0]
+	}
+	results, err := g.currentFunc.backendFunc.While(ni.cond.backendFunc, ni.body.backendFunc, inputValues...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "While operation failed"))
+	}
+	newNi := &nodeInputsWhile{
+		cond:         ni.cond,
+		body:         ni.body,
+		initialState: newInputs,
+	}
+	outputShapes := make([]shapes.Shape, len(results))
+	outputOps := make([]compute.Value, len(results))
+	for i, res := range results {
+		outputShapes[i] = mustNoError(g.builder.OpShape(res))
+		outputOps[i] = res
+	}
+	node := &Node{
+		graph:        g,
+		outputOps:    outputOps,
+		outputShapes: outputShapes,
+		inputs:       newNi,
+		inputNodes:   newInputs,
+		scope:        g.currentFunc,
+	}
+	g.registerNode(node)
+	return node
+}
+
+
 // While executes a loop while a condition is true.
 //
 // The condition and body closures should be created with NewClosure.
@@ -142,6 +178,38 @@ func (ni *nodeInputsIf) Type() NodeType { return NodeTypeIf }
 func (ni *nodeInputsIf) String() string {
 	return "If"
 }
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsIf) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	g := originalNode.Graph()
+	newPred := newInputs[0]
+	results, err := g.currentFunc.backendFunc.If(newPred.outputOps[0], ni.trueBranch.backendFunc, ni.falseBranch.backendFunc)
+	if err != nil {
+		panic(errors.WithMessagef(err, "If operation failed"))
+	}
+	newNi := &nodeInputsIf{
+		pred:        newPred,
+		trueBranch:  ni.trueBranch,
+		falseBranch: ni.falseBranch,
+	}
+	outputShapes := make([]shapes.Shape, len(results))
+	outputOps := make([]compute.Value, len(results))
+	for i, res := range results {
+		outputShapes[i] = mustNoError(g.builder.OpShape(res))
+		outputOps[i] = res
+	}
+	node := &Node{
+		graph:        g,
+		outputOps:    outputOps,
+		outputShapes: outputShapes,
+		inputs:       newNi,
+		inputNodes:   []*Node{newPred},
+		scope:        g.currentFunc,
+	}
+	g.registerNode(node)
+	return node
+}
+
 
 // If executes one of two branches based on a boolean predicate.
 //

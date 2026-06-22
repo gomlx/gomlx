@@ -95,6 +95,9 @@ type NodeInputs interface {
 
 	// String prints a descriptive representation of the node, using its parameters.
 	String() string
+
+	// CloneWithInputs recreates the node using the given inputs instead of the original ones.
+	CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node
 }
 
 // Graph that holds this Node.
@@ -259,4 +262,21 @@ func (n *Node) StopGradient() bool {
 // CustomGradient returns a registered custom gradient for the Node. See IdentityWithCustomGradient.
 func (n *Node) CustomGradient() VJP {
 	return n.customVJP
+}
+
+// CloneWithInputs creates a clone of the node but using the given new inputs instead.
+//
+// It also propagates some generic attributes like stopGradient, customVJP, alias.
+// But it **does not** propagate extra functionality ones, like `logMessage`, `isCheckpointed`, `needsRematerialization`.
+func (n *Node) CloneWithInputs(newInputs ...*Node) *Node {
+	n.AssertValid()
+	cloned := n.inputs.CloneWithInputs(n, newInputs...)
+	if cloned != nil {
+		// Propagate:
+		cloned.stopGradient = n.stopGradient
+		cloned.customVJP = n.customVJP
+		cloned.alias = n.alias
+		// Do not propagate: logMessage, isCheckpointed and needsRematerialization.
+	}
+	return cloned
 }

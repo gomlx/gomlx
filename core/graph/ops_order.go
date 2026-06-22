@@ -28,6 +28,43 @@ func (ni *nodeInputsSort) String() string {
 	return "Sort"
 }
 
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsSort) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	g := originalNode.Graph()
+	// Convert inputs to backend values
+	inputValues := make([]compute.Value, len(newInputs))
+	for i, input := range newInputs {
+		inputValues[i] = input.outputOps[0]
+	}
+	results, err := g.currentFunc.backendFunc.Sort(ni.comparator.backendFunc, ni.axis, ni.isStable, inputValues...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "SortFunc operation failed"))
+	}
+	newNi := &nodeInputsSort{
+		comparator: ni.comparator,
+		axis:       ni.axis,
+		isStable:   ni.isStable,
+		inputs:     newInputs,
+	}
+	outputShapes := make([]shapes.Shape, len(results))
+	outputOps := make([]compute.Value, len(results))
+	for i, res := range results {
+		outputShapes[i] = mustNoError(g.builder.OpShape(res))
+		outputOps[i] = res
+	}
+	node := &Node{
+		graph:        g,
+		outputOps:    outputOps,
+		outputShapes: outputShapes,
+		inputs:       newNi,
+		inputNodes:   newInputs,
+		scope:        g.currentFunc,
+	}
+	g.registerNode(node)
+	return node
+}
+
+
 // Sort sorts a single tensor along the specified axis.
 //
 // This is a simplified version of SortFunc that doesn't require a comparator closure.
