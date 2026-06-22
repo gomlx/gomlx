@@ -58,16 +58,29 @@ func formatScale(scale float64) string {
 // FlashAttention computes causal multi-head attention with the cuDNN flash kernel and a flash
 // backward supplied as a custom gradient. Scores [B,H,S,S] never materialize, in either pass.
 //
-// query, key, value are [B,S,H,D] with equal heads H (non-grouped; expand grouped KV heads
-// first), cast to bfloat16 (the kernel's precision). Output is [B,S,H,D] bfloat16. On backends
-// without custom-call support it falls back to a decomposed attention, differentiated normally.
+// query is [B,S,nQH,D] and key, value are [B,S,nKVH,D], with nQH divisible by nKVH. Grouped-query
+// attention (nKVH < nQH) is handled by repeating each kv head nQH/nKVH times. Inputs are cast to
+// bfloat16 (the kernel's precision); output is [B,S,nQH,D] bfloat16. On backends without
+// custom-call support it falls back to a decomposed attention, differentiated normally.
 func FlashAttention(query, key, value *Node, scale float64) *Node {
 	for _, n := range []*Node{query, key, value} {
 		n.AssertRank(4)
 	}
-	if !query.Shape().Equal(key.Shape()) || !query.Shape().Equal(value.Shape()) {
-		Panicf("FlashAttention requires query/key/value to share shape [B,S,H,D]; got q=%s k=%s v=%s",
-			query.Shape(), key.Shape(), value.Shape())
+	if !key.Shape().Equal(value.Shape()) {
+		Panicf("FlashAttention requires key and value to share shape; got key=%s value=%s", key.Shape(), value.Shape())
+	}
+	qDims, kvDims := query.Shape().Dimensions, key.Shape().Dimensions
+	numQueryHeads, numKVHeads := qDims[2], kvDims[2]
+	if qDims[0] != kvDims[0] || qDims[1] != kvDims[1] || qDims[3] != kvDims[3] {
+		Panicf("FlashAttention query %s and key/value %s must share [B,S,*,D]", query.Shape(), key.Shape())
+	}
+	if numKVHeads == 0 || numQueryHeads%numKVHeads != 0 {
+		Panicf("FlashAttention requires query heads (%d) divisible by kv heads (%d)", numQueryHeads, numKVHeads)
+	}
+	if numKVHeads != numQueryHeads {
+		group := numQueryHeads / numKVHeads
+		key = repeatKVHeads(key, group)
+		value = repeatKVHeads(value, group)
 	}
 	dims := query.Shape().Dimensions
 	b, s, h, d := dims[0], dims[1], dims[2], dims[3]
@@ -132,11 +145,22 @@ func naiveCausalAttention(query, key, value *Node, scale float64) *Node {
 	dims := q.Shape().Dimensions
 	batch, seqLen, heads := dims[0], dims[1], dims[2]
 
-	// scores[b,h,i,j] = scale * sum_d q[b,i,h,d]·k[b,j,h,d]
-	scores := MulScalar(Einsum("bihd,bjhd->bhij", q, k), scale)
-	// Causal mask (true = attend), broadcast to the full [B,H,S,S] score shape.
+	// scores[b,h,q,k] = scale * sum_d query[b,q,h,d]*key[b,k,h,d]
+	scores := MulScalar(Einsum("bqhd,bkhd->bhqk", q, k), scale)
+	// Causal mask (true = attend), broadcast to the full score shape.
 	causal := BroadcastToDims(Reshape(LowerTriangular(g, seqLen), 1, 1, seqLen, seqLen), batch, heads, seqLen, seqLen)
 	attn := MaskedSoftmax(scores, causal, -1)
-	// out[b,i,h,d] = sum_j attn[b,h,i,j]·v[b,j,h,d]
-	return Einsum("bhij,bjhd->bihd", attn, v)
+	// out[b,q,h,d] = sum_k attn[b,h,q,k]*value[b,k,h,d]
+	return Einsum("bhqk,bkhd->bqhd", attn, v)
+}
+
+// repeatKVHeads expands key/value for grouped-query attention: [B,S,nKV,D] -> [B,S,nKV*group,D],
+// repeating each kv head group times contiguously, so output head h uses kv head h/group. This
+// matches the model's GQA grouping (reshapeQueryForGQA).
+func repeatKVHeads(x *Node, group int) *Node {
+	d := x.Shape().Dimensions
+	b, s, nKV, dim := d[0], d[1], d[2], d[3]
+	x = Reshape(x, b, s, nKV, 1, dim)
+	x = BroadcastToDims(x, b, s, nKV, group, dim)
+	return Reshape(x, b, s, nKV*group, dim)
 }
