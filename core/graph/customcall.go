@@ -10,8 +10,8 @@ import (
 )
 
 // NodeTypeCustomCall is the NodeType for CustomCall operations.
-// (1004 = OptimizationBarrier; these manual NodeTypes live outside the generated range.)
-const NodeTypeCustomCall NodeType = 1005
+// (1000-1003 = Call/Sort/While/If; these manual NodeTypes live outside the generated range.)
+const NodeTypeCustomCall NodeType = 1004
 
 // nodeInputsCustomCall holds the inputs for a CustomCall op.
 type nodeInputsCustomCall struct {
@@ -24,6 +24,37 @@ func (ni *nodeInputsCustomCall) Type() NodeType { return NodeTypeCustomCall }
 
 // String implements NodeInputs.
 func (ni *nodeInputsCustomCall) String() string { return "CustomCall(" + ni.spec.Target + ")" }
+
+// CloneWithInputs implements the interface NodeInputs: it re-emits the custom_call with the new
+// inputs and the same spec, preserving the original's custom gradient.
+func (ni *nodeInputsCustomCall) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	g := originalNode.Graph()
+	inputValues := make([]compute.Value, len(newInputs))
+	for i, input := range newInputs {
+		inputValues[i] = input.outputOps[0]
+	}
+	results, err := g.currentFunc.backendFunc.CustomCall(ni.spec, inputValues...)
+	if err != nil {
+		panic(errors.WithMessagef(err, "CustomCall(%q) operation failed", ni.spec.Target))
+	}
+	outputShapes := make([]shapes.Shape, len(results))
+	outputOps := make([]compute.Value, len(results))
+	for i, res := range results {
+		outputShapes[i] = mustNoError(g.builder.OpShape(res))
+		outputOps[i] = res
+	}
+	node := &Node{
+		graph:        g,
+		outputOps:    outputOps,
+		outputShapes: outputShapes,
+		inputs:       &nodeInputsCustomCall{operands: newInputs, spec: ni.spec},
+		inputNodes:   newInputs,
+		scope:        g.currentFunc,
+	}
+	node.customVJP = originalNode.customVJP
+	g.registerNode(node)
+	return node
+}
 
 // CustomCall emits a backend-specific StableHLO custom_call (see compute.Function.CustomCall):
 // an escape hatch to a target named at runtime (e.g. cuDNN flash attention, "__cudnn$fmhaSoftmax").

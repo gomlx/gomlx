@@ -55,8 +55,11 @@ func TestCustomCall_XLAConstruction(t *testing.T) {
 
 	out := shapes.Make(dtypes.BFloat16, 2, 12, 2048, 64) // [B,H,S,D]
 	scratch := shapes.Make(dtypes.Uint8, 0)
+	// A generic (non-cuDNN) target: the XLA backend gates __cudnn$ targets to the cuda plugin,
+	// and this construction check runs on cpu. It exercises the multi-output node + result shapes,
+	// the same machinery the cuDNN flash forward uses.
 	spec := compute.CustomCallSpec{
-		Target:       "__cudnn$fmhaSoftmax",
+		Target:       "__test$multi_output",
 		APIVersion:   2,
 		OutputShapes: []shapes.Shape{out, scratch},
 	}
