@@ -49,6 +49,8 @@ const (
 
 	TypeGelu
 	TypeGeluApprox
+
+	TypeSwiGLU
 )
 
 // ToBackend converts an activations.Type to the corresponding compute.ActivationType.
@@ -72,7 +74,7 @@ func (t Type) ToBackend() compute.ActivationType {
 	}
 }
 
-//go:generate go tool enumer -type Type -trimprefix=Type -output=gen_type_enumer.go activations.go
+//go:generate go tool enumer -type Type -trimprefix=Type -output=gen_type_enumer.go activation.go
 
 // ApplyFromScope picks an activation function from the scope using [ParamActivation] parameter,
 // and applies it to x.
@@ -111,10 +113,23 @@ func Apply(activation Type, x *Node) *Node {
 		return Gelu(x)
 	case TypeGeluApprox:
 		return GeluApproximate(x)
+	case TypeSwiGLU:
+		return SwiGLU(x)
 	default:
 		Panicf("Apply got invalid activation value %q: options are %v", activation, TypeValues())
 	}
 	return nil
+}
+
+// HiddenDimMultiplier returns the multiplier of the hidden dimension for the given activation.
+// This is 2 for SwiGLU, and 1 for all other activations.
+func (act Type) HiddenDimMultiplier() int {
+	switch act {
+	case TypeSwiGLU:
+		return 2
+	default:
+		return 1
+	}
 }
 
 var (
@@ -282,4 +297,27 @@ func GeluApproximate(x *Node) *Node {
 	cdfApprox = Tanh(MulScalar(cdfApprox, sqrt2ByPi))
 	cdfApprox = MulScalar(OnePlus(cdfApprox), 0.5)
 	return Mul(x, cdfApprox)
+}
+
+// SwiGLU activation takes a pre-projected tensor of size [..., 2 * hiddenDim] and
+// applies the Swish-Gated Linear Unit activation.
+//
+// It uses half for the "gate" (x_gate), and the second for the "value" (x_value).
+// The result is the product of the two:
+//
+// SwiGLU(x) = Swish(x_gate) * x_value
+//
+// Where Swish(x) = x * sigmoid(x).
+func SwiGLU(x *Node) *Node {
+	shape := x.Shape()
+	lastDim := shape.Dim(-1)
+	if lastDim%2 != 0 {
+		Panicf("SwiGLU expects the last dimension to be divisible by 2, got shape %s", x.Shape())
+	}
+	halfDim := lastDim / 2
+
+	// Split into gate and value.
+	gate := SliceAxis(x, -1, AxisRangeFromStart(halfDim))
+	value := SliceAxis(x, -1, AxisRangeToEnd(halfDim))
+	return Mul(Swish(gate), value)
 }

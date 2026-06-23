@@ -274,7 +274,7 @@ func (c *Config) Done() *Node {
 	var residual *Node
 
 	// For hidden layers, we have only one axis, with numHiddenNodes.
-	outputDims := []int{c.numHiddenNodes}
+	outputDims := []int{c.numHiddenNodes * c.activation.HiddenDimMultiplier()}
 	for ii := range c.numHiddenLayers + 1 {
 		if ii == c.numHiddenLayers {
 			// For the output layer, we have the specified outputDimensions.
