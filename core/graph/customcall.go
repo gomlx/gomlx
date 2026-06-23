@@ -28,32 +28,7 @@ func (ni *nodeInputsCustomCall) String() string { return "CustomCall(" + ni.spec
 // CloneWithInputs implements the interface NodeInputs: it re-emits the custom_call with the new
 // inputs and the same spec, preserving the original's custom gradient.
 func (ni *nodeInputsCustomCall) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
-	g := originalNode.Graph()
-	inputValues := make([]compute.Value, len(newInputs))
-	for i, input := range newInputs {
-		inputValues[i] = input.outputOps[0]
-	}
-	results, err := g.currentFunc.backendFunc.CustomCall(ni.spec, inputValues...)
-	if err != nil {
-		panic(errors.WithMessagef(err, "CustomCall(%q) operation failed", ni.spec.Target))
-	}
-	outputShapes := make([]shapes.Shape, len(results))
-	outputOps := make([]compute.Value, len(results))
-	for i, res := range results {
-		outputShapes[i] = mustNoError(g.builder.OpShape(res))
-		outputOps[i] = res
-	}
-	node := &Node{
-		graph:        g,
-		outputOps:    outputOps,
-		outputShapes: outputShapes,
-		inputs:       &nodeInputsCustomCall{operands: newInputs, spec: ni.spec},
-		inputNodes:   newInputs,
-		scope:        g.currentFunc,
-	}
-	node.customVJP = originalNode.customVJP
-	g.registerNode(node)
-	return node
+	return newCustomCallNode(originalNode.Graph(), ni.spec, newInputs, originalNode.customVJP)
 }
 
 // CustomCall emits a backend-specific StableHLO custom_call (see compute.Function.CustomCall):
@@ -73,7 +48,12 @@ func CustomCall(spec compute.CustomCallSpec, vjpFn VJP, operands ...*Node) []*No
 	g := operands[0].graph
 	g.AssertBuilding()
 	validateBuildingGraphFromInputs(operands...)
+	return splitNode(newCustomCallNode(g, spec, operands, vjpFn))
+}
 
+// newCustomCallNode emits the custom_call on the backend and builds the registered multi-output
+// node carrying vjpFn as its custom gradient. Callers do their own validation and any splitting.
+func newCustomCallNode(g *Graph, spec compute.CustomCallSpec, operands []*Node, vjpFn VJP) *Node {
 	inputValues := make([]compute.Value, len(operands))
 	for i, o := range operands {
 		inputValues[i] = o.outputOps[0]
@@ -82,14 +62,12 @@ func CustomCall(spec compute.CustomCallSpec, vjpFn VJP, operands ...*Node) []*No
 	if err != nil {
 		panic(errors.WithMessagef(err, "CustomCall(%q) operation failed", spec.Target))
 	}
-
 	outputShapes := make([]shapes.Shape, len(results))
 	outputOps := make([]compute.Value, len(results))
 	for i, res := range results {
 		outputShapes[i] = mustNoError(g.builder.OpShape(res))
 		outputOps[i] = res
 	}
-
 	node := &Node{
 		graph:        g,
 		outputOps:    outputOps,
@@ -100,7 +78,7 @@ func CustomCall(spec compute.CustomCallSpec, vjpFn VJP, operands ...*Node) []*No
 	}
 	node.customVJP = vjpFn
 	g.registerNode(node)
-	return splitNode(node)
+	return node
 }
 
 // customCallVJP is only reached when a differentiable path runs through a CustomCall built
