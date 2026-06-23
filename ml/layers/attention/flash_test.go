@@ -13,6 +13,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -131,6 +132,51 @@ func TestFlashAttentionParity(t *testing.T) {
 		require.Falsef(t, math.IsNaN(rel), "%s relative error is NaN", name)
 		require.LessOrEqualf(t, rel, tol[i], "%s relative max error %.4f exceeds tolerance %.4f", name, rel, tol[i])
 		t.Logf("%s relative max error: %.5f", name, rel)
+	}
+}
+
+// TestFlashVsCore cross-checks flash attention against the package's own decomposed Core (the
+// attention a model actually runs, with its GQA reshaping/masking/softmax), forward and gradients,
+// at a grouped-query shape. Requires a cuDNN GPU backend.
+func TestFlashVsCore(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	if !isCUDABackend(backend) {
+		t.Skipf("flash attention needs a cuDNN (cuda) backend; got %q", backend.Name())
+	}
+
+	const (
+		B, S, QH, KVH, D = 1, 512, 6, 2, 64
+		scale            = 0.125
+	)
+	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*QH*D, 1), B, S, QH, D)
+	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*KVH*D, 2), B, S, KVH, D)
+	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*KVH*D, 3), B, S, KVH, D)
+
+	store := model.NewStore()
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
+		round := func(n *Node) *Node { return ConvertDType(ConvertDType(n, dtypes.BFloat16), dtypes.Float32) }
+		qb, kb, vb := round(qIn), round(kIn), round(vIn)
+
+		flashOut := ConvertDType(FlashAttention(qb, kb, vb, scale), dtypes.Float32)
+		coreOut, _ := Core(scope, qb, kb, vb, scale, nil, nil, LayoutBSHD, true, false, 0.0)
+		coreOut = ConvertDType(coreOut, dtypes.Float32)
+
+		fg := Gradient(ReduceAllSum(flashOut), qb, kb, vb)
+		cg := Gradient(ReduceAllSum(coreOut), qb, kb, vb)
+		relMax := func(got, want *Node) *Node {
+			return Div(ReduceAllMax(Abs(Sub(got, want))), AddScalar(ReduceAllMax(Abs(want)), 1e-6))
+		}
+		return []*Node{relMax(flashOut, coreOut), relMax(fg[0], cg[0]), relMax(fg[1], cg[1]), relMax(fg[2], cg[2])}
+	})
+
+	out := exec.MustCall(q, k, v)
+	names := []string{"output", "dQ", "dK", "dV"}
+	tol := []float64{0.03, 0.06, 0.06, 0.06}
+	for i, name := range names {
+		rel := float64(tensors.ToScalar[float32](out[i]))
+		require.Falsef(t, math.IsNaN(rel), "%s relative error is NaN", name)
+		require.LessOrEqualf(t, rel, tol[i], "%s vs Core: relative max error %.4f exceeds tolerance %.4f", name, rel, tol[i])
+		t.Logf("%s vs Core: relative max error %.5f", name, rel)
 	}
 }
 
