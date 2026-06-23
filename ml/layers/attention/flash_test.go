@@ -3,6 +3,7 @@
 package attention
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"strings"
@@ -87,51 +88,53 @@ func TestFlashAttentionFallback(t *testing.T) {
 }
 
 // TestFlashAttentionParity checks that the cuDNN flash attention forward output and its
-// (flash-kernel) gradients match a decomposed float32 reference. Both paths see the same
-// bfloat16-rounded inputs, so the only difference is flash's internal precision. Requires a
-// cuDNN GPU backend (GOMLX_BACKEND=xla:cuda); skipped otherwise.
+// (flash-kernel) gradients match a decomposed float32 reference, across both head dims cuDNN
+// flash supports (64 and 128). Both paths see the same bfloat16-rounded inputs, so the only
+// difference is flash's internal precision. Requires a cuDNN GPU backend; skipped otherwise.
 func TestFlashAttentionParity(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
 	if !isCUDABackend(backend) {
 		t.Skipf("flash attention needs a cuDNN (cuda) backend; got %q", backend.Name())
 	}
 
-	const (
-		B, S, H, D = 1, 512, 4, 64
-		scale      = 0.125 // 1/sqrt(D)
-	)
-	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 1), B, S, H, D)
-	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 2), B, S, H, D)
-	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 3), B, S, H, D)
+	const B, S, H = 1, 512, 4
+	for _, D := range []int{64, 128} {
+		t.Run(fmt.Sprintf("D=%d", D), func(t *testing.T) {
+			scale := 1.0 / math.Sqrt(float64(D))
+			q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 1), B, S, H, D)
+			k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 2), B, S, H, D)
+			v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 3), B, S, H, D)
 
-	fn := func(qIn, kIn, vIn *Node) []*Node {
-		// Round inputs to bf16 (kept as f32) so flash and the reference start identical.
-		round := func(n *Node) *Node { return ConvertDType(ConvertDType(n, dtypes.BFloat16), dtypes.Float32) }
-		qb, kb, vb := round(qIn), round(kIn), round(vIn)
+			fn := func(qIn, kIn, vIn *Node) []*Node {
+				// Round inputs to bf16 (kept as f32) so flash and the reference start identical.
+				round := func(n *Node) *Node { return ConvertDType(ConvertDType(n, dtypes.BFloat16), dtypes.Float32) }
+				qb, kb, vb := round(qIn), round(kIn), round(vIn)
 
-		flashOut := ConvertDType(FlashAttention(qb, kb, vb, scale), dtypes.Float32)
-		refOut := naiveCausalAttention(qb, kb, vb, scale)
+				flashOut := ConvertDType(FlashAttention(qb, kb, vb, scale), dtypes.Float32)
+				refOut := naiveCausalAttention(qb, kb, vb, scale)
 
-		fg := Gradient(ReduceAllSum(flashOut), qb, kb, vb)
-		ng := Gradient(ReduceAllSum(refOut), qb, kb, vb)
+				fg := Gradient(ReduceAllSum(flashOut), qb, kb, vb)
+				ng := Gradient(ReduceAllSum(refOut), qb, kb, vb)
 
-		relMax := func(got, want *Node) *Node {
-			return Div(ReduceAllMax(Abs(Sub(got, want))), AddScalar(ReduceAllMax(Abs(want)), 1e-6))
-		}
-		return []*Node{
-			relMax(flashOut, refOut),
-			relMax(fg[0], ng[0]), relMax(fg[1], ng[1]), relMax(fg[2], ng[2]),
-		}
-	}
+				relMax := func(got, want *Node) *Node {
+					return Div(ReduceAllMax(Abs(Sub(got, want))), AddScalar(ReduceAllMax(Abs(want)), 1e-6))
+				}
+				return []*Node{
+					relMax(flashOut, refOut),
+					relMax(fg[0], ng[0]), relMax(fg[1], ng[1]), relMax(fg[2], ng[2]),
+				}
+			}
 
-	out := MustNewExec(backend, fn).MustCall(q, k, v)
-	names := []string{"output", "dQ", "dK", "dV"}
-	tol := []float64{0.03, 0.06, 0.06, 0.06}
-	for i, name := range names {
-		rel := float64(tensors.ToScalar[float32](out[i]))
-		require.Falsef(t, math.IsNaN(rel), "%s relative error is NaN", name)
-		require.LessOrEqualf(t, rel, tol[i], "%s relative max error %.4f exceeds tolerance %.4f", name, rel, tol[i])
-		t.Logf("%s relative max error: %.5f", name, rel)
+			out := MustNewExec(backend, fn).MustCall(q, k, v)
+			names := []string{"output", "dQ", "dK", "dV"}
+			tol := []float64{0.03, 0.06, 0.06, 0.06}
+			for i, name := range names {
+				rel := float64(tensors.ToScalar[float32](out[i]))
+				require.Falsef(t, math.IsNaN(rel), "%s relative error is NaN", name)
+				require.LessOrEqualf(t, rel, tol[i], "%s relative max error %.4f exceeds tolerance %.4f", name, rel, tol[i])
+				t.Logf("%s relative max error: %.5f", name, rel)
+			}
+		})
 	}
 }
 
