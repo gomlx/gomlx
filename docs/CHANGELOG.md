@@ -95,6 +95,11 @@ And a few small renaming:
   - Changed default loss metrics behavior to only return the total loss by default (named "Loss" / "~loss"). Added
     `WithMainLossMetric()` method to include the "no-reg" metrics when requested.
 
+## Package `ml/dataset`:
+  - Updated `Dataset` and `Batch` types, and adjusted various datasets implementations accordingly.
+  - Added `dataset.Buffered`, that pre-calculates the dataset.
+  - Added `dataset.Map`, `dataset.ParallelMap`, `dataset.MapOnHost` and `dataset.ParallelMapOnHost` to transform datasets.
+
 ## Graph (github.com/gomlx/gomlx/core/graph):
 - `Exec.*Exec*` -> `Exec.*Call*`; the methods with `*Exec*` still exist but are deprecated.
   - New `Exec` wrappers for fixed number of outputs: `NewExec1`, `NewExec2` and `NewExec3` for graphs with one, two or
@@ -112,6 +117,7 @@ And a few small renaming:
 - Redesigned KVCache implementation (previous was broken) in `ml/layers/attention/kvcache`: it is used by packages `attention`, `transformer` and `decode`.
 - Many improvements to `ml/zoo/transformer`: it nows support Gemma4 class of transformer models.
 - Added `nn.SoftCap` and in the `ml/layers/attention` added support for attention scores soft-cap (used by Gemma models).
+- Added `activation.SwiGLU` for Swish Gated Linear activation, and updated corresponding support in the `fnn` package.
 
 ---
 
@@ -191,7 +197,7 @@ And a few small renaming:
   - Added constants to normalization types.
 
 ### Backends:
-- Backend `xla`:
+- Backend "xla":
   - Updated dependency to `github.com/gomlx/go-xla` to v0.2.2: with a fix to NVIDIA CUDA drivers path.
   - DotGeneral with unsupported accumulation dtypes (only float32 is supported): it automatically converts the
    input dtype to the accumulation dtype first.
@@ -200,7 +206,7 @@ And a few small renaming:
   - Added "hack" dependency on the weights of a DotGeneral operation to the lhs operand of the DotGeneral operation,
     to hugely decrease temporary memory usage. See issue in https://github.com/openxla/stablehlo/issues/2923
     
-- Backend `simplego` ("go"):
+- Backend "go":
   - DotGeneral with accumulation dtypes: it automatically converts the input dtype to the accumulation dtype first.
     (With the exception of half-precision types, which use float32 as accumulator by default).
 

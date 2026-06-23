@@ -1022,7 +1022,7 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x, a
 	x = m.normalize(layerScope.In("norm1"), x, m.Normalization)
 
 	residual = x
-	ff := m.dense(layerScope.In("ff1"), x, m.UseBias, m.FFNDim)
+	ff := m.dense(layerScope.In("ff1"), x, m.UseBias, m.FFNDim*m.Activation.HiddenDimMultiplier())
 	ff = activation.Apply(m.Activation, ff)
 	if m.Dropout > 0 {
 		ff = layers.Dropout(layerScope.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), m.Dropout))
@@ -1274,6 +1274,7 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x, atte
 	x = m.normalize(layerScope.In("pre_feedforward_norm"), x, m.Normalization)
 
 	// Gemma uses SwiGLU: gate_proj, up_proj, down_proj
+	// Notice: it is not using activation.SwiGLU and instead doing the projections separately.
 	ffScope := layerScope.In("mlp")
 	gate := m.dense(ffScope.In("gate_proj"), x, m.UseBias, m.FFNDim)
 	up := m.dense(ffScope.In("up_proj"), x, m.UseBias, m.FFNDim)

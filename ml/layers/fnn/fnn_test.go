@@ -100,19 +100,17 @@ var (
 				Done()
 		},
 
-		// Residual+Normalization:
+		// SwiGLU:
 		func(scope *model.Scope, input *Node) *Node {
 			return New(scope, input, 1).
-				NumHiddenLayers(8, 8).
-				Normalization("layer").
-				Residual(true).
-				Activation(activation.TypeSigmoid).
+				NumHiddenLayers(2, 64).
+				Activation(activation.TypeSwiGLU).
 				Done()
 		},
 	}
 
-	fnnVariationsNames = []string{"Vanilla", "Residual+Normalization"}
-	fnnVariationsSteps = []int{6000, 2000}
+	fnnVariationsNames = []string{"Vanilla", "Residual+Normalization", "SwiGLU"}
+	fnnVariationsSteps = []int{6000, 2000, 4000}
 )
 
 func TestFNN(t *testing.T) {
@@ -258,3 +256,52 @@ func TestFNNEnsembleShapes(t *testing.T) {
 		}
 	}, "xla:cuda") // No need to test xla:cuda, we are only checking the shape logic.
 }
+
+func TestFNNSwiGLUShapes(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		for _, hasEnsembleAxis := range []bool{false, true} {
+			for _, numHiddenLayers := range []int{0, 1, 2} {
+				for _, useBias := range []bool{false, true} {
+					for _, useResidual := range []bool{false, true} {
+						t.Run(fmt.Sprintf("ensembleAxis=%t_hidden=%d_bias=%t_residual=%t", hasEnsembleAxis, numHiddenLayers, useBias, useResidual), func(t *testing.T) {
+							store := model.NewStore()
+							g := NewGraph(backend, "test_swiglu_shapes")
+
+							var input *Node
+							if hasEnsembleAxis {
+								// Insert ensemble axis at index 1 -> [3, 7, 2, 4]
+								input = Ones(g, shapes.Make(dtypes.Float32, 3, 7, 2, 4))
+							} else {
+								input = Ones(g, shapes.Make(dtypes.Float32, 3, 2, 4)) // batch=[3, 2], F=4
+							}
+
+							config := New(store.RootScope().In("model"), input, 5, 6).
+								NumHiddenLayers(numHiddenLayers, 8). // 8 nodes in hidden layers
+								Activation(activation.TypeSwiGLU).
+								UseBias(useBias).
+								Residual(useResidual)
+
+							if hasEnsembleAxis {
+								config.WithEnsembleAxis(1)
+							} else {
+								config.WithEnsembleSize(7)
+							}
+
+							fnnOutput := config.Done()
+
+							var expectedShape shapes.Shape
+							if hasEnsembleAxis {
+								expectedShape = shapes.Make(dtypes.Float32, 3, 7, 2, 5, 6)
+							} else {
+								expectedShape = shapes.Make(dtypes.Float32, 3, 2, 7, 5, 6)
+							}
+							assert.Equal(t, expectedShape, fnnOutput.Shape())
+							store.Finalize()
+						})
+					}
+				}
+			}
+		}
+	}, "xla:cuda") // No need to test xla:cuda, we are only checking the shape logic.
+}
+

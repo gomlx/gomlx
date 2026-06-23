@@ -11,6 +11,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/support/testutil"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRelu(t *testing.T) {
@@ -108,3 +109,35 @@ func TestHardSwish(t *testing.T) {
 			}, xslices.Epsilon)
 	})
 }
+
+func TestSwiGLU(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		graphtest.RunTestGraphFnWithBackend(t, "SwiGLU", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, [][]float32{
+					{0, 1, 2, 3},
+					{-1, -2, 4, 5},
+				})
+				inputs = []*Node{x}
+				outputs = []*Node{SwiGLU(x), Apply(TypeSwiGLU, x)}
+				return
+			}, []any{
+				[][]float32{
+					{0, 2.1931758},
+					{-1.0757657, -1.1920292},
+				},
+				[][]float32{
+					{0, 2.1931758},
+					{-1.0757657, -1.1920292},
+				},
+			}, xslices.Epsilon)
+
+		// Test that SwiGLU panics if the last dimension is not divisible by 2.
+		assert.Panics(t, func() {
+			g := NewGraph(backend, "test_panic")
+			x := Const(g, []float32{1, 2, 3})
+			SwiGLU(x)
+		})
+	})
+}
+
