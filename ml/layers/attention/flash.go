@@ -14,6 +14,18 @@ import (
 )
 
 // cuDNN fused-attention (flash) custom_call targets.
+//
+// These custom-calls, their backend_config, and the operand/result layouts below are not part of
+// the public XLA op set. They are the same calls JAX emits for
+// jax.nn.dot_product_attention(..., implementation="cudnn"). Provenance:
+//   - target names + backend_config field mapping (CudnnfMHABackendConfig, _custom_name_maps):
+//     https://github.com/jax-ml/jax/blob/main/jax/_src/cudnn/fused_attention_stablehlo.py
+//   - the exact backend_config JSON and layouts here were captured by lowering that JAX call to
+//     StableHLO (jax.jit(fn).lower(...).compiler_ir("stablehlo")) and reading the emitted
+//     stablehlo.custom_call.
+//   - XLA custom_call contract (documents api_version=4; these calls use api_version=2):
+//     https://openxla.org/xla/custom_call
+//   - cuDNN fMHA performance context: https://github.com/jax-ml/jax/issues/24934
 const (
 	fmhaForwardTarget  = "__cudnn$fmhaSoftmax"
 	fmhaBackwardTarget = "__cudnn$fmhaSoftmaxBackward"
