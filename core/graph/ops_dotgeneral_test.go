@@ -605,3 +605,32 @@ func TestDotGeneralDTypes(t *testing.T) {
 		}
 	}
 }
+
+// TestDotGeneralVJPLowersToGemm guards the gradient of a matrix multiply being built from DotGeneral
+// ops (which a GPU backend lowers to tensor-core gemms) rather than a broadcast-multiply + ReduceSum.
+// The latter is mathematically identical but XLA leaves it as a slow elementwise reduction for
+// weight-gradient shapes (small output, large reduced axis), so the gradient ran ~18x slower than the
+// forward. C = A·W has one forward DotGeneral; the gradients w.r.t. A and W must add two more.
+func TestDotGeneralVJPLowersToGemm(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	g := NewGraph(backend, t.Name())
+	a := Add(Iota(g, MakeShape(F32, 8, 4), 0), Const(g, float32(1))) // [8,4]
+	w := Add(Iota(g, MakeShape(F32, 4, 6), 1), Const(g, float32(1))) // [4,6]
+	grads := Gradient(ReduceAllSum(MatMul(a, w)), a, w)              // [8,6] -> scalar -> grads wrt a, w
+	require.Len(t, grads, 2)
+
+	var dotGenerals, reduceSums int
+	for _, n := range g.Nodes() {
+		switch n.Type() {
+		case NodeTypeDotGeneral:
+			dotGenerals++
+		case NodeTypeReduceSum:
+			reduceSums++
+		}
+	}
+	// 1 forward DotGeneral + 1 for dA + 1 for dW. Before the fix the gradients were broadcast-multiply
+	// + ReduceSum, so only the single forward DotGeneral existed.
+	require.GreaterOrEqualf(t, dotGenerals, 3,
+		"matmul gradient must lower via DotGeneral (a gemm), not Mul+ReduceSum; got %d DotGeneral / %d ReduceSum",
+		dotGenerals, reduceSums)
+}

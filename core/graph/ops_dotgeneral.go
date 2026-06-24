@@ -701,28 +701,49 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 		// Axes counts:
 		numBatchAxes := len(thisBatchAxes)             // == len(otherBatchAxes)
 		numContractionAxes := len(thisContractingAxes) // == len(otherContractingAxes)
-		//numCrossedAxes := len(thisCrossAxes) + len(otherCrossAxes)
 
-		// Project output (of the DotGeneral) shaped v to "this" (this node) shapes.
-
-		// * Add back contracted dimensions, with size 1.
-		//   thisVJP shapes will be [batch_dims..., lhs_cross_dims..., rhs_cross_dims..., 1 x (numContractionAxes)].
-		thisVJP := v
-		if thisVJP.DType() != computationDType {
-			thisVJP = ConvertDType(thisVJP, computationDType)
-		}
-		if numContractionAxes > 0 {
-			thisVJP = InsertAxes(thisVJP, xslices.SliceWithValue(numContractionAxes, -1)...)
-		}
-
-		// * Project other operand with contracted dimensions.
-		//   otherProjected shapes for this=lhs will be [batch_dims..., 1 x (this_cross_dims), rhs_cross_dims, contracted_dims]
-		otherProjected := otherInput
-		if otherProjected.DType() != computationDType {
-			otherProjected = ConvertDType(otherProjected, computationDType)
-		}
-		otherRank := otherProjected.Rank()
-		{
+		// Build the gradient w.r.t. "this" by contracting the "other" operand's cross (free) axes against
+		// the matching axes of v. When "other" has cross axes (the common matmul case), express it as a
+		// DotGeneral so XLA lowers it to a tensor-core gemm: the mathematically identical broadcast-Mul +
+		// ReduceSum (the else branch, the original implementation) is otherwise left by XLA as a CUDA-core
+		// reduction for weight-gradient shapes (small output, large reduced axis), ~18x slower. The else
+		// branch still handles the cases a DotGeneral cannot (no cross axes, e.g. a vector dot product).
+		// Both branches yield [batch_dims..., this_cross_dims..., contracted_dims...], so the transpose-
+		// back below is unchanged.
+		var thisVJP *Node
+		if len(otherCrossAxes) > 0 {
+			vv := v
+			if vv.DType() != computationDType {
+				vv = ConvertDType(vv, computationDType)
+			}
+			oo := otherInput
+			if oo.DType() != computationDType {
+				oo = ConvertDType(oo, computationDType)
+			}
+			// v's layout is [batch_dims..., lhs_cross_dims..., rhs_cross_dims...]; the axes matching
+			// "other"'s cross axes start after the batch axes (and after "this"'s cross axes when those
+			// come first in v, i.e. when "this" is the lhs).
+			vOtherCrossStart := numBatchAxes
+			if thisCrossesFirst {
+				vOtherCrossStart += len(thisCrossAxes)
+			}
+			thisVJP = DotGeneral(
+				vv, xslices.Iota(vOtherCrossStart, len(otherCrossAxes)), xslices.Iota(0, numBatchAxes),
+				oo, otherCrossAxes, otherBatchAxes)
+		} else {
+			// No "other" cross axes to contract: the gradient is a plain broadcast-multiply (no reduction).
+			thisVJP = v
+			if thisVJP.DType() != computationDType {
+				thisVJP = ConvertDType(thisVJP, computationDType)
+			}
+			if numContractionAxes > 0 {
+				thisVJP = InsertAxes(thisVJP, xslices.SliceWithValue(numContractionAxes, -1)...)
+			}
+			otherProjected := otherInput
+			if otherProjected.DType() != computationDType {
+				otherProjected = ConvertDType(otherProjected, computationDType)
+			}
+			otherRank := otherProjected.Rank()
 			permutations := make([]int, 0, otherRank)
 			permutations = append(permutations, otherBatchAxes...)
 			permutations = append(permutations, otherCrossAxes...)
@@ -736,27 +757,14 @@ func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
 			if changed {
 				otherProjected = TransposeAllAxes(otherProjected, permutations...)
 			}
-			// Add placeholder axes (of dimension 1) for the crosses from "this".
 			if len(thisCrossAxes) > 0 {
-				pos := numBatchAxes // Where axes for thisCrossesAxes will be inserted.
+				pos := numBatchAxes
 				if !thisCrossesFirst {
 					pos += len(otherCrossAxes)
 				}
 				otherProjected = InsertAxes(otherProjected, xslices.SliceWithValue(len(thisCrossAxes), pos)...)
 			}
-		}
-
-		// * Multiply the contracted dimension by otherProjected: this will expand the contracted dimensions.
-		thisVJP = Mul(thisVJP, otherProjected)
-
-		// * Contract the otherCrossAxes, since those dimensions should exist in the final thisVJP — these
-		//   cross-axes came from the "other" input.
-		if len(otherCrossAxes) > 0 {
-			pos := numBatchAxes
-			if thisCrossesFirst {
-				pos += len(thisCrossAxes)
-			}
-			thisVJP = ReduceSum(thisVJP, xslices.Iota(pos, len(otherCrossAxes))...)
+			thisVJP = Mul(thisVJP, otherProjected)
 		}
 
 		// * Transpose thisVJP axes back to its inputNodes.
