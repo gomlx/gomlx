@@ -3,84 +3,21 @@
 package attention
 
 import (
-	"fmt"
-	"strconv"
-
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
 
-// cuDNN fused-attention (flash) custom_call targets.
-//
-// These custom-calls, their backend_config, and the operand/result layouts below are not part of
-// the public XLA op set. They are the same calls JAX emits for
-// jax.nn.dot_product_attention(..., implementation="cudnn"). Provenance:
-//   - target names + backend_config field mapping (CudnnfMHABackendConfig, _custom_name_maps):
-//     https://github.com/jax-ml/jax/blob/main/jax/_src/cudnn/fused_attention_stablehlo.py
-//   - the exact backend_config JSON and layouts here were captured by lowering that JAX call to
-//     StableHLO (jax.jit(fn).lower(...).compiler_ir("stablehlo")) and reading the emitted
-//     stablehlo.custom_call.
-//   - XLA custom_call contract (documents api_version=4; these calls use api_version=2):
-//     https://openxla.org/xla/custom_call
-//   - cuDNN fMHA performance context: https://github.com/jax-ml/jax/issues/24934
-const (
-	fmhaForwardTarget  = "__cudnn$fmhaSoftmax"
-	fmhaBackwardTarget = "__cudnn$fmhaSoftmaxBackward"
-)
-
-// Layouts are rank-determined, so fixed: q,k,v BSHD [3,2,1,0], cuDNN output BHSD [3,1,2,0],
-// stats [2,1,0], scratch u8 [0].
-const (
-	layoutBSHD  = "dense<[3, 2, 1, 0]> : tensor<4xindex>"
-	layoutBHSD  = "dense<[3, 1, 2, 0]> : tensor<4xindex>"
-	layoutStats = "dense<[2, 1, 0]> : tensor<3xindex>"
-	layoutU8    = "dense<0> : tensor<1xindex>"
-
-	flashFwdOperandLayouts = "[" + layoutBSHD + ", " + layoutBSHD + ", " + layoutBSHD + "]"
-	flashFwdResultLayouts  = "[" + layoutBHSD + ", " + layoutStats + ", " + layoutU8 + "]"
-	// Backward operands: q, k, v (BSHD), softmax stats, dOutput (BSHD), output (BSHD).
-	flashBwdOperandLayouts = "[" + layoutBSHD + ", " + layoutBSHD + ", " + layoutBSHD + ", " + layoutStats + ", " + layoutBSHD + ", " + layoutBSHD + "]"
-	// Backward results: dQ, dK, dV (BHSD), scratch.
-	flashBwdResultLayouts = "[" + layoutBHSD + ", " + layoutBHSD + ", " + layoutBHSD + ", " + layoutU8 + "]"
-)
-
-// flashFwdBackendConfig builds the forward cudnn_fmha_backend_config for q,k,v [B,S,H,D]
-// (score matrix [B,H,S,S]). Captured from JAX dot_product_attention(cudnn), causal; only the
-// scale and score-matrix dims vary with shape.
-func flashFwdBackendConfig(b, h, s int, scale float64) string {
-	return flashBackendConfig(b, h, s, scale,
-		`"bmm1_dot_dimension_numbers": {"lhs_contracting_dimensions": ["3"], "rhs_contracting_dimensions": ["3"], "lhs_batch_dimensions": ["0", "2"], "rhs_batch_dimensions": ["0", "2"]}, "bmm2_dot_dimension_numbers": {"lhs_contracting_dimensions": ["3"], "rhs_contracting_dimensions": ["1"], "lhs_batch_dimensions": ["0", "1"], "rhs_batch_dimensions": ["0", "2"]}`)
-}
-
-// flashBwdBackendConfig is the backward counterpart: the four backward-gemm dot_dimension_numbers.
-func flashBwdBackendConfig(b, h, s int, scale float64) string {
-	return flashBackendConfig(b, h, s, scale,
-		`"bmm1_grad_gemm1_dot_dimension_numbers": {"lhs_contracting_dimensions": ["2"], "rhs_contracting_dimensions": ["1"], "lhs_batch_dimensions": ["0", "1"], "rhs_batch_dimensions": ["0", "2"]}, "bmm1_grad_gemm2_dot_dimension_numbers": {"lhs_contracting_dimensions": ["3"], "rhs_contracting_dimensions": ["1"], "lhs_batch_dimensions": ["0", "1"], "rhs_batch_dimensions": ["0", "2"]}, "bmm2_grad_gemm1_dot_dimension_numbers": {"lhs_contracting_dimensions": ["2"], "rhs_contracting_dimensions": ["1"], "lhs_batch_dimensions": ["0", "1"], "rhs_batch_dimensions": ["0", "2"]}, "bmm2_grad_gemm2_dot_dimension_numbers": {"lhs_contracting_dimensions": ["3"], "rhs_contracting_dimensions": ["3"], "lhs_batch_dimensions": ["0", "2"], "rhs_batch_dimensions": ["0", "2"]}`)
-}
-
-// flashBackendConfig builds a cudnn_fmha_backend_config. fmha_scale and the score-matrix
-// dimensions [B,H,S,S] vary with shape; dotDimNumbers carries the bmm dot_dimension_numbers
-// JSON, the only part that differs between the forward and backward custom-calls.
-func flashBackendConfig(b, h, s int, scale float64, dotDimNumbers string) string {
-	return fmt.Sprintf(`{"operation_queue_id": "0", "cudnn_fmha_backend_config": {"algorithm": {"algo_id": "0", "math_type": "TENSOR_OP_MATH", "tuning_knobs": {"17": "1", "24": "0"}, "is_cudnn_frontend": true, "workspace_size": "0"}, "fmha_scale": %s, "intermediate_tensor_shape": {"element_type": "BF16", "dimensions": ["%d", "%d", "%d", "%d"], "tuple_shapes": [], "layout": {"dim_level_types": [], "dim_unique": [], "dim_ordered": [], "minor_to_major": ["3", "2", "1", "0"], "tiles": [], "element_size_in_bits": "0", "memory_space": "0", "index_primitive_type": "PRIMITIVE_TYPE_INVALID", "pointer_primitive_type": "PRIMITIVE_TYPE_INVALID", "dynamic_shape_metadata_prefix_bytes": "0"}, "is_dynamic_dimension": [false, false, false, false]}, "is_flash_attention": true, "mask_type": "CAUSAL", %s, "dropout_rate": 0.0, "seed": 42, "sliding_window_length": 0, "max_seg_per_batch": 1, "is_paged_attention": false}}`,
-		formatScale(scale), b, h, s, s, dotDimNumbers)
-}
-
-// formatScale renders a float as a JSON number (no quotes, shortest round-trip form).
-func formatScale(scale float64) string {
-	return strconv.FormatFloat(scale, 'g', -1, 64)
-}
-
-// FlashAttention computes causal multi-head attention with the cuDNN flash kernel and a flash
-// backward supplied as a custom gradient. Scores [B,H,S,S] never materialize, in either pass.
+// FlashAttention computes causal multi-head attention through the backend's fused
+// scaled-dot-product-attention op (the cuDNN flash kernel on CUDA), using the flash backward
+// automatically when the backend supplies it. The [B,H,S,S] scores never materialize, in either pass.
 //
 // query is [B,S,nQH,D] and key, value are [B,S,nKVH,D], with nQH divisible by nKVH. Grouped-query
-// attention (nKVH < nQH) is handled by repeating each kv head nQH/nKVH times. Inputs are cast to
-// bfloat16 (the kernel's precision); output is [B,S,nQH,D] bfloat16. On backends without
-// custom-call support it falls back to a decomposed attention, differentiated normally.
+// attention (nKVH < nQH) is handled by repeating each kv head nQH/nKVH times before the fused op, so
+// autodiff reduces the repeated-head gradients back onto the kv heads. Output is [B,S,nQH,D] in
+// query's dtype. On backends without the fused op (e.g. SimpleGo / CPU) it falls back to a
+// decomposed causal attention, differentiated normally.
 func FlashAttention(query, key, value *Node, scale float64) *Node {
 	for _, n := range []*Node{query, key, value} {
 		n.AssertRank(4)
@@ -96,54 +33,23 @@ func FlashAttention(query, key, value *Node, scale float64) *Node {
 	if numKVHeads == 0 || numQueryHeads%numKVHeads != 0 {
 		Panicf("FlashAttention requires query heads (%d) divisible by kv heads (%d)", numQueryHeads, numKVHeads)
 	}
+
+	// Expand kv heads for GQA so the fused op sees equal q/kv heads. The repeat is a graph op, so
+	// autodiff sums the repeated-head gradients back onto the original kv heads.
+	k, v := key, value
 	if numKVHeads != numQueryHeads {
 		group := numQueryHeads / numKVHeads
-		key = repeatKVHeads(key, group)
-		value = repeatKVHeads(value, group)
+		k = repeatKVHeads(key, group)
+		v = repeatKVHeads(value, group)
 	}
-	dims := query.Shape().Dimensions
-	b, s, h, d := dims[0], dims[1], dims[2], dims[3]
-
-	q := ConvertDType(query, dtypes.BFloat16)
-	k := ConvertDType(key, dtypes.BFloat16)
-	v := ConvertDType(value, dtypes.BFloat16)
-
-	bhsd := shapes.Make(dtypes.BFloat16, b, h, s, d)
-	statsShape := shapes.Make(dtypes.Float32, b, h, s)
-	scratch := shapes.Make(dtypes.Uint8, 0)
 
 	var output *Node
 	err := TryCatch[error](func() {
-		// stats and outBSHD are assigned after the forward call below but read only at gradient
-		// time, so capturing by reference is safe.
-		var stats, outBSHD *Node
-		vjpFn := func(node *Node, vjpForOutputs []*Node, _ shapes.Shape) []*Node {
-			// vjpForOutputs[0] is the BHSD output adjoint; the backward wants it BSHD bfloat16.
-			dOut := ConvertDType(Transpose(vjpForOutputs[0], 1, 2), dtypes.BFloat16)
-			spec := compute.CustomCallSpec{
-				Target:         fmhaBackwardTarget,
-				APIVersion:     2,
-				BackendConfig:  flashBwdBackendConfig(b, h, s, scale),
-				OperandLayouts: flashBwdOperandLayouts,
-				ResultLayouts:  flashBwdResultLayouts,
-				OutputShapes:   []shapes.Shape{bhsd, bhsd, bhsd, scratch},
-			}
-			grads := CustomCall(spec, nil, q, k, v, stats, dOut, outBSHD)
-			// dQ/dK/dV come back BHSD; transpose to BSHD to match q,k,v.
-			return []*Node{Transpose(grads[0], 1, 2), Transpose(grads[1], 1, 2), Transpose(grads[2], 1, 2)}
-		}
-		spec := compute.CustomCallSpec{
-			Target:         fmhaForwardTarget,
-			APIVersion:     2,
-			BackendConfig:  flashFwdBackendConfig(b, h, s, scale),
-			OperandLayouts: flashFwdOperandLayouts,
-			ResultLayouts:  flashFwdResultLayouts,
-			OutputShapes:   []shapes.Shape{bhsd, statsShape, scratch},
-		}
-		fwd := CustomCall(spec, vjpFn, q, k, v) // [output BHSD, stats, scratch]
-		stats = fwd[1]
-		outBSHD = Transpose(fwd[0], 1, 2) // BHSD -> BSHD
-		output = outBSHD
+		// BSHD, causal, equal heads. The backend casts to bf16 and runs the cuDNN flash kernel,
+		// and attaches the flash backward as the node's custom gradient.
+		output = BackendFusedScaledDotProductAttention(
+			query, k, v, nil, numQueryHeads, numQueryHeads,
+			compute.AxesLayoutBSHD, scale, true /* causal */, nil)
 	})
 	if err != nil {
 		if compute.IsNotImplemented(err) {
@@ -151,7 +57,7 @@ func FlashAttention(query, key, value *Node, scale float64) *Node {
 		}
 		panic(err)
 	}
-	return output
+	return ConvertDType(output, query.DType())
 }
 
 // naiveCausalAttention is the decomposed reference and fallback: softmax(scale*QK^T + causal)*V

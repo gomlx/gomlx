@@ -70,6 +70,7 @@ const (
 	NodeTypeFusedLayerNorm
 	NodeTypeFusedQuantizedDense
 	NodeTypeFusedScaledDotProductAttention
+	NodeTypeFusedScaledDotProductAttentionVJP
 	NodeTypeFusedSoftmax
 	NodeTypeGather
 	NodeTypeGreaterOrEqual
@@ -2652,12 +2653,13 @@ func (ni *nodeInputsFusedScaledDotProductAttention) CloneWithInputs(originalNode
 		new_mask = newInputs[idx]
 		idx++
 	}
-	return backendFusedScaledDotProductAttention(new_query, new_key, new_value, new_mask, ni.numHeads, ni.numKVHeads, ni.axesLayout, ni.scale, ni.causal, ni.options)
+	r0, _ := backendFusedScaledDotProductAttention(new_query, new_key, new_value, new_mask, ni.numHeads, ni.numKVHeads, ni.axesLayout, ni.scale, ni.causal, ni.options)
+	return r0.inputNodes[0]
 }
 
 // backendFusedScaledDotProductAttention is a Graph wrapper for the backend.Builder.FusedScaledDotProductAttention method.
 func backendFusedScaledDotProductAttention(query *Node, key *Node, value *Node, mask *Node, numHeads int, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (
-	node *Node) {
+	output, softmaxStats *Node) {
 	inputNodes := []*Node{query, key, value}
 	if mask != nil {
 		inputNodes = append(inputNodes, mask)
@@ -2679,18 +2681,131 @@ func backendFusedScaledDotProductAttention(query *Node, key *Node, value *Node, 
 	if mask != nil {
 		maskVal = mask.outputOps[0]
 	}
-	result, err := g.currentFunc.backendFunc.FusedScaledDotProductAttention(query.outputOps[0], key.outputOps[0], value.outputOps[0], maskVal, inputs.numHeads, inputs.numKVHeads, inputs.axesLayout, inputs.scale, inputs.causal, inputs.options)
+	v0, v1, err := g.currentFunc.backendFunc.FusedScaledDotProductAttention(query.outputOps[0], key.outputOps[0], value.outputOps[0], maskVal, inputs.numHeads, inputs.numKVHeads, inputs.axesLayout, inputs.scale, inputs.causal, inputs.options)
 	if err != nil {
 		panic(err)
 	}
-	node = &Node{
-		outputOps:    []compute.Value{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+	node := &Node{
+		outputOps:    []compute.Value{v0, v1},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1))},
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
+	splitNodes := splitNode(node)
+	output, softmaxStats = splitNodes[0], splitNodes[1]
+	return
+}
+
+// nodeInputsFusedScaledDotProductAttentionVJP holds the inputs used for the call to compute.FusedScaledDotProductAttentionVJP.
+type nodeInputsFusedScaledDotProductAttentionVJP struct {
+	query        *Node
+	key          *Node
+	value        *Node
+	mask         *Node
+	numHeads     int
+	numKVHeads   int
+	axesLayout   compute.AxesLayout
+	scale        float64
+	causal       bool
+	options      *compute.ScaledDotProductAttentionConfig
+	output       *Node
+	softmaxStats *Node
+	dOutput      *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedScaledDotProductAttentionVJP) Type() NodeType {
+	return NodeTypeFusedScaledDotProductAttentionVJP
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedScaledDotProductAttentionVJP) String() string {
+	return fmt.Sprintf("%s(query=[#%d], key=[#%d], value=[#%d], mask=%s, numHeads=%v, numKVHeads=%v, axesLayout=%s, scale=%v, causal=%v, options=%+v, output=[#%d], softmaxStats=[#%d], dOutput=[#%d])",
+		ni.Type(),
+		ni.query.Id(),
+		ni.key.Id(),
+		ni.value.Id(),
+		strNillableNode(ni.mask),
+		ni.numHeads,
+		ni.numKVHeads,
+		ni.axesLayout,
+		ni.scale,
+		ni.causal,
+		ni.options,
+		ni.output.Id(),
+		ni.softmaxStats.Id(),
+		ni.dOutput.Id(),
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedScaledDotProductAttentionVJP) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_query := newInputs[idx]
+	idx++
+	new_key := newInputs[idx]
+	idx++
+	new_value := newInputs[idx]
+	idx++
+	var new_mask *Node
+	if ni.mask != nil {
+		new_mask = newInputs[idx]
+		idx++
+	}
+	new_output := newInputs[idx]
+	idx++
+	new_softmaxStats := newInputs[idx]
+	idx++
+	new_dOutput := newInputs[idx]
+	idx++
+	r0, _, _ := backendFusedScaledDotProductAttentionVJP(new_query, new_key, new_value, new_mask, ni.numHeads, ni.numKVHeads, ni.axesLayout, ni.scale, ni.causal, ni.options, new_output, new_softmaxStats, new_dOutput)
+	return r0.inputNodes[0]
+}
+
+// backendFusedScaledDotProductAttentionVJP is a Graph wrapper for the backend.Builder.FusedScaledDotProductAttentionVJP method.
+func backendFusedScaledDotProductAttentionVJP(query *Node, key *Node, value *Node, mask *Node, numHeads int, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig, output *Node, softmaxStats *Node, dOutput *Node) (
+	dQuery, dKey, dValue *Node) {
+	inputNodes := []*Node{query, key, value, output, softmaxStats, dOutput}
+	if mask != nil {
+		inputNodes = append(inputNodes, mask)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedScaledDotProductAttentionVJP{
+		query:        query,
+		key:          key,
+		value:        value,
+		mask:         mask,
+		numHeads:     numHeads,
+		numKVHeads:   numKVHeads,
+		axesLayout:   axesLayout,
+		scale:        scale,
+		causal:       causal,
+		options:      options,
+		output:       output,
+		softmaxStats: softmaxStats,
+		dOutput:      dOutput,
+	}
+	var maskVal compute.Value
+	if mask != nil {
+		maskVal = mask.outputOps[0]
+	}
+	v0, v1, v2, err := g.currentFunc.backendFunc.FusedScaledDotProductAttentionVJP(query.outputOps[0], key.outputOps[0], value.outputOps[0], maskVal, inputs.numHeads, inputs.numKVHeads, inputs.axesLayout, inputs.scale, inputs.causal, inputs.options, output.outputOps[0], softmaxStats.outputOps[0], dOutput.outputOps[0])
+	if err != nil {
+		panic(err)
+	}
+	node := &Node{
+		outputOps:    []compute.Value{v0, v1, v2},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1)), mustNoError(g.builder.OpShape(v2))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	splitNodes := splitNode(node)
+	dQuery, dKey, dValue = splitNodes[0], splitNodes[1], splitNodes[2]
 	return
 }
 
