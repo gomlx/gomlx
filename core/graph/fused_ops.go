@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/envutil"
 	"github.com/gomlx/gomlx/support/exceptions"
+	"k8s.io/klog/v2"
 )
 
 // Quantization describes how a graph-level quantized tensor is dequantized.
@@ -132,7 +133,6 @@ func (ni *nodeInputsFusedQuantizedDense) CloneWithInputs(originalNode *Node, new
 	}
 	return BackendFusedQuantizedDense(newX, newWeights, newBias, newWq, ni.activation)
 }
-
 
 // BackendFusedSoftmax computes softmax along the specified axis.
 // Internal: prefer graph.Softmax which handles fallback and gradients.
@@ -277,7 +277,6 @@ func (ni *nodeInputsQuantizedEmbeddingLookup) CloneWithInputs(originalNode *Node
 	return BackendQuantizedEmbeddingLookup(newInputs[0], newInputs[1], ni.tq)
 }
 
-
 // BackendQuantizedEmbeddingLookup performs a quantized embedding lookup (row gather)
 // with on-the-fly dequantization.
 // Internal: prefer nn.QuantizedGather which handles fallback and gradients.
@@ -348,18 +347,21 @@ func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 		return decomposedOutput
 	}
 
+	klog.V(2).Info("Attempt to call fused op")
 	var output *Node
 	err := exceptions.TryCatch[error](func() {
 		output = fused()
 	})
 	if err != nil {
 		if compute.IsNotImplemented(err) {
+			klog.V(2).Infof("Failed to call fused op (not implemented). Falling back to decomposed op: %v", err)
 			// Expected: fused op doesn't support this config; fall back to decomposed.
 			return decomposedOutput
 		}
 		// Unexpected error — re-panic so it surfaces instead of being silently masked.
 		panic(err)
 	}
+	klog.V(2).Info("Successfully called fused op.")
 	// Store decomposed version for VJP computation; dead-code-eliminated if unused.
 	output.vjpAlternateOutputs = []*Node{decomposedOutput}
 	return output
