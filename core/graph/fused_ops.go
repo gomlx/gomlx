@@ -301,7 +301,7 @@ const FusionEnv = "GOMLX_FUSION"
 // VJP alternate output, so that reverse-mode autodiff can compute gradients
 // through the decomposed graph without hand-written VJPs.
 //
-// Note: If GOMLX_FUSION is disabled (set to "0", "false", etc.) the fused
+// Note: If "GOMLX_FUSION" (see FusionEnv constant) is disabled (set to "0", "false", etc.) the fused
 // version is never used. The default is enabled though.
 func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 	// Build decomposed output first so it has a lower nodeIdx than the fused
@@ -310,7 +310,7 @@ func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 	// output, which is then processed normally.
 	decomposedOutput := decomposed()
 
-	if enabled, err := envutil.ReadBool("GOMLX_FUSION", true); err != nil {
+	if enabled, err := envutil.ReadBool(FusionEnv, true); err != nil {
 		panic(err)
 	} else if !enabled {
 		return decomposedOutput
