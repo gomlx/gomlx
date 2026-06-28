@@ -333,8 +333,9 @@ func (b *MultiHeadAttentionBuilder) WithQueryKeyScale(scale float64) *MultiHeadA
 // It returns both the attention output and the attention coefficients (matrix) used.
 //
 // Because coefficients are requested, the decomposed attention path is used (no fused
-// SDPA op) so that the coefficient matrix is available. Use Done instead when coefficients
-// are not needed to allow the fused path.
+// SDPA op) so that the coefficient matrix is available. This may make the graph run
+// significantly slower in some cases.
+// Use Done instead when coefficients are not needed to allow the fused path.
 //
 // `output` will be shaped `[batch_size, <query_elements>, output_dim]`, where `output_dim`
 // can be configured by `SetOutputDim`.
@@ -421,8 +422,6 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 			projectedQuery, projectedKey = qkEncoder.EncodeQK(projectedQuery, projectedKey, posIndices, seqAxis)
 		}
 	}
-
-
 
 	// Build the mask before any flattening, since buildMask uses the original attentionShape.
 	// Mask shape: [batch, <query_elements>, num_heads, <key_elements>]
