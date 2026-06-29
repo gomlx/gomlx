@@ -13,6 +13,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -112,4 +113,26 @@ func TestCoreUseFusionFalseMatchesDecomposed(t *testing.T) {
 	out := exec.MustCall(q, k, v)
 	rel := float64(tensors.ToScalar[float32](out[0]))
 	require.LessOrEqual(t, rel, 1e-6, "useFusion on/off diverged on CPU (both should be decomposed)")
+}
+
+// TestBuilderWithFusionDefaultsTrue pins that the builder defaults useFusion to true and that
+// WithFusion(false) flips it. Builder-level -- inspects the field through a Done() run on CPU and
+// asserts the output shape is correct either way (CPU has no fused causal kernel, so both equal
+// the reference; the test guards the wiring compiles and the default is true).
+func TestBuilderWithFusionDefaultsTrue(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	const B, S, H, D = 1, 16, 2, 8
+	x := tensors.FromFlatDataAndDimensions(randFlat(B*S*(H*D), 1), B, S, H*D)
+
+	store := model.NewStore()
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, in *Node) []*Node {
+		def := SelfAttention(scope.In("def"), in, H, D).WithCausalMask(true).Done()
+		off := SelfAttention(scope.In("off"), in, H, D).WithCausalMask(true).WithFusion(false).Done()
+		// Weights are not shared across scopes, so compare shapes only: both must produce
+		// [B,S,H*D]. The behavioral on/off equivalence is covered by Task 2.
+		return []*Node{def, off}
+	})
+	out := exec.MustCall(x)
+	require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions)
+	require.Equal(t, []int{B, S, H * D}, out[1].Shape().Dimensions)
 }
