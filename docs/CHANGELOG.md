@@ -19,6 +19,17 @@ go run <path_to_gomlx>/cmd/convert_v0.28/main.go [-dir <directory>]
 
 ## API Changes: `backends` and related packages moved to `github.com/gomlx/compute`
 
+**Highlights**:
+- Experimental SIMD support for amd64 for the Go backend.
+- Gradiend Checkpointing: needed when training large models, to trade-off memory usage for recomputation.
+- Transformers library that support many more classes of LLMs.
+- LLM generator (that works this time), with KVCache support.
+- The "xla" backend now supports many more options, including `preallocate=false` to prevent preallocating 75% of the 
+  GPU memory (for `xla:cuda`) upfront. Use `GOMLX_BACKEND=xla:help` and it will printout help on all options. 
+- Added _FlashAttention_ for `xla:cuda` backends -- mimicking what Jax does, using `cuDNN` implementation.
+  Including backward propagation version, for faster training.
+
+**API Changes**:
 - Packages `backends`, `dtypes`, `shapes` and `distributed` moved to `github.com/gomlx/compute`
 - New `github.com/gomlx/compute` repo will host what was in package `backends`.
   - `backends/simplego` backend now moved to `github.com/gomlx/compute/gobackend` (no longer "simple").
@@ -28,12 +39,6 @@ go run <path_to_gomlx>/cmd/convert_v0.28/main.go [-dir <directory>]
 - New `tensors/dtensor` to hold distributed tensors (previously in `pkg/core/distributed`).
 - Packages in `pkg/support` moved to `github.com/gomlx/compute/support`:
   - The following packages were moved: `xslices`, `xsync`, `sets` and `humanize`.
-
-Highlights:
-- Experimental SIMD support for amd64 for the Go backend.
-- Gradiend Checkpointing: needed when training large models, to trade-off memory usage for recomputation.
-- Transformers library that support many more classes of LLMs.
-- LLM generator (that works this time), with KVCache support.
 
 ## Reoganization of packages -- removed the `pkg` top-level directory
 
