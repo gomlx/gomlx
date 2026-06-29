@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
@@ -76,6 +77,11 @@ type MultiHeadAttentionBuilder struct {
 
 	// useFusion gates the fused SDPA path in Core; default true (set in constructor).
 	useFusion bool
+
+	// querySeqLen and keyValueSeqLen are optional per-batch actual sequence lengths (int32 [B])
+	// threaded into the fused SDPA config for padding masking. Mutually exclusive with queryKeyMatrixMask.
+	querySeqLen    *Node
+	keyValueSeqLen *Node
 }
 
 // MultiHeadAttention defines a multi-head attention layers, as described in [1], plus some modern extensions.
@@ -341,6 +347,18 @@ func (b *MultiHeadAttentionBuilder) WithFusion(enabled bool) *MultiHeadAttention
 	return b
 }
 
+// WithSeqLens supplies per-batch actual sequence lengths (int32 [B] nodes) for padding masking
+// via the fused SDPA path. Mutually exclusive with an explicit query/key matrix mask; setting
+// both panics. nil nodes are ignored.
+func (b *MultiHeadAttentionBuilder) WithSeqLens(querySeqLen, keyValueSeqLen *Node) *MultiHeadAttentionBuilder {
+	if b.queryKeyMatrixMask != nil {
+		Panicf("MultiHeadAttention: WithSeqLens is mutually exclusive with an explicit query/key matrix mask")
+	}
+	b.querySeqLen = querySeqLen
+	b.keyValueSeqLen = keyValueSeqLen
+	return b
+}
+
 // DoneWithCoefficients or Done should be called after all optional settings are configured.
 // It returns both the attention output and the attention coefficients (matrix) used.
 //
@@ -455,8 +473,12 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	// Pass causal to Core only when not using KV cache (Core builds a simple lower-triangular mask).
 	// When using KV cache, the position-aware causal mask is already built in buildMask above.
 	useCausalMask := b.useCausalMask && mask == nil
+	var fusedConfig *compute.ScaledDotProductAttentionConfig
+	if b.querySeqLen != nil || b.keyValueSeqLen != nil {
+		fusedConfig = NewSeqLenAttentionConfig(b.querySeqLen, b.keyValueSeqLen)
+	}
 	attentionOutput, attentionCoefficients = Core(b.scope, projectedQuery, projectedKey, projectedValue,
-		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients, b.scoreSoftCap, b.useFusion)
+		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients, b.scoreSoftCap, b.useFusion, fusedConfig)
 
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
 	// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_elements>, numHeads*valueDim]

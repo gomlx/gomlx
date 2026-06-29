@@ -154,6 +154,19 @@ func BackendFusedDense(x, weight, bias *Node, activation compute.ActivationType)
 	return backendFusedDense(x, weight, bias, activation)
 }
 
+// NewSeqLenAttentionConfig builds a ScaledDotProductAttentionConfig carrying per-batch sequence
+// lengths (int32 [B] nodes) for padding masking in the fused SDPA path. Either node may be nil.
+func NewSeqLenAttentionConfig(querySeqLen, keyValueSeqLen *Node) *compute.ScaledDotProductAttentionConfig {
+	cfg := &compute.ScaledDotProductAttentionConfig{}
+	if querySeqLen != nil {
+		cfg.QuerySeqLen = querySeqLen.outputOps[0]
+	}
+	if keyValueSeqLen != nil {
+		cfg.KeyValueSeqLen = keyValueSeqLen.outputOps[0]
+	}
+	return cfg
+}
+
 // BackendFusedScaledDotProductAttention computes multi-head scaled dot-product attention via the
 // backend's fused op, returning the attention output. When the backend also returns softmax stats
 // and implements the fused backward, the gradient uses it (the cuDNN flash backward), threading the

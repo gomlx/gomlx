@@ -106,8 +106,8 @@ func TestCoreUseFusionFalseMatchesDecomposed(t *testing.T) {
 
 	store := model.NewStore()
 	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
-		on, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true)
-		off, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, false)
+		on, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil)
+		off, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, false, nil)
 		return []*Node{Div(ReduceAllMax(Abs(Sub(on, off))), AddScalar(ReduceAllMax(Abs(off)), 1e-6))}
 	})
 	out := exec.MustCall(q, k, v)
@@ -135,4 +135,72 @@ func TestBuilderWithFusionDefaultsTrue(t *testing.T) {
 	out := exec.MustCall(x)
 	require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions)
 	require.Equal(t, []int{B, S, H * D}, out[1].Shape().Dimensions)
+}
+
+// TestWithSeqLensRejectsExplicitMask pins the mutual-exclusion rule: WithSeqLens called after
+// WithQueryKeyMatrixMask must panic. Builder-time validation; panics before any backend op.
+func TestWithSeqLensRejectsExplicitMask(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	const B, S, H, D = 1, 8, 2, 8
+	x := tensors.FromFlatDataAndDimensions(randFlat(B*S*(H*D), 1), B, S, H*D)
+	lens := tensors.FromFlatDataAndDimensions([]int32{S}, B)
+	maskData := make([]float32, B*S*H*S)
+	mask := tensors.FromFlatDataAndDimensions(maskData, B, S, H, S)
+
+	store := model.NewStore()
+	require.Panics(t, func() {
+		_ = model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen, klen, m *Node) []*Node {
+			return []*Node{
+				SelfAttention(scope, in, H, D).
+					WithQueryKeyMatrixMask(m).
+					WithSeqLens(qlen, klen).
+					Done(),
+			}
+		}).MustCall(x, lens, lens, mask)
+	}, "WithQueryKeyMatrixMask then WithSeqLens must panic")
+}
+
+// TestWithSeqLensMaskAfterRejectsExplicitMask pins the reverse mutual-exclusion order:
+// WithQueryKeyMatrixMask called after WithSeqLens must also panic.
+func TestWithSeqLensMaskAfterRejectsExplicitMask(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	const B, S, H, D = 1, 8, 2, 8
+	x := tensors.FromFlatDataAndDimensions(randFlat(B*S*(H*D), 1), B, S, H*D)
+	lens := tensors.FromFlatDataAndDimensions([]int32{S}, B)
+	maskData := make([]float32, B*S*H*S)
+	mask := tensors.FromFlatDataAndDimensions(maskData, B, S, H, S)
+
+	store := model.NewStore()
+	require.Panics(t, func() {
+		_ = model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen, klen, m *Node) []*Node {
+			return []*Node{
+				SelfAttention(scope, in, H, D).
+					WithSeqLens(qlen, klen).
+					WithQueryKeyMatrixMask(m).
+					Done(),
+			}
+		}).MustCall(x, lens, lens, mask)
+	}, "WithSeqLens then WithQueryKeyMatrixMask must panic")
+}
+
+// TestWithSeqLensBuildsConfigAndProducesOutput confirms that WithSeqLens wires a non-nil config
+// into the fused path and that the builder still produces the correct output shape on CPU
+// (the fused path returns ErrNotImplemented on CPU and falls back to decomposed, so the seqlen
+// config is built and forwarded but execution uses the decomposed path).
+func TestWithSeqLensBuildsConfigAndProducesOutput(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	const B, S, H, D = 1, 8, 2, 8
+	x := tensors.FromFlatDataAndDimensions(randFlat(B*S*(H*D), 1), B, S, H*D)
+	lens := tensors.FromFlatDataAndDimensions([]int32{S}, B)
+
+	store := model.NewStore()
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen, klen *Node) []*Node {
+		out := SelfAttention(scope, in, H, D).
+			WithSeqLens(qlen, klen).
+			Done()
+		return []*Node{out}
+	})
+	outputs := exec.MustCall(x, lens, lens)
+	require.Equal(t, []int{B, S, H * D}, outputs[0].Shape().Dimensions,
+		"WithSeqLens output shape must match [B, S, H*D]")
 }

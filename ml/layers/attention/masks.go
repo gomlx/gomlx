@@ -88,6 +88,9 @@ func (b *MultiHeadAttentionBuilder) WithQueryKeyMatrixMask(queryKeyMatrixMask *N
 	if b.keyMask != nil || b.queryMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
 	}
+	if b.querySeqLen != nil || b.keyValueSeqLen != nil {
+		Panicf("MultiHeadAttention: query/key matrix mask is mutually exclusive with WithSeqLens")
+	}
 	if slices.Equal(queryKeyMatrixMask.Shape().Dimensions, b.attentionShape.Dimensions) {
 		// Simplest case: queryKeyMatrixMask provided with attentionShape.
 		b.queryKeyMatrixMask = queryKeyMatrixMask

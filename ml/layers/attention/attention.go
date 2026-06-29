@@ -180,7 +180,8 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 //     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
 func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionMask *Node, dropoutRate *Node,
-	layout AxesLayout, useCausalMask, wantCoefficients bool, scoreSoftCap float64, useFusion bool) (output, coefficients *Node) {
+	layout AxesLayout, useCausalMask, wantCoefficients bool, scoreSoftCap float64, useFusion bool,
+	fusedConfig *compute.ScaledDotProductAttentionConfig) (output, coefficients *Node) {
 	g := query.Graph()
 	numQueryHeads := query.Shape().Dimensions[layout.HeadsAxis()]
 	numKVHeads := key.Shape().Dimensions[layout.HeadsAxis()]
@@ -269,7 +270,7 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 			func() *Node {
 				return BackendFusedScaledDotProductAttention(
 					query, key, value, attentionMask,
-					numQueryHeads, numKVHeads, layout, scale, useCausalMask, nil)
+					numQueryHeads, numKVHeads, layout, scale, useCausalMask, fusedConfig)
 			},
 			func() *Node {
 				output, _ := decomposedFn()
