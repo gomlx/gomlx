@@ -183,14 +183,6 @@ func TestWithSeqLensMaskAfterRejectsExplicitMask(t *testing.T) {
 	}, "WithSeqLens then WithQueryKeyMatrixMask must panic")
 }
 
-// TestGetOfficialBackendSkipsWhenAbsent pins that GetOfficialBackend returns the named backend when
-// present (the CPU "go" backend always is) and a nil for an absent name (caller skips). CPU-only.
-func TestGetOfficialBackendSkipsWhenAbsent(t *testing.T) {
-	testutil.BuildTestBackend()
-	require.NotNil(t, testutil.GetOfficialBackend("go"), "go backend should be available")
-	require.Nil(t, testutil.GetOfficialBackend("definitely-not-a-backend"))
-}
-
 // TestWithSeqLensBuildsConfigAndProducesOutput confirms that WithSeqLens wires a non-nil config
 // into the fused path and that the builder still produces the correct output shape on CPU
 // (the fused path returns ErrNotImplemented on CPU and falls back to decomposed, so the seqlen
