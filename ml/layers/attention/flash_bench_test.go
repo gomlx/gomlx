@@ -30,7 +30,7 @@ func attentionStep(_ bool, qHeads, kvHeads int, scale float64) func(q, k, v *Nod
 // attention at the lm-100m attention shape on the GPU. Requires a cuDNN (cuda) backend.
 func TestFlashThroughput(t *testing.T) {
 	backend := graphtest.BuildTestBackend()
-	if !isCUDABackend(backend) {
+	if !backendSupportsFusion(backend) {
 		t.Skipf("flash throughput needs a cuDNN (cuda) backend; got %q", backend.Name())
 	}
 
@@ -82,7 +82,7 @@ func TestFlashMemoryProbe(t *testing.T) {
 		t.Skip("set GOMLX_MEM_PROBE=flash|naive to run the memory probe")
 	}
 	backend := graphtest.BuildTestBackend()
-	if !isCUDABackend(backend) {
+	if !backendSupportsFusion(backend) {
 		t.Skipf("needs a cuDNN (cuda) backend; got %q", backend.Name())
 	}
 
