@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gomlx/compute/dtypes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -16,17 +15,12 @@ import (
 )
 
 // attentionStep builds one forward+backward attention step (the gradient forces the backward),
-// returning a scalar so reading it forces a device sync. useFlash picks the flash kernel; otherwise
-// the decomposed reference with kv heads repeated to match the query heads.
-func attentionStep(useFlash bool, qHeads, kvHeads int, scale float64) func(q, k, v *Node) []*Node {
+// returning a scalar so reading it forces a device sync.
+// TODO(Task 7): rework bench to use WithFusion instead of the deleted FlashAttention.
+func attentionStep(_ bool, qHeads, kvHeads int, scale float64) func(q, k, v *Node) []*Node {
 	return func(q, k, v *Node) []*Node {
-		var out *Node
-		if useFlash {
-			out = ConvertDType(FlashAttention(q, k, v, scale), dtypes.Float32)
-		} else {
-			group := qHeads / kvHeads
-			out = naiveCausalAttention(q, repeatKVHeads(k, group), repeatKVHeads(v, group), scale)
-		}
+		group := qHeads / kvHeads
+		out := naiveCausalAttention(q, repeatKVHeads(k, group), repeatKVHeads(v, group), scale)
 		g := Gradient(ReduceAllSum(out), q, k, v)
 		return []*Node{Add(Add(ReduceAllSum(g[0]), ReduceAllSum(g[1])), ReduceAllSum(g[2]))}
 	}
