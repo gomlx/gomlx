@@ -180,7 +180,7 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 //     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
 func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionMask *Node, dropoutRate *Node,
-	layout AxesLayout, useCausalMask, wantCoefficients bool, scoreSoftCap float64) (output, coefficients *Node) {
+	layout AxesLayout, useCausalMask, wantCoefficients bool, scoreSoftCap float64, useFusion bool) (output, coefficients *Node) {
 	g := query.Graph()
 	numQueryHeads := query.Shape().Dimensions[layout.HeadsAxis()]
 	numKVHeads := key.Shape().Dimensions[layout.HeadsAxis()]
@@ -262,7 +262,7 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 
 	// When coefficients are requested, use the decomposed path for everything
 	// to avoid computing both paths (fused output + decomposed scores).
-	if wantCoefficients || dropoutActive || scoreSoftCap > 0 {
+	if wantCoefficients || dropoutActive || scoreSoftCap > 0 || !useFusion {
 		output, coefficients = decomposedFn()
 	} else {
 		output = InternalFusedOpCaller(

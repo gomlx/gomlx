@@ -444,7 +444,7 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	// When using KV cache, the position-aware causal mask is already built in buildMask above.
 	useCausalMask := b.useCausalMask && mask == nil
 	attentionOutput, attentionCoefficients = Core(b.scope, projectedQuery, projectedKey, projectedValue,
-		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients, b.scoreSoftCap)
+		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients, b.scoreSoftCap, true)
 
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
 	// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_elements>, numHeads*valueDim]

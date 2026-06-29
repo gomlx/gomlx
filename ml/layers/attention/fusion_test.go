@@ -12,6 +12,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,4 +89,27 @@ func randFlat(n int, seed int64) []float32 {
 		out[i] = float32(r.NormFloat64() * 0.5)
 	}
 	return out
+}
+
+// TestCoreUseFusionFalseMatchesDecomposed pins that Core with useFusion=false produces the
+// same output as useFusion=true on the CPU backend (where both take the decomposed path anyway,
+// since CPU returns ErrNotImplemented for fused causal). This guards the new gate compiling and
+// not altering results. Runs on the default (CPU) backend.
+func TestCoreUseFusionFalseMatchesDecomposed(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	const B, S, H, D = 1, 32, 2, 64
+	scale := 0.125
+	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 1), B, S, H, D)
+	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 2), B, S, H, D)
+	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 3), B, S, H, D)
+
+	store := model.NewStore()
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
+		on, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true)
+		off, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, false)
+		return []*Node{Div(ReduceAllMax(Abs(Sub(on, off))), AddScalar(ReduceAllMax(Abs(off)), 1e-6))}
+	})
+	out := exec.MustCall(q, k, v)
+	rel := float64(tensors.ToScalar[float32](out[0]))
+	require.LessOrEqual(t, rel, 1e-6, "useFusion on/off diverged on CPU (both should be decomposed)")
 }
