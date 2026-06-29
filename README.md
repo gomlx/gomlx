@@ -307,8 +307,12 @@ without linking GoMLX -- it will save a little executable size.
   - `GOMLX_BACKEND`: defines the backend engine to use (if using `backends.New()`). The value is formatted as "<backend_name>[:<backend_config>]",
     with the config part being optional. Examples:
     - `GOMLX_BACKEND=go`: Use the Go backend, the pure Go implementation that is very portable but slow.
+    - `GOMLX_BACKEND="xla"`: Use XLA for whatever the default plugin is (it uses `cuda` if available).
+    - `GOMLX_BACKEND="xla:help"`: It will print out documentation on all options for the `"xla"` backend, and return
+      an error.
     - `GOMLX_BACKEND="xla:cpu"`: Use XLA (the faster backend, only runs on Linux now) for CPU
-    - `GOMLX_BACKEND="xla:cuda"`: Use XLA for for Nvidia CUDA
+    - `GOMLX_BACKEND="xla:cuda"`: Use XLA for for Nvidia CUDA; Or set it to `xla:cuda,preallocate=false` to prevent it
+      from preallocating 75% of the GPU memory.
     - `GOMLX_BACKEND="xla:/path/to/my/pjrt_plugin.so"`: Use XLA with an arbitrary PJRT. PJRT is a plugin system for XLA to support different hardware.
       One can install PJRTs build for NVIDIA GPUs (there is an installation script for that), there is also one for ROCm (not tested by the author),
       for TPU (Google Cloud) and reports of PJRTs being built to even new accelerators (e.g.: [TensTorrent XLA](https://github.com/tenstorrent/tt-xla))
