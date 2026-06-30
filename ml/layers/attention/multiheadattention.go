@@ -346,12 +346,15 @@ func (b *MultiHeadAttentionBuilder) WithFusion(enabled bool) *MultiHeadAttention
 	return b
 }
 
-// WithSeqLens supplies per-batch actual sequence lengths (int32 [B] nodes) for padding masking
-// via the fused SDPA path. Mutually exclusive with an explicit query/key matrix mask; setting
-// both panics. nil nodes are ignored.
+// WithSeqLens supplies per-batch actual sequence lengths (int32 [B] nodes) for padding masking.
+// Both querySeqLen and keyValueSeqLen must be set together, or both nil; passing exactly one
+// non-nil argument panics. Mutually exclusive with an explicit query/key matrix mask.
 func (b *MultiHeadAttentionBuilder) WithSeqLens(querySeqLen, keyValueSeqLen *Node) *MultiHeadAttentionBuilder {
 	if b.queryKeyMatrixMask != nil {
 		Panicf("MultiHeadAttention: WithSeqLens is mutually exclusive with an explicit query/key matrix mask")
+	}
+	if (querySeqLen == nil) != (keyValueSeqLen == nil) {
+		Panicf("MultiHeadAttention: WithSeqLens requires both querySeqLen and keyValueSeqLen, or neither")
 	}
 	b.querySeqLen = querySeqLen
 	b.keyValueSeqLen = keyValueSeqLen

@@ -314,6 +314,38 @@ func TestWithSeqLensMaskAfterRejectsExplicitMask(t *testing.T) {
 	}, "WithSeqLens then WithQueryKeyMatrixMask must panic")
 }
 
+// TestWithSeqLensRequiresBoth pins the both-or-neither contract: passing exactly one non-nil
+// argument to WithSeqLens must panic immediately (before any backend op).
+func TestWithSeqLensRequiresBoth(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	const B, S, H, D = 1, 8, 2, 8
+	x := tensors.FromFlatDataAndDimensions(randFlat(B*S*(H*D), 1), B, S, H*D)
+	lens := tensors.FromFlatDataAndDimensions([]int32{S}, B)
+
+	store := model.NewStore()
+	// Only querySeqLen set, keyValueSeqLen nil.
+	require.Panics(t, func() {
+		_ = model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen *Node) []*Node {
+			return []*Node{
+				SelfAttention(scope, in, H, D).
+					WithSeqLens(qlen, nil).
+					Done(),
+			}
+		}).MustCall(x, lens)
+	}, "WithSeqLens(non-nil, nil) must panic")
+
+	// Only keyValueSeqLen set, querySeqLen nil.
+	require.Panics(t, func() {
+		_ = model.MustNewExec(backend, store, func(scope *model.Scope, in, klen *Node) []*Node {
+			return []*Node{
+				SelfAttention(scope, in, H, D).
+					WithSeqLens(nil, klen).
+					Done(),
+			}
+		}).MustCall(x, lens)
+	}, "WithSeqLens(nil, non-nil) must panic")
+}
+
 // TestSeqLenDecomposedMasking verifies that the decomposed attention path correctly applies
 // padding masking when WithSeqLens is used. On CPU the fused path is unavailable, so both
 // the seqlen path and an equivalent explicit boolean mask path use decomposed attention.
@@ -333,28 +365,29 @@ func TestSeqLenDecomposedMasking(t *testing.T) {
 	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 11), B, S, H*D)
 	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 12), B, S, H*D)
 
-	// seqlens: batch 0 has 3 valid key positions, batch 1 has 2.
+	// seqlens: batch 0 has 3 valid positions, batch 1 has 2.
 	seqLensTensor := tensors.FromFlatDataAndDimensions([]int32{3, 2}, B)
 
-	// Equivalent explicit key mask [B, S]: true = valid key position.
+	// Equivalent explicit mask [B, S]: true = valid position (same for query and key in self-attn).
 	// batch 0: [T,T,T,F]; batch 1: [T,T,F,F].
-	keyMaskTensor := tensors.FromFlatDataAndDimensions([]bool{
+	maskTensor := tensors.FromFlatDataAndDimensions([]bool{
 		true, true, true, false,
 		true, true, false, false,
 	}, B, S)
 
 	store := model.NewStore()
-	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, seqLens, keyMask *Node) []*Node {
-		// Seqlen path: pass only keyValueSeqLen (nil querySeqLen) to mirror a key-only mask.
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, seqLens, mask *Node) []*Node {
+		// Seqlen path: both querySeqLen and keyValueSeqLen set (required by contract).
 		// DoneWithCoefficients forces the decomposed path and returns the [B,Sq,H,Skv] coeffs.
 		_, slCoeffs := MultiHeadAttention(scope.In("sl"), qIn, kIn, vIn, H, D).
-			WithSeqLens(nil, seqLens).
+			WithSeqLens(seqLens, seqLens).
 			WithPreProjected(true).
 			DoneWithCoefficients()
 
-		// Equivalent reference: explicit boolean key mask [B, S].
+		// Equivalent reference: explicit boolean key+query mask [B, S].
 		_, mkCoeffs := MultiHeadAttention(scope.In("mk"), qIn, kIn, vIn, H, D).
-			WithKeyMask(keyMask).
+			WithKeyMask(mask).
+			WithQueryMask(mask).
 			WithPreProjected(true).
 			DoneWithCoefficients()
 
@@ -362,7 +395,7 @@ func TestSeqLenDecomposedMasking(t *testing.T) {
 		diff := ReduceAllMax(Abs(Sub(slCoeffs, mkCoeffs)))
 		return []*Node{diff}
 	})
-	out := exec.MustCall(q, k, v, seqLensTensor, keyMaskTensor)
+	out := exec.MustCall(q, k, v, seqLensTensor, maskTensor)
 	maxDiff := float64(tensors.ToScalar[float32](out[0]))
 	// Same Q/K/V, equivalent masks: coefficients must match within float32 rounding.
 	require.LessOrEqual(t, maxDiff, float64(1e-5),
@@ -392,14 +425,14 @@ func TestWithSeqLensBuildsConfigAndProducesOutput(t *testing.T) {
 }
 
 // TestSeqLenFusedParity_cuda [cuda] verifies that the fused PADDING path with WithSeqLens
-// produces numerically the same output as the decomposed reference with an equivalent explicit
-// boolean key mask. Skipped unless the xla:cuda backend is present and supports fused attention.
+// produces numerically the same output as the decomposed path with the same both-set seqlen
+// config. Skipped unless the xla:cuda backend is present and supports fused attention.
 //
-// Both arms share the same output-projection weights (same variable scope) and use
-// WithPreProjected(true) to skip Q/K/V projections, so the only difference between them is
-// the masking path. Real padding is used: batch element 1 has 48/64 valid keys, element 2 has 32/64.
-// The comparison is on the actual .Done() output tensors, not DoneWithCoefficients, so the fused
-// kernel is exercised and must correctly zero out padding positions.
+// Both arms share output-projection weights (scope.Shared) and use WithPreProjected(true)
+// to skip Q/K/V projections, so the only difference is fused=true vs fused=false.
+// Real padding: batch element 0 has 48/64 valid positions, element 1 has 32/64.
+// The test directly compares fused vs decomposed; it catches any disagreement in how the
+// cuDNN PADDING kernel applies seqlen masking relative to the software decomposed path.
 func TestSeqLenFusedParity_cuda(t *testing.T) {
 	backend := testutil.GetOfficialBackend("xla:cuda")
 	if backend == nil || !backendSupportsFusion(backend) {
@@ -416,50 +449,37 @@ func TestSeqLenFusedParity_cuda(t *testing.T) {
 	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 12), B, S, H*D)
 	seqLensTensor := tensors.FromFlatDataAndDimensions(seqLenData, B)
 
-	// Equivalent explicit key mask [B, S]: true = valid key position.
-	keyMaskData := make([]bool, B*S)
-	for b, sl := range seqLenData {
-		for pos := range S {
-			keyMaskData[b*S+pos] = pos < int(sl)
-		}
-	}
-	keyMaskTensor := tensors.FromFlatDataAndDimensions(keyMaskData, B, S)
-
 	store := model.NewStore()
-	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, seqLens, keyMask *Node) []*Node {
-		// Fused arm: WithSeqLens activates the cuDNN PADDING kernel on xla:cuda.
-		// scope.In("shared") is visited first; the builder resolves variables under shared/.
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, seqLens *Node) []*Node {
+		// Fused arm: WithSeqLens(both) activates the cuDNN PADDING kernel on xla:cuda.
 		fusedOut := MultiHeadAttention(scope.In("shared"), qIn, kIn, vIn, H, D).
-			WithSeqLens(nil, seqLens).
+			WithSeqLens(seqLens, seqLens).
 			WithPreProjected(true).
 			Done()
 
-		// Reference arm: equivalent explicit boolean key mask, decomposed path.
-		// scope.Shared("shared") returns a scope at the same variable path, so both arms use
-		// identical output-projection weights and the outputs are numerically comparable.
+		// Decomposed reference: same both-set config, same shared weights, fused disabled.
 		refOut := MultiHeadAttention(scope.Shared("shared"), qIn, kIn, vIn, H, D).
-			WithKeyMask(keyMask).
+			WithSeqLens(seqLens, seqLens).
 			WithFusion(false).
 			WithPreProjected(true).
 			Done()
 
-		refOut = ConvertDType(refOut, dtypes.Float32)
 		fusedOut = ConvertDType(fusedOut, dtypes.Float32)
+		refOut = ConvertDType(refOut, dtypes.Float32)
 		diff := Div(
 			ReduceAllMax(Abs(Sub(fusedOut, refOut))),
 			AddScalar(ReduceAllMax(Abs(refOut)), 1e-6),
 		)
 		return []*Node{fusedOut, diff}
 	})
-	out := exec.MustCall(q, k, v, seqLensTensor, keyMaskTensor)
+	out := exec.MustCall(q, k, v, seqLensTensor)
 
 	// Output shape must be correct.
 	require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions,
 		"fused WithSeqLens output shape must be [B, S, H*D]")
 
-	// Fused and decomposed outputs must agree within bf16 tolerance.
-	// Fails if the cuDNN PADDING kernel ignores seqlens or returns unmasked output.
+	// Fused and decomposed must agree within bf16 tolerance.
 	relErr := float64(tensors.ToScalar[float32](out[1]))
 	require.LessOrEqual(t, relErr, 0.05,
-		"fused seqlen and explicit-mask outputs diverge (rel err=%v); fused padding not applied", relErr)
+		"fused and decomposed seqlen outputs diverge (rel err=%v); fused padding path broken", relErr)
 }
