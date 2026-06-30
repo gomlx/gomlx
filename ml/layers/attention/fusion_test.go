@@ -112,8 +112,9 @@ func backendSupportsFusion(backend compute.Backend) bool {
 
 // backendSupportsBiasedFusion reports whether the backend implements fused SDPA with a [B,H,S,S] bias.
 // Uses the same probe-then-detect pattern as backendSupportsFusion.
+// Dims match the real test (S=64, H=2, D=64) so "probe succeeds" reliably implies the real test's fused arm will fuse.
 func backendSupportsBiasedFusion(backend compute.Backend) bool {
-	const B, S, H, D = 1, 4, 1, 8
+	const B, S, H, D = 1, 64, 2, 64
 	scale := 1.0 / math.Sqrt(float64(D))
 	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 20), B, S, H, D)
 	biasTensor := tensors.FromFlatDataAndDimensions(make([]float32, B*H*S*S), B, H, S, S)
@@ -122,7 +123,7 @@ func backendSupportsBiasedFusion(backend compute.Backend) bool {
 		exec := MustNewExec(backend, func(qn, bn *Node) *Node {
 			round := func(n *Node) *Node { return ConvertDType(n, dtypes.BFloat16) }
 			cfg := NewFusedAttentionConfig(nil, nil, bn)
-			fused := BackendFusedScaledDotProductAttention(
+			fused, _ := BackendFusedScaledDotProductAttention(
 				round(qn), round(qn), round(qn), nil, H, H,
 				compute.AxesLayoutBSHD, scale, false, cfg)
 			return ConvertDType(ReduceAllSum(fused), dtypes.Float32)
