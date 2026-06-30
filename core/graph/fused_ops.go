@@ -157,14 +157,7 @@ func BackendFusedDense(x, weight, bias *Node, activation compute.ActivationType)
 // NewSeqLenAttentionConfig builds a ScaledDotProductAttentionConfig carrying per-batch sequence
 // lengths (int32 [B] nodes) for padding masking in the fused SDPA path. Either node may be nil.
 func NewSeqLenAttentionConfig(querySeqLen, keyValueSeqLen *Node) *compute.ScaledDotProductAttentionConfig {
-	cfg := &compute.ScaledDotProductAttentionConfig{}
-	if querySeqLen != nil {
-		cfg.QuerySeqLen = querySeqLen.outputOps[0]
-	}
-	if keyValueSeqLen != nil {
-		cfg.KeyValueSeqLen = keyValueSeqLen.outputOps[0]
-	}
-	return cfg
+	return NewFusedAttentionConfig(querySeqLen, keyValueSeqLen, nil)
 }
 
 // NewFusedAttentionConfig builds a ScaledDotProductAttentionConfig from optional seqlen and
