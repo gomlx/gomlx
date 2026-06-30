@@ -305,6 +305,68 @@ func TestTransformerBatchSizes(t *testing.T) {
 	}
 }
 
+// TestCausalSeqLens verifies that a causal model with a rank-2 padding mask takes the
+// WithSeqLens+WithCausalMask (PADDING_CAUSAL) path and applies padding: masked logits
+// must differ from the unmasked baseline.
+func TestCausalSeqLens(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	const (
+		vocabSize = 100
+		embedDim  = 32
+		numLayers = 1
+		numHeads  = 2
+		headDim   = 8
+		seqLen    = 4
+	)
+	store := model.NewStore()
+	// UseCausalMask=true: rank-2 mask now takes WithSeqLens+WithCausalMask path.
+	m := New(vocabSize, embedDim, numLayers, numHeads, headDim).
+		WithFFNDim(64).
+		WithMaxPosEmbed(32).
+		WithCausalMask(true)
+
+	tokenData := [][]int32{
+		{1, 2, 3, 0}, // position 3 is padding
+		{5, 6, 0, 0}, // positions 2,3 are padding
+	}
+	tokenTensor := tensors.FromValue(tokenData)
+
+	// No-mask baseline: causal only, no padding mask.
+	noMaskLogits := model.MustCallOnce(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+		return m.Logits(scope, tokens, nil)
+	}, tokenTensor)
+
+	// Partial-mask run: rank-2 mask triggers WithSeqLens+WithCausalMask.
+	// Padding must change at least some logits relative to the no-mask run.
+	partialMaskData := [][]bool{
+		{true, true, true, false},
+		{true, true, false, false},
+	}
+	partialMaskTensor := tensors.FromValue(partialMaskData)
+	partialMaskLogits := model.MustCallOnce(backend, store, func(scope *model.Scope, tokens, mask *Node) *Node {
+		return m.Logits(scope, tokens, mask)
+	}, tokenTensor, partialMaskTensor)
+
+	// At least one logit must differ by more than numerical noise.
+	maxDiff := float32(0)
+	tensors.MustConstFlatData[float32](noMaskLogits, func(noFlat []float32) {
+		tensors.MustConstFlatData[float32](partialMaskLogits, func(partFlat []float32) {
+			require.Equal(t, len(noFlat), len(partFlat))
+			for i := range noFlat {
+				d := noFlat[i] - partFlat[i]
+				if d < 0 {
+					d = -d
+				}
+				if d > maxDiff {
+					maxDiff = d
+				}
+			}
+		})
+	})
+	assert.Greater(t, float64(maxDiff), 1e-3,
+		"causal+seqlen logits must differ from no-mask logits (diff=%v); padding not applied on PADDING_CAUSAL path", maxDiff)
+}
+
 // TestSeqLensFromMask verifies seqLensFromMask converts a contiguous right-padded [B, Skv]
 // boolean mask to correct int32 [B] sequence lengths, and that the full model path using
 // WithSeqLens produces numerically equivalent output to the WithMask path.
@@ -377,14 +439,14 @@ func TestSeqLensFromMask(t *testing.T) {
 		partialMaskTensor := tensors.FromValue(partialMaskData)
 
 		// Full-mask run (rank-2 triggers WithSeqLens; seqlen==S means no masking applied).
-		fullMaskLogits := model.MustExecOnce(backend, store, func(scope *model.Scope, tokens, mask *Node) *Node {
+		fullMaskLogits := model.MustCallOnce(backend, store, func(scope *model.Scope, tokens, mask *Node) *Node {
 			return m.Logits(scope, tokens, mask)
 		}, tokenTensor, fullMaskTensor)
 
 		// Partial-mask run (rank-2 triggers WithSeqLens; seqlen < S means padding is masked).
 		// If the fix is absent, the decomposed fallback silently ignores seqlens and produces
 		// the same output as the full-mask run. The test detects this by asserting they differ.
-		partialMaskLogits := model.MustExecOnce(backend, store, func(scope *model.Scope, tokens, mask *Node) *Node {
+		partialMaskLogits := model.MustCallOnce(backend, store, func(scope *model.Scope, tokens, mask *Node) *Node {
 			return m.Logits(scope, tokens, mask)
 		}, tokenTensor, partialMaskTensor)
 
