@@ -262,6 +262,11 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 		isGQA := numQueryHeads != numKVHeads
 		decomposedQuery := query
 		decomposedBias := attentionBias
+		// Bias convention is [B,H,Sq,Skv] (heads-major). BSHD scores are [B,Sq,H,Skv],
+		// so permute bias [0,2,1,3] before Add. BHSD scores are [B,H,Sq,Skv]: no permute.
+		if decomposedBias != nil && layout == LayoutBSHD {
+			decomposedBias = TransposeAllAxes(decomposedBias, 0, 2, 1, 3)
+		}
 		if isGQA {
 			decomposedQuery = reshapeQueryForGQA(query, numQueryHeads, numKVHeads, layout)
 			if decomposedMask != nil {
