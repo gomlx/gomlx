@@ -4,7 +4,6 @@ package transformer
 
 import (
 	"fmt"
-	"math"
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
@@ -333,10 +332,12 @@ func TestSeqLensFromMask(t *testing.T) {
 	})
 
 	t.Run("ModelParityMaskVsSeqLens", func(t *testing.T) {
-		// Run two model instances with shared weights: one sees nil mask (no masking),
-		// the other sees a full-length mask ([B, S] all-ones) which is rank-2 and triggers
-		// the WithSeqLens path with seqlens == S.  Both paths must produce the same logits
-		// because a full-length seqlen disables masking just as nil does.
+		// Parity fixture with REAL padding: two batches where some tokens are padding.
+		// batch 0: positions 0,1,2 valid (len=3); batch 1: positions 0,1 valid (len=2).
+		// A rank-2 [B, S] boolean mask triggers the WithSeqLens path in Logits/transformer.
+		// This test verifies that the seqlen path actually applies the padding mask on CPU
+		// (which always uses the decomposed attention path), making masked outputs differ
+		// from unmasked outputs — not a vacuous pass with all-ones masking.
 		const (
 			vocabSize = 100
 			embedDim  = 32
@@ -347,44 +348,64 @@ func TestSeqLensFromMask(t *testing.T) {
 			batchSize = 2
 		)
 		store := model.NewStore()
+		// UseCausalMask=false so the rank-2 mask path selects WithSeqLens in Logits.
 		m := New(vocabSize, embedDim, numLayers, numHeads, headDim).
 			WithFFNDim(64).
-			WithMaxPosEmbed(32)
+			WithMaxPosEmbed(32).
+			WithCausalMask(false)
 
 		tokenData := [][]int32{
-			{1, 2, 3, 4},
-			{5, 6, 7, 8},
+			{1, 2, 3, 0}, // position 3 is padding
+			{5, 6, 0, 0}, // positions 2,3 are padding
 		}
 		tokenTensor := tensors.FromValue(tokenData)
 
 		// Full mask: all positions valid — seqlen path returns S for each batch element.
+		// This is the baseline: seqlen == S is equivalent to no mask.
 		fullMaskData := [][]bool{
 			{true, true, true, true},
 			{true, true, true, true},
 		}
 		fullMaskTensor := tensors.FromValue(fullMaskData)
 
-		// nil-mask run.
-		nilMaskLogits := model.MustExecOnce(backend, store, func(scope *model.Scope, tokens *Node) *Node {
-			return m.Logits(scope, tokens, nil)
-		}, tokenTensor)
+		// Partial mask: real padding — seqlen path must shorten the attended key positions.
+		// This triggers masking that MUST differ from the full-mask logits.
+		partialMaskData := [][]bool{
+			{true, true, true, false},
+			{true, true, false, false},
+		}
+		partialMaskTensor := tensors.FromValue(partialMaskData)
 
-		// full-mask run (rank-2, triggers WithSeqLens path).
+		// Full-mask run (rank-2 triggers WithSeqLens; seqlen==S means no masking applied).
 		fullMaskLogits := model.MustExecOnce(backend, store, func(scope *model.Scope, tokens, mask *Node) *Node {
 			return m.Logits(scope, tokens, mask)
 		}, tokenTensor, fullMaskTensor)
 
-		// Both should produce identical logits.
-		tensors.MustConstFlatData[float32](nilMaskLogits, func(nilFlat []float32) {
-			tensors.MustConstFlatData[float32](fullMaskLogits, func(fullFlat []float32) {
-				require.Equal(t, len(nilFlat), len(fullFlat))
-				for i, v := range nilFlat {
-					if math.IsNaN(float64(v)) {
-						continue
+		// Partial-mask run (rank-2 triggers WithSeqLens; seqlen < S means padding is masked).
+		// If the fix is absent, the decomposed fallback silently ignores seqlens and produces
+		// the same output as the full-mask run. The test detects this by asserting they differ.
+		partialMaskLogits := model.MustExecOnce(backend, store, func(scope *model.Scope, tokens, mask *Node) *Node {
+			return m.Logits(scope, tokens, mask)
+		}, tokenTensor, partialMaskTensor)
+
+		// The partial-mask run must differ meaningfully from the full-mask run:
+		// at least one logit position must change by more than numerical noise.
+		maxDiff := float32(0)
+		tensors.MustConstFlatData[float32](fullMaskLogits, func(fullFlat []float32) {
+			tensors.MustConstFlatData[float32](partialMaskLogits, func(partFlat []float32) {
+				require.Equal(t, len(fullFlat), len(partFlat))
+				for i := range fullFlat {
+					d := fullFlat[i] - partFlat[i]
+					if d < 0 {
+						d = -d
 					}
-					assert.InDelta(t, v, fullFlat[i], 1e-4, "logit[%d] mismatch: nil-mask=%v seqlens=%v", i, v, fullFlat[i])
+					if d > maxDiff {
+						maxDiff = d
+					}
 				}
 			})
 		})
+		assert.Greater(t, float64(maxDiff), 1e-3,
+			"partial-mask seqlen logits must differ from full-mask logits (diff=%v); padding is not applied on decomposed path", maxDiff)
 	})
 }
