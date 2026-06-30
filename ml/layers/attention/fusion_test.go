@@ -314,6 +314,61 @@ func TestWithSeqLensMaskAfterRejectsExplicitMask(t *testing.T) {
 	}, "WithSeqLens then WithQueryKeyMatrixMask must panic")
 }
 
+// TestSeqLenDecomposedMasking verifies that the decomposed attention path correctly applies
+// padding masking when WithSeqLens is used. On CPU the fused path is unavailable, so both
+// the seqlen path and an equivalent explicit boolean mask path use decomposed attention.
+// They must produce identical attention coefficients; before the fix the seqlen path ignores
+// padding so its coefficients differ from the masked-softmax reference.
+//
+// Uses DoneWithCoefficients() so the comparison is on the attention weight matrix, which
+// is computed before the output projection. This means different output-projection weights
+// in the two separate scopes do not affect the comparison.
+func TestSeqLenDecomposedMasking(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	// B=2, Sq=Skv=4, H=2, D=8; seqlens=[3,2] (positions 3 and 2,3 are padding).
+	const B, S, H, D = 2, 4, 2, 8
+
+	// Q/K/V: [B, S, H*D] (MultiHeadAttention with preProjected reshapes to [B,S,H,D]).
+	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 10), B, S, H*D)
+	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 11), B, S, H*D)
+	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 12), B, S, H*D)
+
+	// seqlens: batch 0 has 3 valid key positions, batch 1 has 2.
+	seqLensTensor := tensors.FromFlatDataAndDimensions([]int32{3, 2}, B)
+
+	// Equivalent explicit key mask [B, S]: true = valid key position.
+	// batch 0: [T,T,T,F]; batch 1: [T,T,F,F].
+	keyMaskTensor := tensors.FromFlatDataAndDimensions([]bool{
+		true, true, true, false,
+		true, true, false, false,
+	}, B, S)
+
+	store := model.NewStore()
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, seqLens, keyMask *Node) []*Node {
+		// Seqlen path: pass only keyValueSeqLen (nil querySeqLen) to mirror a key-only mask.
+		// DoneWithCoefficients forces the decomposed path and returns the [B,Sq,H,Skv] coeffs.
+		_, slCoeffs := MultiHeadAttention(scope.In("sl"), qIn, kIn, vIn, H, D).
+			WithSeqLens(nil, seqLens).
+			WithPreProjected(true).
+			DoneWithCoefficients()
+
+		// Equivalent reference: explicit boolean key mask [B, S].
+		_, mkCoeffs := MultiHeadAttention(scope.In("mk"), qIn, kIn, vIn, H, D).
+			WithKeyMask(keyMask).
+			WithPreProjected(true).
+			DoneWithCoefficients()
+
+		// Compare coefficient matrices: they must match when masking is applied correctly.
+		diff := ReduceAllMax(Abs(Sub(slCoeffs, mkCoeffs)))
+		return []*Node{diff}
+	})
+	out := exec.MustCall(q, k, v, seqLensTensor, keyMaskTensor)
+	maxDiff := float64(tensors.ToScalar[float32](out[0]))
+	// Same Q/K/V, equivalent masks: coefficients must match within float32 rounding.
+	require.LessOrEqual(t, maxDiff, float64(1e-5),
+		"seqlen and explicit-mask attention coefficients diverge (max diff=%v); padding not applied on decomposed path", maxDiff)
+}
+
 // TestWithSeqLensBuildsConfigAndProducesOutput confirms that WithSeqLens wires a non-nil config
 // into the fused path and that the builder still produces the correct output shape on CPU
 // (the fused path returns ErrNotImplemented on CPU and falls back to decomposed, so the seqlen

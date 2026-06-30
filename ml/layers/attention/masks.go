@@ -194,6 +194,41 @@ func (b *MultiHeadAttentionBuilder) buildAttentionMaskFromSplitMasks() (mask *No
 	return LogicalAnd(queryMask, keyMask)
 }
 
+// buildSeqLenPaddingMask builds a boolean padding mask from per-batch sequence length tensors.
+// querySeqLen and keyValueSeqLen are int32 [B] nodes; either may be nil (treated as full length).
+// Returns a [B, Sq, 1, Skv] boolean mask (BSHD layout) broadcastable to [B, Sq, H, Skv]:
+// mask[b, q, 0, kv] = (q < querySeqLen[b]) AND (kv < keyValueSeqLen[b]).
+// Nil seqlen means all positions in that axis are valid.
+func buildSeqLenPaddingMask(query, key *Node, querySeqLen, keyValueSeqLen *Node, layout AxesLayout) *Node {
+	g := query.Graph()
+	seqAxis := layout.SeqAxis()
+	sqLen := query.Shape().Dimensions[seqAxis]
+	skvLen := key.Shape().Dimensions[seqAxis]
+
+	var kvMask, qMask *Node
+	if keyValueSeqLen != nil {
+		// kv positions: Iota [1, 1, 1, Skv], compare < kvLen[b] reshaped to [B, 1, 1, 1]
+		kvIota := Reshape(Iota(g, shapes.Make(dtypes.Int32, skvLen), 0), 1, 1, 1, skvLen)
+		kvLenBC := Reshape(ConvertDType(keyValueSeqLen, dtypes.Int32), keyValueSeqLen.Shape().Dimensions[0], 1, 1, 1)
+		kvMask = LessThan(kvIota, kvLenBC) // [B, 1, 1, Skv]
+	}
+	if querySeqLen != nil {
+		// q positions: Iota [1, Sq, 1, 1], compare < qLen[b] reshaped to [B, 1, 1, 1]
+		qIota := Reshape(Iota(g, shapes.Make(dtypes.Int32, sqLen), 0), 1, sqLen, 1, 1)
+		qLenBC := Reshape(ConvertDType(querySeqLen, dtypes.Int32), querySeqLen.Shape().Dimensions[0], 1, 1, 1)
+		qMask = LessThan(qIota, qLenBC) // [B, Sq, 1, 1]
+	}
+
+	switch {
+	case kvMask != nil && qMask != nil:
+		return LogicalAnd(qMask, kvMask) // [B, Sq, 1, Skv] via broadcast
+	case kvMask != nil:
+		return kvMask
+	default:
+		return qMask
+	}
+}
+
 // buildCausalAttentionMask creates a mask where queries can only attend to keys with "smaller index" than itself.
 func (b *MultiHeadAttentionBuilder) buildCausalAttentionMask() (mask *Node) {
 	queryShape := b.query.Shape()

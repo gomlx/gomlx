@@ -476,6 +476,21 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	var fusedConfig *compute.ScaledDotProductAttentionConfig
 	if b.querySeqLen != nil || b.keyValueSeqLen != nil {
 		fusedConfig = NewSeqLenAttentionConfig(b.querySeqLen, b.keyValueSeqLen)
+		// Build a padding mask for the decomposed fallback path: Core's decomposedFn only
+		// sees the opaque fusedConfig (compute.Value), not the *Node seqlens, so we derive
+		// the boolean mask here while *Node access is still available.
+		padMask := buildSeqLenPaddingMask(projectedQuery, projectedKey, b.querySeqLen, b.keyValueSeqLen, b.layout)
+		if useCausalMask {
+			// Combine padding + causal: AND them into one mask so Core takes decomposed path
+			// with a single boolean mask (useCausalMask and mask are mutually exclusive in Core).
+			sqLen := projectedQuery.Shape().Dimensions[b.layout.SeqAxis()]
+			causal := LowerTriangular(b.g, sqLen)
+			causal = Reshape(causal, 1, sqLen, 1, sqLen) // [1, Sq, 1, Sq] for BSHD broadcast
+			mask = LogicalAnd(padMask, causal)
+			useCausalMask = false
+		} else {
+			mask = padMask
+		}
 	}
 	attentionOutput, attentionCoefficients = Core(b.scope, projectedQuery, projectedKey, projectedValue,
 		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients, b.scoreSoftCap, b.useFusion, fusedConfig)
