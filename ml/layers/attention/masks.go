@@ -35,6 +35,9 @@ func (b *MultiHeadAttentionBuilder) WithKeyMask(keyMask *Node) *MultiHeadAttenti
 	if b.queryKeyMatrixMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
 	}
+	if b.querySeqLen != nil || b.keyValueSeqLen != nil {
+		Panicf("MultiHeadAttention: an explicit mask is mutually exclusive with WithSeqLens; pass padding via seqlens only")
+	}
 	shape := keyMask.Shape()
 	if shape.Rank() < 1+b.innerKeyAxes || shape.Rank() > 2+b.innerKeyAxes {
 		Panicf("invalid keyMask shape (%s), expected rank to be %d or %d -- "+
@@ -58,6 +61,9 @@ func (b *MultiHeadAttentionBuilder) WithKeyMask(keyMask *Node) *MultiHeadAttenti
 func (b *MultiHeadAttentionBuilder) WithQueryMask(queryMask *Node) *MultiHeadAttentionBuilder {
 	if b.queryKeyMatrixMask != nil {
 		Panicf("a mask can be set either with WithKeyMask and WithQueryMask separately or with WithKeyQueryMatrixMask, but not both")
+	}
+	if b.querySeqLen != nil || b.keyValueSeqLen != nil {
+		Panicf("MultiHeadAttention: an explicit mask is mutually exclusive with WithSeqLens; pass padding via seqlens only")
 	}
 	shape := queryMask.Shape()
 	if shape.Rank() < 1+b.innerQueryAxes || shape.Rank() > 2+b.innerQueryAxes {

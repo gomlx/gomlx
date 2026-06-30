@@ -196,6 +196,13 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 	if useCausalMask && attentionMask != nil {
 		Panicf("attention.Core: useCausalMask and mask are mutually exclusive; combine them into a single mask before calling Core")
 	}
+	hasSeqLens := querySeqLen != nil || keyValueSeqLen != nil
+	if hasSeqLens && attentionMask != nil {
+		Panicf("attention.Core: querySeqLen/keyValueSeqLen are mutually exclusive with a non-nil attentionMask; combine padding into a single mask upstream")
+	}
+	if hasSeqLens && layout != LayoutBSHD {
+		Panicf("attention.Core: querySeqLen/keyValueSeqLen require LayoutBSHD (padding mask is BSHD-only), got %s", layout)
+	}
 	if numQueryHeads <= 0 || numKVHeads <= 0 || numQueryHeads%numKVHeads != 0 {
 		Panicf("attention.Core: numQueryHeads (%d) must be positive and divisible by numKVHeads (%d)", numQueryHeads, numKVHeads)
 	}

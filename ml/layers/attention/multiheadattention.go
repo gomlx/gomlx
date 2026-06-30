@@ -350,8 +350,9 @@ func (b *MultiHeadAttentionBuilder) WithFusion(enabled bool) *MultiHeadAttention
 // Both querySeqLen and keyValueSeqLen must be set together, or both nil; passing exactly one
 // non-nil argument panics. Mutually exclusive with an explicit query/key matrix mask.
 func (b *MultiHeadAttentionBuilder) WithSeqLens(querySeqLen, keyValueSeqLen *Node) *MultiHeadAttentionBuilder {
-	if b.queryKeyMatrixMask != nil {
-		Panicf("MultiHeadAttention: WithSeqLens is mutually exclusive with an explicit query/key matrix mask")
+	if b.queryKeyMatrixMask != nil || b.keyMask != nil || b.queryMask != nil {
+		Panicf("MultiHeadAttention: WithSeqLens is mutually exclusive with an explicit mask " +
+			"(WithMask/WithKeyMask/WithQueryMask/WithQueryKeyMatrixMask); pass padding via seqlens only")
 	}
 	if (querySeqLen == nil) != (keyValueSeqLen == nil) {
 		Panicf("MultiHeadAttention: WithSeqLens requires both querySeqLen and keyValueSeqLen, or neither")

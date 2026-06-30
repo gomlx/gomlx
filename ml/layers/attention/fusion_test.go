@@ -86,19 +86,27 @@ func backendSupportsFusion(backend compute.Backend) bool {
 	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 2), B, S, H, D)
 	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 3), B, S, H, D)
 	supported := false
-	_ = exceptions.TryCatch[error](func() {
+	probeErr := exceptions.TryCatch[error](func() {
 		exec := MustNewExec(backend, func(qn, kn, vn *Node) *Node {
 			round := func(n *Node) *Node { return ConvertDType(n, dtypes.BFloat16) }
-			err := exceptions.TryCatch[error](func() {
-				_ = BackendFusedScaledDotProductAttention(
-					round(qn), round(kn), round(vn), nil, H, H,
-					compute.AxesLayoutBSHD, 0.125, true, nil)
-			})
-			supported = err == nil || !compute.IsNotImplemented(err)
-			return qn // dummy output to keep the graph valid
+			fused := BackendFusedScaledDotProductAttention(
+				round(qn), round(kn), round(vn), nil, H, H,
+				compute.AxesLayoutBSHD, 0.125, true, nil)
+			// Make the returned node depend on the fused output so the fused op is genuinely
+			// part of the executable graph and exercised at compile/exec time. A backend whose
+			// ErrNotImplemented surfaces only at compile/exec (not graph-build) would otherwise
+			// be misdetected as supported.
+			return ConvertDType(ReduceAllSum(fused), dtypes.Float32)
 		})
 		_ = exec.MustCall(q, k, v)
+		supported = true
 	})
+	if probeErr != nil {
+		if compute.IsNotImplemented(probeErr) {
+			return false // fused op not implemented on this backend.
+		}
+		panic(probeErr) // unexpected error: do not silently swallow.
+	}
 	return supported
 }
 
@@ -312,6 +320,97 @@ func TestWithSeqLensMaskAfterRejectsExplicitMask(t *testing.T) {
 			}
 		}).MustCall(x, lens, lens, mask)
 	}, "WithSeqLens then WithQueryKeyMatrixMask must panic")
+}
+
+// TestWithSeqLensRejectsKeyMask pins that WithSeqLens is mutually exclusive with WithKeyMask
+// (a split mask, not just the matrix mask), in both orders. A non-nil mask would otherwise
+// disable the causal flag in doneInternal and contradict the "seqlens instead of mask" contract.
+func TestWithSeqLensRejectsKeyMask(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	const B, S, H, D = 1, 8, 2, 8
+	x := tensors.FromFlatDataAndDimensions(randFlat(B*S*(H*D), 1), B, S, H*D)
+	lens := tensors.FromFlatDataAndDimensions([]int32{S}, B)
+	keyMaskData := make([]bool, B*S)
+	for i := range keyMaskData {
+		keyMaskData[i] = true
+	}
+	keyMask := tensors.FromFlatDataAndDimensions(keyMaskData, B, S)
+
+	// WithKeyMask then WithSeqLens: WithSeqLens must reject the already-set key mask at builder time.
+	store := model.NewStore()
+	err := exceptions.TryCatch[error](func() {
+		_ = model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen, klen, km *Node) []*Node {
+			return []*Node{
+				SelfAttention(scope, in, H, D).
+					WithKeyMask(km).
+					WithSeqLens(qlen, klen).
+					Done(),
+			}
+		}).MustCall(x, lens, lens, keyMask)
+	})
+	require.Error(t, err, "WithKeyMask then WithSeqLens must panic")
+	require.Contains(t, err.Error(), "WithSeqLens is mutually exclusive with an explicit mask",
+		"panic must come from the WithSeqLens builder guard, not the Core guard")
+
+	// WithSeqLens then WithKeyMask (reverse): the mask setter must reject the already-set seqlens.
+	store2 := model.NewStore()
+	err2 := exceptions.TryCatch[error](func() {
+		_ = model.MustNewExec(backend, store2, func(scope *model.Scope, in, qlen, klen, km *Node) []*Node {
+			return []*Node{
+				SelfAttention(scope, in, H, D).
+					WithSeqLens(qlen, klen).
+					WithKeyMask(km).
+					Done(),
+			}
+		}).MustCall(x, lens, lens, keyMask)
+	})
+	require.Error(t, err2, "WithSeqLens then WithKeyMask must panic")
+	require.Contains(t, err2.Error(), "an explicit mask is mutually exclusive with WithSeqLens",
+		"panic must come from the WithKeyMask builder guard, not the Core guard")
+}
+
+// TestCoreRejectsSeqLensWithMask pins the Core-level guard: passing seqlens together with a
+// non-nil attentionMask must panic (an additive float mask would otherwise be LogicalAnd-ed
+// with the boolean padding mask on the decomposed path, which is wrong).
+func TestCoreRejectsSeqLensWithMask(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	const B, S, H, D = 1, 8, 2, 8
+	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 1), B, S, H, D)
+	lens := tensors.FromFlatDataAndDimensions([]int32{S}, B)
+	maskData := make([]float32, B*S*H*S)
+	maskT := tensors.FromFlatDataAndDimensions(maskData, B, S, H, S)
+
+	store := model.NewStore()
+	err := exceptions.TryCatch[error](func() {
+		_ = model.MustNewExec(backend, store, func(scope *model.Scope, qn, qlen, klen, m *Node) []*Node {
+			out, _ := Core(scope, qn, qn, qn, 0.125, m, nil, LayoutBSHD, false, false, 0.0, true, qlen, klen)
+			return []*Node{out}
+		}).MustCall(q, lens, lens, maskT)
+	})
+	require.Error(t, err, "Core with seqlens and a non-nil mask must panic")
+	require.Contains(t, err.Error(), "mutually exclusive with a non-nil attentionMask",
+		"panic must come from the Core seqlens/mask guard, not an incidental LogicalAnd type error")
+}
+
+// TestCoreRejectsSeqLensWithNonBSHD pins the Core-level guard that seqlens require LayoutBSHD,
+// since buildSeqLenPaddingMask is BSHD-only. Passing seqlens with LayoutBHSD must panic.
+func TestCoreRejectsSeqLensWithNonBSHD(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	const B, H, S, D = 1, 2, 8, 8
+	// BHSD layout: [batch, heads, seq, dim].
+	q := tensors.FromFlatDataAndDimensions(randFlat(B*H*S*D, 1), B, H, S, D)
+	lens := tensors.FromFlatDataAndDimensions([]int32{S}, B)
+
+	store := model.NewStore()
+	err := exceptions.TryCatch[error](func() {
+		_ = model.MustNewExec(backend, store, func(scope *model.Scope, qn, qlen, klen *Node) []*Node {
+			out, _ := Core(scope, qn, qn, qn, 0.125, nil, nil, LayoutBHSD, false, false, 0.0, true, qlen, klen)
+			return []*Node{out}
+		}).MustCall(q, lens, lens)
+	})
+	require.Error(t, err, "Core with seqlens and non-BSHD layout must panic")
+	require.Contains(t, err.Error(), "require LayoutBSHD",
+		"panic must come from the Core seqlens/layout guard")
 }
 
 // TestWithSeqLensRequiresBoth pins the both-or-neither contract: passing exactly one non-nil
