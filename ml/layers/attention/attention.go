@@ -167,6 +167,12 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 // The scope parameter provides the training/inference scope for dropout; it may be nil
 // when dropoutRate is 0.
 //
+// querySeqLen and keyValueSeqLen are optional per-batch actual sequence lengths (int32 [B] nodes)
+// for padding masking. Either may be nil. On the fused path they are forwarded via the seqlen
+// config (so attentionMask stays nil and flashSupported accepts the call). On the decomposed path
+// they are materialized into a boolean padding mask and AND-ed with any existing mask.
+// These are mutually exclusive with a non-nil attentionMask.
+//
 // When wantCoefficients is true, the decomposed path is used for the entire computation
 // (no fused op) and coefficients are returned. When false, the fused op is attempted for
 // the output and coefficients is nil.
@@ -181,7 +187,7 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
 func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionMask *Node, dropoutRate *Node,
 	layout AxesLayout, useCausalMask, wantCoefficients bool, scoreSoftCap float64, useFusion bool,
-	fusedConfig *compute.ScaledDotProductAttentionConfig) (output, coefficients *Node) {
+	querySeqLen, keyValueSeqLen *Node) (output, coefficients *Node) {
 	g := query.Graph()
 	numQueryHeads := query.Shape().Dimensions[layout.HeadsAxis()]
 	numKVHeads := key.Shape().Dimensions[layout.HeadsAxis()]
@@ -212,6 +218,16 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 				causalBool = Reshape(causalBool, 1, seqLen, 1, seqLen)
 			}
 			decomposedMask = causalBool
+		}
+
+		// Build padding mask from seqlen nodes and combine with existing decomposed mask.
+		if querySeqLen != nil || keyValueSeqLen != nil {
+			padMask := buildSeqLenPaddingMask(query, key, querySeqLen, keyValueSeqLen, layout)
+			if decomposedMask != nil {
+				decomposedMask = LogicalAnd(decomposedMask, padMask)
+			} else {
+				decomposedMask = padMask
+			}
 		}
 
 		// For Grouped Query Attention (GQA): reshape Q to split heads into
@@ -268,6 +284,11 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 	} else {
 		output = InternalFusedOpCaller(
 			func() *Node {
+				// Build seqlen config from graph nodes; attentionMask stays nil so flashSupported accepts.
+				var fusedConfig *compute.ScaledDotProductAttentionConfig
+				if querySeqLen != nil || keyValueSeqLen != nil {
+					fusedConfig = NewSeqLenAttentionConfig(querySeqLen, keyValueSeqLen)
+				}
 				return BackendFusedScaledDotProductAttention(
 					query, key, value, attentionMask,
 					numQueryHeads, numKVHeads, layout, scale, useCausalMask, fusedConfig)

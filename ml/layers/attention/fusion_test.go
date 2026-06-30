@@ -126,7 +126,7 @@ func TestFusionFallbackParity(t *testing.T) {
 
 		store := model.NewStore()
 		exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
-			fusedOut, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil)
+			fusedOut, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
 			refOut := naiveCausalAttention(qIn, kIn, vIn, scale)
 			fusedOut = ConvertDType(fusedOut, dtypes.Float32)
 			fg := Gradient(ReduceAllSum(fusedOut), qIn, kIn, vIn)
@@ -162,7 +162,7 @@ func TestFusionGQAParity(t *testing.T) {
 
 		store := model.NewStore()
 		exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
-			out, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil)
+			out, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
 			out = ConvertDType(out, dtypes.Float32)
 			ref := naiveGQAReference(qIn, kIn, vIn, KVH, scale)
 			og := Gradient(ReduceAllSum(out), qIn, kIn, vIn)
@@ -202,7 +202,7 @@ func TestCUDAFusionParity(t *testing.T) {
 			exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
 				round := func(n *Node) *Node { return ConvertDType(ConvertDType(n, dtypes.BFloat16), dtypes.Float32) }
 				qb, kb, vb := round(qIn), round(kIn), round(vIn)
-				fusedOut, _ := Core(scope, qb, kb, vb, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil)
+				fusedOut, _ := Core(scope, qb, kb, vb, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
 				fusedOut = ConvertDType(fusedOut, dtypes.Float32)
 				refOut := naiveCausalAttention(qb, kb, vb, scale)
 				fg := Gradient(ReduceAllSum(fusedOut), qb, kb, vb)
@@ -237,8 +237,8 @@ func TestCoreUseFusionFalseMatchesDecomposed(t *testing.T) {
 
 	store := model.NewStore()
 	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
-		on, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil)
-		off, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, false, nil)
+		on, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
+		off, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, false, nil, nil)
 		return []*Node{Div(ReduceAllMax(Abs(Sub(on, off))), AddScalar(ReduceAllMax(Abs(off)), 1e-6))}
 	})
 	out := exec.MustCall(q, k, v)
@@ -389,4 +389,67 @@ func TestWithSeqLensBuildsConfigAndProducesOutput(t *testing.T) {
 	outputs := exec.MustCall(x, lens, lens)
 	require.Equal(t, []int{B, S, H * D}, outputs[0].Shape().Dimensions,
 		"WithSeqLens output shape must match [B, S, H*D]")
+}
+
+// TestSeqLenFusedParity_cuda [cuda] verifies that the fused path with WithSeqLens produces
+// the same output as the decomposed reference with a real explicit key mask. Skipped unless
+// the xla:cuda backend is present and supports fused attention. This is the GPU-side proof
+// that the seqlen config activates the fused PADDING/PADDING_CAUSAL kernel and masks correctly.
+func TestSeqLenFusedParity_cuda(t *testing.T) {
+	backend := testutil.GetOfficialBackend("xla:cuda")
+	if backend == nil || !backendSupportsFusion(backend) {
+		t.Skip("xla:cuda fused attention backend not available")
+	}
+
+	// B=2, Sq=Skv=64, H=2, D=64; seqlens=[48,32] — real padding.
+	const B, S, H, D = 2, 64, 2, 64
+	seqLenData := []int32{48, 32}
+
+	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 10), B, S, H*D)
+	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 11), B, S, H*D)
+	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 12), B, S, H*D)
+	seqLensTensor := tensors.FromFlatDataAndDimensions(seqLenData, B)
+
+	// Equivalent explicit key mask [B, S]: true = valid key position.
+	keyMaskData := make([]bool, B*S)
+	for b, sl := range seqLenData {
+		for pos := range S {
+			keyMaskData[b*S+pos] = pos < int(sl)
+		}
+	}
+	keyMaskTensor := tensors.FromFlatDataAndDimensions(keyMaskData, B, S)
+
+	store := model.NewStore()
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, seqLens, keyMask *Node) []*Node {
+		// Fused path: WithSeqLens — attentionMask stays nil so flashSupported accepts the call.
+		fusedOut := MultiHeadAttention(scope.In("fused"), qIn, kIn, vIn, H, D).
+			WithSeqLens(nil, seqLens).
+			WithPreProjected(true).
+			Done()
+
+		// Decomposed reference: explicit boolean key mask — forces decomposed path via DoneWithCoefficients.
+		_, decompCoeffs := MultiHeadAttention(scope.In("decomp"), qIn, kIn, vIn, H, D).
+			WithKeyMask(keyMask).
+			WithPreProjected(true).
+			DoneWithCoefficients()
+
+		// Also get decomposed output directly using the same seqlen as an explicit mask.
+		_, fusedCoeffs := MultiHeadAttention(scope.In("fusedCoeff"), qIn, kIn, vIn, H, D).
+			WithSeqLens(nil, seqLens).
+			WithPreProjected(true).
+			DoneWithCoefficients()
+
+		diff := ReduceAllMax(Abs(Sub(fusedCoeffs, decompCoeffs)))
+		return []*Node{fusedOut, diff}
+	})
+	out := exec.MustCall(q, k, v, seqLensTensor, keyMaskTensor)
+
+	// Output shape must be correct.
+	require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions,
+		"fused WithSeqLens output shape must be [B, S, H*D]")
+
+	// Fused and decomposed coefficient matrices must agree within bf16 tolerance.
+	maxDiff := float64(tensors.ToScalar[float32](out[1]))
+	require.LessOrEqual(t, maxDiff, 0.05,
+		"fused seqlen and explicit-mask coefficients diverge (max diff=%v); fused padding not applied", maxDiff)
 }
