@@ -110,6 +110,35 @@ func backendSupportsFusion(backend compute.Backend) bool {
 	return supported
 }
 
+// backendSupportsBiasedFusion reports whether the backend implements fused SDPA with a [B,H,S,S] bias.
+// Uses the same probe-then-detect pattern as backendSupportsFusion.
+func backendSupportsBiasedFusion(backend compute.Backend) bool {
+	const B, S, H, D = 1, 4, 1, 8
+	scale := 1.0 / math.Sqrt(float64(D))
+	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 20), B, S, H, D)
+	biasTensor := tensors.FromFlatDataAndDimensions(make([]float32, B*H*S*S), B, H, S, S)
+	supported := false
+	probeErr := exceptions.TryCatch[error](func() {
+		exec := MustNewExec(backend, func(qn, bn *Node) *Node {
+			round := func(n *Node) *Node { return ConvertDType(n, dtypes.BFloat16) }
+			cfg := NewFusedAttentionConfig(nil, nil, bn)
+			fused := BackendFusedScaledDotProductAttention(
+				round(qn), round(qn), round(qn), nil, H, H,
+				compute.AxesLayoutBSHD, scale, false, cfg)
+			return ConvertDType(ReduceAllSum(fused), dtypes.Float32)
+		})
+		_ = exec.MustCall(q, biasTensor)
+		supported = true
+	})
+	if probeErr != nil {
+		if compute.IsNotImplemented(probeErr) {
+			return false
+		}
+		panic(probeErr)
+	}
+	return supported
+}
+
 // TestRepeatKVHeads pins the GQA grouping order: kv head h is repeated to query heads
 // h*group .. h*group+group-1, so query head q uses kv head q/group (matching reshapeQueryForGQA).
 func TestRepeatKVHeads(t *testing.T) {
@@ -599,9 +628,9 @@ func TestCoreAttentionBiasDecomposed(t *testing.T) {
 	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 1), B, S, H, D)
 	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 2), B, S, H, D)
 	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 3), B, S, H, D)
-	// Bias [1,2,1,2]: strongly favor key position 1 for both query positions.
-	biasData := []float32{-100, 0, -100, 0} // [B=0,Sq=0,H=0,Skv=0..1], [B=0,Sq=1,H=0,Skv=0..1]
-	bias := tensors.FromFlatDataAndDimensions(biasData, B, S, H, S)
+	// Bias [B,H,Sq,Skv] = [1,1,2,2]: strongly favor key position 1 for both query positions.
+	biasData := []float32{-100, 0, -100, 0} // [H=0,Sq=0,Skv=0..1], [H=0,Sq=1,Skv=0..1]
+	bias := tensors.FromFlatDataAndDimensions(biasData, B, H, S, S)
 
 	store := model.NewStore()
 	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qn, kn, vn, bn *Node) []*Node {
@@ -609,8 +638,9 @@ func TestCoreAttentionBiasDecomposed(t *testing.T) {
 		biasedOut, _ := Core(scope, qn, kn, vn, scale, nil, nil, LayoutBSHD, false, true, 0.0, false, nil, nil, bn)
 
 		// Inline reference: softmax(scale*QK^T + bias)*V.
+		// bn is [B,H,Sq,Skv]; BSHD scores are [B,Sq,H,Skv] so permute before Add.
 		scores := MulScalar(Einsum("bqhd,bkhd->bqhk", qn, kn), scale)
-		scores = Add(scores, bn)
+		scores = Add(scores, TransposeAllAxes(bn, 0, 2, 1, 3))
 		attn := Softmax(scores, -1)
 		refOut := Einsum("bqhk,bkhd->bqhd", attn, vn)
 
@@ -669,6 +699,8 @@ func TestAttentionBiasFusedParity_cuda(t *testing.T) {
 	if backend == nil || !backendSupportsFusion(backend) {
 		t.Skip("xla:cuda fused attention backend not available")
 	}
+	require.True(t, backendSupportsBiasedFusion(backend),
+		"xla:cuda supports plain fused SDPA but not biased fusion; bias layout rejected by validateBias")
 
 	// [B=2, S=64, H=2, D=64] — cuDNN flash supports D=64.
 	const B, S, H, D = 2, 64, 2, 64
@@ -678,9 +710,9 @@ func TestAttentionBiasFusedParity_cuda(t *testing.T) {
 	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 10), B, S, H*D)
 	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 11), B, S, H*D)
 	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 12), B, S, H*D)
-	// Bias [B,S,H,S]: non-trivial values so any difference in handling is visible.
-	bData := randFlat(B*S*H*S, 99)
-	biasTensor := tensors.FromFlatDataAndDimensions(bData, B, S, H, S)
+	// Bias [B,H,S,S]: non-trivial values so any difference in handling is visible.
+	bData := randFlat(B*H*S*S, 99)
+	biasTensor := tensors.FromFlatDataAndDimensions(bData, B, H, S, S)
 
 	store := model.NewStore()
 	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, biasIn *Node) []*Node {
