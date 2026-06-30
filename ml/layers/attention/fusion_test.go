@@ -134,7 +134,7 @@ func TestFusionFallbackParity(t *testing.T) {
 
 		store := model.NewStore()
 		exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
-			fusedOut, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
+			fusedOut, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil, nil)
 			refOut := naiveCausalAttention(qIn, kIn, vIn, scale)
 			fusedOut = ConvertDType(fusedOut, dtypes.Float32)
 			fg := Gradient(ReduceAllSum(fusedOut), qIn, kIn, vIn)
@@ -170,7 +170,7 @@ func TestFusionGQAParity(t *testing.T) {
 
 		store := model.NewStore()
 		exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
-			out, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
+			out, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil, nil)
 			out = ConvertDType(out, dtypes.Float32)
 			ref := naiveGQAReference(qIn, kIn, vIn, KVH, scale)
 			og := Gradient(ReduceAllSum(out), qIn, kIn, vIn)
@@ -210,7 +210,7 @@ func TestCUDAFusionParity(t *testing.T) {
 			exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
 				round := func(n *Node) *Node { return ConvertDType(ConvertDType(n, dtypes.BFloat16), dtypes.Float32) }
 				qb, kb, vb := round(qIn), round(kIn), round(vIn)
-				fusedOut, _ := Core(scope, qb, kb, vb, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
+				fusedOut, _ := Core(scope, qb, kb, vb, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil, nil)
 				fusedOut = ConvertDType(fusedOut, dtypes.Float32)
 				refOut := naiveCausalAttention(qb, kb, vb, scale)
 				fg := Gradient(ReduceAllSum(fusedOut), qb, kb, vb)
@@ -245,8 +245,8 @@ func TestCoreUseFusionFalseMatchesDecomposed(t *testing.T) {
 
 	store := model.NewStore()
 	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
-		on, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
-		off, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, false, nil, nil)
+		on, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil, nil)
+		off, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, false, nil, nil, nil)
 		return []*Node{Div(ReduceAllMax(Abs(Sub(on, off))), AddScalar(ReduceAllMax(Abs(off)), 1e-6))}
 	})
 	out := exec.MustCall(q, k, v)
@@ -383,7 +383,7 @@ func TestCoreRejectsSeqLensWithMask(t *testing.T) {
 	store := model.NewStore()
 	err := exceptions.TryCatch[error](func() {
 		_ = model.MustNewExec(backend, store, func(scope *model.Scope, qn, qlen, klen, m *Node) []*Node {
-			out, _ := Core(scope, qn, qn, qn, 0.125, m, nil, LayoutBSHD, false, false, 0.0, true, qlen, klen)
+			out, _ := Core(scope, qn, qn, qn, 0.125, m, nil, LayoutBSHD, false, false, 0.0, true, qlen, klen, nil)
 			return []*Node{out}
 		}).MustCall(q, lens, lens, maskT)
 	})
@@ -404,7 +404,7 @@ func TestCoreRejectsSeqLensWithNonBSHD(t *testing.T) {
 	store := model.NewStore()
 	err := exceptions.TryCatch[error](func() {
 		_ = model.MustNewExec(backend, store, func(scope *model.Scope, qn, qlen, klen *Node) []*Node {
-			out, _ := Core(scope, qn, qn, qn, 0.125, nil, nil, LayoutBHSD, false, false, 0.0, true, qlen, klen)
+			out, _ := Core(scope, qn, qn, qn, 0.125, nil, nil, LayoutBHSD, false, false, 0.0, true, qlen, klen, nil)
 			return []*Node{out}
 		}).MustCall(q, lens, lens)
 	})
@@ -584,4 +584,159 @@ func TestSeqLenFusedParity_cuda(t *testing.T) {
 	relErr := float64(tensors.ToScalar[float32](out[1]))
 	require.LessOrEqual(t, relErr, 0.05,
 		"fused and decomposed seqlen outputs diverge (rel err=%v); fused padding path broken", relErr)
+}
+
+// TestCoreAttentionBiasDecomposed verifies that passing a non-nil attentionBias to Core produces
+// output matching the inline reference softmax(scale*QK^T + bias)*V on the CPU backend (decomposed).
+// The bias strongly favors key position 1, so the output diverges measurably from no-bias attention;
+// the test fails if bias is silently dropped.
+func TestCoreAttentionBiasDecomposed(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	// [B=1, S=2, H=1, D=4] — BSHD layout, scores are [B,Sq,H,Skv] = [1,2,1,2].
+	const B, S, H, D = 1, 2, 1, 4
+	scale := 1.0 / math.Sqrt(float64(D))
+
+	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 1), B, S, H, D)
+	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 2), B, S, H, D)
+	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 3), B, S, H, D)
+	// Bias [1,2,1,2]: strongly favor key position 1 for both query positions.
+	biasData := []float32{-100, 0, -100, 0} // [B=0,Sq=0,H=0,Skv=0..1], [B=0,Sq=1,H=0,Skv=0..1]
+	bias := tensors.FromFlatDataAndDimensions(biasData, B, S, H, S)
+
+	store := model.NewStore()
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qn, kn, vn, bn *Node) []*Node {
+		// Core with bias — decomposed forced via wantCoefficients=true.
+		biasedOut, _ := Core(scope, qn, kn, vn, scale, nil, nil, LayoutBSHD, false, true, 0.0, false, nil, nil, bn)
+
+		// Inline reference: softmax(scale*QK^T + bias)*V.
+		scores := MulScalar(Einsum("bqhd,bkhd->bqhk", qn, kn), scale)
+		scores = Add(scores, bn)
+		attn := Softmax(scores, -1)
+		refOut := Einsum("bqhk,bkhd->bqhd", attn, vn)
+
+		// Without bias for comparison.
+		noBiasOut, _ := Core(scope, qn, kn, vn, scale, nil, nil, LayoutBSHD, false, true, 0.0, false, nil, nil, nil)
+
+		return []*Node{biasedOut, refOut, noBiasOut}
+	})
+
+	out := exec.MustCall(q, k, v, bias)
+	biasedData := out[0].Value().([][][][]float32)
+	refData := out[1].Value().([][][][]float32)
+	noBiasData := out[2].Value().([][][][]float32)
+
+	// Biased output must match the inline reference.
+	for b := range biasedData {
+		for s := range biasedData[b] {
+			for h := range biasedData[b][s] {
+				for d := range biasedData[b][s][h] {
+					require.InDeltaf(t, refData[b][s][h][d], biasedData[b][s][h][d], 1e-5,
+						"biased Core output != inline reference at [%d][%d][%d][%d]", b, s, h, d)
+				}
+			}
+		}
+	}
+
+	// Biased output must differ from no-bias output (bias was not silently dropped).
+	maxDiff := float32(0)
+	for b := range biasedData {
+		for s := range biasedData[b] {
+			for h := range biasedData[b][s] {
+				for d := range biasedData[b][s][h] {
+					diff := biasedData[b][s][h][d] - noBiasData[b][s][h][d]
+					if diff < 0 {
+						diff = -diff
+					}
+					if diff > maxDiff {
+						maxDiff = diff
+					}
+				}
+			}
+		}
+	}
+	require.Greater(t, maxDiff, float32(0.01),
+		"biased and unbiased outputs are too similar; bias appears to be ignored (maxDiff=%v)", maxDiff)
+}
+
+// TestAttentionBiasFusedParity_cuda [cuda] verifies that the fused bias path (cfg.Bias set)
+// produces the same forward output as the decomposed reference with the same bias. On xla:cuda
+// with cuDNN ScaleBias, the fused kernel handles the bias; the fallback path handles it in
+// software — both must agree within bf16 tolerance. Also exercises the backward: gradients
+// of the fused-bias output are compared to gradients of the decomposed-bias output.
+// Skipped unless xla:cuda is available and supports fused attention.
+func TestAttentionBiasFusedParity_cuda(t *testing.T) {
+	backend := testutil.GetOfficialBackend("xla:cuda")
+	if backend == nil || !backendSupportsFusion(backend) {
+		t.Skip("xla:cuda fused attention backend not available")
+	}
+
+	// [B=2, S=64, H=2, D=64] — cuDNN flash supports D=64.
+	const B, S, H, D = 2, 64, 2, 64
+	scale := 1.0 / math.Sqrt(float64(D))
+
+	// Inputs in float32; both arms round-trip through bf16 inside the fused kernel.
+	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 10), B, S, H*D)
+	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 11), B, S, H*D)
+	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 12), B, S, H*D)
+	// Bias [B,S,H,S]: non-trivial values so any difference in handling is visible.
+	bData := randFlat(B*S*H*S, 99)
+	biasTensor := tensors.FromFlatDataAndDimensions(bData, B, S, H, S)
+
+	store := model.NewStore()
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, biasIn *Node) []*Node {
+		// Pre-project: reshape [B,S,H*D] -> [B,S,H,D].
+		qProj := Reshape(qIn, B, S, H, D)
+		kProj := Reshape(kIn, B, S, H, D)
+		vProj := Reshape(vIn, B, S, H, D)
+
+		// Fused arm: WithAttentionBias + WithPreProjected, fused=true.
+		fusedOut := MultiHeadAttention(scope.In("shared"), qIn, kIn, vIn, H, D).
+			WithAttentionBias(biasIn).
+			WithPreProjected(true).
+			Done()
+
+		// Decomposed reference: same bias, same shared weights, fused disabled.
+		refOut := MultiHeadAttention(scope.Shared("shared"), qIn, kIn, vIn, H, D).
+			WithAttentionBias(biasIn).
+			WithFusion(false).
+			WithPreProjected(true).
+			Done()
+
+		fusedF32 := ConvertDType(fusedOut, dtypes.Float32)
+		refF32 := ConvertDType(refOut, dtypes.Float32)
+
+		// Forward parity metric.
+		relFwd := Div(
+			ReduceAllMax(Abs(Sub(fusedF32, refF32))),
+			AddScalar(ReduceAllMax(Abs(refF32)), 1e-6),
+		)
+
+		// Backward: gradient of sum(fused) wrt Q (exercises the fused bias backward path).
+		// Use the projected nodes so the gradient flows through the bias add.
+		fusedBwdOut, _ := Core(scope.In("bwd"), qProj, kProj, vProj, scale, nil, nil, LayoutBSHD, false, false, 0.0, true, nil, nil, biasIn)
+		fusedSum := ReduceAllSum(ConvertDType(fusedBwdOut, dtypes.Float32))
+		refBwdOut, _ := Core(scope.In("bwdRef"), qProj, kProj, vProj, scale, nil, nil, LayoutBSHD, false, false, 0.0, false, nil, nil, biasIn)
+		refSum := ReduceAllSum(ConvertDType(refBwdOut, dtypes.Float32))
+		dqFused := Gradient(fusedSum, qProj)[0]
+		dqRef := Gradient(refSum, qProj)[0]
+		relBwd := Div(
+			ReduceAllMax(Abs(Sub(dqFused, dqRef))),
+			AddScalar(ReduceAllMax(Abs(dqRef)), 1e-6),
+		)
+
+		return []*Node{fusedF32, relFwd, relBwd}
+	})
+
+	out := exec.MustCall(q, k, v, biasTensor)
+
+	require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions,
+		"fused bias output shape must be [B, S, H*D]")
+
+	relFwd := float64(tensors.ToScalar[float32](out[1]))
+	require.LessOrEqual(t, relFwd, 0.06,
+		"fused and decomposed bias outputs diverge (forward rel err=%v)", relFwd)
+
+	relBwd := float64(tensors.ToScalar[float32](out[2]))
+	require.LessOrEqual(t, relBwd, 0.06,
+		"fused and decomposed bias gradients diverge (dQ rel err=%v)", relBwd)
 }

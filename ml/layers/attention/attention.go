@@ -177,6 +177,13 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 // they are materialized into a boolean padding mask and AND-ed with any existing mask.
 // These are mutually exclusive with a non-nil attentionMask.
 //
+// attentionBias is an optional additive attention-score bias broadcastable to [B,H,Sq,Skv]
+// (ALiBi, relative-position, etc.). It is added to the raw scores before softmax. This is
+// DISTINCT from UseProjectionBias (the Q/K/V dense bias) and is NOT mutually exclusive with
+// causal masking, seqlens, or an explicit attentionMask. On the fused path the bias is
+// forwarded via the config; if the fused kernel does not support the combination (e.g. bias
+// with seqlens) it returns ErrNotImplemented and the decomposed path handles it correctly.
+//
 // When wantCoefficients is true, the decomposed path is used for the entire computation
 // (no fused op) and coefficients are returned. When false, the fused op is attempted for
 // the output and coefficients is nil.
@@ -191,7 +198,7 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
 func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionMask *Node, dropoutRate *Node,
 	layout AxesLayout, useCausalMask, wantCoefficients bool, scoreSoftCap float64, useFusion bool,
-	querySeqLen, keyValueSeqLen *Node) (output, coefficients *Node) {
+	querySeqLen, keyValueSeqLen, attentionBias *Node) (output, coefficients *Node) {
 	g := query.Graph()
 	numQueryHeads := query.Shape().Dimensions[layout.HeadsAxis()]
 	numKVHeads := key.Shape().Dimensions[layout.HeadsAxis()]
@@ -269,6 +276,11 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 			scores = nn.SoftCap(scores, scoreSoftCap)
 		}
 
+		// Add additive bias (ALiBi, relative-position, etc.) before softmax.
+		if attentionBias != nil {
+			scores = Add(scores, attentionBias)
+		}
+
 		if decomposedMask != nil && decomposedMask.DType() != dtypes.Bool {
 			// Additive float mask.
 			scores = Add(scores, decomposedMask)
@@ -302,10 +314,10 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 	} else {
 		output = InternalFusedOpCaller(
 			func() *Node {
-				// Build seqlen config from graph nodes; attentionMask stays nil so flashSupported accepts.
+				// Build config from graph nodes; attentionMask stays nil so flashSupported accepts.
 				var fusedConfig *compute.ScaledDotProductAttentionConfig
-				if querySeqLen != nil || keyValueSeqLen != nil {
-					fusedConfig = NewSeqLenAttentionConfig(querySeqLen, keyValueSeqLen)
+				if querySeqLen != nil || keyValueSeqLen != nil || attentionBias != nil {
+					fusedConfig = NewFusedAttentionConfig(querySeqLen, keyValueSeqLen, attentionBias)
 				}
 				klog.V(2).Info("Attempting to call BackendFusedScaledDotProductAttention op.")
 				out, _ := BackendFusedScaledDotProductAttention(

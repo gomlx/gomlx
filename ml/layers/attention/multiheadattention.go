@@ -81,6 +81,10 @@ type MultiHeadAttentionBuilder struct {
 	// threaded into the fused SDPA config for padding masking. Mutually exclusive with queryKeyMatrixMask.
 	querySeqLen    *Node
 	keyValueSeqLen *Node
+
+	// attentionBias is an optional additive attention-score bias broadcastable to [B,H,Sq,Skv]
+	// (e.g. ALiBi, relative-position). Added to raw scores before softmax.
+	attentionBias *Node
 }
 
 // MultiHeadAttention defines a multi-head attention layers, as described in [1], plus some modern extensions.
@@ -366,6 +370,16 @@ func (b *MultiHeadAttentionBuilder) WithSeqLens(querySeqLen, keyValueSeqLen *Nod
 	return b
 }
 
+// WithAttentionBias sets an additive attention-score bias broadcastable to [B,H,Sq,Skv]
+// (e.g. ALiBi or a learned relative-position bias). It is added to the raw scaled scores
+// before softmax. This is DISTINCT from UseProjectionBias (the Q/K/V dense-layer bias)
+// and is NOT mutually exclusive with causal masking, WithSeqLens, or an explicit mask
+// (it is purely additive to the score tensor and combines with any of those).
+func (b *MultiHeadAttentionBuilder) WithAttentionBias(bias *Node) *MultiHeadAttentionBuilder {
+	b.attentionBias = bias
+	return b
+}
+
 // DoneWithCoefficients or Done should be called after all optional settings are configured.
 // It returns both the attention output and the attention coefficients (matrix) used.
 //
@@ -481,7 +495,7 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	useCausalMask := b.useCausalMask && mask == nil
 	attentionOutput, attentionCoefficients = Core(b.scope, projectedQuery, projectedKey, projectedValue,
 		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients, b.scoreSoftCap, b.useFusion,
-		b.querySeqLen, b.keyValueSeqLen)
+		b.querySeqLen, b.keyValueSeqLen, b.attentionBias)
 
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
 	// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_elements>, numHeads*valueDim]
