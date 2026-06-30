@@ -4,6 +4,7 @@ package transformer
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
@@ -303,4 +304,87 @@ func TestTransformerBatchSizes(t *testing.T) {
 			assert.Equal(t, []int{batchSize, seqLen, 100}, logits.Shape().Dimensions)
 		})
 	}
+}
+
+// TestSeqLensFromMask verifies seqLensFromMask converts a contiguous right-padded [B, Skv]
+// boolean mask to correct int32 [B] sequence lengths, and that the full model path using
+// WithSeqLens produces numerically equivalent output to the WithMask path.
+func TestSeqLensFromMask(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+
+	t.Run("HelperValues", func(t *testing.T) {
+		// mask[0] has 3 valid tokens, mask[1] has 5 valid tokens (contiguous right-pad).
+		maskData := [][]bool{
+			{true, true, true, false, false},
+			{true, true, true, true, true},
+		}
+		maskTensor := tensors.FromValue(maskData)
+
+		result := MustExecOnce(backend, func(m *Node) *Node {
+			q, _ := seqLensFromMask(m)
+			return q
+		}, maskTensor)
+
+		tensors.MustConstFlatData[int32](result, func(flat []int32) {
+			require.Len(t, flat, 2)
+			assert.Equal(t, int32(3), flat[0], "batch[0] valid tokens")
+			assert.Equal(t, int32(5), flat[1], "batch[1] valid tokens")
+		})
+	})
+
+	t.Run("ModelParityMaskVsSeqLens", func(t *testing.T) {
+		// Run two model instances with shared weights: one sees nil mask (no masking),
+		// the other sees a full-length mask ([B, S] all-ones) which is rank-2 and triggers
+		// the WithSeqLens path with seqlens == S.  Both paths must produce the same logits
+		// because a full-length seqlen disables masking just as nil does.
+		const (
+			vocabSize = 100
+			embedDim  = 32
+			numLayers = 1
+			numHeads  = 2
+			headDim   = 8
+			seqLen    = 4
+			batchSize = 2
+		)
+		store := model.NewStore()
+		m := New(vocabSize, embedDim, numLayers, numHeads, headDim).
+			WithFFNDim(64).
+			WithMaxPosEmbed(32)
+
+		tokenData := [][]int32{
+			{1, 2, 3, 4},
+			{5, 6, 7, 8},
+		}
+		tokenTensor := tensors.FromValue(tokenData)
+
+		// Full mask: all positions valid — seqlen path returns S for each batch element.
+		fullMaskData := [][]bool{
+			{true, true, true, true},
+			{true, true, true, true},
+		}
+		fullMaskTensor := tensors.FromValue(fullMaskData)
+
+		// nil-mask run.
+		nilMaskLogits := model.MustExecOnce(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+			return m.Logits(scope, tokens, nil)
+		}, tokenTensor)
+
+		// full-mask run (rank-2, triggers WithSeqLens path).
+		fullMaskLogits := model.MustExecOnce(backend, store, func(scope *model.Scope, tokens, mask *Node) *Node {
+			return m.Logits(scope, tokens, mask)
+		}, tokenTensor, fullMaskTensor)
+
+		// Both should produce identical logits.
+		tensors.MustConstFlatData[float32](nilMaskLogits, func(nilFlat []float32) {
+			tensors.MustConstFlatData[float32](fullMaskLogits, func(fullFlat []float32) {
+				require.Equal(t, len(nilFlat), len(fullFlat))
+				for i, v := range nilFlat {
+					if math.IsNaN(float64(v)) {
+						continue
+					}
+					assert.InDelta(t, v, fullFlat[i], 1e-4, "logit[%d] mismatch: nil-mask=%v seqlens=%v", i, v, fullFlat[i])
+				}
+			})
+		})
+	})
 }

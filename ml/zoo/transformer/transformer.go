@@ -864,6 +864,18 @@ func (m *Model) ForwardLayer(scope *model.Scope, layerNum int, x, attentionMask 
 	return m.forwardLayerStandard(scope, layerNum, x, attentionMask, position, cache, perLayerInput, sharedKVs)
 }
 
+// seqLensFromMask derives int32 [B] actual-length tensors from a rank-2 `[B, Skv]` boolean
+// padding mask where valid positions are 1 and padding positions are 0.
+//
+// This conversion is only correct when the mask is contiguous and right-padded (valid tokens
+// occupy exactly [0, L) for each batch element). The returned querySeqLen and keyValueSeqLen
+// are identical because in non-KVCache self-attention query and key share the same padding.
+func seqLensFromMask(mask *Node) (querySeqLen, keyValueSeqLen *Node) {
+	int32Mask := ConvertDType(mask, dtypes.Int32)
+	seqLen := ReduceSum(int32Mask, 1)
+	return seqLen, seqLen
+}
+
 func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x, attentionMask *Node, position *Node, cache KVCacheNodes, perLayerInput *Node, sharedKVs KVCacheNodes) *Node {
 	residual := x
 	var attn *Node
@@ -999,7 +1011,15 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x, a
 			WithScoreSoftCap(m.AttentionScoreSoftCap).
 			WithQueryKeyScale(m.QueryKeyScale)
 		if attentionMask != nil {
-			attnBuilder.WithMask(attentionMask)
+			// Rank-2 [B, Skv] padding masks are expressed more efficiently as sequence lengths
+			// (cuDNN PADDING masktype). WithSeqLens is mutually exclusive with WithCausalMask
+			// or SlidingWindow, so fall back to WithMask for those paths.
+			if attentionMask.Rank() == 2 && !m.UseCausalMask && !(layerType == LocalLayer && m.SlidingWindow > 0) {
+				qLen, kvLen := seqLensFromMask(attentionMask)
+				attnBuilder.WithSeqLens(qLen, kvLen)
+			} else {
+				attnBuilder.WithMask(attentionMask)
+			}
 		}
 		if m.UseCausalMask {
 			attnBuilder.WithCausalMask(true)
@@ -1246,7 +1266,15 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x, atte
 			WithScoreSoftCap(m.AttentionScoreSoftCap).
 			WithQueryKeyScale(m.QueryKeyScale)
 		if attentionMask != nil {
-			attnBuilder.WithMask(attentionMask)
+			// Rank-2 [B, Skv] padding masks are expressed more efficiently as sequence lengths
+			// (cuDNN PADDING masktype). WithSeqLens is mutually exclusive with WithCausalMask
+			// or SlidingWindow, so fall back to WithMask for those paths.
+			if attentionMask.Rank() == 2 && !m.UseCausalMask && !(layerType == LocalLayer && m.SlidingWindow > 0) {
+				qLen, kvLen := seqLensFromMask(attentionMask)
+				attnBuilder.WithSeqLens(qLen, kvLen)
+			} else {
+				attnBuilder.WithMask(attentionMask)
+			}
 		}
 		if m.UseCausalMask {
 			attnBuilder.WithCausalMask(true)
