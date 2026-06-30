@@ -222,7 +222,7 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 
 		// Build padding mask from seqlen nodes and combine with existing decomposed mask.
 		if querySeqLen != nil || keyValueSeqLen != nil {
-			padMask := buildSeqLenPaddingMask(query, key, querySeqLen, keyValueSeqLen, layout)
+			padMask := buildSeqLenPaddingMask(query, key, querySeqLen, keyValueSeqLen)
 			if decomposedMask != nil {
 				decomposedMask = LogicalAnd(decomposedMask, padMask)
 			} else {

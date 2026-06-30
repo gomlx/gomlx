@@ -391,20 +391,26 @@ func TestWithSeqLensBuildsConfigAndProducesOutput(t *testing.T) {
 		"WithSeqLens output shape must match [B, S, H*D]")
 }
 
-// TestSeqLenFusedParity_cuda [cuda] verifies that the fused path with WithSeqLens produces
-// the same output as the decomposed reference with a real explicit key mask. Skipped unless
-// the xla:cuda backend is present and supports fused attention. This is the GPU-side proof
-// that the seqlen config activates the fused PADDING/PADDING_CAUSAL kernel and masks correctly.
+// TestSeqLenFusedParity_cuda [cuda] verifies that the fused PADDING path with WithSeqLens
+// produces numerically the same output as the decomposed reference with an equivalent explicit
+// boolean key mask. Skipped unless the xla:cuda backend is present and supports fused attention.
+//
+// Both arms share the same output-projection weights (same variable scope) and use
+// WithPreProjected(true) to skip Q/K/V projections, so the only difference between them is
+// the masking path. Real padding is used: batch element 1 has 48/64 valid keys, element 2 has 32/64.
+// The comparison is on the actual .Done() output tensors, not DoneWithCoefficients, so the fused
+// kernel is exercised and must correctly zero out padding positions.
 func TestSeqLenFusedParity_cuda(t *testing.T) {
 	backend := testutil.GetOfficialBackend("xla:cuda")
 	if backend == nil || !backendSupportsFusion(backend) {
 		t.Skip("xla:cuda fused attention backend not available")
 	}
 
-	// B=2, Sq=Skv=64, H=2, D=64; seqlens=[48,32] — real padding.
+	// B=2, Sq=Skv=64, H=2, D=64; seqlens=[48,32] — real padding in both batch elements.
 	const B, S, H, D = 2, 64, 2, 64
 	seqLenData := []int32{48, 32}
 
+	// WithPreProjected(true): inputs are pre-projected, shaped [B, S, H*D].
 	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 10), B, S, H*D)
 	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 11), B, S, H*D)
 	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 12), B, S, H*D)
@@ -421,25 +427,28 @@ func TestSeqLenFusedParity_cuda(t *testing.T) {
 
 	store := model.NewStore()
 	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, seqLens, keyMask *Node) []*Node {
-		// Fused path: WithSeqLens — attentionMask stays nil so flashSupported accepts the call.
-		fusedOut := MultiHeadAttention(scope.In("fused"), qIn, kIn, vIn, H, D).
+		// Fused arm: WithSeqLens activates the cuDNN PADDING kernel on xla:cuda.
+		// scope.In("shared") is visited first; the builder resolves variables under shared/.
+		fusedOut := MultiHeadAttention(scope.In("shared"), qIn, kIn, vIn, H, D).
 			WithSeqLens(nil, seqLens).
 			WithPreProjected(true).
 			Done()
 
-		// Decomposed reference: explicit boolean key mask — forces decomposed path via DoneWithCoefficients.
-		_, decompCoeffs := MultiHeadAttention(scope.In("decomp"), qIn, kIn, vIn, H, D).
+		// Reference arm: equivalent explicit boolean key mask, decomposed path.
+		// scope.Shared("shared") returns a scope at the same variable path, so both arms use
+		// identical output-projection weights and the outputs are numerically comparable.
+		refOut := MultiHeadAttention(scope.Shared("shared"), qIn, kIn, vIn, H, D).
 			WithKeyMask(keyMask).
+			WithFusion(false).
 			WithPreProjected(true).
-			DoneWithCoefficients()
+			Done()
 
-		// Also get decomposed output directly using the same seqlen as an explicit mask.
-		_, fusedCoeffs := MultiHeadAttention(scope.In("fusedCoeff"), qIn, kIn, vIn, H, D).
-			WithSeqLens(nil, seqLens).
-			WithPreProjected(true).
-			DoneWithCoefficients()
-
-		diff := ReduceAllMax(Abs(Sub(fusedCoeffs, decompCoeffs)))
+		refOut = ConvertDType(refOut, dtypes.Float32)
+		fusedOut = ConvertDType(fusedOut, dtypes.Float32)
+		diff := Div(
+			ReduceAllMax(Abs(Sub(fusedOut, refOut))),
+			AddScalar(ReduceAllMax(Abs(refOut)), 1e-6),
+		)
 		return []*Node{fusedOut, diff}
 	})
 	out := exec.MustCall(q, k, v, seqLensTensor, keyMaskTensor)
@@ -448,8 +457,9 @@ func TestSeqLenFusedParity_cuda(t *testing.T) {
 	require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions,
 		"fused WithSeqLens output shape must be [B, S, H*D]")
 
-	// Fused and decomposed coefficient matrices must agree within bf16 tolerance.
-	maxDiff := float64(tensors.ToScalar[float32](out[1]))
-	require.LessOrEqual(t, maxDiff, 0.05,
-		"fused seqlen and explicit-mask coefficients diverge (max diff=%v); fused padding not applied", maxDiff)
+	// Fused and decomposed outputs must agree within bf16 tolerance.
+	// Fails if the cuDNN PADDING kernel ignores seqlens or returns unmasked output.
+	relErr := float64(tensors.ToScalar[float32](out[1]))
+	require.LessOrEqual(t, relErr, 0.05,
+		"fused seqlen and explicit-mask outputs diverge (rel err=%v); fused padding not applied", relErr)
 }

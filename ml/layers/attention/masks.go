@@ -196,14 +196,14 @@ func (b *MultiHeadAttentionBuilder) buildAttentionMaskFromSplitMasks() (mask *No
 
 // buildSeqLenPaddingMask builds a boolean padding mask from per-batch sequence length tensors.
 // querySeqLen and keyValueSeqLen are int32 [B] nodes; either may be nil (treated as full length).
-// Returns a [B, Sq, 1, Skv] boolean mask (BSHD layout) broadcastable to [B, Sq, H, Skv]:
+// Returns a [B, Sq, 1, Skv] boolean mask (BSHD layout only) broadcastable to [B, Sq, H, Skv]:
 // mask[b, q, 0, kv] = (q < querySeqLen[b]) AND (kv < keyValueSeqLen[b]).
 // Nil seqlen means all positions in that axis are valid.
-func buildSeqLenPaddingMask(query, key *Node, querySeqLen, keyValueSeqLen *Node, layout AxesLayout) *Node {
+func buildSeqLenPaddingMask(query, key *Node, querySeqLen, keyValueSeqLen *Node) *Node {
 	g := query.Graph()
-	seqAxis := layout.SeqAxis()
-	sqLen := query.Shape().Dimensions[seqAxis]
-	skvLen := key.Shape().Dimensions[seqAxis]
+	// BSHD layout: seq is axis 1.
+	sqLen := query.Shape().Dimensions[1]
+	skvLen := key.Shape().Dimensions[1]
 
 	var kvMask, qMask *Node
 	if keyValueSeqLen != nil {
