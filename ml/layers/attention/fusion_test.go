@@ -740,3 +740,95 @@ func TestAttentionBiasFusedParity_cuda(t *testing.T) {
 	require.LessOrEqual(t, relBwd, 0.06,
 		"fused and decomposed bias gradients diverge (dQ rel err=%v)", relBwd)
 }
+
+// TestCoreAttentionBiasGQA verifies that an additive attentionBias is correctly applied when
+// GQA is active (numQueryHeads > numKVHeads). On the decomposed path the score tensor is 5D
+// ([B,H,G,Sq,Skv] for BHSD), so the 4D bias must be reshaped before Add; without the reshape
+// the Add broadcasts along the wrong axis producing corrupted results or a shape panic.
+//
+// RED: without the reshapeMaskForGQA call on attentionBias inside the isGQA block, the test
+// fails (wrong output or panic). GREEN: after the fix it matches the inline reference.
+func TestCoreAttentionBiasGQA(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	// 4 query heads, 2 kv heads (groupSize=2), BHSD layout.
+	// Shapes: Q [B,QH,Sq,D], K/V [B,KVH,Skv,D].
+	const B, QH, KVH, Sq, Skv, D = 1, 4, 2, 3, 3, 4
+	scale := 1.0 / math.Sqrt(float64(D))
+
+	q := tensors.FromFlatDataAndDimensions(randFlat(B*QH*Sq*D, 7), B, QH, Sq, D)
+	k := tensors.FromFlatDataAndDimensions(randFlat(B*KVH*Skv*D, 8), B, KVH, Skv, D)
+	v := tensors.FromFlatDataAndDimensions(randFlat(B*KVH*Skv*D, 9), B, KVH, Skv, D)
+	// Bias [B,QH,Sq,Skv]: strongly favor key position 0 for every query position.
+	biasFlat := make([]float32, B*QH*Sq*Skv)
+	for i := 0; i < len(biasFlat); i++ {
+		// pattern: 0, -100, -100 repeating — position 0 is strongly preferred.
+		if i%Skv == 0 {
+			biasFlat[i] = 0
+		} else {
+			biasFlat[i] = -100
+		}
+	}
+	biasTensor := tensors.FromFlatDataAndDimensions(biasFlat, B, QH, Sq, Skv)
+
+	store := model.NewStore()
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qn, kn, vn, bn *Node) []*Node {
+		// Core with bias, GQA, decomposed path (wantCoefficients=true forces decomposed).
+		biasedOut, _ := Core(scope, qn, kn, vn, scale, nil, nil, LayoutBHSD, false, true, 0.0, false, nil, nil, bn)
+
+		// Inline reference: explicit GQA grouping, bias broadcast-added per group.
+		// Q reshaped to [B,KVH,group,Sq,D], K/V stay [B,KVH,Skv,D].
+		group := QH / KVH
+		qg := Reshape(qn, B, KVH, group, Sq, D)
+		// scores [B,KVH,group,Sq,Skv]
+		scores := MulScalar(Einsum("bhgqd,bhkd->bhgqk", qg, kn), scale)
+		// bias [B,QH,Sq,Skv] = [B,KVH*group,Sq,Skv] -> reshape to [B,KVH,group,Sq,Skv].
+		biasReshaped := Reshape(bn, B, KVH, group, Sq, Skv)
+		scores = Add(scores, biasReshaped)
+		attn := Softmax(scores, -1) // [B,KVH,group,Sq,Skv]
+		// out [B,KVH,group,Sq,D] -> merge -> [B,QH,Sq,D]
+		out5d := Einsum("bhgqk,bhkd->bhgqd", attn, vn)
+		refOut := Reshape(out5d, B, QH, Sq, D)
+
+		// No-bias output to prove bias is non-vacuous.
+		noBiasOut, _ := Core(scope, qn, kn, vn, scale, nil, nil, LayoutBHSD, false, true, 0.0, false, nil, nil, nil)
+
+		return []*Node{biasedOut, refOut, noBiasOut}
+	})
+
+	out := exec.MustCall(q, k, v, biasTensor)
+	biasedData := out[0].Value().([][][][]float32)
+	refData := out[1].Value().([][][][]float32)
+	noBiasData := out[2].Value().([][][][]float32)
+
+	// biasedOut must match the inline GQA+bias reference.
+	for b := range biasedData {
+		for h := range biasedData[b] {
+			for s := range biasedData[b][h] {
+				for d := range biasedData[b][h][s] {
+					require.InDeltaf(t, refData[b][h][s][d], biasedData[b][h][s][d], 1e-5,
+						"GQA+bias Core output != inline reference at [%d][%d][%d][%d]", b, h, s, d)
+				}
+			}
+		}
+	}
+
+	// Bias must be non-vacuous: biasedOut and noBiasOut must differ.
+	maxDiff := float32(0)
+	for b := range biasedData {
+		for h := range biasedData[b] {
+			for s := range biasedData[b][h] {
+				for d := range biasedData[b][h][s] {
+					diff := biasedData[b][h][s][d] - noBiasData[b][h][s][d]
+					if diff < 0 {
+						diff = -diff
+					}
+					if diff > maxDiff {
+						maxDiff = diff
+					}
+				}
+			}
+		}
+	}
+	require.Greater(t, maxDiff, float32(0.01),
+		"GQA biased and unbiased outputs are too similar; bias is being silently dropped or misapplied (maxDiff=%v)", maxDiff)
+}

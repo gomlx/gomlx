@@ -261,10 +261,14 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 		// only a free reshape of Q is needed.
 		isGQA := numQueryHeads != numKVHeads
 		decomposedQuery := query
+		decomposedBias := attentionBias
 		if isGQA {
 			decomposedQuery = reshapeQueryForGQA(query, numQueryHeads, numKVHeads, layout)
 			if decomposedMask != nil {
 				decomposedMask = reshapeMaskForGQA(decomposedMask, numQueryHeads, numKVHeads, layout)
+			}
+			if decomposedBias != nil {
+				decomposedBias = reshapeMaskForGQA(decomposedBias, numQueryHeads, numKVHeads, layout)
 			}
 		}
 
@@ -277,8 +281,9 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 		}
 
 		// Add additive bias (ALiBi, relative-position, etc.) before softmax.
-		if attentionBias != nil {
-			scores = Add(scores, attentionBias)
+		// decomposedBias is reshaped to 5D when isGQA, matching the score tensor.
+		if decomposedBias != nil {
+			scores = Add(scores, decomposedBias)
 		}
 
 		if decomposedMask != nil && decomposedMask.DType() != dtypes.Bool {
