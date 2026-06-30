@@ -12,6 +12,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/nn"
 	. "github.com/gomlx/gomlx/support/exceptions"
+	"k8s.io/klog/v2"
 )
 
 // AxesLayout is a type alias for compute.AxesLayout, re-exported for convenience.
@@ -201,6 +202,13 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 
 	dropoutActive := layers.IsDropoutActive(scope, g) && dropoutRate != nil
 
+	if klog.V(2).Enabled() {
+		klog.Infof("attention.Core(scope=%s, query=%s, key=%s, value=%s, scale=%f, attentionMask=%v, dropoutRate=%v, "+
+			"layout=%+v, useCausalMask=%v, wantCoefficients=%v, scoreSoftCap=%f)",
+			scope.Scope(), query.Shape(), key.Shape(), value.Shape(), scale, attentionMask != nil, dropoutRate != nil,
+			layout, useCausalMask, wantCoefficients, scoreSoftCap)
+	}
+
 	// Function to compute the attention "decomposed" (as in not-fused).
 	// We use this as a closure (as opposed to calculating it directly), because it's required
 	// by InternalFusedOpCaller() below.
@@ -289,6 +297,7 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 				if querySeqLen != nil || keyValueSeqLen != nil {
 					fusedConfig = NewSeqLenAttentionConfig(querySeqLen, keyValueSeqLen)
 				}
+				klog.V(2).Info("Attempting to call BackendFusedScaledDotProductAttention op.")
 				return BackendFusedScaledDotProductAttention(
 					query, key, value, attentionMask,
 					numQueryHeads, numKVHeads, layout, scale, useCausalMask, fusedConfig)
