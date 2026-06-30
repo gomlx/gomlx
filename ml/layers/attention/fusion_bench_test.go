@@ -21,7 +21,7 @@ var (
 )
 
 // attentionStep builds one forward+backward attention step through the SAME builder path for both
-// fused and non-fused — fusion toggles via WithFusion, not a separate decomposed code path — so the
+// fused and non-fused; fusion toggles via WithFusion, not a separate decomposed code path, so the
 // benchmark compares the two routes of one implementation. Returns a scalar so reading it forces a
 // device sync. query/key/value are pre-projected [B,S,H,D].
 func attentionStep(useFusion bool, qHeads, kvHeads int, scale float64) func(scope *model.Scope, q, k, v *Node) []*Node {

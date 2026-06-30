@@ -247,7 +247,7 @@ func TestCoreUseFusionFalseMatchesDecomposed(t *testing.T) {
 }
 
 // TestBuilderWithFusionDefaultsTrue pins that the builder defaults useFusion to true and that
-// WithFusion(false) flips it. Builder-level -- inspects the field through a Done() run on CPU and
+// WithFusion(false) flips it. Builder-level: inspects the field through a Done() run on CPU and
 // asserts the output shape is correct either way (CPU has no fused causal kernel, so both equal
 // the reference; the test guards the wiring compiles and the default is true).
 func TestBuilderWithFusionDefaultsTrue(t *testing.T) {
