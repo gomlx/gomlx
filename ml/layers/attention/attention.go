@@ -168,6 +168,12 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 // The scope parameter provides the training/inference scope for dropout; it may be nil
 // when dropoutRate is 0.
 //
+// querySeqLen and keyValueSeqLen are optional per-batch actual sequence lengths (int32 [B] nodes)
+// for padding masking. Either may be nil. On the fused path they are forwarded via the seqlen
+// config (so attentionMask stays nil and flashSupported accepts the call). On the decomposed path
+// they are materialized into a boolean padding mask and AND-ed with any existing mask.
+// These are mutually exclusive with a non-nil attentionMask.
+//
 // When wantCoefficients is true, the decomposed path is used for the entire computation
 // (no fused op) and coefficients are returned. When false, the fused op is attempted for
 // the output and coefficients is nil.
@@ -181,13 +187,21 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 //     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
 func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionMask *Node, dropoutRate *Node,
-	layout AxesLayout, useCausalMask, wantCoefficients bool, scoreSoftCap float64) (output, coefficients *Node) {
+	layout AxesLayout, useCausalMask, wantCoefficients bool, scoreSoftCap float64, useFusion bool,
+	querySeqLen, keyValueSeqLen *Node) (output, coefficients *Node) {
 	g := query.Graph()
 	numQueryHeads := query.Shape().Dimensions[layout.HeadsAxis()]
 	numKVHeads := key.Shape().Dimensions[layout.HeadsAxis()]
 
 	if useCausalMask && attentionMask != nil {
 		Panicf("attention.Core: useCausalMask and mask are mutually exclusive; combine them into a single mask before calling Core")
+	}
+	hasSeqLens := querySeqLen != nil || keyValueSeqLen != nil
+	if hasSeqLens && attentionMask != nil {
+		Panicf("attention.Core: querySeqLen/keyValueSeqLen are mutually exclusive with a non-nil attentionMask; combine padding into a single mask upstream")
+	}
+	if hasSeqLens && layout != LayoutBSHD {
+		Panicf("attention.Core: querySeqLen/keyValueSeqLen require LayoutBSHD (padding mask is BSHD-only), got %s", layout)
 	}
 	if numQueryHeads <= 0 || numKVHeads <= 0 || numQueryHeads%numKVHeads != 0 {
 		Panicf("attention.Core: numQueryHeads (%d) must be positive and divisible by numKVHeads (%d)", numQueryHeads, numKVHeads)
@@ -219,6 +233,16 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 				causalBool = Reshape(causalBool, 1, seqLen, 1, seqLen)
 			}
 			decomposedMask = causalBool
+		}
+
+		// Build padding mask from seqlen nodes and combine with existing decomposed mask.
+		if querySeqLen != nil || keyValueSeqLen != nil {
+			padMask := buildSeqLenPaddingMask(query, key, querySeqLen, keyValueSeqLen)
+			if decomposedMask != nil {
+				decomposedMask = LogicalAnd(decomposedMask, padMask)
+			} else {
+				decomposedMask = padMask
+			}
 		}
 
 		// For Grouped Query Attention (GQA): reshape Q to split heads into
@@ -270,15 +294,20 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 
 	// When coefficients are requested, use the decomposed path for everything
 	// to avoid computing both paths (fused output + decomposed scores).
-	if wantCoefficients || dropoutActive || scoreSoftCap > 0 {
+	if wantCoefficients || dropoutActive || scoreSoftCap > 0 || !useFusion {
 		output, coefficients = decomposedFn()
 	} else {
 		output = InternalFusedOpCaller(
 			func() *Node {
+				// Build seqlen config from graph nodes; attentionMask stays nil so flashSupported accepts.
+				var fusedConfig *compute.ScaledDotProductAttentionConfig
+				if querySeqLen != nil || keyValueSeqLen != nil {
+					fusedConfig = NewSeqLenAttentionConfig(querySeqLen, keyValueSeqLen)
+				}
 				klog.V(2).Info("Attempting to call BackendFusedScaledDotProductAttention op.")
 				return BackendFusedScaledDotProductAttention(
 					query, key, value, attentionMask,
-					numQueryHeads, numKVHeads, layout, scale, useCausalMask, nil)
+					numQueryHeads, numKVHeads, layout, scale, useCausalMask, fusedConfig)
 			},
 			func() *Node {
 				output, _ := decomposedFn()

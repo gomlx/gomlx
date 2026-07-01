@@ -35,6 +35,9 @@ func (b *MultiHeadAttentionBuilder) WithKeyMask(keyMask *Node) *MultiHeadAttenti
 	if b.queryKeyMatrixMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
 	}
+	if b.querySeqLen != nil || b.keyValueSeqLen != nil {
+		Panicf("MultiHeadAttention: an explicit mask is mutually exclusive with WithSeqLens; pass padding via seqlens only")
+	}
 	shape := keyMask.Shape()
 	if shape.Rank() < 1+b.innerKeyAxes || shape.Rank() > 2+b.innerKeyAxes {
 		Panicf("invalid keyMask shape (%s), expected rank to be %d or %d -- "+
@@ -58,6 +61,9 @@ func (b *MultiHeadAttentionBuilder) WithKeyMask(keyMask *Node) *MultiHeadAttenti
 func (b *MultiHeadAttentionBuilder) WithQueryMask(queryMask *Node) *MultiHeadAttentionBuilder {
 	if b.queryKeyMatrixMask != nil {
 		Panicf("a mask can be set either with WithKeyMask and WithQueryMask separately or with WithKeyQueryMatrixMask, but not both")
+	}
+	if b.querySeqLen != nil || b.keyValueSeqLen != nil {
+		Panicf("MultiHeadAttention: an explicit mask is mutually exclusive with WithSeqLens; pass padding via seqlens only")
 	}
 	shape := queryMask.Shape()
 	if shape.Rank() < 1+b.innerQueryAxes || shape.Rank() > 2+b.innerQueryAxes {
@@ -87,6 +93,9 @@ func (b *MultiHeadAttentionBuilder) WithQueryKeyMatrixMask(queryKeyMatrixMask *N
 	}
 	if b.keyMask != nil || b.queryMask != nil {
 		Panicf("a mask can be set either with SetKeyMask and SetQueryMask separately or with SetKeyQueryMatrixMask, but not both")
+	}
+	if b.querySeqLen != nil || b.keyValueSeqLen != nil {
+		Panicf("MultiHeadAttention: query/key matrix mask is mutually exclusive with WithSeqLens")
 	}
 	if slices.Equal(queryKeyMatrixMask.Shape().Dimensions, b.attentionShape.Dimensions) {
 		// Simplest case: queryKeyMatrixMask provided with attentionShape.
@@ -189,6 +198,41 @@ func (b *MultiHeadAttentionBuilder) buildAttentionMaskFromSplitMasks() (mask *No
 		queryMask = BroadcastToDims(queryMask, b.attentionShape.Dimensions...)
 	}
 	return LogicalAnd(queryMask, keyMask)
+}
+
+// buildSeqLenPaddingMask builds a boolean padding mask from per-batch sequence length tensors.
+// querySeqLen and keyValueSeqLen are int32 [B] nodes; either may be nil (treated as full length).
+// Returns a [B, Sq, 1, Skv] boolean mask (BSHD layout only) broadcastable to [B, Sq, H, Skv]:
+// mask[b, q, 0, kv] = (q < querySeqLen[b]) AND (kv < keyValueSeqLen[b]).
+// Nil seqlen means all positions in that axis are valid.
+func buildSeqLenPaddingMask(query, key *Node, querySeqLen, keyValueSeqLen *Node) *Node {
+	g := query.Graph()
+	// BSHD layout: seq is axis 1.
+	sqLen := query.Shape().Dimensions[1]
+	skvLen := key.Shape().Dimensions[1]
+
+	var kvMask, qMask *Node
+	if keyValueSeqLen != nil {
+		// kv positions: Iota [1, 1, 1, Skv], compare < kvLen[b] reshaped to [B, 1, 1, 1]
+		kvIota := Reshape(Iota(g, shapes.Make(dtypes.Int32, skvLen), 0), 1, 1, 1, skvLen)
+		kvLenBC := Reshape(ConvertDType(keyValueSeqLen, dtypes.Int32), keyValueSeqLen.Shape().Dimensions[0], 1, 1, 1)
+		kvMask = LessThan(kvIota, kvLenBC) // [B, 1, 1, Skv]
+	}
+	if querySeqLen != nil {
+		// q positions: Iota [1, Sq, 1, 1], compare < qLen[b] reshaped to [B, 1, 1, 1]
+		qIota := Reshape(Iota(g, shapes.Make(dtypes.Int32, sqLen), 0), 1, sqLen, 1, 1)
+		qLenBC := Reshape(ConvertDType(querySeqLen, dtypes.Int32), querySeqLen.Shape().Dimensions[0], 1, 1, 1)
+		qMask = LessThan(qIota, qLenBC) // [B, Sq, 1, 1]
+	}
+
+	switch {
+	case kvMask != nil && qMask != nil:
+		return LogicalAnd(qMask, kvMask) // [B, Sq, 1, Skv] via broadcast
+	case kvMask != nil:
+		return kvMask
+	default:
+		return qMask
+	}
 }
 
 // buildCausalAttentionMask creates a mask where queries can only attend to keys with "smaller index" than itself.

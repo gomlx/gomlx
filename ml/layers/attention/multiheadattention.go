@@ -73,6 +73,14 @@ type MultiHeadAttentionBuilder struct {
 
 	scoreSoftCap  float64
 	queryKeyScale float64
+
+	// useFusion gates the fused SDPA path in Core; default true (set in constructor).
+	useFusion bool
+
+	// querySeqLen and keyValueSeqLen are optional per-batch actual sequence lengths (int32 [B])
+	// threaded into the fused SDPA config for padding masking. Mutually exclusive with queryKeyMatrixMask.
+	querySeqLen    *Node
+	keyValueSeqLen *Node
 }
 
 // MultiHeadAttention defines a multi-head attention layers, as described in [1], plus some modern extensions.
@@ -153,6 +161,7 @@ func MultiHeadAttention(scope *model.Scope, query, key, value *Node, numHeads in
 		innerQueryAxes:    queryShape.Rank() - 2,
 		useProjectionBias: true,
 		layout:            LayoutBSHD,
+		useFusion:         true,
 	}
 	b.buildAttentionShape()
 	return b
@@ -329,6 +338,30 @@ func (b *MultiHeadAttentionBuilder) WithQueryKeyScale(scale float64) *MultiHeadA
 	return b
 }
 
+// WithFusion controls whether the backend fused scaled-dot-product-attention path may be used.
+// Default is true. When false, Core always takes the decomposed path (useful for debugging or
+// for configs the fused kernel does not support). GOMLX_FUSION is a separate global override.
+func (b *MultiHeadAttentionBuilder) WithFusion(enabled bool) *MultiHeadAttentionBuilder {
+	b.useFusion = enabled
+	return b
+}
+
+// WithSeqLens supplies per-batch actual sequence lengths (int32 [B] nodes) for padding masking.
+// Both querySeqLen and keyValueSeqLen must be set together, or both nil; passing exactly one
+// non-nil argument panics. Mutually exclusive with an explicit query/key matrix mask.
+func (b *MultiHeadAttentionBuilder) WithSeqLens(querySeqLen, keyValueSeqLen *Node) *MultiHeadAttentionBuilder {
+	if b.queryKeyMatrixMask != nil || b.keyMask != nil || b.queryMask != nil {
+		Panicf("MultiHeadAttention: WithSeqLens is mutually exclusive with an explicit mask " +
+			"(WithMask/WithKeyMask/WithQueryMask/WithQueryKeyMatrixMask); pass padding via seqlens only")
+	}
+	if (querySeqLen == nil) != (keyValueSeqLen == nil) {
+		Panicf("MultiHeadAttention: WithSeqLens requires both querySeqLen and keyValueSeqLen, or neither")
+	}
+	b.querySeqLen = querySeqLen
+	b.keyValueSeqLen = keyValueSeqLen
+	return b
+}
+
 // DoneWithCoefficients or Done should be called after all optional settings are configured.
 // It returns both the attention output and the attention coefficients (matrix) used.
 //
@@ -443,7 +476,8 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	// When using KV cache, the position-aware causal mask is already built in buildMask above.
 	useCausalMask := b.useCausalMask && mask == nil
 	attentionOutput, attentionCoefficients = Core(b.scope, projectedQuery, projectedKey, projectedValue,
-		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients, b.scoreSoftCap)
+		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients, b.scoreSoftCap, b.useFusion,
+		b.querySeqLen, b.keyValueSeqLen)
 
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
 	// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_elements>, numHeads*valueDim]
