@@ -238,7 +238,11 @@ func (b *MultiHeadAttentionBuilder) UseProjectionBias(useProjectionBias bool) *M
 //
 // If set to nil to disable it (the default). Values <= 0 are a no-op, and values > 1 are invalid.
 //
-// Notice the dropout rate is a *Node, since it can be set dynamically if needed.
+// The dropout rate is a *Node, since it can be set dynamically if needed.
+//
+// Notice: Dropout is rarely used in modern transformer models, and it prevents fusion (flash attention).
+// See discussion:
+// https://www.reddit.com/r/LocalLLaMA/comments/1pntkme/day_8_21_days_of_building_a_small_language_model/
 func (b *MultiHeadAttentionBuilder) WithDropout(rate *Node) *MultiHeadAttentionBuilder {
 	b.dropoutRate = rate
 	return b

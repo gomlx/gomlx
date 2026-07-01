@@ -163,10 +163,13 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 // If you need both causal masking and an explicit mask, combine them into a single mask
 // before calling Core (e.g. LogicalAnd a lower-triangular boolean mask with your mask).
 //
-// The dropoutRate (if > 0) applies dropout to the attention coefficients during training.
+// The dropoutRate (if not nil) applies dropout to the attention coefficients during training.
 // When dropout is active, the fused path is skipped (fused ops don't support dropout).
 // The scope parameter provides the training/inference scope for dropout; it may be nil
 // when dropoutRate is 0.
+// Notice: Dropout is rarely used in modern transformer models, and it prevents fusion (flash attention).
+// See discussion:
+// https://www.reddit.com/r/LocalLLaMA/comments/1pntkme/day_8_21_days_of_building_a_small_language_model/
 //
 // querySeqLen and keyValueSeqLen are optional per-batch actual sequence lengths (int32 [B] nodes)
 // for padding masking. Either may be nil. On the fused path they are forwarded via the seqlen
