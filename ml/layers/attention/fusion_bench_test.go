@@ -24,8 +24,14 @@ var (
 // fused and non-fused; fusion toggles via WithFusion, not a separate decomposed code path, so the
 // benchmark compares the two routes of one implementation. Returns a scalar so reading it forces a
 // device sync. query/key/value are pre-projected [B,S,H,D].
+//
+// The step runs in bf16. The fused cuDNN kernel is gated to half precision (flashSupported returns
+// ErrNotImplemented for float32), so a float32 step never engages fusion: both routes collapse to
+// the decomposed path and throughput reports a meaningless 1.0x. bf16 is the precision the fused
+// path runs in, so this measures the route the model actually takes.
 func attentionStep(useFusion bool, qHeads, kvHeads int, scale float64) func(scope *model.Scope, q, k, v *Node) []*Node {
 	return func(scope *model.Scope, q, k, v *Node) []*Node {
+		q, k, v = ConvertDType(q, dtypes.BFloat16), ConvertDType(k, dtypes.BFloat16), ConvertDType(v, dtypes.BFloat16)
 		// Pre-projected [B,S,H,D] in; flatten head dims for the builder's pre-projected path.
 		flat := func(n *Node) *Node { d := n.Shape().Dimensions; return Reshape(n, d[0], d[1], d[2]*d[3]) }
 		b := MultiHeadAttention(scope, flat(q), flat(k), flat(v), qHeads, q.Shape().Dimensions[3]).
@@ -35,12 +41,14 @@ func attentionStep(useFusion bool, qHeads, kvHeads int, scale float64) func(scop
 		}
 		out := ConvertDType(b.Done(), dtypes.Float32)
 		g := Gradient(ReduceAllSum(out), q, k, v)
-		return []*Node{Add(Add(ReduceAllSum(g[0]), ReduceAllSum(g[1])), ReduceAllSum(g[2]))}
+		// Gradients are bf16 (q/k/v are bf16); sum and cast so the harness can read a float32 scalar.
+		sum := Add(Add(ReduceAllSum(g[0]), ReduceAllSum(g[1])), ReduceAllSum(g[2]))
+		return []*Node{ConvertDType(sum, dtypes.Float32)}
 	}
 }
 
 // TestFusionThroughput reports per-step (forward+backward) wall time for the fused vs decomposed
-// route at the lm-100m attention shape. Requires a backend with fusion support (e.g. cuDNN). [cuda]
+// route at a representative GQA attention shape. Requires a backend with fusion support (e.g. cuDNN). [cuda]
 func TestFusionThroughput(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	if !backendSupportsFusion(backend) {
