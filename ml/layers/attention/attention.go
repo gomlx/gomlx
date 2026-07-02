@@ -12,6 +12,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/nn"
 	. "github.com/gomlx/gomlx/support/exceptions"
+	"k8s.io/klog/v2"
 )
 
 // AxesLayout is a type alias for compute.AxesLayout, re-exported for convenience.
@@ -166,10 +167,15 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 // When dropout is active, the fused path is skipped (fused ops don't support dropout).
 // The scope parameter provides the training/inference scope for dropout; it may be nil
 // when dropoutRate is 0.
-//
 // Notice: Dropout is rarely used in modern transformer models, and it prevents fusion (flash attention).
 // See discussion:
 // https://www.reddit.com/r/LocalLLaMA/comments/1pntkme/day_8_21_days_of_building_a_small_language_model/
+//
+// querySeqLen and keyValueSeqLen are optional per-batch actual sequence lengths (int32 [B] nodes)
+// for padding masking. Either may be nil. On the fused path they are forwarded via the seqlen
+// config (so attentionMask stays nil and flashSupported accepts the call). On the decomposed path
+// they are materialized into a boolean padding mask and AND-ed with any existing mask.
+// These are mutually exclusive with a non-nil attentionMask.
 //
 // When wantCoefficients is true, the decomposed path is used for the entire computation
 // (no fused op) and coefficients are returned. When false, the fused op is attempted for
@@ -184,7 +190,8 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 //     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
 func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionMask *Node, dropoutRate *Node,
-	layout AxesLayout, useCausalMask, wantCoefficients bool, scoreSoftCap float64) (output, coefficients *Node) {
+	layout AxesLayout, useCausalMask, wantCoefficients bool, scoreSoftCap float64, useFusion bool,
+	querySeqLen, keyValueSeqLen *Node) (output, coefficients *Node) {
 	g := query.Graph()
 	numQueryHeads := query.Shape().Dimensions[layout.HeadsAxis()]
 	numKVHeads := key.Shape().Dimensions[layout.HeadsAxis()]
@@ -192,11 +199,25 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 	if useCausalMask && attentionMask != nil {
 		Panicf("attention.Core: useCausalMask and mask are mutually exclusive; combine them into a single mask before calling Core")
 	}
+	hasSeqLens := querySeqLen != nil || keyValueSeqLen != nil
+	if hasSeqLens && attentionMask != nil {
+		Panicf("attention.Core: querySeqLen/keyValueSeqLen are mutually exclusive with a non-nil attentionMask; combine padding into a single mask upstream")
+	}
+	if hasSeqLens && layout != LayoutBSHD {
+		Panicf("attention.Core: querySeqLen/keyValueSeqLen require LayoutBSHD (padding mask is BSHD-only), got %s", layout)
+	}
 	if numQueryHeads <= 0 || numKVHeads <= 0 || numQueryHeads%numKVHeads != 0 {
 		Panicf("attention.Core: numQueryHeads (%d) must be positive and divisible by numKVHeads (%d)", numQueryHeads, numKVHeads)
 	}
 
 	dropoutActive := layers.IsDropoutActive(scope, g) && dropoutRate != nil
+
+	if klog.V(2).Enabled() {
+		klog.Infof("attention.Core(scope=%s, query=%s, key=%s, value=%s, scale=%f, attentionMask=%v, dropoutRate=%v, "+
+			"layout=%+v, useCausalMask=%v, wantCoefficients=%v, scoreSoftCap=%f)",
+			scope.Scope(), query.Shape(), key.Shape(), value.Shape(), scale, attentionMask != nil, dropoutRate != nil,
+			layout, useCausalMask, wantCoefficients, scoreSoftCap)
+	}
 
 	// Function to compute the attention "decomposed" (as in not-fused).
 	// We use this as a closure (as opposed to calculating it directly), because it's required
@@ -215,6 +236,16 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 				causalBool = Reshape(causalBool, 1, seqLen, 1, seqLen)
 			}
 			decomposedMask = causalBool
+		}
+
+		// Build padding mask from seqlen nodes and combine with existing decomposed mask.
+		if querySeqLen != nil || keyValueSeqLen != nil {
+			padMask := buildSeqLenPaddingMask(query, key, querySeqLen, keyValueSeqLen)
+			if decomposedMask != nil {
+				decomposedMask = LogicalAnd(decomposedMask, padMask)
+			} else {
+				decomposedMask = padMask
+			}
 		}
 
 		// For Grouped Query Attention (GQA): reshape Q to split heads into
@@ -266,14 +297,21 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 
 	// When coefficients are requested, use the decomposed path for everything
 	// to avoid computing both paths (fused output + decomposed scores).
-	if wantCoefficients || dropoutActive || scoreSoftCap > 0 {
+	if wantCoefficients || dropoutActive || scoreSoftCap > 0 || !useFusion {
 		output, coefficients = decomposedFn()
 	} else {
 		output = InternalFusedOpCaller(
 			func() *Node {
-				return BackendFusedScaledDotProductAttention(
+				// Build seqlen config from graph nodes; attentionMask stays nil so flashSupported accepts.
+				var fusedConfig *compute.ScaledDotProductAttentionConfig
+				if querySeqLen != nil || keyValueSeqLen != nil {
+					fusedConfig = NewSeqLenAttentionConfig(querySeqLen, keyValueSeqLen)
+				}
+				klog.V(2).Info("Attempting to call BackendFusedScaledDotProductAttention op.")
+				out, _ := BackendFusedScaledDotProductAttention(
 					query, key, value, attentionMask,
-					numQueryHeads, numKVHeads, layout, scale, useCausalMask, nil)
+					numQueryHeads, numKVHeads, layout, scale, useCausalMask, fusedConfig)
+				return out
 			},
 			func() *Node {
 				output, _ := decomposedFn()
