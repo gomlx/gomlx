@@ -168,41 +168,42 @@ func NewSeqLenAttentionConfig(querySeqLen, keyValueSeqLen *Node) *compute.Scaled
 }
 
 // BackendFusedScaledDotProductAttention computes multi-head scaled dot-product attention via the
-// backend's fused op, returning the attention output. When the backend also returns softmax stats
-// and implements the fused backward, the gradient uses it (the cuDNN flash backward), threading the
-// stats in, so the [B,H,S,S] scores never materialize in either pass. When the backend returns nil
-// stats (no fused backward), the gradient falls back to the generated decomposed VJP. Backends
-// without the fused op panic with a wrapped compute.ErrNotImplemented, so callers fall back.
+// backend's fused op. It returns the attention output plus statesForVJP: the backend-specific state
+// tensors the fused backward consumes (the cuDNN flash softmax stats today; a slice so other
+// backends can carry a different set, e.g. an extra workspace tensor). statesForVJP is empty when
+// the backend has no fused backward. The gradient is the registered VJP
+// (fusedScaledDotProductAttentionVJP), which threads statesForVJP into the fused backward so the
+// [B,H,S,S] scores never materialize in either pass. Backends without the fused op panic with a
+// wrapped compute.ErrNotImplemented, so callers fall back.
 //
-// Internal: prefer the InternalFusedOpCaller wrapper in layers, which handles the not-implemented
-// fallback to a decomposed attention.
-func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) *Node {
-	output, softmaxStats := backendFusedScaledDotProductAttention(query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal, options)
-	if softmaxStats == nil {
-		// Backend produced no stats: no fused backward. Leave the generated decomposed VJP in place.
-		return output
+// Internal: prefer to use the package ml/layers/attention instead, which provides the standard (and
+// stable) API for attention layers. This is an internal API that may change without notice.
+func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (output *Node, statesForVJP []*Node) {
+	return backendFusedScaledDotProductAttention(query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal, options)
+}
+
+// fusedScaledDotProductAttentionVJP is the registered VJP for NodeTypeFusedScaledDotProductAttention.
+// It threads statesForVJP into the fused backward, so the [B,H,S,S] scores never materialize.
+func fusedScaledDotProductAttentionVJP(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsFusedScaledDotProductAttention)
+	splitOutputs := splitNode(node)
+	output, statesForVJP := splitOutputs[0], splitOutputs[1:]
+	dOutput := vjps[0] // adjoint of the attention output; the state adjoints are unused.
+	dQuery, dKey, dValue := backendFusedScaledDotProductAttentionVJP(
+		inputs.query, inputs.key, inputs.value, inputs.mask,
+		inputs.numHeads, inputs.numKVHeads, inputs.axesLayout, inputs.scale, inputs.causal, inputs.options,
+		output, statesForVJP, dOutput)
+	// Grads align to node.inputNodes = [query, key, value (, mask)]. The fused backward runs in bf16;
+	// cast each grad back to its input's dtype so autodiff accumulation matches.
+	grads := []*Node{
+		ConvertDType(dQuery, inputs.query.DType()),
+		ConvertDType(dKey, inputs.key.DType()),
+		ConvertDType(dValue, inputs.value.DType()),
 	}
-	// output and softmaxStats are projections of one multi-output node; attach the flash backward
-	// to that parent (gradient flows projection -> parent -> parent.customVJP).
-	parent := output.inputNodes[0]
-	parent.customVJP = func(_ *Node, vjpOutputs []*Node, _ shapes.Shape) []*Node {
-		dOutput := vjpOutputs[0] // adjoint of the attention output; the stats adjoint is unused.
-		dQuery, dKey, dValue := backendFusedScaledDotProductAttentionVJP(
-			query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal, options,
-			output, softmaxStats, dOutput)
-		// Grads align to the parent's inputNodes = [query, key, value (, mask)]. The fused backward
-		// runs in bf16; cast each grad back to its input's dtype so autodiff accumulation matches.
-		grads := []*Node{
-			ConvertDType(dQuery, query.DType()),
-			ConvertDType(dKey, key.DType()),
-			ConvertDType(dValue, value.DType()),
-		}
-		if mask != nil {
-			grads = append(grads, nil) // causal flash takes no mask operand; mask is not differentiated.
-		}
-		return grads
+	if inputs.mask != nil {
+		grads = append(grads, nil) // causal flash takes no mask operand; mask is not differentiated.
 	}
-	return output
+	return grads
 }
 
 // BackendFusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.

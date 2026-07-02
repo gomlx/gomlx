@@ -308,9 +308,10 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 					fusedConfig = NewSeqLenAttentionConfig(querySeqLen, keyValueSeqLen)
 				}
 				klog.V(2).Info("Attempting to call BackendFusedScaledDotProductAttention op.")
-				return BackendFusedScaledDotProductAttention(
+				out, _ := BackendFusedScaledDotProductAttention(
 					query, key, value, attentionMask,
 					numQueryHeads, numKVHeads, layout, scale, useCausalMask, fusedConfig)
+				return out
 			},
 			func() *Node {
 				output, _ := decomposedFn()

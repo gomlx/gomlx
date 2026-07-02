@@ -2659,7 +2659,7 @@ func (ni *nodeInputsFusedScaledDotProductAttention) CloneWithInputs(originalNode
 
 // backendFusedScaledDotProductAttention is a Graph wrapper for the backend.Builder.FusedScaledDotProductAttention method.
 func backendFusedScaledDotProductAttention(query *Node, key *Node, value *Node, mask *Node, numHeads int, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (
-	output, softmaxStats *Node) {
+	output *Node, statesForVJP []*Node) {
 	inputNodes := []*Node{query, key, value}
 	if mask != nil {
 		inputNodes = append(inputNodes, mask)
@@ -2681,20 +2681,23 @@ func backendFusedScaledDotProductAttention(query *Node, key *Node, value *Node, 
 	if mask != nil {
 		maskVal = mask.outputOps[0]
 	}
-	v0, v1, err := g.currentFunc.backendFunc.FusedScaledDotProductAttention(query.outputOps[0], key.outputOps[0], value.outputOps[0], maskVal, inputs.numHeads, inputs.numKVHeads, inputs.axesLayout, inputs.scale, inputs.causal, inputs.options)
+	v0, vTrailing, err := g.currentFunc.backendFunc.FusedScaledDotProductAttention(query.outputOps[0], key.outputOps[0], value.outputOps[0], maskVal, inputs.numHeads, inputs.numKVHeads, inputs.axesLayout, inputs.scale, inputs.causal, inputs.options)
 	if err != nil {
 		panic(err)
 	}
+	outputOps := append([]compute.Value{v0}, vTrailing...)
 	node := &Node{
-		outputOps:    []compute.Value{v0, v1},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1))},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   inputNodes,
+		outputOps: outputOps,
+		outputShapes: xslices.Map(outputOps,
+			func(op compute.Value) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
+		graph:      g,
+		inputs:     inputs,
+		inputNodes: inputNodes,
 	}
 	g.registerNode(node)
 	splitNodes := splitNode(node)
-	output, softmaxStats = splitNodes[0], splitNodes[1]
+	output = splitNodes[0]
+	statesForVJP = splitNodes[1:]
 	return
 }
 
@@ -2711,7 +2714,7 @@ type nodeInputsFusedScaledDotProductAttentionVJP struct {
 	causal       bool
 	options      *compute.ScaledDotProductAttentionConfig
 	output       *Node
-	softmaxStats *Node
+	statesForVJP []*Node
 	dOutput      *Node
 }
 
@@ -2722,7 +2725,7 @@ func (ni *nodeInputsFusedScaledDotProductAttentionVJP) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsFusedScaledDotProductAttentionVJP) String() string {
-	return fmt.Sprintf("%s(query=[#%d], key=[#%d], value=[#%d], mask=%s, numHeads=%v, numKVHeads=%v, axesLayout=%s, scale=%v, causal=%v, options=%+v, output=[#%d], softmaxStats=[#%d], dOutput=[#%d])",
+	return fmt.Sprintf("%s(query=[#%d], key=[#%d], value=[#%d], mask=%s, numHeads=%v, numKVHeads=%v, axesLayout=%s, scale=%v, causal=%v, options=%+v, output=[#%d], statesForVJP=[#%s], dOutput=[#%d])",
 		ni.Type(),
 		ni.query.Id(),
 		ni.key.Id(),
@@ -2735,7 +2738,7 @@ func (ni *nodeInputsFusedScaledDotProductAttentionVJP) String() string {
 		ni.causal,
 		ni.options,
 		ni.output.Id(),
-		ni.softmaxStats.Id(),
+		strings.Join(xslices.Map(ni.statesForVJP, func(node *Node) string { return fmt.Sprintf("#%d", node.Id()) }), ", "),
 		ni.dOutput.Id(),
 	)
 }
@@ -2757,18 +2760,19 @@ func (ni *nodeInputsFusedScaledDotProductAttentionVJP) CloneWithInputs(originalN
 	}
 	new_output := newInputs[idx]
 	idx++
-	new_softmaxStats := newInputs[idx]
-	idx++
+	new_statesForVJP := newInputs[idx : idx+len(ni.statesForVJP)]
+	idx += len(ni.statesForVJP)
 	new_dOutput := newInputs[idx]
 	idx++
-	r0, _, _ := backendFusedScaledDotProductAttentionVJP(new_query, new_key, new_value, new_mask, ni.numHeads, ni.numKVHeads, ni.axesLayout, ni.scale, ni.causal, ni.options, new_output, new_softmaxStats, new_dOutput)
+	r0, _, _ := backendFusedScaledDotProductAttentionVJP(new_query, new_key, new_value, new_mask, ni.numHeads, ni.numKVHeads, ni.axesLayout, ni.scale, ni.causal, ni.options, new_output, new_statesForVJP, new_dOutput)
 	return r0.inputNodes[0]
 }
 
 // backendFusedScaledDotProductAttentionVJP is a Graph wrapper for the backend.Builder.FusedScaledDotProductAttentionVJP method.
-func backendFusedScaledDotProductAttentionVJP(query *Node, key *Node, value *Node, mask *Node, numHeads int, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig, output *Node, softmaxStats *Node, dOutput *Node) (
+func backendFusedScaledDotProductAttentionVJP(query *Node, key *Node, value *Node, mask *Node, numHeads int, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig, output *Node, statesForVJP []*Node, dOutput *Node) (
 	dQuery, dKey, dValue *Node) {
-	inputNodes := []*Node{query, key, value, output, softmaxStats, dOutput}
+	inputNodes := []*Node{query, key, value, output, dOutput}
+	inputNodes = append(inputNodes, statesForVJP...)
 	if mask != nil {
 		inputNodes = append(inputNodes, mask)
 	}
@@ -2785,14 +2789,14 @@ func backendFusedScaledDotProductAttentionVJP(query *Node, key *Node, value *Nod
 		causal:       causal,
 		options:      options,
 		output:       output,
-		softmaxStats: softmaxStats,
+		statesForVJP: slices.Clone(statesForVJP),
 		dOutput:      dOutput,
 	}
 	var maskVal compute.Value
 	if mask != nil {
 		maskVal = mask.outputOps[0]
 	}
-	v0, v1, v2, err := g.currentFunc.backendFunc.FusedScaledDotProductAttentionVJP(query.outputOps[0], key.outputOps[0], value.outputOps[0], maskVal, inputs.numHeads, inputs.numKVHeads, inputs.axesLayout, inputs.scale, inputs.causal, inputs.options, output.outputOps[0], softmaxStats.outputOps[0], dOutput.outputOps[0])
+	v0, v1, v2, err := g.currentFunc.backendFunc.FusedScaledDotProductAttentionVJP(query.outputOps[0], key.outputOps[0], value.outputOps[0], maskVal, inputs.numHeads, inputs.numKVHeads, inputs.axesLayout, inputs.scale, inputs.causal, inputs.options, output.outputOps[0], xslices.Map(statesForVJP, func(node *Node) compute.Value { return node.outputOps[0] }), dOutput.outputOps[0])
 	if err != nil {
 		panic(err)
 	}

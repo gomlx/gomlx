@@ -89,7 +89,7 @@ func backendSupportsFusion(backend compute.Backend) bool {
 	probeErr := exceptions.TryCatch[error](func() {
 		exec := MustNewExec(backend, func(qn, kn, vn *Node) *Node {
 			round := func(n *Node) *Node { return ConvertDType(n, dtypes.BFloat16) }
-			fused := BackendFusedScaledDotProductAttention(
+			fused, _ := BackendFusedScaledDotProductAttention(
 				round(qn), round(kn), round(vn), nil, H, H,
 				compute.AxesLayoutBSHD, 0.125, true, nil)
 			// Make the returned node depend on the fused output so the fused op is genuinely
@@ -532,6 +532,9 @@ func TestWithSeqLensBuildsConfigAndProducesOutput(t *testing.T) {
 // Real padding: batch element 0 has 48/64 valid positions, element 1 has 32/64.
 // The test directly compares fused vs decomposed; it catches any disagreement in how the
 // cuDNN PADDING kernel applies seqlen masking relative to the software decomposed path.
+//
+// TODO(jan): loop over testutil.TestOfficialBackends instead of pinning xla:cuda, so a future Go
+// SIMD or ONNXRuntime fused backend is covered too (non-fusing backends pass trivially).
 func TestSeqLenFusedParity_cuda(t *testing.T) {
 	backend := testutil.GetOfficialBackend("xla:cuda")
 	if backend == nil || !backendSupportsFusion(backend) {
