@@ -52,7 +52,8 @@ var (
 
 		// Fused ops: exported wrappers with "Internal:" comments are hand-written in fused_ops.go.
 		"FusedDense", "FusedGelu", "FusedLayerNorm", "FusedSoftmax",
-		"FusedScaledDotProductAttention", "FusedAttentionQKVProjection",
+		"FusedScaledDotProductAttention", "FusedScaledDotProductAttentionVJP",
+		"FusedAttentionQKVProjection",
 		"FusedQuantizedDense", "QuantizedEmbeddingLookup")
 
 	// methodsNotGenerated get a NodeType but no auto-generated wrapper
@@ -66,6 +67,7 @@ var (
 		"FusedLayerNorm.gamma", "FusedLayerNorm.beta",
 		"FusedDense.bias",
 		"FusedScaledDotProductAttention.mask",
+		"FusedScaledDotProductAttentionVJP.mask",
 		"FusedAttentionQKVProjection.biasQ", "FusedAttentionQKVProjection.biasK", "FusedAttentionQKVProjection.biasV",
 	)
 
@@ -221,6 +223,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			}
 			mi.HasGraph = len(mi.OpInputSlices) == 0 && len(mi.OpInputs) == 0 && len(mi.NillableInputs) == 0
 		}
+		sliceOutputCount := 0
 		for outputIdx, output := range raw.Outputs[:len(raw.Outputs)-1] { // Skip the error.
 			switch output.Type {
 			case "Value":
@@ -228,11 +231,22 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			case "[]Value":
 				mi.OutputNames = append(mi.OutputNames, output.Name)
 				mi.IsOutputSlice = true
+				sliceOutputCount++
 			default:
 				exceptions.Panicf("unexpected output type %q for output #%d of %q", output.Type, outputIdx, name)
 			}
 		}
-		if len(mi.OutputNames) > 1 {
+		switch {
+		case mi.IsOutputSlice && len(mi.OutputNames) > 1:
+			// Mixed shape: scalar output(s) then exactly one trailing []Value (the last output).
+			if sliceOutputCount != 1 || raw.Outputs[len(raw.Outputs)-2].Type != "[]Value" {
+				exceptions.Panicf("method %q: mixed outputs only supported as scalar output(s) followed by exactly one trailing []Value", name)
+			}
+			mi.HasTrailingSlice = true
+			mi.IsOutputSlice = false // not the pure-slice case
+			mi.ScalarOutputNames = mi.OutputNames[:len(mi.OutputNames)-1]
+			mi.SliceOutputName = mi.OutputNames[len(mi.OutputNames)-1]
+		case len(mi.OutputNames) > 1:
 			mi.HasMultipleOutputs = true
 		}
 	}
@@ -253,6 +267,11 @@ type MethodInfo struct {
 	HasMultipleOutputs bool
 	IsOutputSlice      bool
 	OutputNames        []string
+
+	// HasTrailingSlice marks the mixed output shape: scalar output(s) then one trailing []Value.
+	HasTrailingSlice  bool
+	ScalarOutputNames []string
+	SliceOutputName   string
 }
 
 // ParameterInfo represents one parameter only.
@@ -366,6 +385,9 @@ func (ni *nodeInputs{{.BackendName}}) CloneWithInputs(originalNode *Node, newInp
 	{{- if .HasMultipleOutputs}}
 	{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{if eq $ii 0}}r0{{else}}_{{end}}{{end}} := {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*Node") (eq .GraphType "[]*Node") (eq .GraphType "...*Node") (eq .NodeInputType "[]*Node")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.Name}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
 	return r0.inputNodes[0]
+	{{- else if .HasTrailingSlice}}
+	r0{{range $ii, $name := .ScalarOutputNames}}{{if $ii}}, _{{end}}{{end}}, _ := {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*Node") (eq .GraphType "[]*Node") (eq .GraphType "...*Node") (eq .NodeInputType "[]*Node")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.Name}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
+	return r0.inputNodes[0]
 	{{- else if .IsOutputSlice}}
 	r := {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*Node") (eq .GraphType "[]*Node") (eq .GraphType "...*Node") (eq .NodeInputType "[]*Node")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.Name}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
 	return r[0].inputNodes[0]
@@ -389,6 +411,8 @@ Inputs:  */}}{{.GraphName}}({{if .HasGraph}}g *Graph, {{end}}{{range .Inputs}}{{
 {{- /* Outputs: */}}
 {{- if .HasMultipleOutputs}}
 {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} *Node
+{{- else if .HasTrailingSlice}}
+{{range .ScalarOutputNames}}{{.}} *Node, {{end}}{{.SliceOutputName}} []*Node
 {{- else if .IsOutputSlice}}
 []*Node
 {{- else}}
@@ -436,6 +460,17 @@ Convert result(s) to node(s):
 	node := &Node{
 		outputOps: []compute.Value{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} },
 		outputShapes: []shapes.Shape{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}mustNoError(g.builder.OpShape(v{{$ii}})){{end}} },
+{{- else if .HasTrailingSlice}}
+{{- /* Version with scalar output(s) followed by a trailing []Value: */}}
+	{{range $ii, $name := .ScalarOutputNames}}v{{$ii}}, {{end}}vTrailing, err := g.currentFunc.backendFunc.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
+	if err != nil {
+		panic(err)
+	}
+	outputOps := append([]compute.Value{ {{range $ii, $name := .ScalarOutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} }, vTrailing...)
+	node := &Node{
+		outputOps: outputOps,
+		outputShapes: xslices.Map(outputOps,
+			func (op compute.Value) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
 {{- else if .IsOutputSlice}}
 {{- /* Version with output slice: */}}
 	results, err := g.currentFunc.backendFunc.{{.BackendName}}({{range .Inputs}}{{.ConvertStatement}}, {{end}})
@@ -475,6 +510,11 @@ If multiple-outputs, split resulting node into its separate parts:
 {{- if .HasMultipleOutputs}}
 	splitNodes := splitNode(node)
 	{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} = {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}splitNodes[{{$ii}}]{{end}}
+	return
+{{- else if .HasTrailingSlice}}
+	splitNodes := splitNode(node)
+	{{range $ii, $name := .ScalarOutputNames}}{{$name}} = splitNodes[{{$ii}}]
+	{{end}}{{.SliceOutputName}} = splitNodes[{{len .ScalarOutputNames}}:]
 	return
 {{- else if .IsOutputSlice}}
 	return splitNode(node)

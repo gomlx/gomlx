@@ -65,6 +65,16 @@ func BuildTestBackend() compute.Backend {
 	return OfficialTestBackends[compute.DefaultConfig]
 }
 
+// GetOfficialBackend returns the named official backend if it was successfully initialized,
+// or nil if it is not available in this environment. Callers should skip the test on nil:
+//
+//	b := testutil.GetOfficialBackend("xla:cuda")
+//	if b == nil { t.Skip("xla:cuda backend not available") }
+func GetOfficialBackend(name string) compute.Backend {
+	BuildTestBackend()
+	return OfficialTestBackends[name]
+}
+
 // TestOfficialBackends iterates over list of backends and calls testFn for each of them.
 // If GOMLX_BACKEND environment variable is set, it will only iterate over the one set.
 // If GOMLX_BACKEND is not set, it will iterate over all official backends, except those in excludecompute.

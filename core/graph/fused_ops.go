@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/envutil"
 	"github.com/gomlx/gomlx/support/exceptions"
+	"k8s.io/klog/v2"
 )
 
 // Quantization describes how a graph-level quantized tensor is dequantized.
@@ -133,7 +134,6 @@ func (ni *nodeInputsFusedQuantizedDense) CloneWithInputs(originalNode *Node, new
 	return BackendFusedQuantizedDense(newX, newWeights, newBias, newWq, ni.activation)
 }
 
-
 // BackendFusedSoftmax computes softmax along the specified axis.
 // Internal: prefer graph.Softmax which handles fallback and gradients.
 func BackendFusedSoftmax(x *Node, axis int) *Node { return backendFusedSoftmax(x, axis) }
@@ -154,10 +154,67 @@ func BackendFusedDense(x, weight, bias *Node, activation compute.ActivationType)
 	return backendFusedDense(x, weight, bias, activation)
 }
 
-// BackendFusedScaledDotProductAttention computes multi-head scaled dot-product attention.
-// Internal: prefer the InternalFusedOpCaller wrapper in layers which handles fallback and gradients.
-func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) *Node {
+// NewSeqLenAttentionConfig builds a ScaledDotProductAttentionConfig carrying per-batch sequence
+// lengths (int32 [B] nodes) for padding masking in the fused SDPA path. Either node may be nil.
+func NewSeqLenAttentionConfig(querySeqLen, keyValueSeqLen *Node) *compute.ScaledDotProductAttentionConfig {
+	return NewFusedAttentionConfig(querySeqLen, keyValueSeqLen, nil)
+}
+
+// NewFusedAttentionConfig builds a ScaledDotProductAttentionConfig from optional seqlen and
+// additive bias nodes. Any of the three arguments may be nil. When both seqlens and a bias
+// are set, go-xla returns ErrNotImplemented (cuDNN ScaleBias does not accept seqlen operands)
+// and the caller falls back to the decomposed path, which handles the combination correctly.
+func NewFusedAttentionConfig(querySeqLen, keyValueSeqLen, attentionBias *Node) *compute.ScaledDotProductAttentionConfig {
+	cfg := &compute.ScaledDotProductAttentionConfig{}
+	if querySeqLen != nil {
+		cfg.QuerySeqLen = querySeqLen.outputOps[0]
+	}
+	if keyValueSeqLen != nil {
+		cfg.KeyValueSeqLen = keyValueSeqLen.outputOps[0]
+	}
+	if attentionBias != nil {
+		cfg.Bias = attentionBias.outputOps[0]
+	}
+	return cfg
+}
+
+// BackendFusedScaledDotProductAttention computes multi-head scaled dot-product attention via the
+// backend's fused op. It returns the attention output plus statesForVJP: the backend-specific state
+// tensors the fused backward consumes (the cuDNN flash softmax stats today; a slice so other
+// backends can carry a different set, e.g. an extra workspace tensor). statesForVJP is empty when
+// the backend has no fused backward. The gradient is the registered VJP
+// (fusedScaledDotProductAttentionVJP), which threads statesForVJP into the fused backward so the
+// [B,H,S,S] scores never materialize in either pass. Backends without the fused op panic with a
+// wrapped compute.ErrNotImplemented, so callers fall back.
+//
+// Internal: prefer to use the package ml/layers/attention instead, which provides the standard (and
+// stable) API for attention layers. This is an internal API that may change without notice.
+func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (output *Node, statesForVJP []*Node) {
 	return backendFusedScaledDotProductAttention(query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal, options)
+}
+
+// fusedScaledDotProductAttentionVJP is the registered VJP for NodeTypeFusedScaledDotProductAttention.
+// It threads statesForVJP into the fused backward, so the [B,H,S,S] scores never materialize.
+func fusedScaledDotProductAttentionVJP(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsFusedScaledDotProductAttention)
+	splitOutputs := splitNode(node)
+	output, statesForVJP := splitOutputs[0], splitOutputs[1:]
+	dOutput := vjps[0] // adjoint of the attention output; the state adjoints are unused.
+	dQuery, dKey, dValue := backendFusedScaledDotProductAttentionVJP(
+		inputs.query, inputs.key, inputs.value, inputs.mask,
+		inputs.numHeads, inputs.numKVHeads, inputs.axesLayout, inputs.scale, inputs.causal, inputs.options,
+		output, statesForVJP, dOutput)
+	// Grads align to node.inputNodes = [query, key, value (, mask)]. The fused backward runs in bf16;
+	// cast each grad back to its input's dtype so autodiff accumulation matches.
+	grads := []*Node{
+		ConvertDType(dQuery, inputs.query.DType()),
+		ConvertDType(dKey, inputs.key.DType()),
+		ConvertDType(dValue, inputs.value.DType()),
+	}
+	if inputs.mask != nil {
+		grads = append(grads, nil) // causal flash takes no mask operand; mask is not differentiated.
+	}
+	return grads
 }
 
 // BackendFusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
@@ -245,7 +302,6 @@ func (ni *nodeInputsQuantizedEmbeddingLookup) CloneWithInputs(originalNode *Node
 	return BackendQuantizedEmbeddingLookup(newInputs[0], newInputs[1], ni.tq)
 }
 
-
 // BackendQuantizedEmbeddingLookup performs a quantized embedding lookup (row gather)
 // with on-the-fly dequantization.
 // Internal: prefer nn.QuantizedGather which handles fallback and gradients.
@@ -316,18 +372,21 @@ func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 		return decomposedOutput
 	}
 
+	klog.V(2).Info("Attempt to call fused op")
 	var output *Node
 	err := exceptions.TryCatch[error](func() {
 		output = fused()
 	})
 	if err != nil {
 		if compute.IsNotImplemented(err) {
+			klog.V(2).Infof("Failed to call fused op (not implemented). Falling back to decomposed op: %v", err)
 			// Expected: fused op doesn't support this config; fall back to decomposed.
 			return decomposedOutput
 		}
 		// Unexpected error — re-panic so it surfaces instead of being silently masked.
 		panic(err)
 	}
+	klog.V(2).Info("Successfully called fused op.")
 	// Store decomposed version for VJP computation; dead-code-eliminated if unused.
 	output.vjpAlternateOutputs = []*Node{decomposedOutput}
 	return output
