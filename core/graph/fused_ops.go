@@ -154,19 +154,6 @@ func BackendFusedDense(x, weight, bias *Node, activation compute.ActivationType)
 	return backendFusedDense(x, weight, bias, activation)
 }
 
-// NewSeqLenAttentionConfig builds a ScaledDotProductAttentionConfig carrying per-batch sequence
-// lengths (int32 [B] nodes) for padding masking in the fused SDPA path. Either node may be nil.
-func NewSeqLenAttentionConfig(querySeqLen, keyValueSeqLen *Node) *compute.ScaledDotProductAttentionConfig {
-	cfg := &compute.ScaledDotProductAttentionConfig{}
-	if querySeqLen != nil {
-		cfg.QuerySeqLen = querySeqLen.outputOps[0]
-	}
-	if keyValueSeqLen != nil {
-		cfg.KeyValueSeqLen = keyValueSeqLen.outputOps[0]
-	}
-	return cfg
-}
-
 // BackendFusedScaledDotProductAttention computes multi-head scaled dot-product attention via the
 // backend's fused op. It returns the attention output plus statesForVJP: the backend-specific state
 // tensors the fused backward consumes (the cuDNN flash softmax stats today; a slice so other
@@ -415,4 +402,15 @@ func InternalFusedOpCallerMulti(fused, decomposed func() []*Node) []*Node {
 	}
 
 	return outputs
+}
+
+// InternalBackendOutputs retrieves the unexported backend outputs of a node.
+//
+// WARNING: This is an internal GoMLX API. It is exposed specifically for
+// layer packages (like `attention`) that need to access backend details to
+// stitch together fused operations (e.g., FusedScaledDotProductAttention).
+//
+// End-users building standard computation graphs should never need to call this.
+func InternalBackendOutputs(n *Node) []compute.Value {
+	return n.outputOps
 }

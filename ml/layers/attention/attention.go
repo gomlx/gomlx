@@ -305,7 +305,13 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 				// Build seqlen config from graph nodes; attentionMask stays nil so flashSupported accepts.
 				var fusedConfig *compute.ScaledDotProductAttentionConfig
 				if querySeqLen != nil || keyValueSeqLen != nil {
-					fusedConfig = NewSeqLenAttentionConfig(querySeqLen, keyValueSeqLen)
+					fusedConfig = &compute.ScaledDotProductAttentionConfig{}
+					if querySeqLen != nil {
+						fusedConfig.QuerySeqLen = InternalBackendOutputs(querySeqLen)[0]
+					}
+					if keyValueSeqLen != nil {
+						fusedConfig.KeyValueSeqLen = InternalBackendOutputs(keyValueSeqLen)[0]
+					}
 				}
 				klog.V(2).Info("Attempting to call BackendFusedScaledDotProductAttention op.")
 				out, _ := BackendFusedScaledDotProductAttention(
