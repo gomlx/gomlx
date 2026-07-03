@@ -186,21 +186,6 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			continue
 		}
 
-		if node.Type() == NodeTypeSplitNode {
-			// SplitNode just pushes v to the specific element of the tuple.
-			// This is a special case because it doesn't return a single VJP to accumulate, but needs to be set
-			// in a special way.
-			params := node.inputs.(*nodeInputsSplitNode)
-			rInput := rg.ReverseNodes[params.multiOutputNode.Id()]
-			if rInput.VJPsForMultiOutputs[params.index] == nil {
-				rInput.VJPsForMultiOutputs[params.index] = rNode.AccumulatedVJP
-			} else {
-				// This usually shouldn't happen, since a Node is only split once ... but just in case.
-				rInput.VJPsForMultiOutputs[params.index] = Add(rInput.VJPsForMultiOutputs[params.index], rNode.AccumulatedVJP)
-			}
-			continue
-		}
-
 		// Fused ops with decomposed alternatives: transfer VJPs to the alternate output
 		// nodes and let the normal gradient loop process the decomposed subgraph.
 		// The alternates have lower nodeIdx (built first by InternalFusedOpCaller/Multi),
@@ -224,6 +209,21 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 					rAlt.AccumulatedVJP = Add(rAlt.AccumulatedVJP, vjps[i])
 				}
 				markSubgraphUseful(rg, alt)
+			}
+			continue
+		}
+
+		if node.Type() == NodeTypeSplitNode {
+			// SplitNode just pushes v to the specific element of the tuple.
+			// This is a special case because it doesn't return a single VJP to accumulate, but needs to be set
+			// in a special way.
+			params := node.inputs.(*nodeInputsSplitNode)
+			rInput := rg.ReverseNodes[params.multiOutputNode.Id()]
+			if rInput.VJPsForMultiOutputs[params.index] == nil {
+				rInput.VJPsForMultiOutputs[params.index] = rNode.AccumulatedVJP
+			} else {
+				// This usually shouldn't happen, since a Node is only split once ... but just in case.
+				rInput.VJPsForMultiOutputs[params.index] = Add(rInput.VJPsForMultiOutputs[params.index], rNode.AccumulatedVJP)
 			}
 			continue
 		}

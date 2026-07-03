@@ -373,8 +373,8 @@ func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 //
 // Like InternalFusedOpCaller, the decomposed version is built first so it has lower
 // node indices than the fused nodes. When the fused call succeeds, the decomposed
-// outputs are stored as vjpAlternateOutputs on the multi-output parent node for
-// reverse-mode autodiff.
+// outputs are stored as vjpAlternateOutputs on each individual output node (which
+// are split nodes under the hood) for reverse-mode autodiff.
 func InternalFusedOpCallerMulti(fused, decomposed func() []*Node) []*Node {
 	decomposedOutputs := decomposed()
 
@@ -389,16 +389,11 @@ func InternalFusedOpCallerMulti(fused, decomposed func() []*Node) []*Node {
 		panic(err)
 	}
 
-	// Find the multi-output parent node via the first split node.
-	// The fused function returns split nodes; we need the underlying multi-output node.
-	if len(outputs) > 0 {
-		firstSplit := outputs[0]
-		splitInputs, ok := firstSplit.inputs.(*nodeInputsSplitNode)
-		if !ok {
-			exceptions.Panicf("InternalFusedOpCallerMulti: fused function returned non-split nodes; cannot set vjpAlternateOutputs")
-		}
-		parent := splitInputs.multiOutputNode
-		parent.vjpAlternateOutputs = decomposedOutputs
+	if len(outputs) != len(decomposedOutputs) {
+		exceptions.Panicf("InternalFusedOpCallerMulti: fused function returned %d outputs, but decomposed returned %d", len(outputs), len(decomposedOutputs))
+	}
+	for i, output := range outputs {
+		output.vjpAlternateOutputs = []*Node{decomposedOutputs[i]}
 	}
 
 	return outputs
