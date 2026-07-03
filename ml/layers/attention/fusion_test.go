@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"testing"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/bfloat16"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
@@ -18,21 +20,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// naiveCausalAttention is the decomposed reference oracle: softmax(scale*QK^T + causal)*V in float32.
+// naiveCausalAttention is the decomposed reference oracle: softmax(scale*QK^T + causal)*V.
 // query/key/value are [B,S,H,D] with equal heads. Test-only: Core has its own inline decomposed path,
 // so this exists only as the reference the parity tests compare Core's output against.
 func naiveCausalAttention(query, key, value *Node, scale float64) *Node {
 	g := query.Graph()
-	q := ConvertDType(query, dtypes.Float32)
-	k := ConvertDType(key, dtypes.Float32)
-	v := ConvertDType(value, dtypes.Float32)
-	dims := q.Shape().Dimensions
+	dims := query.Shape().Dimensions
 	batch, seqLen, heads := dims[0], dims[1], dims[2]
 
-	scores := MulScalar(Einsum("bqhd,bkhd->bhqk", q, k), scale)
+	scores := MulScalar(Einsum("bqhd,bkhd->bhqk", query, key), scale)
 	causal := BroadcastToDims(Reshape(LowerTriangular(g, seqLen), 1, 1, seqLen, seqLen), batch, heads, seqLen, seqLen)
 	attn := MaskedSoftmax(scores, causal, -1)
-	return Einsum("bhqk,bkhd->bqhd", attn, v)
+	return Einsum("bhqk,bkhd->bqhd", attn, value)
 }
 
 // naiveGQAReference computes grouped-query attention independently of repeatKVHeads: it splits the
@@ -40,18 +39,15 @@ func naiveCausalAttention(query, key, value *Node, scale float64) *Node {
 // genuine cross-check of the repeat-KV grouping. query is [B,S,nQH,D], key/value [B,S,nKVH,D].
 func naiveGQAReference(query, key, value *Node, numKVHeads int, scale float64) *Node {
 	g := query.Graph()
-	q := ConvertDType(query, dtypes.Float32)
-	k := ConvertDType(key, dtypes.Float32)
-	v := ConvertDType(value, dtypes.Float32)
-	d := q.Shape().Dimensions
+	d := query.Shape().Dimensions
 	b, s, nQH, dim := d[0], d[1], d[2], d[3]
 	group := nQH / numKVHeads
 
-	qg := Reshape(q, b, s, numKVHeads, group, dim) // [b,s,h,g,d], query head = h*group + g
-	scores := MulScalar(Einsum("bqhgd,bkhd->bhgqk", qg, k), scale)
+	qg := Reshape(query, b, s, numKVHeads, group, dim) // [b,s,h,g,d], query head = h*group + g
+	scores := MulScalar(Einsum("bqhgd,bkhd->bhgqk", qg, key), scale)
 	causal := BroadcastToDims(Reshape(LowerTriangular(g, s), 1, 1, 1, s, s), b, numKVHeads, group, s, s)
 	attn := MaskedSoftmax(scores, causal, -1)
-	out := Einsum("bhgqk,bkhd->bqhgd", attn, v)
+	out := Einsum("bhgqk,bkhd->bqhgd", attn, value)
 	return Reshape(out, b, s, nQH, dim)
 }
 
@@ -77,20 +73,29 @@ func randFlat(n int, seed int64) []float32 {
 	return out
 }
 
-// backendSupportsFusion reports whether the backend implements fused scaled-dot-product attention,
+// randFlatBF16 returns n bfloat16 values drawn from N(0,0.5) with the given seed.
+func randFlatBF16(n int, seed int64) []bfloat16.BFloat16 {
+	r := rand.New(rand.NewSource(seed))
+	out := make([]bfloat16.BFloat16, n)
+	for i := range out {
+		out[i] = bfloat16.FromFloat64(r.NormFloat64() * 0.5)
+	}
+	return out
+}
+
+// backendSupportsFusionForBFloat16 reports whether the backend implements fused scaled-dot-product attention,
 // by probing a tiny causal bf16 FusedSDPA and checking it does not return ErrNotImplemented. This
 // replaces name-sniffing (isCUDABackend) so any backend that grows the kernel is exercised.
-func backendSupportsFusion(backend compute.Backend) bool {
+func backendSupportsFusionForBFloat16(backend compute.Backend) bool {
 	const B, S, H, D = 1, 8, 1, 64
-	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 1), B, S, H, D)
-	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 2), B, S, H, D)
-	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 3), B, S, H, D)
+	q := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 1), B, S, H, D)
+	k := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 2), B, S, H, D)
+	v := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 3), B, S, H, D)
 	supported := false
 	probeErr := exceptions.TryCatch[error](func() {
-		exec := MustNewExec(backend, func(qn, kn, vn *Node) *Node {
-			round := func(n *Node) *Node { return ConvertDType(n, dtypes.BFloat16) }
+		exec := MustNewExec(backend, func(qIn, kIn, vIn *Node) *Node {
 			fused, _ := BackendFusedScaledDotProductAttention(
-				round(qn), round(kn), round(vn), nil, H, H,
+				qIn, kIn, vIn, nil, H, H,
 				compute.AxesLayoutBSHD, 0.125, true, nil)
 			// Make the returned node depend on the fused output so the fused op is genuinely
 			// part of the executable graph and exercised at compile/exec time. A backend whose
@@ -113,44 +118,51 @@ func backendSupportsFusion(backend compute.Backend) bool {
 // TestRepeatKVHeads pins the GQA grouping order: kv head h is repeated to query heads
 // h*group .. h*group+group-1, so query head q uses kv head q/group (matching reshapeQueryForGQA).
 func TestRepeatKVHeads(t *testing.T) {
-	backend := testutil.BuildTestBackend()
-	in := tensors.FromFlatDataAndDimensions([]float32{10, 20}, 1, 1, 2, 1) // two kv heads
-	fn := func(x *Node) *Node { return Reshape(repeatKVHeads(x, 2), 4) }
-	out := MustNewExec(backend, fn).MustCall(in)
-	require.Equal(t, []float32{10, 10, 20, 20}, out[0].Value().([]float32))
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		in := tensors.FromFlatDataAndDimensions([]float32{10, 20}, 1, 1, 2, 1) // two kv heads
+		fn := func(x *Node) *Node { return Reshape(repeatKVHeads(x, 2), 4) }
+		out := MustNewExec(backend, fn).MustCall(in)
+		require.Equal(t, []float32{10, 10, 20, 20}, out[0].Value().([]float32))
+	})
 }
 
 // TestFusionFallbackParity checks that on every official backend, attention through Core (fused path
 // attempted) matches the decomposed reference, forward and gradients. On a backend without the fused
-// kernel this exercises the ErrNotImplemented fallback; on one with it, it is a parity check. Loops
-// all official backends.
+// kernel this exercises the ErrNotImplemented fallback; on one with it, it is a parity check.
+// Loops all official backends.
 func TestFusionFallbackParity(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		const B, S, H, D = 1, 64, 2, 64
 		scale := 0.125
-		q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 1), B, S, H, D)
-		k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 2), B, S, H, D)
-		v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 3), B, S, H, D)
+		q := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 1), B, S, H, D)
+		k := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 2), B, S, H, D)
+		v := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 3), B, S, H, D)
 
 		store := model.NewStore()
 		exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
 			fusedOut, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
-			refOut := naiveCausalAttention(qIn, kIn, vIn, scale)
-			fusedOut = ConvertDType(fusedOut, dtypes.Float32)
+			refOut := ConvertDType(naiveCausalAttention(qIn, kIn, vIn, scale), dtypes.Float32)
 			fg := Gradient(ReduceAllSum(fusedOut), qIn, kIn, vIn)
 			ng := Gradient(ReduceAllSum(refOut), qIn, kIn, vIn)
 			relMax := func(got, want *Node) *Node {
+				got, want = ConvertDType(got, dtypes.Float32), ConvertDType(want, dtypes.Float32)
 				return Div(ReduceAllMax(Abs(Sub(got, want))), AddScalar(ReduceAllMax(Abs(want)), 1e-6))
 			}
 			return []*Node{relMax(fusedOut, refOut), relMax(fg[0], ng[0]), relMax(fg[1], ng[1]), relMax(fg[2], ng[2])}
 		})
-		out := exec.MustCall(q, k, v)
-		// Fused kernels run in bf16, so use a loose tolerance when fusion is supported; the CPU
-		// fallback is the reference itself, so it matches near-exactly.
-		tol := 1e-5
-		if backendSupportsFusion(backend) {
-			tol = 0.06
+		out, g, err := exec.CallWithGraph(q, k, v)
+		require.NoError(t, err)
+
+		// For backends supporting BFloat16 fused attention, check that it was issued:
+		if backendSupportsFusionForBFloat16(backend) {
+			fmt.Printf("\t- Backend %q: checking that fused attention was used.\n", backend.Description())
+			hasForward, hasBackward := HasFusedSDPA(g)
+			require.True(t, hasForward, "Expected FusedScaledDotProductAttention to be used in forward pass")
+			require.True(t, hasBackward, "Expected FusedScaledDotProductAttentionVJP to be used in backward pass")
 		}
+
+		// Fused kernels and fallback decomposed both run in bf16, so use a loose tolerance.
+		tol := 0.06
 		for i, name := range []string{"output", "dQ", "dK", "dV"} {
 			rel := float64(tensors.ToScalar[float32](out[i]))
 			require.LessOrEqualf(t, rel, tol, "%s rel error %.2e exceeds %.2e on %s", name, rel, tol, backend.Name())
@@ -164,27 +176,34 @@ func TestFusionGQAParity(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		const B, S, QH, KVH, D = 1, 128, 6, 2, 64
 		scale := 0.125
-		q := tensors.FromFlatDataAndDimensions(randFlat(B*S*QH*D, 1), B, S, QH, D)
-		k := tensors.FromFlatDataAndDimensions(randFlat(B*S*KVH*D, 2), B, S, KVH, D)
-		v := tensors.FromFlatDataAndDimensions(randFlat(B*S*KVH*D, 3), B, S, KVH, D)
+		q := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*QH*D, 1), B, S, QH, D)
+		k := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*KVH*D, 2), B, S, KVH, D)
+		v := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*KVH*D, 3), B, S, KVH, D)
 
 		store := model.NewStore()
 		exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
 			out, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
-			out = ConvertDType(out, dtypes.Float32)
 			ref := naiveGQAReference(qIn, kIn, vIn, KVH, scale)
 			og := Gradient(ReduceAllSum(out), qIn, kIn, vIn)
 			rg := Gradient(ReduceAllSum(ref), qIn, kIn, vIn)
 			relMax := func(got, want *Node) *Node {
+				got, want = ConvertDType(got, dtypes.Float32), ConvertDType(want, dtypes.Float32)
 				return Div(ReduceAllMax(Abs(Sub(got, want))), AddScalar(ReduceAllMax(Abs(want)), 1e-6))
 			}
 			return []*Node{relMax(out, ref), relMax(og[0], rg[0]), relMax(og[1], rg[1]), relMax(og[2], rg[2])}
 		})
-		out := exec.MustCall(q, k, v)
-		tol := 1e-5
-		if backendSupportsFusion(backend) {
-			tol = 0.06
+		out, g, err := exec.CallWithGraph(q, k, v)
+		require.NoError(t, err)
+
+		// For backends supporting BFloat16 fused attention, check that it was issued:
+		if backendSupportsFusionForBFloat16(backend) {
+			fmt.Printf("\t- Backend %q: checking that fused attention was used.\n", backend.Description())
+			hasForward, hasBackward := HasFusedSDPA(g)
+			require.True(t, hasForward, "Expected FusedScaledDotProductAttention to be used in forward pass")
+			require.True(t, hasBackward, "Expected FusedScaledDotProductAttentionVJP to be used in backward pass")
 		}
+
+		tol := 0.06
 		for i, name := range []string{"output", "dQ", "dK", "dV"} {
 			rel := float64(tensors.ToScalar[float32](out[i]))
 			require.LessOrEqualf(t, rel, tol, "%s rel error %.2e exceeds %.2e on %s", name, rel, tol, backend.Name())
@@ -192,12 +211,12 @@ func TestFusionGQAParity(t *testing.T) {
 	})
 }
 
-// TestFusionParity [cuda] cross-checks the fused kernel against the float32 reference at
+// TestFusionParity [cuda] cross-checks the fused kernel against the bfloat16 reference at
 // the head dims (64, 128).
 // Skipped if fusion not supported.
 func TestFusionParity(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
-		if !backendSupportsFusion(backend) {
+		if !backendSupportsFusionForBFloat16(backend) {
 			t.Skip("xla:cuda fused attention backend not available")
 		}
 		const B, S, H = 1, 512, 4
@@ -209,19 +228,27 @@ func TestFusionParity(t *testing.T) {
 				v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 3), B, S, H, D)
 				store := model.NewStore()
 				exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
-					round := func(n *Node) *Node { return ConvertDType(ConvertDType(n, dtypes.BFloat16), dtypes.Float32) }
-					qb, kb, vb := round(qIn), round(kIn), round(vIn)
+					qb := ConvertDType(qIn, dtypes.BFloat16)
+					kb := ConvertDType(kIn, dtypes.BFloat16)
+					vb := ConvertDType(vIn, dtypes.BFloat16)
 					fusedOut, _ := Core(scope, qb, kb, vb, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
 					fusedOut = ConvertDType(fusedOut, dtypes.Float32)
-					refOut := naiveCausalAttention(qb, kb, vb, scale)
-					fg := Gradient(ReduceAllSum(fusedOut), qb, kb, vb)
-					ng := Gradient(ReduceAllSum(refOut), qb, kb, vb)
+					refQ := ConvertDType(qb, dtypes.Float32)
+					refK := ConvertDType(kb, dtypes.Float32)
+					refV := ConvertDType(vb, dtypes.Float32)
+					refOut := naiveCausalAttention(refQ, refK, refV, scale)
+					fg := Gradient(ReduceAllSum(fusedOut), qIn, kIn, vIn)
+					ng := Gradient(ReduceAllSum(refOut), qIn, kIn, vIn)
 					relMax := func(got, want *Node) *Node {
 						return Div(ReduceAllMax(Abs(Sub(got, want))), AddScalar(ReduceAllMax(Abs(want)), 1e-6))
 					}
 					return []*Node{relMax(fusedOut, refOut), relMax(fg[0], ng[0]), relMax(fg[1], ng[1]), relMax(fg[2], ng[2])}
 				})
-				out := exec.MustCall(q, k, v)
+				out, g, err := exec.CallWithGraph(q, k, v)
+				require.NoError(t, err)
+				hasForward, hasBackward := HasFusedSDPA(g)
+				require.True(t, hasForward, "Expected FusedScaledDotProductAttention to be used in forward pass")
+				require.True(t, hasBackward, "Expected FusedScaledDotProductAttentionVJP to be used in backward pass")
 				tol := []float64{0.03, 0.06, 0.06, 0.06}
 				for i, name := range []string{"output", "dQ", "dK", "dV"} {
 					rel := float64(tensors.ToScalar[float32](out[i]))
@@ -247,13 +274,29 @@ func TestCoreUseFusionFalseMatchesDecomposed(t *testing.T) {
 
 	store := model.NewStore()
 	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
-		on, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
-		off, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, false, nil, nil)
-		return []*Node{Div(ReduceAllMax(Abs(Sub(on, off))), AddScalar(ReduceAllMax(Abs(off)), 1e-6))}
+		qBF16 := ConvertDType(qIn, dtypes.BFloat16)
+		kBF16 := ConvertDType(kIn, dtypes.BFloat16)
+		vBF16 := ConvertDType(vIn, dtypes.BFloat16)
+		on, _ := Core(scope, qBF16, kBF16, vBF16, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
+		off, _ := Core(scope, qBF16, kBF16, vBF16, scale, nil, nil, LayoutBSHD, true, false, 0.0, false, nil, nil)
+		diff := Div(ReduceAllMax(Abs(Sub(on, off))), AddScalar(ReduceAllMax(Abs(off)), 1e-6))
+		return []*Node{ConvertDType(diff, dtypes.Float32)}
 	})
-	out := exec.MustCall(q, k, v)
+	out, g, err := exec.CallWithGraph(q, k, v)
+	require.NoError(t, err)
+	tol := 1e-6
+	if backendSupportsFusionForBFloat16(backend) {
+		tol = 0.06
+		hasForward, hasBackward := HasFusedSDPA(g)
+		require.True(t, hasForward, "Expected FusedScaledDotProductAttention to be used for the 'on' part")
+		require.False(t, hasBackward, "Expected FusedScaledDotProductAttentionVJP not to be used (no gradient)")
+	} else {
+		hasForward, hasBackward := HasFusedSDPA(g)
+		require.False(t, hasForward)
+		require.False(t, hasBackward)
+	}
 	rel := float64(tensors.ToScalar[float32](out[0]))
-	require.LessOrEqual(t, rel, 1e-6, "useFusion on/off diverged on CPU (both should be decomposed)")
+	require.LessOrEqual(t, rel, tol, "useFusion on/off diverged")
 }
 
 // TestBuilderWithFusionDefaultsTrue pins that the builder defaults useFusion to true and that
@@ -267,19 +310,28 @@ func TestBuilderWithFusionDefaultsTrue(t *testing.T) {
 
 	store := model.NewStore()
 	exec := model.MustNewExec(backend, store, func(scope *model.Scope, in *Node) []*Node {
-		def := SelfAttention(scope.In("def"), in, H, D).WithCausalMask(true).Done()
-		off := SelfAttention(scope.In("off"), in, H, D).WithCausalMask(true).WithFusion(false).Done()
+		inBF16 := ConvertDType(in, dtypes.BFloat16)
+		def := SelfAttention(scope.In("def"), inBF16, H, D).WithCausalMask(true).Done()
+		off := SelfAttention(scope.In("off"), inBF16, H, D).WithCausalMask(true).WithFusion(false).Done()
 		// Weights are not shared across scopes, so compare shapes only: both must produce
 		// [B,S,H*D]. The behavioral on/off equivalence is covered by Task 2.
 		return []*Node{def, off}
 	})
-	out := exec.MustCall(x)
+	out, g, err := exec.CallWithGraph(x)
+	require.NoError(t, err)
+	if backendSupportsFusionForBFloat16(backend) {
+		hasForward, hasBackward := HasFusedSDPA(g)
+		require.True(t, hasForward, "Expected FusedScaledDotProductAttention to be used")
+		require.False(t, hasBackward, "Expected FusedScaledDotProductAttentionVJP not to be used")
+	} else {
+		hasForward, hasBackward := HasFusedSDPA(g)
+		require.False(t, hasForward)
+		require.False(t, hasBackward)
+	}
 	require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions)
 	require.Equal(t, []int{B, S, H * D}, out[1].Shape().Dimensions)
 }
 
-// TestWithSeqLensRejectsExplicitMask pins the mutual-exclusion rule: WithSeqLens called after
-// WithQueryKeyMatrixMask must panic. Builder-time validation; panics before any backend op.
 func TestWithSeqLensRejectsExplicitMask(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	const B, S, H, D = 1, 8, 2, 8
@@ -289,16 +341,15 @@ func TestWithSeqLensRejectsExplicitMask(t *testing.T) {
 	mask := tensors.FromFlatDataAndDimensions(maskData, B, S, H, S)
 
 	store := model.NewStore()
-	require.Panics(t, func() {
-		_ = model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen, klen, m *Node) []*Node {
-			return []*Node{
-				SelfAttention(scope, in, H, D).
-					WithQueryKeyMatrixMask(m).
-					WithSeqLens(qlen, klen).
-					Done(),
-			}
-		}).MustCall(x, lens, lens, mask)
-	}, "WithQueryKeyMatrixMask then WithSeqLens must panic")
+	_, _, err := model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen, klen, m *Node) []*Node {
+		return []*Node{
+			SelfAttention(scope, in, H, D).
+				WithQueryKeyMatrixMask(m).
+				WithSeqLens(qlen, klen).
+				Done(),
+		}
+	}).CallWithGraph(x, lens, lens, mask)
+	require.Error(t, err, "WithQueryKeyMatrixMask then WithSeqLens must fail")
 }
 
 // TestWithSeqLensMaskAfterRejectsExplicitMask pins the reverse mutual-exclusion order:
@@ -312,16 +363,15 @@ func TestWithSeqLensMaskAfterRejectsExplicitMask(t *testing.T) {
 	mask := tensors.FromFlatDataAndDimensions(maskData, B, S, H, S)
 
 	store := model.NewStore()
-	require.Panics(t, func() {
-		_ = model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen, klen, m *Node) []*Node {
-			return []*Node{
-				SelfAttention(scope, in, H, D).
-					WithSeqLens(qlen, klen).
-					WithQueryKeyMatrixMask(m).
-					Done(),
-			}
-		}).MustCall(x, lens, lens, mask)
-	}, "WithSeqLens then WithQueryKeyMatrixMask must panic")
+	_, _, err := model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen, klen, m *Node) []*Node {
+		return []*Node{
+			SelfAttention(scope, in, H, D).
+				WithSeqLens(qlen, klen).
+				WithQueryKeyMatrixMask(m).
+				Done(),
+		}
+	}).CallWithGraph(x, lens, lens, mask)
+	require.Error(t, err, "WithSeqLens then WithQueryKeyMatrixMask must fail")
 }
 
 // TestWithSeqLensRejectsKeyMask pins that WithSeqLens is mutually exclusive with WithKeyMask
@@ -340,33 +390,29 @@ func TestWithSeqLensRejectsKeyMask(t *testing.T) {
 
 	// WithKeyMask then WithSeqLens: WithSeqLens must reject the already-set key mask at builder time.
 	store := model.NewStore()
-	err := exceptions.TryCatch[error](func() {
-		_ = model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen, klen, km *Node) []*Node {
-			return []*Node{
-				SelfAttention(scope, in, H, D).
-					WithKeyMask(km).
-					WithSeqLens(qlen, klen).
-					Done(),
-			}
-		}).MustCall(x, lens, lens, keyMask)
-	})
-	require.Error(t, err, "WithKeyMask then WithSeqLens must panic")
+	_, _, err := model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen, klen, km *Node) []*Node {
+		return []*Node{
+			SelfAttention(scope, in, H, D).
+				WithKeyMask(km).
+				WithSeqLens(qlen, klen).
+				Done(),
+		}
+	}).CallWithGraph(x, lens, lens, keyMask)
+	require.Error(t, err, "WithKeyMask then WithSeqLens must fail")
 	require.Contains(t, err.Error(), "WithSeqLens is mutually exclusive with an explicit mask",
 		"panic must come from the WithSeqLens builder guard, not the Core guard")
 
 	// WithSeqLens then WithKeyMask (reverse): the mask setter must reject the already-set seqlens.
 	store2 := model.NewStore()
-	err2 := exceptions.TryCatch[error](func() {
-		_ = model.MustNewExec(backend, store2, func(scope *model.Scope, in, qlen, klen, km *Node) []*Node {
-			return []*Node{
-				SelfAttention(scope, in, H, D).
-					WithSeqLens(qlen, klen).
-					WithKeyMask(km).
-					Done(),
-			}
-		}).MustCall(x, lens, lens, keyMask)
-	})
-	require.Error(t, err2, "WithSeqLens then WithKeyMask must panic")
+	_, _, err2 := model.MustNewExec(backend, store2, func(scope *model.Scope, in, qlen, klen, km *Node) []*Node {
+		return []*Node{
+			SelfAttention(scope, in, H, D).
+				WithSeqLens(qlen, klen).
+				WithKeyMask(km).
+				Done(),
+		}
+	}).CallWithGraph(x, lens, lens, keyMask)
+	require.Error(t, err2, "WithSeqLens then WithKeyMask must fail")
 	require.Contains(t, err2.Error(), "an explicit mask is mutually exclusive with WithSeqLens",
 		"panic must come from the WithKeyMask builder guard, not the Core guard")
 }
@@ -383,13 +429,11 @@ func TestCoreRejectsSeqLensWithMask(t *testing.T) {
 	maskT := tensors.FromFlatDataAndDimensions(maskData, B, S, H, S)
 
 	store := model.NewStore()
-	err := exceptions.TryCatch[error](func() {
-		_ = model.MustNewExec(backend, store, func(scope *model.Scope, qn, qlen, klen, m *Node) []*Node {
-			out, _ := Core(scope, qn, qn, qn, 0.125, m, nil, LayoutBSHD, false, false, 0.0, true, qlen, klen)
-			return []*Node{out}
-		}).MustCall(q, lens, lens, maskT)
-	})
-	require.Error(t, err, "Core with seqlens and a non-nil mask must panic")
+	_, _, err := model.MustNewExec(backend, store, func(scope *model.Scope, qn, qlen, klen, m *Node) []*Node {
+		out, _ := Core(scope, qn, qn, qn, 0.125, m, nil, LayoutBSHD, false, false, 0.0, true, qlen, klen)
+		return []*Node{out}
+	}).CallWithGraph(q, lens, lens, maskT)
+	require.Error(t, err, "Core with seqlens and a non-nil mask must fail")
 	require.Contains(t, err.Error(), "mutually exclusive with a non-nil attentionMask",
 		"panic must come from the Core seqlens/mask guard, not an incidental LogicalAnd type error")
 }
@@ -404,13 +448,11 @@ func TestCoreRejectsSeqLensWithNonBSHD(t *testing.T) {
 	lens := tensors.FromFlatDataAndDimensions([]int32{S}, B)
 
 	store := model.NewStore()
-	err := exceptions.TryCatch[error](func() {
-		_ = model.MustNewExec(backend, store, func(scope *model.Scope, qn, qlen, klen *Node) []*Node {
-			out, _ := Core(scope, qn, qn, qn, 0.125, nil, nil, LayoutBHSD, false, false, 0.0, true, qlen, klen)
-			return []*Node{out}
-		}).MustCall(q, lens, lens)
-	})
-	require.Error(t, err, "Core with seqlens and non-BSHD layout must panic")
+	_, _, err := model.MustNewExec(backend, store, func(scope *model.Scope, qn, qlen, klen *Node) []*Node {
+		out, _ := Core(scope, qn, qn, qn, 0.125, nil, nil, LayoutBHSD, false, false, 0.0, true, qlen, klen)
+		return []*Node{out}
+	}).CallWithGraph(q, lens, lens)
+	require.Error(t, err, "Core with seqlens and non-BSHD layout must fail")
 	require.Contains(t, err.Error(), "require LayoutBSHD",
 		"panic must come from the Core seqlens/layout guard")
 }
@@ -425,26 +467,24 @@ func TestWithSeqLensRequiresBoth(t *testing.T) {
 
 	store := model.NewStore()
 	// Only querySeqLen set, keyValueSeqLen nil.
-	require.Panics(t, func() {
-		_ = model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen *Node) []*Node {
-			return []*Node{
-				SelfAttention(scope, in, H, D).
-					WithSeqLens(qlen, nil).
-					Done(),
-			}
-		}).MustCall(x, lens)
-	}, "WithSeqLens(non-nil, nil) must panic")
+	_, _, err := model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen *Node) []*Node {
+		return []*Node{
+			SelfAttention(scope, in, H, D).
+				WithSeqLens(qlen, nil).
+				Done(),
+		}
+	}).CallWithGraph(x, lens)
+	require.Error(t, err, "WithSeqLens(non-nil, nil) must fail")
 
 	// Only keyValueSeqLen set, querySeqLen nil.
-	require.Panics(t, func() {
-		_ = model.MustNewExec(backend, store, func(scope *model.Scope, in, klen *Node) []*Node {
-			return []*Node{
-				SelfAttention(scope, in, H, D).
-					WithSeqLens(nil, klen).
-					Done(),
-			}
-		}).MustCall(x, lens)
-	}, "WithSeqLens(nil, non-nil) must panic")
+	_, _, err2 := model.MustNewExec(backend, store, func(scope *model.Scope, in, klen *Node) []*Node {
+		return []*Node{
+			SelfAttention(scope, in, H, D).
+				WithSeqLens(nil, klen).
+				Done(),
+		}
+	}).CallWithGraph(x, lens)
+	require.Error(t, err2, "WithSeqLens(nil, non-nil) must fail")
 }
 
 // TestSeqLenDecomposedMasking verifies that the decomposed attention path correctly applies
@@ -496,7 +536,11 @@ func TestSeqLenDecomposedMasking(t *testing.T) {
 		diff := ReduceAllMax(Abs(Sub(slCoeffs, mkCoeffs)))
 		return []*Node{diff}
 	})
-	out := exec.MustCall(q, k, v, seqLensTensor, maskTensor)
+	out, g, err := exec.CallWithGraph(q, k, v, seqLensTensor, maskTensor)
+	require.NoError(t, err)
+	hasForward, hasBackward := HasFusedSDPA(g)
+	require.False(t, hasForward, "Expected FusedScaledDotProductAttention not to be used (DoneWithCoefficients forces decomposed)")
+	require.False(t, hasBackward, "Expected FusedScaledDotProductAttentionVJP not to be used (DoneWithCoefficients forces decomposed)")
 	maxDiff := float64(tensors.ToScalar[float32](out[0]))
 	// Same Q/K/V, equivalent masks: coefficients must match within float32 rounding.
 	require.LessOrEqual(t, maxDiff, float64(1e-5),
@@ -515,12 +559,23 @@ func TestWithSeqLensBuildsConfigAndProducesOutput(t *testing.T) {
 
 	store := model.NewStore()
 	exec := model.MustNewExec(backend, store, func(scope *model.Scope, in, qlen, klen *Node) []*Node {
-		out := SelfAttention(scope, in, H, D).
+		inBF16 := ConvertDType(in, dtypes.BFloat16)
+		out := SelfAttention(scope, inBF16, H, D).
 			WithSeqLens(qlen, klen).
 			Done()
 		return []*Node{out}
 	})
-	outputs := exec.MustCall(x, lens, lens)
+	outputs, g, err := exec.CallWithGraph(x, lens, lens)
+	require.NoError(t, err)
+	if backendSupportsFusionForBFloat16(backend) {
+		hasForward, hasBackward := HasFusedSDPA(g)
+		require.True(t, hasForward, "Expected FusedScaledDotProductAttention to be used")
+		require.False(t, hasBackward, "Expected FusedScaledDotProductAttentionVJP not to be used (no gradient)")
+	} else {
+		hasForward, hasBackward := HasFusedSDPA(g)
+		require.False(t, hasForward)
+		require.False(t, hasBackward)
+	}
 	require.Equal(t, []int{B, S, H * D}, outputs[0].Shape().Dimensions,
 		"WithSeqLens output shape must match [B, S, H*D]")
 }
@@ -539,7 +594,7 @@ func TestWithSeqLensBuildsConfigAndProducesOutput(t *testing.T) {
 // SIMD or ONNXRuntime fused backend is covered too (non-fusing backends pass trivially).
 func TestSeqLenFusedParity(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
-		if !backendSupportsFusion(backend) {
+		if !backendSupportsFusionForBFloat16(backend) {
 			t.Skipf("%s: fused attention backend not available", backend)
 		}
 
@@ -556,13 +611,15 @@ func TestSeqLenFusedParity(t *testing.T) {
 		store := model.NewStore()
 		exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, seqLens *Node) []*Node {
 			// Fused arm: WithSeqLens(both) activates the cuDNN PADDING kernel on xla:cuda.
-			fusedOut := MultiHeadAttention(scope.In("shared"), qIn, kIn, vIn, H, D).
+			// It requires BF16 so we convert first.
+			q16, k16, v16 := ConvertDType(qIn, dtypes.BF16), ConvertDType(kIn, dtypes.BF16), ConvertDType(vIn, dtypes.BF16)
+			fusedOut := MultiHeadAttention(scope.In("shared"), q16, k16, v16, H, D).
 				WithSeqLens(seqLens, seqLens).
 				WithPreProjected(true).
 				Done()
 
 			// Decomposed reference: same both-set config, same shared weights, fused disabled.
-			refOut := MultiHeadAttention(scope.Shared("shared"), qIn, kIn, vIn, H, D).
+			refOut := MultiHeadAttention(scope.Shared("shared"), q16, k16, v16, H, D).
 				WithSeqLens(seqLens, seqLens).
 				WithFusion(false).
 				WithPreProjected(true).
@@ -576,7 +633,13 @@ func TestSeqLenFusedParity(t *testing.T) {
 			)
 			return []*Node{fusedOut, diff}
 		})
-		out := exec.MustCall(q, k, v, seqLensTensor)
+		out, g, err := exec.CallWithGraph(q, k, v, seqLensTensor)
+		require.NoError(t, err)
+		if backendSupportsFusionForBFloat16(backend) {
+			hasForward, hasBackward := HasFusedSDPA(g)
+			require.True(t, hasForward, "Expected FusedScaledDotProductAttention to be used")
+			require.False(t, hasBackward, "Expected FusedScaledDotProductAttentionVJP not to be used (no gradient)")
+		}
 
 		// Output shape must be correct.
 		require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions,
@@ -587,4 +650,13 @@ func TestSeqLenFusedParity(t *testing.T) {
 		require.LessOrEqual(t, relErr, 0.05,
 			"fused and decomposed seqlen outputs diverge (rel err=%v); fused padding path broken", relErr)
 	})
+}
+
+// HasFusedSDPA checks if FusedScaledDotProductAttention or FusedScaledDotProductAttentionVJP
+// node types are present in the graph.
+func HasFusedSDPA(g *Graph) (hasForward, hasBackward bool) {
+	str := g.String()
+	hasForward = strings.Contains(str, "FusedScaledDotProductAttention(")
+	hasBackward = strings.Contains(str, "FusedScaledDotProductAttentionVJP(")
+	return
 }

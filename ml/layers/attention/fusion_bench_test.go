@@ -51,13 +51,13 @@ func attentionStep(useFusion bool, qHeads, kvHeads int, scale float64) func(scop
 // route at a representative GQA attention shape. Requires a backend with fusion support (e.g. cuDNN). [cuda]
 func TestFusionThroughput(t *testing.T) {
 	backend := testutil.BuildTestBackend()
-	if !backendSupportsFusion(backend) {
+	if !backendSupportsFusionForBFloat16(backend) {
 		t.Skipf("fusion throughput needs a backend with the fused kernel; %q has none", backend.Name())
 	}
 	const (
 		B, S, QH, KVH, D = 2, 2048, 12, 4, 64
-		scale             = 0.125
-		iters             = 20
+		scale            = 0.125
+		iters            = 20
 	)
 	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*QH*D, 1), B, S, QH, D)
 	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*KVH*D, 2), B, S, KVH, D)
@@ -103,12 +103,12 @@ func TestFusionMemoryProbe(t *testing.T) {
 		t.Skip("pass -mem_probe=fused|decomposed to run the memory probe")
 	}
 	backend := testutil.BuildTestBackend()
-	if !backendSupportsFusion(backend) {
+	if !backendSupportsFusionForBFloat16(backend) {
 		t.Skipf("memory probe needs the fused kernel; %q has none", backend.Name())
 	}
 	const (
 		B, QH, KVH, D = 2, 12, 4, 64
-		scale          = 0.125
+		scale         = 0.125
 	)
 	S := *memProbeSeqLen
 	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*QH*D, 1), B, S, QH, D)
