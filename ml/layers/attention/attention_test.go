@@ -12,7 +12,12 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
+	"k8s.io/klog/v2"
 )
+
+func init() {
+	klog.InitFlags(nil)
+}
 
 func TestAxesLayoutEquivalence(t *testing.T) {
 	// Verify that BSHD and BHSD layouts produce the same results when
