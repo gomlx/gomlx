@@ -112,6 +112,7 @@ And a few small renaming:
 - New ops:
   - `SchedulingBarrier` and `OptimizationBarrier`: they are implemented in the Go and XLA backends. 
 - Gradient Checkpointing: Added `Node.Checkpoint()` and `Node.StopCheckpoint()`.
+- Updates to `FusedScaledDotProductAttention`, including adding support to the corresponding VJP: enabling the **flash attention** in XLA+CUDA.
   
 
 ## Tensors (github.com/gomlx/gomlx/core/tensors):
