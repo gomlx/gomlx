@@ -575,12 +575,21 @@ func (m *Model) sourceLayerForShared(layerNum int) int {
 // This form can be used to embed full sentences or for training.
 //
 //   - tokens: shaped [batchSize, seqLen], or simply [seqLen]
+//   - mask: optional, if provided the shape must match tokens.Shape(), and it indicates
+//     which tokens are valid (1) and which are padding (0). The attention mask (causal or not)
+//     is computed taking into consideration the mask.
+//
+// It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize]
+// Logits builds the model including the last logits projection to predict the next token,
+// for each element of the sequence.
+//
+// This form can be used to embed full sentences or for training.
+//
+//   - tokens: shaped [batchSize, seqLen], or simply [seqLen]
 //   - mask: optional, shaped [batchSize, seqLen] of some integer dtype or [dtypes.Bool].
 //     If provided the shape must match tokens.Shape(), and it indicates
 //     which tokens are valid (1/true) and which are padding (0/false). The attention mask (causal or not)
-//     is computed taking into consideration the mask. A rank-2 [B, seqLen] mask is assumed to be a
-//     contiguous right-padded padding mask (valid tokens occupy [0, length)); non-contiguous masks
-//     must be passed as higher-rank/materialized masks.
+//     is computed taking into consideration the mask.
 //
 // It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize]
 func (m *Model) Logits(scope *model.Scope, tokens, mask *Node) *Node {
@@ -612,9 +621,7 @@ func MakeNaiveModelFn(m *Model) generate.NaiveModelFn {
 //
 // - tokens: shaped [batchSize, seqLen]
 // - positionIds: shaped [batchSize, seqLen], or nil (which defaults to sequential positions)
-// - attentionMask: shaped [batchSize, seqLen], or nil. A rank-2 mask is assumed to be a
-//   contiguous right-padded padding mask (valid tokens occupy [0, length)); non-contiguous
-//   masks must be passed as higher-rank/materialized masks.
+// - attentionMask: shaped [batchSize, seqLen], or nil
 // - cache: KVCacheNodes, or nil if no KV cache is used.
 //
 // It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize],
@@ -647,9 +654,7 @@ func MakeKVCacheModelFn(m *Model) generate.KVCacheModelFn {
 //   - tokens: shaped [batchSize, seqLen], or simply [seqLen]
 //   - positionIds: shaped [batchSize, seqLen], or nil
 //   - attentionMask: optional, if provided the shape must match tokens.Shape(), and it indicates
-//     which tokens are valid (1) and which are padding (0). A rank-2 [B, seqLen] mask is assumed
-//     to be a contiguous right-padded padding mask (valid tokens occupy [0, length));
-//     non-contiguous masks must be passed as higher-rank/materialized masks.
+//     which tokens are valid (1) and which are padding (0).
 //   - cache: the KVCacheNodes map containing cached key/value nodes.
 //
 // It returns:
@@ -846,9 +851,7 @@ func (m *Model) LogitsFromEmbeddings(scope *model.Scope, embeddings *Node) *Node
 //
 // - scope: scope must be already scoped for the layer, e.g. scope.In("layer_0")
 // - x: features coming from the previous layer (or token embedding table), shape [batchSize, seqLen, embedDim]
-// - attentionMask: (optional, can be nil) shaped [batchSize, seqLen]. A rank-2 mask is assumed
-//   to be a contiguous right-padded padding mask (valid tokens occupy [0, length));
-//   non-contiguous masks must be passed as higher-rank/materialized masks.
+// - attentionMask: (optional, can be nil) shaped [batchSize, seqLen]
 // - position: position node (scalar int32) indicating the current absolute position
 // - cache: updated KVCacheNodes map
 // - sharedKVs: optional, map of shared key/values for layers that don't project their own KVs
@@ -859,18 +862,6 @@ func (m *Model) ForwardLayer(scope *model.Scope, layerNum int, x, attentionMask 
 		return m.forwardLayerGemma(scope, layerNum, x, attentionMask, position, cache, perLayerInput, sharedKVs)
 	}
 	return m.forwardLayerStandard(scope, layerNum, x, attentionMask, position, cache, perLayerInput, sharedKVs)
-}
-
-// seqLensFromMask derives int32 [B] actual-length tensors from a rank-2 `[B, Skv]` boolean
-// padding mask where valid positions are 1 and padding positions are 0.
-//
-// This conversion is only correct when the mask is contiguous and right-padded (valid tokens
-// occupy exactly [0, L) for each batch element). The returned querySeqLen and keyValueSeqLen
-// are identical because in non-KVCache self-attention query and key share the same padding.
-func seqLensFromMask(mask *Node) (querySeqLen, keyValueSeqLen *Node) {
-	int32Mask := ConvertDType(mask, dtypes.Int32)
-	seqLen := ReduceSum(int32Mask, 1)
-	return seqLen, seqLen
 }
 
 func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x, attentionMask *Node, position *Node, cache KVCacheNodes, perLayerInput *Node, sharedKVs KVCacheNodes) *Node {
@@ -1008,15 +999,7 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x, a
 			WithScoreSoftCap(m.AttentionScoreSoftCap).
 			WithQueryKeyScale(m.QueryKeyScale)
 		if attentionMask != nil {
-			// Rank-2 [B, Skv] padding masks are expressed more efficiently as sequence lengths:
-			// PADDING masktype for non-causal models, PADDING_CAUSAL when UseCausalMask is also set.
-			// Sliding-window + seqlens is not validated; fall back to WithMask for that path.
-			if attentionMask.Rank() == 2 && !(layerType == LocalLayer && m.SlidingWindow > 0) {
-				qLen, kvLen := seqLensFromMask(attentionMask)
-				attnBuilder.WithSeqLens(qLen, kvLen)
-			} else {
-				attnBuilder.WithMask(attentionMask)
-			}
+			attnBuilder.WithMask(attentionMask)
 		}
 		if m.UseCausalMask {
 			attnBuilder.WithCausalMask(true)
@@ -1263,15 +1246,7 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x, atte
 			WithScoreSoftCap(m.AttentionScoreSoftCap).
 			WithQueryKeyScale(m.QueryKeyScale)
 		if attentionMask != nil {
-			// Rank-2 [B, Skv] padding masks are expressed more efficiently as sequence lengths:
-			// PADDING masktype for non-causal models, PADDING_CAUSAL when UseCausalMask is also set.
-			// Sliding-window + seqlens is not validated; fall back to WithMask for that path.
-			if attentionMask.Rank() == 2 && !(layerType == LocalLayer && m.SlidingWindow > 0) {
-				qLen, kvLen := seqLensFromMask(attentionMask)
-				attnBuilder.WithSeqLens(qLen, kvLen)
-			} else {
-				attnBuilder.WithMask(attentionMask)
-			}
+			attnBuilder.WithMask(attentionMask)
 		}
 		if m.UseCausalMask {
 			attnBuilder.WithCausalMask(true)
