@@ -297,10 +297,15 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 
 	// When coefficients are requested, use the decomposed path for everything
 	// to avoid computing both paths (fused output + decomposed scores).
-	if wantCoefficients || dropoutActive || scoreSoftCap > 0 || !useFusion {
+	capabilities := g.Backend().Capabilities()
+	hasFused := capabilities.Operations[compute.OpTypeFusedScaledDotProductAttention]
+	hasFusedVJP := capabilities.Operations[compute.OpTypeFusedScaledDotProductAttentionVJP]
+	if wantCoefficients || dropoutActive || scoreSoftCap > 0 || !useFusion || !hasFused {
 		output, coefficients = decomposedFn()
 	} else {
+		// Attempt fused version:
 		var isFused bool
+		useDecomposedVJP := !hasFusedVJP // If FusedVJP is not registered for backprop, fall back to use the decomposed.
 		output, isFused = InternalFusedOpCaller(
 			func() *Node {
 				var fusedConfig *compute.ScaledDotProductAttentionConfig
@@ -323,7 +328,7 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 				output, _ := decomposedFn()
 				return output
 			},
-			true,
+			useDecomposedVJP,
 		)
 		if isFused {
 			klog.V(2).Info("attention.Core(): using FusedScaledDotProductAttention op.")
