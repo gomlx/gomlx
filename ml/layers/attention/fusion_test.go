@@ -523,9 +523,9 @@ func TestWithSeqLensBuildsConfigAndProducesOutput(t *testing.T) {
 		"WithSeqLens output shape must match [B, S, H*D]")
 }
 
-// TestSeqLenFusedParity_cuda [cuda] verifies that the fused PADDING path with WithSeqLens
+// TestSeqLenFusedParity verifies that the fused PADDING path with WithSeqLens
 // produces numerically the same output as the decomposed path with the same both-set seqlen
-// config. Skipped unless the xla:cuda backend is present and supports fused attention.
+// config. Skipped unless the backend is present and supports fused attention.
 //
 // Both arms share output-projection weights (scope.Shared) and use WithPreProjected(true)
 // to skip Q/K/V projections, so the only difference is fused=true vs fused=false.
@@ -535,53 +535,54 @@ func TestWithSeqLensBuildsConfigAndProducesOutput(t *testing.T) {
 //
 // TODO(jan): loop over testutil.TestOfficialBackends instead of pinning xla:cuda, so a future Go
 // SIMD or ONNXRuntime fused backend is covered too (non-fusing backends pass trivially).
-func TestSeqLenFusedParity_cuda(t *testing.T) {
-	backend := testutil.GetOfficialBackend("xla:cuda")
-	if backend == nil || !backendSupportsFusion(backend) {
-		t.Skip("xla:cuda fused attention backend not available")
-	}
+func TestSeqLenFusedParity(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		if backend == nil || !backendSupportsFusion(backend) {
+			t.Skipf("%s: fused attention backend not available", backend)
+		}
 
-	// B=2, Sq=Skv=64, H=2, D=64; seqlens=[48,32] — real padding in both batch elements.
-	const B, S, H, D = 2, 64, 2, 64
-	seqLenData := []int32{48, 32}
+		// B=2, Sq=Skv=64, H=2, D=64; seqlens=[48,32] — real padding in both batch elements.
+		const B, S, H, D = 2, 64, 2, 64
+		seqLenData := []int32{48, 32}
 
-	// WithPreProjected(true): inputs are pre-projected, shaped [B, S, H*D].
-	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 10), B, S, H*D)
-	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 11), B, S, H*D)
-	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 12), B, S, H*D)
-	seqLensTensor := tensors.FromFlatDataAndDimensions(seqLenData, B)
+		// WithPreProjected(true): inputs are pre-projected, shaped [B, S, H*D].
+		q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 10), B, S, H*D)
+		k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 11), B, S, H*D)
+		v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 12), B, S, H*D)
+		seqLensTensor := tensors.FromFlatDataAndDimensions(seqLenData, B)
 
-	store := model.NewStore()
-	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, seqLens *Node) []*Node {
-		// Fused arm: WithSeqLens(both) activates the cuDNN PADDING kernel on xla:cuda.
-		fusedOut := MultiHeadAttention(scope.In("shared"), qIn, kIn, vIn, H, D).
-			WithSeqLens(seqLens, seqLens).
-			WithPreProjected(true).
-			Done()
+		store := model.NewStore()
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, seqLens *Node) []*Node {
+			// Fused arm: WithSeqLens(both) activates the cuDNN PADDING kernel on xla:cuda.
+			fusedOut := MultiHeadAttention(scope.In("shared"), qIn, kIn, vIn, H, D).
+				WithSeqLens(seqLens, seqLens).
+				WithPreProjected(true).
+				Done()
 
-		// Decomposed reference: same both-set config, same shared weights, fused disabled.
-		refOut := MultiHeadAttention(scope.Shared("shared"), qIn, kIn, vIn, H, D).
-			WithSeqLens(seqLens, seqLens).
-			WithFusion(false).
-			WithPreProjected(true).
-			Done()
+			// Decomposed reference: same both-set config, same shared weights, fused disabled.
+			refOut := MultiHeadAttention(scope.Shared("shared"), qIn, kIn, vIn, H, D).
+				WithSeqLens(seqLens, seqLens).
+				WithFusion(false).
+				WithPreProjected(true).
+				Done()
 
-		fusedOut = ConvertDType(fusedOut, dtypes.Float32)
-		refOut = ConvertDType(refOut, dtypes.Float32)
-		diff := Div(
-			ReduceAllMax(Abs(Sub(fusedOut, refOut))),
-			AddScalar(ReduceAllMax(Abs(refOut)), 1e-6),
-		)
-		return []*Node{fusedOut, diff}
+			fusedOut = ConvertDType(fusedOut, dtypes.Float32)
+			refOut = ConvertDType(refOut, dtypes.Float32)
+			diff := Div(
+				ReduceAllMax(Abs(Sub(fusedOut, refOut))),
+				AddScalar(ReduceAllMax(Abs(refOut)), 1e-6),
+			)
+			return []*Node{fusedOut, diff}
+		})
+		out := exec.MustCall(q, k, v, seqLensTensor)
+
+		// Output shape must be correct.
+		require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions,
+			"fused WithSeqLens output shape must be [B, S, H*D]")
+
+		// Fused and decomposed must agree within bf16 tolerance.
+		relErr := float64(tensors.ToScalar[float32](out[1]))
+		require.LessOrEqual(t, relErr, 0.05,
+			"fused and decomposed seqlen outputs diverge (rel err=%v); fused padding path broken", relErr)
 	})
-	out := exec.MustCall(q, k, v, seqLensTensor)
-
-	// Output shape must be correct.
-	require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions,
-		"fused WithSeqLens output shape must be [B, S, H*D]")
-
-	// Fused and decomposed must agree within bf16 tolerance.
-	relErr := float64(tensors.ToScalar[float32](out[1]))
-	require.LessOrEqual(t, relErr, 0.05,
-		"fused and decomposed seqlen outputs diverge (rel err=%v); fused padding path broken", relErr)
 }
