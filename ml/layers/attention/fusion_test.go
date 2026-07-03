@@ -192,43 +192,45 @@ func TestFusionGQAParity(t *testing.T) {
 	})
 }
 
-// TestCUDAFusionParity [cuda] cross-checks the cuDNN fused kernel against the float32 reference at
-// the head dims cuDNN flash supports (64, 128). Skipped unless the xla:cuda backend is present.
-func TestCUDAFusionParity(t *testing.T) {
-	backend := testutil.GetOfficialBackend("xla:cuda")
-	if backend == nil || !backendSupportsFusion(backend) {
-		t.Skip("xla:cuda fused attention backend not available")
-	}
-	const B, S, H = 1, 512, 4
-	for _, D := range []int{64, 128} {
-		t.Run(fmt.Sprintf("D=%d", D), func(t *testing.T) {
-			scale := 1.0 / math.Sqrt(float64(D))
-			q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 1), B, S, H, D)
-			k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 2), B, S, H, D)
-			v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 3), B, S, H, D)
-			store := model.NewStore()
-			exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
-				round := func(n *Node) *Node { return ConvertDType(ConvertDType(n, dtypes.BFloat16), dtypes.Float32) }
-				qb, kb, vb := round(qIn), round(kIn), round(vIn)
-				fusedOut, _ := Core(scope, qb, kb, vb, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
-				fusedOut = ConvertDType(fusedOut, dtypes.Float32)
-				refOut := naiveCausalAttention(qb, kb, vb, scale)
-				fg := Gradient(ReduceAllSum(fusedOut), qb, kb, vb)
-				ng := Gradient(ReduceAllSum(refOut), qb, kb, vb)
-				relMax := func(got, want *Node) *Node {
-					return Div(ReduceAllMax(Abs(Sub(got, want))), AddScalar(ReduceAllMax(Abs(want)), 1e-6))
+// TestFusionParity [cuda] cross-checks the fused kernel against the float32 reference at
+// the head dims (64, 128).
+// Skipped if fusion not supported.
+func TestFusionParity(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		if !backendSupportsFusion(backend) {
+			t.Skip("xla:cuda fused attention backend not available")
+		}
+		const B, S, H = 1, 512, 4
+		for _, D := range []int{64, 128} {
+			t.Run(fmt.Sprintf("D=%d", D), func(t *testing.T) {
+				scale := 1.0 / math.Sqrt(float64(D))
+				q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 1), B, S, H, D)
+				k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 2), B, S, H, D)
+				v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 3), B, S, H, D)
+				store := model.NewStore()
+				exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
+					round := func(n *Node) *Node { return ConvertDType(ConvertDType(n, dtypes.BFloat16), dtypes.Float32) }
+					qb, kb, vb := round(qIn), round(kIn), round(vIn)
+					fusedOut, _ := Core(scope, qb, kb, vb, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
+					fusedOut = ConvertDType(fusedOut, dtypes.Float32)
+					refOut := naiveCausalAttention(qb, kb, vb, scale)
+					fg := Gradient(ReduceAllSum(fusedOut), qb, kb, vb)
+					ng := Gradient(ReduceAllSum(refOut), qb, kb, vb)
+					relMax := func(got, want *Node) *Node {
+						return Div(ReduceAllMax(Abs(Sub(got, want))), AddScalar(ReduceAllMax(Abs(want)), 1e-6))
+					}
+					return []*Node{relMax(fusedOut, refOut), relMax(fg[0], ng[0]), relMax(fg[1], ng[1]), relMax(fg[2], ng[2])}
+				})
+				out := exec.MustCall(q, k, v)
+				tol := []float64{0.03, 0.06, 0.06, 0.06}
+				for i, name := range []string{"output", "dQ", "dK", "dV"} {
+					rel := float64(tensors.ToScalar[float32](out[i]))
+					require.Falsef(t, math.IsNaN(rel), "%s rel error NaN", name)
+					require.LessOrEqualf(t, rel, tol[i], "%s rel max %.4f exceeds %.4f", name, rel, tol[i])
 				}
-				return []*Node{relMax(fusedOut, refOut), relMax(fg[0], ng[0]), relMax(fg[1], ng[1]), relMax(fg[2], ng[2])}
 			})
-			out := exec.MustCall(q, k, v)
-			tol := []float64{0.03, 0.06, 0.06, 0.06}
-			for i, name := range []string{"output", "dQ", "dK", "dV"} {
-				rel := float64(tensors.ToScalar[float32](out[i]))
-				require.Falsef(t, math.IsNaN(rel), "%s rel error NaN", name)
-				require.LessOrEqualf(t, rel, tol[i], "%s rel max %.4f exceeds %.4f", name, rel, tol[i])
-			}
-		})
-	}
+		}
+	})
 }
 
 // TestCoreUseFusionFalseMatchesDecomposed pins that Core with useFusion=false produces the
@@ -537,7 +539,7 @@ func TestWithSeqLensBuildsConfigAndProducesOutput(t *testing.T) {
 // SIMD or ONNXRuntime fused backend is covered too (non-fusing backends pass trivially).
 func TestSeqLenFusedParity(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
-		if backend == nil || !backendSupportsFusion(backend) {
+		if !backendSupportsFusion(backend) {
 			t.Skipf("%s: fused attention backend not available", backend)
 		}
 

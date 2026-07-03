@@ -302,7 +302,6 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 	} else {
 		output = InternalFusedOpCaller(
 			func() *Node {
-				// Build seqlen config from graph nodes; attentionMask stays nil so flashSupported accepts.
 				var fusedConfig *compute.ScaledDotProductAttentionConfig
 				if querySeqLen != nil || keyValueSeqLen != nil {
 					fusedConfig = &compute.ScaledDotProductAttentionConfig{}
