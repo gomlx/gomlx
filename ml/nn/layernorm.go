@@ -21,10 +21,12 @@ func LayerNorm(x *Node, axes []int, epsilon float64, gamma, beta, mask *Node) *N
 
 	// Only try fused when there's no mask (fused ops don't support masking).
 	if mask == nil {
-		return InternalFusedOpCaller(
+		res, _ := InternalFusedOpCaller(
 			func() *Node { return BackendFusedLayerNorm(x, axes, epsilon, gamma, beta) },
 			decomposed,
+			true,
 		)
+		return res
 	}
 
 	return decomposed()

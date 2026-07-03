@@ -19,7 +19,7 @@ import (
 // is used; otherwise the operation is decomposed into primitives. Fallback is
 // handled automatically via InternalFusedOpCallerMulti.
 func QKVProjection(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int) (query, key, value *Node) {
-	results := InternalFusedOpCallerMulti(
+	results, _ := InternalFusedOpCallerMulti(
 		func() []*Node {
 			query, key, value := BackendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
 			return []*Node{query, key, value}
@@ -27,6 +27,7 @@ func QKVProjection(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int
 		func() []*Node {
 			return QKVProjectionDecomposed(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
 		},
+		true,
 	)
 	return results[0], results[1], results[2]
 }

@@ -326,16 +326,20 @@ const FusionEnv = "GOMLX_FUSION"
 // panic is re-thrown — this prevents real bugs in fused op implementations from
 // being silently swallowed.
 //
+// If useDecomposedAlternateVJP is set, the decomposed version is stored as the
+// vjpAlternateOutputs on the returned node, so that reverse-mode autodiff can
+// compute gradients through the decomposed graph without hand-written VJPs.
+// This should be set to true if there is no corresponding fused VJP.
+//
+// The returned opFused indicates whether the fused operation was taken (true) or
+// fell back to decomposed (false).
+//
 // Internal: this is used by higher-level wrappers (graph.Softmax, nn.Dense,
 // nn.LayerNorm) that pair a fused backend call with a decomposed fallback.
 //
-// When the fused call succeeds, the decomposed version is also stored as the
-// VJP alternate output, so that reverse-mode autodiff can compute gradients
-// through the decomposed graph without hand-written VJPs.
-//
 // Note: If "GOMLX_FUSION" (see FusionEnv constant) is disabled (set to "0", "false", etc.) the fused
 // version is never used. The default is enabled though.
-func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
+func InternalFusedOpCaller(fused, decomposed func() *Node, useDecomposedAlternateVJP bool) (output *Node, opFused bool) {
 	// Build decomposed output first so it has a lower nodeIdx than the fused
 	// node. The gradient loop iterates from output down to 0, so it will
 	// visit the fused node first and transfer its VJP to the decomposed
@@ -345,58 +349,70 @@ func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 	if enabled, err := envutil.ReadBool(FusionEnv, true); err != nil {
 		panic(err)
 	} else if !enabled {
-		return decomposedOutput
+		return decomposedOutput, false
 	}
 
 	klog.V(2).Info("Attempt to call fused op")
-	var output *Node
 	err := exceptions.TryCatch[error](func() {
 		output = fused()
 	})
 	if err != nil {
 		if compute.IsNotImplemented(err) {
-			klog.V(2).Infof("Failed to call fused op (not implemented). Falling back to decomposed op: %v", err)
+			if klog.V(2).Enabled() {
+				klog.Infof("InternalFusedOpCaller(): failed to call fused op (not implemented). Falling back to decomposed op: %v", err)
+			}
 			// Expected: fused op doesn't support this config; fall back to decomposed.
-			return decomposedOutput
+			return decomposedOutput, false
 		}
 		// Unexpected error — re-panic so it surfaces instead of being silently masked.
 		panic(err)
 	}
-	klog.V(2).Info("Successfully called fused op.")
-	// Store decomposed version for VJP computation; dead-code-eliminated if unused.
-	output.vjpAlternateOutputs = []*Node{decomposedOutput}
-	return output
+	klog.V(2).Info("InternalFusedOpCaller(): Successfully called fused op.")
+	// Store decomposed version for VJP computation if requested; dead-code-eliminated if unused.
+	if useDecomposedAlternateVJP {
+		output.vjpAlternateOutputs = []*Node{decomposedOutput}
+	}
+	return output, true
 }
 
 // InternalFusedOpCallerMulti is the multi-output counterpart of InternalFusedOpCaller.
 // It handles fused ops that return multiple outputs (e.g. FusedAttentionQKVProjection returning q, k, v).
 //
 // Like InternalFusedOpCaller, the decomposed version is built first so it has lower
-// node indices than the fused nodes. When the fused call succeeds, the decomposed
-// outputs are stored as vjpAlternateOutputs on each individual output node (which
-// are split nodes under the hood) for reverse-mode autodiff.
-func InternalFusedOpCallerMulti(fused, decomposed func() []*Node) []*Node {
+// node indices than the fused nodes. When the fused call succeeds and useDecomposedAlternateVJP
+// is set, the decomposed outputs are stored as vjpAlternateOutputs on each individual
+// output node (which are split nodes under the hood) for reverse-mode autodiff.
+// This should be set to true if there is no corresponding fused VJP.
+//
+// The returned opFused indicates whether the fused operation was taken (true) or
+// fell back to decomposed (false).
+func InternalFusedOpCallerMulti(fused, decomposed func() []*Node, useDecomposedAlternateVJP bool) (outputs []*Node, opFused bool) {
 	decomposedOutputs := decomposed()
 
-	var outputs []*Node
 	err := exceptions.TryCatch[error](func() {
 		outputs = fused()
 	})
 	if err != nil {
 		if compute.IsNotImplemented(err) {
-			return decomposedOutputs
+			if klog.V(2).Enabled() {
+				klog.Infof("InternalFusedOpCallerMulti(): failed to call fused op (not implemented). Falling back to decomposed op: %v", err)
+			}
+			return decomposedOutputs, false
 		}
 		panic(err)
 	}
-
 	if len(outputs) != len(decomposedOutputs) {
 		exceptions.Panicf("InternalFusedOpCallerMulti: fused function returned %d outputs, but decomposed returned %d", len(outputs), len(decomposedOutputs))
 	}
-	for i, output := range outputs {
-		output.vjpAlternateOutputs = []*Node{decomposedOutputs[i]}
+	klog.V(2).Info("InternalFusedOpCallerMulti(): Successfully called fused op.")
+
+	if useDecomposedAlternateVJP {
+		for i, output := range outputs {
+			output.vjpAlternateOutputs = []*Node{decomposedOutputs[i]}
+		}
 	}
 
-	return outputs
+	return outputs, true
 }
 
 // InternalBackendOutputs retrieves the unexported backend outputs of a node.

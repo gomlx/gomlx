@@ -300,7 +300,8 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 	if wantCoefficients || dropoutActive || scoreSoftCap > 0 || !useFusion {
 		output, coefficients = decomposedFn()
 	} else {
-		output = InternalFusedOpCaller(
+		var isFused bool
+		output, isFused = InternalFusedOpCaller(
 			func() *Node {
 				var fusedConfig *compute.ScaledDotProductAttentionConfig
 				if querySeqLen != nil || keyValueSeqLen != nil {
@@ -312,7 +313,7 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 						fusedConfig.KeyValueSeqLen = InternalBackendOutputs(keyValueSeqLen)[0]
 					}
 				}
-				klog.V(2).Info("Attempting to call BackendFusedScaledDotProductAttention op.")
+				klog.V(2).Info("attention.Core(): attempting to use FusedScaledDotProductAttention op.")
 				out, _ := BackendFusedScaledDotProductAttention(
 					query, key, value, attentionMask,
 					numQueryHeads, numKVHeads, layout, scale, useCausalMask, fusedConfig)
@@ -322,7 +323,13 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 				output, _ := decomposedFn()
 				return output
 			},
+			true,
 		)
+		if isFused {
+			klog.V(2).Info("attention.Core(): using FusedScaledDotProductAttention op.")
+		} else {
+			klog.V(2).Info("attention.Core(): using decomposed op.")
+		}
 		coefficients = nil
 	}
 	return output, coefficients
