@@ -3,8 +3,10 @@
 package attention
 
 import (
+	"fmt"
 	"math"
 	"slices"
+	"strings"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
@@ -198,6 +200,42 @@ type CoreOptions struct {
 	DisableFusion bool
 }
 
+// String returns a representation of non-zero fields of CoreOptions.
+func (o CoreOptions) String() string {
+	var parts []string
+	if o.Scale != 0 {
+		parts = append(parts, fmt.Sprintf("Scale: %g", o.Scale))
+	}
+	if o.AttentionMask != nil {
+		parts = append(parts, fmt.Sprintf("AttentionMask: %s", o.AttentionMask.Shape()))
+	}
+	if o.UseCausalMask {
+		parts = append(parts, "UseCausalMask: true")
+	}
+	if o.QuerySeqLen != nil {
+		parts = append(parts, fmt.Sprintf("QuerySeqLen: %s", o.QuerySeqLen.Shape()))
+	}
+	if o.KVSeqLen != nil {
+		parts = append(parts, fmt.Sprintf("KVSeqLen: %s", o.KVSeqLen.Shape()))
+	}
+	if o.WantCoefficients {
+		parts = append(parts, "WantCoefficients: true")
+	}
+	if o.ScoreSoftCap != 0 {
+		parts = append(parts, fmt.Sprintf("ScoreSoftCap: %g", o.ScoreSoftCap))
+	}
+	if o.Scope != nil {
+		parts = append(parts, fmt.Sprintf("Scope: %s", o.Scope.Scope()))
+	}
+	if o.DropoutRate != nil {
+		parts = append(parts, fmt.Sprintf("DropoutRate: %s", o.DropoutRate.Shape()))
+	}
+	if o.DisableFusion {
+		parts = append(parts, "DisableFusion: true")
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
+}
+
 // Core computes the core scaled dot-product attention operation.
 // This is the shared implementation used by MultiHeadAttention and ONNX op converters.
 //
@@ -246,10 +284,8 @@ func Core(query, key, value *Node, layout AxesLayout, options CoreOptions) (outp
 		if options.Scope != nil {
 			scopePath = options.Scope.Scope()
 		}
-		klog.Infof("attention.Core(scope=%s, query=%s, key=%s, value=%s, scale=%f, attentionMask=%v, dropoutRate=%v, "+
-			"layout=%+v, useCausalMask=%v, wantCoefficients=%v, scoreSoftCap=%f)",
-			scopePath, query.Shape(), key.Shape(), value.Shape(), scale, options.AttentionMask != nil, options.DropoutRate != nil,
-			layout, options.UseCausalMask, options.WantCoefficients, options.ScoreSoftCap)
+		klog.Infof("attention.Core(scope=%s, query=%s, key=%s, value=%s, layout=%s, options=%s)",
+			scopePath, query.Shape(), key.Shape(), value.Shape(), layout, options)
 	}
 
 	// Function to compute the attention "decomposed" (as in not-fused).
@@ -334,6 +370,7 @@ func Core(query, key, value *Node, layout AxesLayout, options CoreOptions) (outp
 	hasFused := capabilities.Operations[compute.OpTypeFusedScaledDotProductAttention]
 	hasFusedVJP := capabilities.Operations[compute.OpTypeFusedScaledDotProductAttentionVJP]
 	if options.WantCoefficients || dropoutActive || options.ScoreSoftCap > 0 || options.DisableFusion || !hasFused {
+		klog.V(2).Info("attention.Core(): forced decomposed version.")
 		output, coefficients = decomposedFn()
 	} else {
 		// Attempt fused version:

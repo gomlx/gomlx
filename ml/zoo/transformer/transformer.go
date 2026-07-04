@@ -85,8 +85,28 @@ func NewKVCache() *kvcache.KVCache {
 	return kvcache.NewKVCache()
 }
 
+// CallOptions holds transient execution/graph building options for a forward pass or layer generation.
+type CallOptions struct {
+	// SeqLen is an optional 1D tensor of shape [batchSize] containing the non-padded sequence lengths.
+	// Cannot be set if AttentionMask is set.
+	SeqLen *Node
+
+	// AttentionMask is an optional 2D tensor of shape [batchSize, paddedSeqLen] containing 1s for valid tokens and 0s for padding.
+	// Cannot be set if SeqLen is set.
+	AttentionMask *Node
+
+	// PositionIds is shaped [batchSize, seqLen]. If nil, defaults to sequential positions (0, 1, 2...).
+	PositionIds *Node
+
+	// Cache is the optional KVCacheNodes map containing cached key/value nodes from past steps.
+	// If it is nil, no KV cache is used and the model computes attention across the entire sequence.
+	// If it is non-nil, the model uses/updates the cache, which is typical for fast autoregressive generation.
+	Cache KVCacheNodes
+}
+
 // Model configures a cached transformer model.
 type Model struct {
+	Scope                *model.Scope    // Scope for variables and hyperparameters configuration
 	VocabSize            int             // Vocabulary size
 	EmbedDim             int             // Embedding dimension
 	NumLayers            int             // Transformer layers
@@ -136,14 +156,15 @@ type Model struct {
 }
 
 // New creates a default transformer configuration.
-func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
-	return &Model{
-		VocabSize:                    vocabSize,
-		EmbedDim:                     embedDim,
-		NumLayers:                    numLayers,
-		NumHeads:                     numHeads,
-		HeadDim:                      headDim,
-		FFNDim:                       embedDim * 4, // 4x expansion
+func New(scope *model.Scope) *Model {
+	m := &Model{
+		Scope:                        scope,
+		VocabSize:                    0,
+		EmbedDim:                     0,
+		NumLayers:                    0,
+		NumHeads:                     0,
+		HeadDim:                      0,
+		FFNDim:                       0,
 		MaxPosEmbed:                  512,
 		DType:                        dtypes.Float32,
 		Dropout:                      0.0,
@@ -163,9 +184,67 @@ func New(vocabSize, embedDim, numLayers, numHeads, headDim int) *Model {
 		PerLayerModelProjectionScale: 1,
 		RMSNormOffset:                1,
 	}
+
+	if scope != nil {
+		m.VocabSize = model.GetParamOr(scope, ParamVocabSize, m.VocabSize)
+		m.EmbedDim = model.GetParamOr(scope, ParamEmbedDim, m.EmbedDim)
+		m.NumLayers = model.GetParamOr(scope, ParamNumLayers, m.NumLayers)
+		m.NumHeads = model.GetParamOr(scope, ParamNumHeads, m.NumHeads)
+		m.HeadDim = model.GetParamOr(scope, ParamHeadDim, m.HeadDim)
+
+		m.FFNDim = model.GetParamOr(scope, ParamFFNDim, m.FFNDim)
+		if m.FFNDim == 0 && m.EmbedDim > 0 {
+			m.FFNDim = m.EmbedDim * 4
+		}
+		m.MaxPosEmbed = model.GetParamOr(scope, ParamMaxPosEmbed, m.MaxPosEmbed)
+		m.Dropout = model.GetParamOr(scope, ParamDropout, m.Dropout)
+
+		// Deprecated way to specify LayerNorm:
+		useLayerNorm := model.GetParamOr(scope, ParamUseLayerNorm, true)
+		if useLayerNorm {
+			m.WithNormalization(layers.NormalizationLayerNorm)
+		} else {
+			m.WithNormalization(layers.NormalizationNone)
+		}
+		m.Normalization = model.GetParamOr(scope, ParamNormalization, m.Normalization)
+		m.UseBias = model.GetParamOr(scope, ParamUseBias, m.UseBias)
+		m.UseCausalMask = model.GetParamOr(scope, ParamUseCausalMask, m.UseCausalMask)
+		archStr := model.GetParamOr(scope, ParamArchitecture, m.Architecture.String())
+		if arch, err := ArchitectureString(archStr); err == nil {
+			m.Architecture = arch
+		} else {
+			exceptions.Panicf("invalid architecture name %q: options are %v", archStr, ArchitectureValues())
+		}
+		m.NormEpsilon = model.GetParamOr(scope, ParamNormEpsilon, m.NormEpsilon)
+		m.Activation = activation.FromName(model.GetParamOr(scope, ParamActivation, m.Activation.String()))
+		m.NumKVHeads = model.GetParamOr(scope, ParamNumKVHeads, m.NumKVHeads)
+		m.GlobalHeadDim = model.GetParamOr(scope, ParamGlobalHeadDim, m.GlobalHeadDim)
+		m.NumKVSharedLayers = model.GetParamOr(scope, ParamNumKVSharedLayers, m.NumKVSharedLayers)
+		m.AttentionScoreSoftCap = model.GetParamOr(scope, ParamAttentionScoreSoftCap, m.AttentionScoreSoftCap)
+		m.FinalLogitSoftCap = model.GetParamOr(scope, ParamFinalLogitSoftCap, m.FinalLogitSoftCap)
+
+		// Legacy RoPE configuration from scope
+		useRoPE := model.GetParamOr(scope, ParamUseRoPE, false)
+		if useRoPE {
+			baseFreq := model.GetParamOr(scope, ParamRoPEBaseFreq, 10000.0)
+			m.posEncoder = pos.NewRoPE(baseFreq)
+		}
+
+		// Handle dtype separately since it's a string
+		dtypeStr := model.GetParamOr(scope, ParamDType, "")
+		if dtypeStr != "" {
+			dtype, err := dtypes.DTypeString(dtypeStr)
+			if err != nil || !dtype.IsFloat() {
+				panic(fmt.Sprintf("Invalid hyperparameter value %s=%q", ParamDType, dtypeStr))
+			}
+			m.DType = dtype
+		}
+	}
+
+	return m
 }
 
-func (m *Model) populateOrderedScopes(scope *model.Scope) {
+func (m *Model) populateOrderedScopes() {
 	if len(m.KVCache.OrderedScopes) > 0 {
 		return
 	}
@@ -173,25 +252,25 @@ func (m *Model) populateOrderedScopes(scope *model.Scope) {
 	for i := range m.NumLayers {
 		var path string
 		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
-			path = scope.At("layer_%d", i).At("self_attn").Scope()
+			path = m.Scope.At("layer_%d", i).At("self_attn").Scope()
 		} else {
-			path = scope.At("layer_%d", i).At("attn").Scope()
+			path = m.Scope.At("layer_%d", i).At("attn").Scope()
 		}
 		scopes[i] = path
 	}
 	m.KVCache.OrderedScopes = scopes
 }
 
-func (m *Model) populateLayerTypes(scope *model.Scope) {
+func (m *Model) populateLayerTypes() {
 	if len(m.KVCache.LayerTypes) > 0 {
 		return
 	}
 	for i := range m.NumLayers {
 		var path string
 		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
-			path = scope.At("layer_%d", i).At("self_attn").Scope()
+			path = m.Scope.At("layer_%d", i).At("self_attn").Scope()
 		} else {
-			path = scope.At("layer_%d", i).At("attn").Scope()
+			path = m.Scope.At("layer_%d", i).At("attn").Scope()
 		}
 
 		lt := GlobalLayer
@@ -203,123 +282,66 @@ func (m *Model) populateLayerTypes(scope *model.Scope) {
 }
 
 // PopulateKVCacheConfigs initializes the internal KVCache configuration's OrderedScopes
-// and LayerTypes based on the model's architecture and the execution scope.
-func (m *Model) PopulateKVCacheConfigs(scope *model.Scope) {
-	m.populateOrderedScopes(scope)
-	m.populateLayerTypes(scope)
+// and LayerTypes based on the model's architecture.
+func (m *Model) PopulateKVCacheConfigs() {
+	m.populateOrderedScopes()
+	m.populateLayerTypes()
 }
 
-// NewFromScope creates a transformer model configured from the hyperparameters in Scope:
-// It reads parameters with the following keys (with defaults):
-//   - transformer_vocab_size (required, no default)
-//   - transformer_embed_dim (required, no default)
-//   - transformer_num_layers (required, no default)
-//   - transformer_num_heads (required, no default)
-//   - transformer_head_dim (required, no default)
-//   - transformer_ffn_dim (default: embed_dim * 4)
-//   - transformer_max_pos_embed (default: 512)
-//   - transformer_dtype (default: "float32")
-//   - transformer_dropout (default: 0.0)
-//   - transformer_use_rope (default: false)
-//   - transformer_rope_base_freq (default: 10000.0)
-//   - transformer_use_layer_norm (default: true)
-//   - transformer_use_bias (default: true)
-//
-// Example usage:
-//
-//	scope.SetParams(map[string]any{
-//	    "transformer_vocab_size": 50257,
-//	    "transformer_embed_dim": 768,
-//	    "transformer_num_layers": 12,
-//	    "transformer_num_heads": 12,
-//	    "transformer_head_dim": 64,
-//	})
-//	model := transformer.NewFromScope(scope)
-func NewFromScope(scope *model.Scope) *Model {
-	// Required parameters
-	vocabSize, found := scope.GetParam(ParamVocabSize)
-	if !found {
-		panic(fmt.Sprintf("Required hyperparameter %q not found in scope", ParamVocabSize))
+func (m *Model) validate(options CallOptions) {
+	if m.VocabSize <= 0 {
+		exceptions.Panicf("VocabSize must be configured (> 0)")
 	}
-	embedDim, found := scope.GetParam(ParamEmbedDim)
-	if !found {
-		panic(fmt.Sprintf("Required hyperparameter %q not found in scope", ParamEmbedDim))
+	if m.EmbedDim <= 0 {
+		exceptions.Panicf("EmbedDim must be configured (> 0)")
 	}
-	numLayers, found := scope.GetParam(ParamNumLayers)
-	if !found {
-		panic(fmt.Sprintf("Required hyperparameter %q not found in scope", ParamNumLayers))
+	if m.NumLayers <= 0 {
+		exceptions.Panicf("NumLayers must be configured (> 0)")
 	}
-	numHeads, found := scope.GetParam(ParamNumHeads)
-	if !found {
-		panic(fmt.Sprintf("Required hyperparameter %q not found in scope", ParamNumHeads))
+	if m.NumHeads <= 0 {
+		exceptions.Panicf("NumHeads must be configured (> 0)")
 	}
-	headDim, found := scope.GetParam(ParamHeadDim)
-	if !found {
-		panic(fmt.Sprintf("Required hyperparameter %q not found in scope", ParamHeadDim))
+	if m.HeadDim <= 0 {
+		exceptions.Panicf("HeadDim must be configured (> 0)")
 	}
+	if m.FFNDim <= 0 {
+		m.FFNDim = m.EmbedDim * 4
+	}
+	if options.AttentionMask != nil && options.SeqLen != nil {
+		exceptions.Panicf("AttentionMask and SeqLen cannot both be configured")
+	}
+}
 
-	// Create model with required parameters
-	m := New(
-		vocabSize.(int),
-		embedDim.(int),
-		numLayers.(int),
-		numHeads.(int),
-		headDim.(int),
-	)
-
-	// Apply optional parameters from scope
-	m.FromScope(scope)
+// WithVocabSize sets vocabulary size.
+func (m *Model) WithVocabSize(size int) *Model {
+	m.VocabSize = size
 	return m
 }
 
-// FromScope configures the model with optional hyperparameters from the model.
-// This allows fine-tuning an existing model configuration.
-func (m *Model) FromScope(scope *model.Scope) *Model {
-	// Optional parameters with defaults
-	m.FFNDim = model.GetParamOr(scope, ParamFFNDim, m.FFNDim)
-	m.MaxPosEmbed = model.GetParamOr(scope, ParamMaxPosEmbed, m.MaxPosEmbed)
-	m.Dropout = model.GetParamOr(scope, ParamDropout, m.Dropout)
-
-	// Deprecated way to specify LayerNorm:
-	useLayerNorm := model.GetParamOr(scope, ParamUseLayerNorm, true)
-	if useLayerNorm {
-		m.WithLayerNorm(true)
+// WithEmbedDim sets embedding dimension.
+func (m *Model) WithEmbedDim(dim int) *Model {
+	m.EmbedDim = dim
+	if m.FFNDim == 0 {
+		m.FFNDim = dim * 4
 	}
-	m.Normalization = model.GetParamOr(scope, ParamNormalization, m.Normalization)
-	m.WithNormalization(m.Normalization)
-	m.UseBias = model.GetParamOr(scope, ParamUseBias, m.UseBias)
-	m.UseCausalMask = model.GetParamOr(scope, ParamUseCausalMask, m.UseCausalMask)
-	archStr := model.GetParamOr(scope, ParamArchitecture, m.Architecture.String())
-	if arch, err := ArchitectureString(archStr); err == nil {
-		m.Architecture = arch
-	} else {
-		exceptions.Panicf("invalid architecture name %q: options are %v", archStr, ArchitectureValues())
-	}
-	m.NormEpsilon = model.GetParamOr(scope, ParamNormEpsilon, m.NormEpsilon)
-	m.Activation = activation.FromName(model.GetParamOr(scope, ParamActivation, m.Activation.String()))
-	m.NumKVHeads = model.GetParamOr(scope, ParamNumKVHeads, m.NumKVHeads)
-	m.GlobalHeadDim = model.GetParamOr(scope, ParamGlobalHeadDim, m.GlobalHeadDim)
-	m.NumKVSharedLayers = model.GetParamOr(scope, ParamNumKVSharedLayers, m.NumKVSharedLayers)
-	m.AttentionScoreSoftCap = model.GetParamOr(scope, ParamAttentionScoreSoftCap, m.AttentionScoreSoftCap)
-	m.FinalLogitSoftCap = model.GetParamOr(scope, ParamFinalLogitSoftCap, m.FinalLogitSoftCap)
+	return m
+}
 
-	// Legacy RoPE configuration from scope
-	useRoPE := model.GetParamOr(scope, ParamUseRoPE, false)
-	if useRoPE {
-		baseFreq := model.GetParamOr(scope, ParamRoPEBaseFreq, 10000.0)
-		m.posEncoder = pos.NewRoPE(baseFreq)
-	}
+// WithNumLayers sets the number of transformer layers.
+func (m *Model) WithNumLayers(num int) *Model {
+	m.NumLayers = num
+	return m
+}
 
-	// Handle dtype separately since it's a string
-	dtypeStr := model.GetParamOr(scope, ParamDType, "")
-	if dtypeStr != "" {
-		dtype, err := dtypes.DTypeString(dtypeStr)
-		if err != nil || !dtype.IsFloat() {
-			panic(fmt.Sprintf("Invalid hyperparameter value %s=%q", ParamDType, dtypeStr))
-		}
-		m.DType = dtype
-	}
+// WithNumHeads sets the number of attention heads per layer.
+func (m *Model) WithNumHeads(num int) *Model {
+	m.NumHeads = num
+	return m
+}
 
+// WithHeadDim sets the head dimension.
+func (m *Model) WithHeadDim(dim int) *Model {
+	m.HeadDim = dim
 	return m
 }
 
@@ -574,87 +596,67 @@ func (m *Model) sourceLayerForShared(layerNum int) int {
 //
 // This form can be used to embed full sentences or for training.
 //
-//   - tokens: shaped [batchSize, seqLen], or simply [seqLen]
-//   - mask: optional, if provided the shape must match tokens.Shape(), and it indicates
-//     which tokens are valid (1) and which are padding (0). The attention mask (causal or not)
-//     is computed taking into consideration the mask.
-//
 // It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize]
-// Logits builds the model including the last logits projection to predict the next token,
-// for each element of the sequence.
-//
-// This form can be used to embed full sentences or for training.
-//
-//   - tokens: shaped [batchSize, seqLen], or simply [seqLen]
-//   - mask: optional, shaped [batchSize, seqLen] of some integer dtype or [dtypes.Bool].
-//     If provided the shape must match tokens.Shape(), and it indicates
-//     which tokens are valid (1/true) and which are padding (0/false). The attention mask (causal or not)
-//     is computed taking into consideration the mask.
-//
-// It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize]
-func (m *Model) Logits(scope *model.Scope, tokens, mask *Node) *Node {
-	embeddings, _, _ := m.AllLayers(scope, tokens, nil, mask, nil)
-	return m.LogitsFromEmbeddings(scope, embeddings)
+func (m *Model) Logits(tokens *Node, options CallOptions) *Node {
+	embeddings, _, _ := m.AllLayers(tokens, options)
+	return m.LogitsFromEmbeddings(embeddings)
 }
 
 // MakeNaiveModelFn returns a "naive" model function for iterative (increasing sequence length, no KVCache)
 // generation, using the decode package.
 //
-// It returns a generate.NaiveModel interface.
+// It returns a generate.NaiveModelFn interface.
 func MakeNaiveModelFn(m *Model) generate.NaiveModelFn {
-	return func(scope *model.Scope, tokens *Node, length int) *Node {
-		paddedSeqLen := tokens.Shape().Dimensions[1]
-		if length > paddedSeqLen {
-			exceptions.Panicf("indicated length %d of sequence is larger than the tokens ([batch, seqLen]=%s) length provided", length, tokens.Shape())
+	return func(scope *model.Scope, tokens *Node, seqLen *Node) *Node {
+		if scope.Store() != m.Scope.Store() {
+			exceptions.Panicf("NaiveModelFn called with a scope from a different Store")
 		}
-		var attentionMask *Node
-		if paddedSeqLen != length {
-			g := tokens.Graph()
-			attentionMask = Iota(g, tokens.Shape(), 1)
-			attentionMask = LessThan(attentionMask, ConstAs(attentionMask, length))
-		}
-		return m.Logits(scope, tokens, attentionMask)
+		m.Scope = m.Scope.ResetVisited()
+		return m.Logits(tokens, CallOptions{SeqLen: seqLen})
 	}
 }
 
 // Forward returns the forward path for the model.
 //
-// - tokens: shaped [batchSize, seqLen]
-// - positionIds: shaped [batchSize, seqLen], or nil (which defaults to sequential positions)
-// - attentionMask: shaped [batchSize, seqLen], or nil
-// - cache: KVCacheNodes, or nil if no KV cache is used.
-//
 // It returns the logits of the last layer, typically shaped [batchSize, seqLen, vocabSize],
 // and the updated KV cache.
-func (m *Model) Forward(scope *model.Scope,
-	tokens, positionIds *Node,
-	attentionMask *Node,
-	cache KVCacheNodes,
+func (m *Model) Forward(
+	tokens *Node,
+	options CallOptions,
 ) (logits *Node, updatedCache KVCacheNodes) {
-	embeddings, _, updatedCache := m.AllLayers(scope, tokens, positionIds, attentionMask, cache)
-	return m.LogitsFromEmbeddings(scope, embeddings), updatedCache
+	embeddings, _, updatedCache := m.AllLayers(tokens, options)
+	return m.LogitsFromEmbeddings(embeddings), updatedCache
 }
 
 // LogitsWithKVCache returns the forward path for the newTokens sequence, using the KV cache.
-func (m *Model) LogitsWithKVCache(scope *model.Scope, newTokens *Node, positionIds *Node, cache KVCacheNodes) (*Node, KVCacheNodes) {
-	return m.Forward(scope, newTokens, positionIds, nil, cache)
+func (m *Model) LogitsWithKVCache(newTokens *Node, positionIds *Node, cache KVCacheNodes) (*Node, KVCacheNodes) {
+	return m.Forward(newTokens, CallOptions{
+		PositionIds: positionIds,
+		Cache:       cache,
+	})
 }
 
 // MakeKVCacheModelFn returns a model function used by the decoder for incremental generation with KVCache,
 // using the decode package.
+//
+// Note that the returned function marks the Model.Scope to be reused (see [Scope.ResetVisited])
 func MakeKVCacheModelFn(m *Model) generate.KVCacheModelFn {
 	return func(scope *model.Scope, newTokens *Node, position *Node, cache KVCacheNodes) (*Node, KVCacheNodes) {
-		return m.Forward(scope, newTokens, position, nil, cache)
+		if scope.Store() != m.Scope.Store() {
+			exceptions.Panicf("KVCacheModelFn called with a scope from a different Store")
+		}
+		m.Scope = m.Scope.ResetVisited()
+		return m.Forward(newTokens, CallOptions{
+			PositionIds: position,
+			Cache:       cache,
+		})
 	}
 }
 
 // AllLayers takes the input tokens and creates the forward graph for the transformer model,
 // returning the last layer and all the intermediate layers.
 //
-//   - tokens: shaped [batchSize, seqLen], or simply [seqLen]
 //   - positionIds: shaped [batchSize, seqLen], or nil
-//   - attentionMask: optional, if provided the shape must match tokens.Shape(), and it indicates
-//     which tokens are valid (1) and which are padding (0).
 //   - cache: the KVCacheNodes map containing cached key/value nodes.
 //
 // It returns:
@@ -662,21 +664,28 @@ func MakeKVCacheModelFn(m *Model) generate.KVCacheModelFn {
 //   - lastLayer: the final hidden state of the last layer, shaped [batchSize, seqLen,hiddenSize].
 //   - allLayers: the input to the first layer and the output of each layer.
 //   - updatedCache: the updated KVCacheNodes map.
-func (m *Model) AllLayers(scope *model.Scope, tokens, positionIds *Node, attentionMask *Node, cache KVCacheNodes) (lastLayer *Node, allLayers []*Node, updatedCache KVCacheNodes) {
+func (m *Model) AllLayers(tokens *Node, options CallOptions) (lastLayer *Node, allLayers []*Node, updatedCache KVCacheNodes) {
+	m.validate(options)
+
+	if tokens == nil {
+		exceptions.Panicf("tokens must be set")
+	}
 	if tokens.Rank() == 1 {
 		tokens = ExpandAxes(tokens, 0)
 	}
 	g := tokens.Graph()
 	seqLen := tokens.Shape().Dimensions[1]
 
+	positionIds := options.PositionIds
 	if positionIds == nil {
 		posIdx := Iota(g, shapes.Make(dtypes.Int32, seqLen), 0)
 		positionIds = ExpandDims(posIdx, 0)
 		positionIds = BroadcastToDims(positionIds, tokens.Shape().Dimensions...)
 	}
 
-	m.populateOrderedScopes(scope)
-	m.populateLayerTypes(scope)
+	m.populateOrderedScopes()
+	m.populateLayerTypes()
+	cache := options.Cache
 	if cache != nil {
 		updatedCache = make(KVCacheNodes)
 		for k, v := range cache {
@@ -685,7 +694,7 @@ func (m *Model) AllLayers(scope *model.Scope, tokens, positionIds *Node, attenti
 	}
 
 	allLayers = make([]*Node, 0, m.NumLayers+1)
-	x := m.EmbedTokens(scope, tokens)
+	x := m.EmbedTokens(tokens)
 
 	if m.posEncoder != nil {
 		if preEnc, ok := m.posEncoder.(pos.PreEncoder); ok {
@@ -694,7 +703,7 @@ func (m *Model) AllLayers(scope *model.Scope, tokens, positionIds *Node, attenti
 	}
 
 	if m.EmbedNormalization != layers.NormalizationNone {
-		x = m.normalize(scope.In("embed_norm"), x, m.EmbedNormalization)
+		x = m.normalize(m.Scope.In("embed_norm"), x, m.EmbedNormalization)
 	}
 	allLayers = append(allLayers, x)
 
@@ -716,17 +725,17 @@ func (m *Model) AllLayers(scope *model.Scope, tokens, positionIds *Node, attenti
 	var perLayerInputs *Node
 	if m.HiddenSizePerLayerInput > 0 {
 		// Per-layer Embedding (PLE): see explanation in [Model.WithHiddenSizePerLayerInput].
-		embeddedPLE := layers.Embedding(scope.In("token_embed_per_layer"), tokens, m.DType, m.VocabSizePerLayerInput, m.NumLayers*m.HiddenSizePerLayerInput)
+		embeddedPLE := layers.Embedding(m.Scope.In("token_embed_per_layer"), tokens, m.DType, m.VocabSizePerLayerInput, m.NumLayers*m.HiddenSizePerLayerInput)
 		pleScale := Scalar(embeddedPLE.Graph(), m.DType, math.Sqrt(float64(m.HiddenSizePerLayerInput)))
 		embeddedPLE = Mul(embeddedPLE, pleScale)
 		batchSize := tokens.Shape().Dimensions[0]
 		embeddedPLE = Reshape(embeddedPLE, batchSize, seqLen, m.NumLayers, m.HiddenSizePerLayerInput)
 
-		perLayerProjection := m.dense(scope.In("per_layer_model_projection"), x, false, m.NumLayers*m.HiddenSizePerLayerInput)
+		perLayerProjection := m.dense(m.Scope.In("per_layer_model_projection"), x, false, m.NumLayers*m.HiddenSizePerLayerInput)
 		perLayerProjectionScale := Scalar(perLayerProjection.Graph(), m.DType, m.PerLayerModelProjectionScale)
 		perLayerProjection = Mul(perLayerProjection, perLayerProjectionScale)
 		perLayerProjection = Reshape(perLayerProjection, batchSize, seqLen, m.NumLayers, m.HiddenSizePerLayerInput)
-		perLayerProjection = m.normalize(scope.In("per_layer_projection_norm"), perLayerProjection, layers.NormalizationRMSNorm)
+		perLayerProjection = m.normalize(m.Scope.In("per_layer_projection_norm"), perLayerProjection, layers.NormalizationRMSNorm)
 
 		perLayerInputs = Add(perLayerProjection, embeddedPLE)
 		if m.PerLayerInputScale != 1 {
@@ -741,16 +750,16 @@ func (m *Model) AllLayers(scope *model.Scope, tokens, positionIds *Node, attenti
 
 	// Apply all layers.
 	for layerNum := range m.NumLayers {
-		layerScope := scope.In("layer_%d", layerNum)
+		layerScope := m.Scope.In("layer_%d", layerNum)
 		var perLayerInput *Node
 		if perLayerInputs != nil {
 			perLayerInput = Squeeze(Slice(perLayerInputs, AxisRange(), AxisRange(), AxisElem(layerNum), AxisRange()), 2)
 		}
-		x = m.ForwardLayer(layerScope, layerNum, x, attentionMask, positionNode, updatedCache, perLayerInput, sharedKVs)
+		x = m.ForwardLayer(layerScope, layerNum, x, positionNode, updatedCache, perLayerInput, sharedKVs, options)
 		allLayers = append(allLayers, x)
 	}
 	if m.FinalNormalization != layers.NormalizationNone {
-		x = m.normalize(scope.In("final_norm"), x, m.FinalNormalization)
+		x = m.normalize(m.Scope.In("final_norm"), x, m.FinalNormalization)
 		if len(allLayers) > 0 {
 			allLayers[len(allLayers)-1] = x
 		}
@@ -774,8 +783,8 @@ func (m *Model) AllLayers(scope *model.Scope, tokens, positionIds *Node, attenti
 //
 // It defaults to TokenType 0 for all tokens if TokenTypeEmbedSize > 0.
 // Use EmbedTokensWithType to select a different index.
-func (m *Model) EmbedTokens(scope *model.Scope, tokens *Node) *Node {
-	return m.EmbedTokensWithType(scope, tokens, nil)
+func (m *Model) EmbedTokens(tokens *Node) *Node {
+	return m.EmbedTokensWithType(tokens, nil)
 }
 
 // EmbedTokensWithType returns the token embeddings for the given tokens and tokenTypes using lookup tables.
@@ -787,10 +796,10 @@ func (m *Model) EmbedTokens(scope *model.Scope, tokens *Node) *Node {
 //
 // tokenTypes must be a scalar int (limited to the vocabSize set in WithTokenTypeEmbedding).
 // Or it can be nil, in which case it defaults to TokenType 0 for all tokens if TokenTypeEmbedSize > 0.
-func (m *Model) EmbedTokensWithType(scope *model.Scope, tokens, tokenTypes *Node) *Node {
+func (m *Model) EmbedTokensWithType(tokens, tokenTypes *Node) *Node {
 	g := tokens.Graph()
 	// Tokens embedding table lookup.
-	embedded := layers.Embedding(scope.In("token_embed"), tokens, m.DType, m.VocabSize, m.EmbedDim)
+	embedded := layers.Embedding(m.Scope.In("token_embed"), tokens, m.DType, m.VocabSize, m.EmbedDim)
 	if embedded.Rank() == 2 {
 		embedded = ExpandDims(embedded, 1)
 	}
@@ -802,7 +811,7 @@ func (m *Model) EmbedTokensWithType(scope *model.Scope, tokens, tokenTypes *Node
 		if tokenTypes == nil {
 			tokenTypes = ScalarZero(g, dtypes.Int32)
 		}
-		tokenTypeEmbed := layers.Embedding(scope.In("token_type_embed"), tokenTypes, m.DType, m.TokenTypeEmbedSize, m.EmbedDim)
+		tokenTypeEmbed := layers.Embedding(m.Scope.In("token_type_embed"), tokenTypes, m.DType, m.TokenTypeEmbedSize, m.EmbedDim)
 		embedded = Add(embedded, broadcastPrefixToMatch(tokenTypeEmbed, embedded))
 	}
 	return embedded
@@ -817,7 +826,7 @@ func (m *Model) EmbedTokensWithType(scope *model.Scope, tokens, tokenTypes *Node
 //
 // This step is done automatically by AllLayers or Logits, but if needed, it can
 // be used separately by calling this method.
-func (m *Model) PrePositionalEncoder(scope *model.Scope, x *Node, position int, useKVCache bool) *Node {
+func (m *Model) PrePositionalEncoder(x *Node, position int, useKVCache bool) *Node {
 	if m.posEncoder == nil {
 		return x
 	}
@@ -839,32 +848,31 @@ func (m *Model) PrePositionalEncoder(scope *model.Scope, x *Node, position int, 
 //
 // This step is done automatically by Logits (which builds the full forward path from the tokens), but if needed, it can
 // be used separately by calling this method.
-func (m *Model) LogitsFromEmbeddings(scope *model.Scope, embeddings *Node) *Node {
-	logits := layers.Dense(scope.In("output"), embeddings, false, m.VocabSize)
+func (m *Model) LogitsFromEmbeddings(embeddings *Node) *Node {
+	logits := layers.Dense(m.Scope.In("output"), embeddings, false, m.VocabSize)
 	if m.FinalLogitSoftCap > 0 {
 		logits = nn.SoftCap(logits, m.FinalLogitSoftCap)
 	}
 	return logits
 }
 
-// // ForwardLayer executes a single transformer layer block depending on the configured architecture.
+// ForwardLayer executes a single transformer layer block depending on the configured architecture.
 //
-// - scope: scope must be already scoped for the layer, e.g. scope.In("layer_0")
+// - layerScope: scope must be already scoped for the layer, e.g. scope.In("layer_0")
 // - x: features coming from the previous layer (or token embedding table), shape [batchSize, seqLen, embedDim]
-// - attentionMask: (optional, can be nil) shaped [batchSize, seqLen]
 // - position: position node (scalar int32) indicating the current absolute position
 // - cache: updated KVCacheNodes map
 // - sharedKVs: optional, map of shared key/values for layers that don't project their own KVs
 //
 // It returns the output of the layer, shape [batchSize, seqLen, embedDim].
-func (m *Model) ForwardLayer(scope *model.Scope, layerNum int, x, attentionMask *Node, position *Node, cache KVCacheNodes, perLayerInput *Node, sharedKVs KVCacheNodes) *Node {
+func (m *Model) ForwardLayer(layerScope *model.Scope, layerNum int, x *Node, position *Node, cache KVCacheNodes, perLayerInput *Node, sharedKVs KVCacheNodes, options CallOptions) *Node {
 	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
-		return m.forwardLayerGemma(scope, layerNum, x, attentionMask, position, cache, perLayerInput, sharedKVs)
+		return m.forwardLayerGemma(layerScope, layerNum, x, position, cache, perLayerInput, sharedKVs, options)
 	}
-	return m.forwardLayerStandard(scope, layerNum, x, attentionMask, position, cache, perLayerInput, sharedKVs)
+	return m.forwardLayerStandard(layerScope, layerNum, x, position, cache, perLayerInput, sharedKVs, options)
 }
 
-func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x, attentionMask *Node, position *Node, cache KVCacheNodes, perLayerInput *Node, sharedKVs KVCacheNodes) *Node {
+func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x *Node, position *Node, cache KVCacheNodes, perLayerInput *Node, sharedKVs KVCacheNodes, options CallOptions) *Node {
 	residual := x
 	var attn *Node
 
@@ -961,8 +969,8 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x, a
 		}
 		customMask := m.KVCache.BuildAttentionMask(attnScope, cache, x, position, m.UseCausalMask, slidingWindow)
 
-		if attentionMask != nil {
-			expandedMask := ExpandDims(attentionMask, 1)
+		if options.AttentionMask != nil {
+			expandedMask := ExpandDims(options.AttentionMask, 1)
 			expandedMask = BroadcastToDims(expandedMask, customMask.Shape().Dimensions...)
 			customMask = LogicalAnd(customMask, expandedMask)
 		}
@@ -998,8 +1006,11 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x, a
 			WithOutputDim(m.EmbedDim).
 			WithScoreSoftCap(m.AttentionScoreSoftCap).
 			WithQueryKeyScale(m.QueryKeyScale)
-		if attentionMask != nil {
-			attnBuilder.WithMask(attentionMask)
+		if options.AttentionMask != nil {
+			attnBuilder.WithMask(options.AttentionMask)
+		}
+		if options.SeqLen != nil {
+			attnBuilder.WithSeqLens(options.SeqLen, options.SeqLen)
 		}
 		if m.UseCausalMask {
 			attnBuilder.WithCausalMask(true)
@@ -1087,7 +1098,7 @@ func (m *Model) normalize(scope *model.Scope, operand *Node, normType string) *N
 	}
 }
 
-func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x, attentionMask *Node, position *Node, cache KVCacheNodes, perLayerInput *Node, sharedKVs KVCacheNodes) *Node {
+func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x *Node, position *Node, cache KVCacheNodes, perLayerInput *Node, sharedKVs KVCacheNodes, options CallOptions) *Node {
 	residual := x
 
 	// Pre-attention normalization.
@@ -1208,8 +1219,8 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x, atte
 		}
 		customMask := m.KVCache.BuildAttentionMask(selfAttnScope, cache, x, position, m.UseCausalMask, slidingWindow)
 
-		if attentionMask != nil {
-			expandedMask := ExpandDims(attentionMask, 1)
+		if options.AttentionMask != nil {
+			expandedMask := ExpandDims(options.AttentionMask, 1)
 			expandedMask = BroadcastToDims(expandedMask, customMask.Shape().Dimensions...)
 			customMask = LogicalAnd(expandedMask, customMask)
 		}
@@ -1245,8 +1256,11 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x, atte
 			WithOutputDim(m.EmbedDim).
 			WithScoreSoftCap(m.AttentionScoreSoftCap).
 			WithQueryKeyScale(m.QueryKeyScale)
-		if attentionMask != nil {
-			attnBuilder.WithMask(attentionMask)
+		if options.AttentionMask != nil {
+			attnBuilder.WithMask(options.AttentionMask)
+		}
+		if options.SeqLen != nil {
+			attnBuilder.WithSeqLens(options.SeqLen, options.SeqLen)
 		}
 		if m.UseCausalMask {
 			attnBuilder.WithCausalMask(true)

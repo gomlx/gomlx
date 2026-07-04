@@ -151,10 +151,10 @@ func trainModel(backend compute.Backend, scope *model.Scope) {
 	// Simple model function wrapper
 	modelFn := func(scope *model.Scope, _ any, inputs []*graph.Node) []*graph.Node {
 		tokens := inputs[0]
-		transformerModel := transformer.NewFromScope(scope)
+		transformerModel := transformer.New(scope)
 		posEmbeder := pos.NewLearned(scope, transformerModel.MaxPosEmbed, transformerModel.EmbedDim)
 		transformerModel.WithPositionalEncoder(posEmbeder)
-		return []*graph.Node{transformerModel.Logits(scope, tokens, nil)}
+		return []*graph.Node{transformerModel.Logits(tokens, transformer.CallOptions{})}
 	}
 
 	trainer := train.NewTrainer(backend, scope.Store(), modelFn,
@@ -194,9 +194,9 @@ func generateText(backend compute.Backend, scope *model.Scope, prompt string) {
 		promptTokens = []int{32}
 	}
 
-	transformerModel := transformer.NewFromScope(scope)
+	transformerModel := transformer.New(scope)
 	modelFn := transformer.MakeKVCacheModelFn(transformerModel)
-	transformerModel.PopulateKVCacheConfigs(scope)
+	transformerModel.PopulateKVCacheConfigs()
 
 	decoder := generate.New(modelFn).FromScope(scope)
 	numKVHeads := transformerModel.NumKVHeads

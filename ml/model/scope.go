@@ -161,6 +161,14 @@ func (s *Scope) At(nameFormat string, args ...any) *Scope {
 	return s2
 }
 
+// ResetVisited returns a copy of the Scope at the same path, but with its visited-paths set cleared.
+// This is useful when reusing the same scope across different compilation passes.
+func (s *Scope) ResetVisited() *Scope {
+	s2 := s.copy()
+	s2.visitedPaths = sets.Make[string]()
+	return s2
+}
+
 // WithInitializer returns a new reference to the Scope, with the initializer set.
 func (s *Scope) WithInitializer(initializer VariableInitializer) *Scope {
 	if initializer == nil {

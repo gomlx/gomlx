@@ -167,13 +167,12 @@ func LoadGPT2(backend compute.Backend, repo *hub.Repo) (*GPT2Model, api.Tokenize
 	posEmbedder := pos.NewLearned(scope, config.MaxPosEmbed, config.HiddenSize)
 
 	// Build the transformer model and wrap it in our GPT2Model.
-	transformerModel := transformer.New(
-		config.VocabSize,
-		config.HiddenSize,
-		config.NumLayers,
-		config.NumHeads,
-		config.HiddenSize/config.NumHeads, // head_dim
-	).
+	transformerModel := transformer.New(scope).
+		WithVocabSize(config.VocabSize).
+		WithEmbedDim(config.HiddenSize).
+		WithNumLayers(config.NumLayers).
+		WithNumHeads(config.NumHeads).
+		WithHeadDim(config.HiddenSize/config.NumHeads).
 		WithFFNDim(config.HiddenSize * 4). // GPT-2 uses 4x expansion
 		WithMaxPosEmbed(config.MaxPosEmbed).
 		WithDType(config.DType).

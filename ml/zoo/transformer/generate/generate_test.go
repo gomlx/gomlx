@@ -19,7 +19,7 @@ import (
 // TestGenerator groups config default and builder tests.
 func TestGenerator(t *testing.T) {
 	t.Run("Defaults", func(t *testing.T) {
-		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node { return tokens }
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, seqLen *Node) *Node { return tokens }
 		cfg := New(modelFn)
 		assert.Equal(t, 100, cfg.MaxLength)
 		assert.Equal(t, sample.StrategyGreedy, cfg.Strategy)
@@ -32,7 +32,7 @@ func TestGenerator(t *testing.T) {
 	})
 
 	t.Run("Builders", func(t *testing.T) {
-		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node { return tokens }
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, seqLen *Node) *Node { return tokens }
 		cfg := New(modelFn).
 			WithMaxLength(50).
 			WithTemperature(0.7).
@@ -57,7 +57,7 @@ func TestGeneratorSampling(t *testing.T) {
 	t.Run("Greedy", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
 		store := model.NewStore()
-		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, seqLen *Node) *Node {
 			vocabSize := 10
 			g := tokens.Graph()
 			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
@@ -87,7 +87,7 @@ func TestGeneratorSampling(t *testing.T) {
 	t.Run("Temperature", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
 		store := model.NewStore()
-		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, seqLen *Node) *Node {
 			vocabSize := 10
 			g := tokens.Graph()
 			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
@@ -114,7 +114,7 @@ func TestGeneratorSampling(t *testing.T) {
 	t.Run("OneDPrompt", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
 		store := model.NewStore()
-		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, seqLen *Node) *Node {
 			vocabSize := 10
 			g := tokens.Graph()
 			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
@@ -137,7 +137,7 @@ func TestGeneratorSampling(t *testing.T) {
 	t.Run("PromptTooLong", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
 		store := model.NewStore()
-		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node { return tokens }
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, seqLen *Node) *Node { return tokens }
 		cfg := New(modelFn).WithMaxLength(5)
 		prompt := [][]int32{{1, 2, 3, 4, 5, 6, 7, 8}}
 		_, err := cfg.Decode(backend, store.RootScope(), prompt)
@@ -150,7 +150,7 @@ func TestGeneratorSampling(t *testing.T) {
 func TestBeamSearch(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	store := model.NewStore()
-	var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
+	var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, seqLen *Node) *Node {
 		vocabSize := 10
 		g := tokens.Graph()
 		vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
@@ -175,7 +175,7 @@ func TestBeamSearch(t *testing.T) {
 func TestStreaming(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	store := model.NewStore()
-	var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
+	var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, seqLen *Node) *Node {
 		vocabSize := 10
 		g := tokens.Graph()
 		vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
@@ -212,7 +212,7 @@ func TestDynamicShapesAndBucketing(t *testing.T) {
 		}
 
 		store := model.NewStore()
-		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, seqLen *Node) *Node {
 			vocabSize := 10
 			g := tokens.Graph()
 			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
@@ -238,7 +238,7 @@ func TestDynamicShapesAndBucketing(t *testing.T) {
 
 	t.Run("BucketingPow2Strategy", func(t *testing.T) {
 		store := model.NewStore()
-		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, length int) *Node {
+		var modelFn NaiveModelFn = func(scope *model.Scope, tokens *Node, seqLen *Node) *Node {
 			vocabSize := 10
 			g := tokens.Graph()
 			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
