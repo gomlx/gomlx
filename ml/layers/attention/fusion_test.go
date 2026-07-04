@@ -140,7 +140,9 @@ func TestFusionFallbackParity(t *testing.T) {
 
 		store := model.NewStore()
 		exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
-			fusedOut, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
+			fusedOut, _ := Core(qIn, kIn, vIn, LayoutBSHD, CoreOptions{
+				UseCausalMask: true,
+			})
 			refOut := ConvertDType(naiveCausalAttention(qIn, kIn, vIn, scale), dtypes.Float32)
 			fg := Gradient(ReduceAllSum(fusedOut), qIn, kIn, vIn)
 			ng := Gradient(ReduceAllSum(refOut), qIn, kIn, vIn)
@@ -184,7 +186,9 @@ func disabledTestFusionGQAParity(t *testing.T) {
 
 		store := model.NewStore()
 		exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn *Node) []*Node {
-			out, _ := Core(scope, qIn, kIn, vIn, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
+			out, _ := Core(qIn, kIn, vIn, LayoutBSHD, CoreOptions{
+				UseCausalMask: true,
+			})
 			ref := naiveGQAReference(qIn, kIn, vIn, KVH, scale)
 			og := Gradient(ReduceAllSum(out), qIn, kIn, vIn)
 			rg := Gradient(ReduceAllSum(ref), qIn, kIn, vIn)
@@ -233,7 +237,9 @@ func TestFusionParity(t *testing.T) {
 					qb := ConvertDType(qIn, dtypes.BFloat16)
 					kb := ConvertDType(kIn, dtypes.BFloat16)
 					vb := ConvertDType(vIn, dtypes.BFloat16)
-					fusedOut, _ := Core(scope, qb, kb, vb, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
+					fusedOut, _ := Core(qb, kb, vb, LayoutBSHD, CoreOptions{
+						UseCausalMask: true,
+					})
 					fusedOut = ConvertDType(fusedOut, dtypes.Float32)
 					refQ := ConvertDType(qb, dtypes.Float32)
 					refK := ConvertDType(kb, dtypes.Float32)
@@ -269,7 +275,6 @@ func TestFusionParity(t *testing.T) {
 func TestCoreUseFusionFalseMatchesDecomposed(t *testing.T) {
 	backend := testutil.BuildTestBackend()
 	const B, S, H, D = 1, 32, 2, 64
-	scale := 0.125
 	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 1), B, S, H, D)
 	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 2), B, S, H, D)
 	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 3), B, S, H, D)
@@ -279,8 +284,13 @@ func TestCoreUseFusionFalseMatchesDecomposed(t *testing.T) {
 		qBF16 := ConvertDType(qIn, dtypes.BFloat16)
 		kBF16 := ConvertDType(kIn, dtypes.BFloat16)
 		vBF16 := ConvertDType(vIn, dtypes.BFloat16)
-		on, _ := Core(scope, qBF16, kBF16, vBF16, scale, nil, nil, LayoutBSHD, true, false, 0.0, true, nil, nil)
-		off, _ := Core(scope, qBF16, kBF16, vBF16, scale, nil, nil, LayoutBSHD, true, false, 0.0, false, nil, nil)
+		on, _ := Core(qBF16, kBF16, vBF16, LayoutBSHD, CoreOptions{
+			UseCausalMask: true,
+		})
+		off, _ := Core(qBF16, kBF16, vBF16, LayoutBSHD, CoreOptions{
+			UseCausalMask: true,
+			DisableFusion: true,
+		})
 		diff := Div(ReduceAllMax(Abs(Sub(on, off))), AddScalar(ReduceAllMax(Abs(off)), 1e-6))
 		return []*Node{ConvertDType(diff, dtypes.Float32)}
 	})
@@ -432,7 +442,12 @@ func TestCoreRejectsSeqLensWithMask(t *testing.T) {
 
 	store := model.NewStore()
 	_, _, err := model.MustNewExec(backend, store, func(scope *model.Scope, qn, qlen, klen, m *Node) []*Node {
-		out, _ := Core(scope, qn, qn, qn, 0.125, m, nil, LayoutBSHD, false, false, 0.0, true, qlen, klen)
+		out, _ := Core(qn, qn, qn, LayoutBSHD, CoreOptions{
+			Scale:         0.125,
+			AttentionMask: m,
+			QuerySeqLen:   qlen,
+			KVSeqLen:      klen,
+		})
 		return []*Node{out}
 	}).CallWithGraph(q, lens, lens, maskT)
 	require.Error(t, err, "Core with seqlens and a non-nil mask must fail")
@@ -451,7 +466,11 @@ func TestCoreRejectsSeqLensWithNonBSHD(t *testing.T) {
 
 	store := model.NewStore()
 	_, _, err := model.MustNewExec(backend, store, func(scope *model.Scope, qn, qlen, klen *Node) []*Node {
-		out, _ := Core(scope, qn, qn, qn, 0.125, nil, nil, LayoutBHSD, false, false, 0.0, true, qlen, klen)
+		out, _ := Core(qn, qn, qn, LayoutBHSD, CoreOptions{
+			Scale:       0.125,
+			QuerySeqLen: qlen,
+			KVSeqLen:    klen,
+		})
 		return []*Node{out}
 	}).CallWithGraph(q, lens, lens)
 	require.Error(t, err, "Core with seqlens and non-BSHD layout must fail")

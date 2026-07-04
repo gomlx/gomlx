@@ -3,6 +3,7 @@
 package attention
 
 import (
+	"math"
 	"slices"
 
 	"github.com/gomlx/compute"
@@ -136,6 +137,67 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 	return Reshape(node, mergedDims...)
 }
 
+// CoreOptions packs all the optional parameters for Core.
+// Default values (zero values) are sensible defaults.
+type CoreOptions struct {
+	// Scale is the scaling factor for attention scores. Typically 1/sqrt(head_dim).
+	// If left as 0, it defaults to 1/sqrt(head_dim), where head_dim is the last dimension of query (head dimension).
+	Scale float64
+
+	// AttentionMask controls which positions can be attended to:
+	//   - Boolean mask (DType.IsBoolean()): uses MaskedSoftmax — true means attend, false means ignore.
+	//     This avoids the -1e9 additive trick which causes gradient and low-precision issues.
+	//   - Float mask: added to scores before softmax (additive mask).
+	//
+	// The attentionMask must be broadcastable to the score tensor layout (using numHeads, not numKVHeads):
+	//   - LayoutBHSD: broadcastable to [batch, numHeads, q_seq, kv_seq]
+	//   - LayoutBSHD: broadcastable to [batch, q_seq, numHeads, kv_seq]
+	//
+	// The useCausalMask and mask parameters are mutually exclusive: providing both will panic.
+	// If you need both causal masking and an explicit mask, combine them into a single mask
+	// before calling Core (e.g. LogicalAnd a lower-triangular boolean mask with your mask).
+	AttentionMask *Node
+
+	// UseCausalMask controls whether to apply a causal (lower-triangular) mask.
+	// It is mutually exclusive with AttentionMask.
+	UseCausalMask bool
+
+	// QuerySeqLen, KVSeqLen are an optional per-batch actual sequence length (int32 [B] node) for query
+	// and Key/Value padding masking.
+	// On the fused path, it is forwarded via the seqlen config.
+	// On the decomposed path, it is materialized into a boolean padding mask.
+	// Mutually exclusive with a non-nil AttentionMask.
+	// If one is set the other must also be set.
+	QuerySeqLen, KVSeqLen *Node
+
+	// WantCoefficients, when true, forces the decomposed path to be used for the entire computation
+	// (no fused op) and returns coefficients. When false, the fused op is attempted for
+	// the output and coefficients is nil.
+	WantCoefficients bool
+
+	// ScoreSoftCap controls whether to cap the scores (of the attention softmax) using the [nn.SoftCap].
+	// A value > 0 enables this feature.
+	ScoreSoftCap float64
+
+	// Scope provides the training/inference scope of the attention operation.
+	// Currently, this is only needed for RNG state for dropout.
+	// If not using dropout, just leave it at nil.
+	Scope *model.Scope
+
+	// DropoutRate (if not nil) applies dropout to the attention coefficients during training.
+	// When dropout is active, the fused path is skipped (fused ops don't support dropout).
+	// Notice: Dropout is rarely used in modern transformer models, and it prevents fusion (flash attention).
+	// See discussion:
+	// https://www.reddit.com/r/LocalLLaMA/comments/1pntkme/day_8_21_days_of_building_a_small_language_model/
+	//
+	// If using DropoutRate set also the Scope field.
+	DropoutRate *Node
+
+	// DisableFusion disables attempting to use the fused attention op (like flash-attention) when available.
+	// This is mostly used for testing -- most of the times one wants fusion if available.
+	DisableFusion bool
+}
+
 // Core computes the core scaled dot-product attention operation.
 // This is the shared implementation used by MultiHeadAttention and ONNX op converters.
 //
@@ -148,59 +210,21 @@ func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) 
 // of query heads shares the same key/value head. This also covers Multi-Query Attention (MQA)
 // where numKVHeads=1.
 //
-// The scale is typically 1/sqrt(head_dim).
-//
-// The mask parameter (if non-nil) controls which positions can be attended to:
-//   - Boolean mask (DType.IsBoolean()): uses MaskedSoftmax — true means attend, false means ignore.
-//     This avoids the -1e9 additive trick which causes gradient and low-precision issues.
-//   - Float mask: added to scores before softmax (additive mask).
-//
-// The attentionMask must be broadcastable to the score tensor layout (using numHeads, not numKVHeads):
-//   - LayoutBHSD: broadcastable to [batch, numHeads, q_seq, kv_seq]
-//   - LayoutBSHD: broadcastable to [batch, q_seq, numHeads, kv_seq]
-//
-// The useCausalMask and mask parameters are mutually exclusive: providing both will panic.
-// If you need both causal masking and an explicit mask, combine them into a single mask
-// before calling Core (e.g. LogicalAnd a lower-triangular boolean mask with your mask).
-//
-// The dropoutRate (if not nil) applies dropout to the attention coefficients during training.
-// When dropout is active, the fused path is skipped (fused ops don't support dropout).
-// The scope parameter provides the training/inference scope for dropout; it may be nil
-// when dropoutRate is 0.
-// Notice: Dropout is rarely used in modern transformer models, and it prevents fusion (flash attention).
-// See discussion:
-// https://www.reddit.com/r/LocalLLaMA/comments/1pntkme/day_8_21_days_of_building_a_small_language_model/
-//
-// querySeqLen and keyValueSeqLen are optional per-batch actual sequence lengths (int32 [B] nodes)
-// for padding masking. Either may be nil. On the fused path they are forwarded via the seqlen
-// config (so attentionMask stays nil and flashSupported accepts the call). On the decomposed path
-// they are materialized into a boolean padding mask and AND-ed with any existing mask.
-// These are mutually exclusive with a non-nil attentionMask.
-//
-// When wantCoefficients is true, the decomposed path is used for the entire computation
-// (no fused op) and coefficients are returned. When false, the fused op is attempted for
-// the output and coefficients is nil.
-//
-// The scoreSoftCap controls whether to cap the scores (of the attention softmax) using the [nn.SoftCap].
-// A value > 0 enables this feature.
-//
 // Returns:
 //   - output: same shape as query.
-//   - coefficients: attention coefficients (nil when wantCoefficients is false) shaped
+//   - coefficients: attention coefficients (nil when WantCoefficients is false) shaped
 //     [batch, heads, q_seq, kv_seq] for LayoutBHSD or
 //     [batch, q_seq, heads, kv_seq] for LayoutBSHD.
-func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionMask *Node, dropoutRate *Node,
-	layout AxesLayout, useCausalMask, wantCoefficients bool, scoreSoftCap float64, useFusion bool,
-	querySeqLen, keyValueSeqLen *Node) (output, coefficients *Node) {
+func Core(query, key, value *Node, layout AxesLayout, options CoreOptions) (output, coefficients *Node) {
 	g := query.Graph()
 	numQueryHeads := query.Shape().Dimensions[layout.HeadsAxis()]
 	numKVHeads := key.Shape().Dimensions[layout.HeadsAxis()]
 
-	if useCausalMask && attentionMask != nil {
+	if options.UseCausalMask && options.AttentionMask != nil {
 		Panicf("attention.Core: useCausalMask and mask are mutually exclusive; combine them into a single mask before calling Core")
 	}
-	hasSeqLens := querySeqLen != nil || keyValueSeqLen != nil
-	if hasSeqLens && attentionMask != nil {
+	hasSeqLens := options.QuerySeqLen != nil || options.KVSeqLen != nil
+	if hasSeqLens && options.AttentionMask != nil {
 		Panicf("attention.Core: querySeqLen/keyValueSeqLen are mutually exclusive with a non-nil attentionMask; combine padding into a single mask upstream")
 	}
 	if hasSeqLens && layout != LayoutBSHD {
@@ -210,13 +234,22 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 		Panicf("attention.Core: numQueryHeads (%d) must be positive and divisible by numKVHeads (%d)", numQueryHeads, numKVHeads)
 	}
 
-	dropoutActive := layers.IsDropoutActive(scope, g) && dropoutRate != nil
+	dropoutActive := layers.IsDropoutActive(options.Scope, g) && options.DropoutRate != nil
+
+	scale := options.Scale
+	if scale == 0 {
+		scale = 1.0 / math.Sqrt(float64(query.Shape().Dimensions[len(query.Shape().Dimensions)-1]))
+	}
 
 	if klog.V(2).Enabled() {
+		scopePath := "<nil>"
+		if options.Scope != nil {
+			scopePath = options.Scope.Scope()
+		}
 		klog.Infof("attention.Core(scope=%s, query=%s, key=%s, value=%s, scale=%f, attentionMask=%v, dropoutRate=%v, "+
 			"layout=%+v, useCausalMask=%v, wantCoefficients=%v, scoreSoftCap=%f)",
-			scope.Scope(), query.Shape(), key.Shape(), value.Shape(), scale, attentionMask != nil, dropoutRate != nil,
-			layout, useCausalMask, wantCoefficients, scoreSoftCap)
+			scopePath, query.Shape(), key.Shape(), value.Shape(), scale, options.AttentionMask != nil, options.DropoutRate != nil,
+			layout, options.UseCausalMask, options.WantCoefficients, options.ScoreSoftCap)
 	}
 
 	// Function to compute the attention "decomposed" (as in not-fused).
@@ -224,8 +257,8 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 	// by InternalFusedOpCaller() below.
 	decomposedFn := func() (output *Node, coefficients *Node) {
 		// Build causal mask for the decomposed path.
-		decomposedMask := attentionMask
-		if useCausalMask {
+		decomposedMask := options.AttentionMask
+		if options.UseCausalMask {
 			seqLen := query.Shape().Dimensions[layout.SeqAxis()]
 			causalBool := LowerTriangular(g, seqLen)
 			// Reshape for correct broadcasting with score layout.
@@ -239,8 +272,8 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 		}
 
 		// Build padding mask from seqlen nodes and combine with existing decomposed mask.
-		if querySeqLen != nil || keyValueSeqLen != nil {
-			padMask := buildSeqLenPaddingMask(query, key, querySeqLen, keyValueSeqLen)
+		if options.QuerySeqLen != nil || options.KVSeqLen != nil {
+			padMask := buildSeqLenPaddingMask(query, key, options.QuerySeqLen, options.KVSeqLen)
 			if decomposedMask != nil {
 				decomposedMask = LogicalAnd(decomposedMask, padMask)
 			} else {
@@ -265,8 +298,8 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 		scores := Einsum(scoreEquation(layout, isGQA), decomposedQuery, key)
 		scores = MulScalar(scores, scale)
 
-		if scoreSoftCap > 0 {
-			scores = nn.SoftCap(scores, scoreSoftCap)
+		if options.ScoreSoftCap > 0 {
+			scores = nn.SoftCap(scores, options.ScoreSoftCap)
 		}
 
 		if decomposedMask != nil && decomposedMask.DType() != dtypes.Bool {
@@ -281,7 +314,7 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 			coefficients = MaskedSoftmax(scores, decomposedMask, -1)
 		}
 		if dropoutActive {
-			coefficients = layers.Dropout(scope, coefficients, dropoutRate)
+			coefficients = layers.Dropout(options.Scope, coefficients, options.DropoutRate)
 		}
 
 		decomposedOutput := Einsum(outputEquation(layout, isGQA), coefficients, value)
@@ -300,7 +333,7 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 	capabilities := g.Backend().Capabilities()
 	hasFused := capabilities.Operations[compute.OpTypeFusedScaledDotProductAttention]
 	hasFusedVJP := capabilities.Operations[compute.OpTypeFusedScaledDotProductAttentionVJP]
-	if wantCoefficients || dropoutActive || scoreSoftCap > 0 || !useFusion || !hasFused {
+	if options.WantCoefficients || dropoutActive || options.ScoreSoftCap > 0 || options.DisableFusion || !hasFused {
 		output, coefficients = decomposedFn()
 	} else {
 		// Attempt fused version:
@@ -309,19 +342,19 @@ func Core(scope *model.Scope, query, key, value *Node, scale float64, attentionM
 		output, isFused = InternalFusedOpCaller(
 			func() *Node {
 				var fusedConfig *compute.ScaledDotProductAttentionConfig
-				if querySeqLen != nil || keyValueSeqLen != nil {
+				if options.QuerySeqLen != nil || options.KVSeqLen != nil {
 					fusedConfig = &compute.ScaledDotProductAttentionConfig{}
-					if querySeqLen != nil {
-						fusedConfig.QuerySeqLen = InternalBackendOutputs(querySeqLen)[0]
+					if options.QuerySeqLen != nil {
+						fusedConfig.QuerySeqLen = InternalBackendOutputs(options.QuerySeqLen)[0]
 					}
-					if keyValueSeqLen != nil {
-						fusedConfig.KeyValueSeqLen = InternalBackendOutputs(keyValueSeqLen)[0]
+					if options.KVSeqLen != nil {
+						fusedConfig.KeyValueSeqLen = InternalBackendOutputs(options.KVSeqLen)[0]
 					}
 				}
 				klog.V(2).Info("attention.Core(): attempting to use FusedScaledDotProductAttention op.")
 				out, _ := BackendFusedScaledDotProductAttention(
-					query, key, value, attentionMask,
-					numQueryHeads, numKVHeads, layout, scale, useCausalMask, fusedConfig)
+					query, key, value, options.AttentionMask,
+					numQueryHeads, numKVHeads, layout, scale, options.UseCausalMask, fusedConfig)
 				return out
 			},
 			func() *Node {
