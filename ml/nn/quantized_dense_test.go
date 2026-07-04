@@ -86,6 +86,10 @@ func TestQuantizedDense_Int8(t *testing.T) {
 func TestQuantizedDense_NF4(t *testing.T) {
 	// Sub-byte dtypes (Uint4) are only supported by the simplego backend; exclude XLA.
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		if backend.Name() == "xla" {
+			t.Skip("Skipping: XLA seems to have some bugs when supporting some sub-byte dtypes operations.")
+		}
+
 		// M=1, K=2, N=4, blockSize=4 → numBlocks=1.
 		//
 		// Nibble indices (low nibble = even col, high nibble = odd col):
@@ -450,6 +454,10 @@ func TestQuantizedDense_GGML_IQ4NL(t *testing.T) {
 func TestQuantizedDense_Int4(t *testing.T) {
 	// Sub-byte dtypes (Int4) are only supported by the simplego backend; exclude XLA.
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		if backend.Name() == "xla" {
+			t.Skip("Skipping: XLA seems to have some bugs when supporting sub-byte dtypes operations.")
+		}
+
 		// Same packed layout as the NF4 test, but QuantLinear dequant with Int4 weights.
 		//
 		// Packed bytes (low nibble first):
