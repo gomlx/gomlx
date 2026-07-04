@@ -59,12 +59,12 @@ github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 h1:DACJavvAHhabrF0
 github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0/go.mod h1:E/TSTwGwJL78qG/PmXZO1EjYhfJinVAhrmmHX6Z8B9k=
 github.com/gomlx/bsplines v0.2.0 h1:n3cWFE6ZleFp/zeliDVLf1Rd4zK0WLoZ6HcfzKz7gUs=
 github.com/gomlx/bsplines v0.2.0/go.mod h1:9esLFW2B5jekrmvecUjo3JVUmTgEHY6OwEjEQ3zEMiA=
-github.com/gomlx/compute v0.0.0-20260621195442-7cf34e76eacb h1:kTvVmJYXNBmh1sw4PL7uA9Qood0B/JzyWVpNUWnLDlo=
-github.com/gomlx/compute v0.0.0-20260621195442-7cf34e76eacb/go.mod h1:MDTT683Wvq7IMSKXDGLvV3Co7HDpx/Xsgp2RbF5lhNM=
+github.com/gomlx/compute v0.0.0-20260703132750-8164cab5c3c7 h1:eXtlemeXFYqVHxxxFhp9wwIRzi6KanRvoAsJU1bYD34=
+github.com/gomlx/compute v0.0.0-20260703132750-8164cab5c3c7/go.mod h1:MDTT683Wvq7IMSKXDGLvV3Co7HDpx/Xsgp2RbF5lhNM=
 github.com/gomlx/exceptions v0.0.3 h1:HKnTgEjj4jlmhr8zVFkTP9qmV1ey7ypYYosQ8GzXWuM=
 github.com/gomlx/exceptions v0.0.3/go.mod h1:uHL0TQwJ0xaV2/snJOJV6hSE4yRmhhfymuYgNredGxU=
-github.com/gomlx/go-xla v0.2.3-0.20260622114419-ab1f50d463f9 h1:WlSW1uPnmjO7MkktJWvmsFD1+wn9CgnFKrjSqmB710o=
-github.com/gomlx/go-xla v0.2.3-0.20260622114419-ab1f50d463f9/go.mod h1:U53xQ6FasicRXLpdEywW8Yrx8GTprcrGsFq7SiI4bvY=
+github.com/gomlx/go-xla v0.2.3-0.20260704051754-1a2878185822 h1:9UPzo8a1w37PUQ05Z2iJxJdBz+9d2cUgu5slrcH13Ek=
+github.com/gomlx/go-xla v0.2.3-0.20260704051754-1a2878185822/go.mod h1:R003tw6UX22D/KePkViEfuCVEWlu/ICf2XpPpj5Pouc=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
