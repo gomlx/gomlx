@@ -49,11 +49,12 @@ const (
 // Parameters:
 //   - scope: Model scope passed along by the Generator.
 //   - tokens: Input token sequence, shaped [batch, paddedSeqLen].
-//   - length: Number of tokens that are non-padding.
+//   - seqLen: A [batchSize] tensor containing the unpadded sequence length for each element of the batch.
+//             If nil, the full paddedSeqLen is assumed (no padding / masking).
 //
 // Returns:
 //   - logits: Output logits per candidate token (vocabSize), shaped [batch, seqLen, vocabSize]
-type NaiveModelFn func(scope *model.Scope, tokens *Node, length int) *Node
+type NaiveModelFn func(scope *model.Scope, tokens *Node, seqLen *Node) *Node
 
 // KVCacheModelFn represents an incremental model function, which is expected to have
 // an associated KVCache.
@@ -474,7 +475,7 @@ func (gen *Generator) validate() error {
 // Parameters:
 //   - backend: Backend for computation
 //   - scope: Scope containing model parameters
-//   - prompt: Input token sequence (1D or 2D tensor)
+//   - prompt: Input token sequence (1D or 2D tensor). If not a [tensors.Tensor] it will be converted to one using [tensors.FromAnyValue].
 //
 // Returns:
 //   - Generated token sequence including the prompt
@@ -761,25 +762,21 @@ func (gen *Generator) generateSamplingNaive(
 	if gen.naiveExec == nil {
 		gen.naiveExec, err = model.NewExec(backend, scope.Store(), func(scope *model.Scope, inputs []*Node) *Node {
 			currentSeqNode := inputs[0]
-			if useDynamic {
-				seqLenNode := inputs[1]
-				logits := gen.naiveModelFn(scope, currentSeqNode, -1)
-				lastIndex := Sub(seqLenNode, ConstAs(seqLenNode, 1))
-				transposed := Transpose(logits, 0, 1)
-				lastLogits := Gather(transposed, lastIndex)
-				nextToken := sample.SampleWithStrategy(scope, lastLogits, gen.Strategy, float64(gen.Temperature), gen.TopK, float64(gen.TopP))
-				return nextToken
+			seqLenNode := inputs[1]
+			logits := gen.naiveModelFn(scope, currentSeqNode, seqLenNode)
+
+			var lastIndex *Node
+			if seqLenNode.Rank() > 0 {
+				lastIndex = Squeeze(Slice(seqLenNode, AxisElem(0)))
 			} else {
-				lengthDummy := inputs[1]
-				currentSeqLen := lengthDummy.Shape().Dimensions[0]
-				logits := gen.naiveModelFn(scope, currentSeqNode, currentSeqLen)
-				g := logits.Graph()
-				lastIndex := Const(g, int32(currentSeqLen-1))
-				transposed := Transpose(logits, 0, 1)
-				lastLogits := Gather(transposed, lastIndex)
-				nextToken := sample.SampleWithStrategy(scope, lastLogits, gen.Strategy, float64(gen.Temperature), gen.TopK, float64(gen.TopP))
-				return nextToken
+				lastIndex = seqLenNode
 			}
+			lastIndex = Sub(lastIndex, ConstAs(lastIndex, 1))
+
+			transposed := Transpose(logits, 0, 1)
+			lastLogits := Gather(transposed, lastIndex)
+			nextToken := sample.SampleWithStrategy(scope, lastLogits, gen.Strategy, float64(gen.Temperature), gen.TopK, float64(gen.TopP))
+			return nextToken
 		})
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to create naiveExec")
@@ -792,14 +789,15 @@ func (gen *Generator) generateSamplingNaive(
 	for step := range numTokensToGenerate {
 		currentSeqLen := promptLen + step
 
-		var outputs []*tensors.Tensor
-		if useDynamic {
-			outputs, err = gen.naiveExec.Call(currentSeq, tensors.FromValue(int32(currentSeqLen)))
-		} else {
-			lengthDummy := tensors.FromShape(shapes.Make(dtypes.Int32, currentSeqLen))
-			outputs, err = gen.naiveExec.Call(currentSeq, lengthDummy)
-			lengthDummy.FinalizeAll()
+		seqLenVals := make([]int32, batchSize)
+		for i := range batchSize {
+			seqLenVals[i] = int32(currentSeqLen)
 		}
+		seqLenTensor := tensors.FromValue(seqLenVals)
+
+		var outputs []*tensors.Tensor
+		outputs, err = gen.naiveExec.Call(currentSeq, seqLenTensor)
+		seqLenTensor.FinalizeAll()
 
 		if err != nil {
 			return nil, errors.WithMessagef(err, "generation step %d failed", step)
@@ -1241,7 +1239,8 @@ func (gen *Generator) generateBeamSearchNaive(
 				} else {
 					paddedSequences = sequences
 				}
-				logits := gen.naiveModelFn(scope, paddedSequences, currentLength)
+				seqLenNode := BroadcastToDims(Scalar(g, dtypes.Int32, int32(currentLength)), batchBeamSize)
+				logits := gen.naiveModelFn(scope, paddedSequences, seqLenNode)
 
 				// Last token logits: [batch_beam_size, vocab_size]
 				lastIndex := Const(g, int32(currentLength-1))
