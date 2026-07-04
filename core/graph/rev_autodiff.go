@@ -186,21 +186,6 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			continue
 		}
 
-		if node.Type() == NodeTypeSplitNode {
-			// SplitNode just pushes v to the specific element of the tuple.
-			// This is a special case because it doesn't return a single VJP to accumulate, but needs to be set
-			// in a special way.
-			params := node.inputs.(*nodeInputsSplitNode)
-			rInput := rg.ReverseNodes[params.multiOutputNode.Id()]
-			if rInput.VJPsForMultiOutputs[params.index] == nil {
-				rInput.VJPsForMultiOutputs[params.index] = rNode.AccumulatedVJP
-			} else {
-				// This usually shouldn't happen, since a Node is only split once ... but just in case.
-				rInput.VJPsForMultiOutputs[params.index] = Add(rInput.VJPsForMultiOutputs[params.index], rNode.AccumulatedVJP)
-			}
-			continue
-		}
-
 		// Fused ops with decomposed alternatives: transfer VJPs to the alternate output
 		// nodes and let the normal gradient loop process the decomposed subgraph.
 		// The alternates have lower nodeIdx (built first by InternalFusedOpCaller/Multi),
@@ -224,6 +209,21 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 					rAlt.AccumulatedVJP = Add(rAlt.AccumulatedVJP, vjps[i])
 				}
 				markSubgraphUseful(rg, alt)
+			}
+			continue
+		}
+
+		if node.Type() == NodeTypeSplitNode {
+			// SplitNode just pushes v to the specific element of the tuple.
+			// This is a special case because it doesn't return a single VJP to accumulate, but needs to be set
+			// in a special way.
+			params := node.inputs.(*nodeInputsSplitNode)
+			rInput := rg.ReverseNodes[params.multiOutputNode.Id()]
+			if rInput.VJPsForMultiOutputs[params.index] == nil {
+				rInput.VJPsForMultiOutputs[params.index] = rNode.AccumulatedVJP
+			} else {
+				// This usually shouldn't happen, since a Node is only split once ... but just in case.
+				rInput.VJPsForMultiOutputs[params.index] = Add(rInput.VJPsForMultiOutputs[params.index], rNode.AccumulatedVJP)
 			}
 			continue
 		}
@@ -411,27 +411,28 @@ func vjpForSingleOutput(vjpFn SingleOutputVJP) VJP {
 // Notice xla.GetTupleElementNode is specialized inside the main reverse autodiff code, and is not
 // in the table here.
 var VJPRegistration = map[NodeType]VJP{
-	NodeTypeInvalid:              vjpForSingleOutput(noOpVJP),
-	NodeTypeConstant:             vjpForSingleOutput(nilVJP),
-	NodeTypeParameter:            vjpForSingleOutput(nilVJP),
-	NodeTypeConvertDType:         vjpForSingleOutput(convertDTypeVJP),
-	NodeTypeWhere:                vjpForSingleOutput(whereVJP),
-	NodeTypeNeg:                  vjpForSingleOutput(negVJP),
-	NodeTypeAbs:                  vjpForSingleOutput(absVJP),
-	NodeTypeExp:                  vjpForSingleOutput(expVJP),
-	NodeTypeLog:                  vjpForSingleOutput(logVJP),
-	NodeTypeLog1p:                vjpForSingleOutput(log1pVJP),
-	NodeTypeCos:                  vjpForSingleOutput(cosVJP),
-	NodeTypeSin:                  vjpForSingleOutput(sinVJP),
-	NodeTypeTanh:                 vjpForSingleOutput(tanhVJP),
-	NodeTypeAdd:                  vjpForSingleOutput(addVJP),
-	NodeTypeSub:                  vjpForSingleOutput(subVJP),
-	NodeTypeMul:                  vjpForSingleOutput(mulVJP),
-	NodeTypeDiv:                  vjpForSingleOutput(divVJP),
-	NodeTypePow:                  vjpForSingleOutput(powVJP),
-	NodeTypeSqrt:                 vjpForSingleOutput(sqrtVJP),
-	NodeTypeErf:                  vjpForSingleOutput(erfVJP),
-	NodeTypeBatchNormForTraining: batchNormForTrainingVJP,
+	NodeTypeInvalid:                        vjpForSingleOutput(noOpVJP),
+	NodeTypeConstant:                       vjpForSingleOutput(nilVJP),
+	NodeTypeParameter:                      vjpForSingleOutput(nilVJP),
+	NodeTypeConvertDType:                   vjpForSingleOutput(convertDTypeVJP),
+	NodeTypeWhere:                          vjpForSingleOutput(whereVJP),
+	NodeTypeNeg:                            vjpForSingleOutput(negVJP),
+	NodeTypeAbs:                            vjpForSingleOutput(absVJP),
+	NodeTypeExp:                            vjpForSingleOutput(expVJP),
+	NodeTypeLog:                            vjpForSingleOutput(logVJP),
+	NodeTypeLog1p:                          vjpForSingleOutput(log1pVJP),
+	NodeTypeCos:                            vjpForSingleOutput(cosVJP),
+	NodeTypeSin:                            vjpForSingleOutput(sinVJP),
+	NodeTypeTanh:                           vjpForSingleOutput(tanhVJP),
+	NodeTypeAdd:                            vjpForSingleOutput(addVJP),
+	NodeTypeSub:                            vjpForSingleOutput(subVJP),
+	NodeTypeMul:                            vjpForSingleOutput(mulVJP),
+	NodeTypeDiv:                            vjpForSingleOutput(divVJP),
+	NodeTypePow:                            vjpForSingleOutput(powVJP),
+	NodeTypeSqrt:                           vjpForSingleOutput(sqrtVJP),
+	NodeTypeErf:                            vjpForSingleOutput(erfVJP),
+	NodeTypeBatchNormForTraining:           batchNormForTrainingVJP,
+	NodeTypeFusedScaledDotProductAttention: fusedScaledDotProductAttentionVJP,
 
 	// Bitwise/integer operations: we define a zero gradient to their inputs.
 	NodeTypeLogicalAnd: vjpForSingleOutput(zeroVJP),

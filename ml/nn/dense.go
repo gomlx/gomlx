@@ -35,10 +35,12 @@ func Dense(x, weight, bias *Node, optionalActivation ...activation.Type) *Node {
 	}
 
 	backendAct := act.ToBackend()
-	return InternalFusedOpCaller(
+	res, _ := InternalFusedOpCaller(
 		func() *Node { return BackendFusedDense(x, weight, bias, backendAct) },
 		decomposed,
+		true,
 	)
+	return res
 }
 
 // denseDecomposed implements Dense using primitive graph ops.

@@ -46,10 +46,12 @@ func QuantizedDense(x, weights *Node, quant *Quantization, bias *Node,
 	// a backend with a fused executor (e.g. simplego); other backends will panic here.
 	if quant.Scheme == compute.QuantGGML {
 		if ggml.CanDecompose(quant.GGMLType) {
-			return InternalFusedOpCaller(
+			res, _ := InternalFusedOpCaller(
 				func() *Node { return BackendFusedQuantizedDense(x, weights, bias, quant, backendAct) },
 				func() *Node { return ggml.DenseDecomposed(x, weights, quant.GGMLType, bias, act) },
+				true,
 			)
+			return res
 		}
 		return BackendFusedQuantizedDense(x, weights, bias, quant, backendAct)
 	}
@@ -58,12 +60,14 @@ func QuantizedDense(x, weights *Node, quant *Quantization, bias *Node,
 		return quantizedDenseDecomposed(x, weights, quant, bias, act)
 	}
 
-	return InternalFusedOpCaller(
+	res, _ := InternalFusedOpCaller(
 		func() *Node {
 			return BackendFusedQuantizedDense(x, weights, bias, quant, backendAct)
 		},
 		decomposed,
+		true,
 	)
+	return res
 }
 
 // quantizedDenseDecomposed implements QuantizedDense using primitive graph ops.

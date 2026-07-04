@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/envutil"
 	"github.com/gomlx/gomlx/support/exceptions"
+	"k8s.io/klog/v2"
 )
 
 // Quantization describes how a graph-level quantized tensor is dequantized.
@@ -133,7 +134,6 @@ func (ni *nodeInputsFusedQuantizedDense) CloneWithInputs(originalNode *Node, new
 	return BackendFusedQuantizedDense(newX, newWeights, newBias, newWq, ni.activation)
 }
 
-
 // BackendFusedSoftmax computes softmax along the specified axis.
 // Internal: prefer graph.Softmax which handles fallback and gradients.
 func BackendFusedSoftmax(x *Node, axis int) *Node { return backendFusedSoftmax(x, axis) }
@@ -154,10 +154,43 @@ func BackendFusedDense(x, weight, bias *Node, activation compute.ActivationType)
 	return backendFusedDense(x, weight, bias, activation)
 }
 
-// BackendFusedScaledDotProductAttention computes multi-head scaled dot-product attention.
-// Internal: prefer the InternalFusedOpCaller wrapper in layers which handles fallback and gradients.
-func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) *Node {
+// BackendFusedScaledDotProductAttention computes multi-head scaled dot-product attention via the
+// backend's fused op. It returns the attention output plus statesForVJP: the backend-specific state
+// tensors the fused backward consumes (the cuDNN flash softmax stats today; a slice so other
+// backends can carry a different set, e.g. an extra workspace tensor). statesForVJP is empty when
+// the backend has no fused backward. The gradient is the registered VJP
+// (fusedScaledDotProductAttentionVJP), which threads statesForVJP into the fused backward so the
+// [B,H,S,S] scores never materialize in either pass. Backends without the fused op panic with a
+// wrapped compute.ErrNotImplemented, so callers fall back.
+//
+// Internal: prefer to use the package ml/layers/attention instead, which provides the standard (and
+// stable) API for attention layers. This is an internal API that may change without notice.
+func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (output *Node, statesForVJP []*Node) {
 	return backendFusedScaledDotProductAttention(query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal, options)
+}
+
+// fusedScaledDotProductAttentionVJP is the registered VJP for NodeTypeFusedScaledDotProductAttention.
+// It threads statesForVJP into the fused backward, so the [B,H,S,S] scores never materialize.
+func fusedScaledDotProductAttentionVJP(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsFusedScaledDotProductAttention)
+	splitOutputs := splitNode(node)
+	output, statesForVJP := splitOutputs[0], splitOutputs[1:]
+	dOutput := vjps[0] // adjoint of the attention output; the state adjoints are unused.
+	dQuery, dKey, dValue := backendFusedScaledDotProductAttentionVJP(
+		inputs.query, inputs.key, inputs.value, inputs.mask,
+		inputs.numHeads, inputs.numKVHeads, inputs.axesLayout, inputs.scale, inputs.causal, inputs.options,
+		output, statesForVJP, dOutput)
+	// Grads align to node.inputNodes = [query, key, value (, mask)]. The fused backward runs in bf16;
+	// cast each grad back to its input's dtype so autodiff accumulation matches.
+	grads := []*Node{
+		ConvertDType(dQuery, inputs.query.DType()),
+		ConvertDType(dKey, inputs.key.DType()),
+		ConvertDType(dValue, inputs.value.DType()),
+	}
+	if inputs.mask != nil {
+		grads = append(grads, nil) // causal flash takes no mask operand; mask is not differentiated.
+	}
+	return grads
 }
 
 // BackendFusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
@@ -245,7 +278,6 @@ func (ni *nodeInputsQuantizedEmbeddingLookup) CloneWithInputs(originalNode *Node
 	return BackendQuantizedEmbeddingLookup(newInputs[0], newInputs[1], ni.tq)
 }
 
-
 // BackendQuantizedEmbeddingLookup performs a quantized embedding lookup (row gather)
 // with on-the-fly dequantization.
 // Internal: prefer nn.QuantizedGather which handles fallback and gradients.
@@ -294,16 +326,20 @@ const FusionEnv = "GOMLX_FUSION"
 // panic is re-thrown — this prevents real bugs in fused op implementations from
 // being silently swallowed.
 //
+// If useDecomposedAlternateVJP is set, the decomposed version is stored as the
+// vjpAlternateOutputs on the returned node, so that reverse-mode autodiff can
+// compute gradients through the decomposed graph without hand-written VJPs.
+// This should be set to true if there is no corresponding fused VJP.
+//
+// The returned opFused indicates whether the fused operation was taken (true) or
+// fell back to decomposed (false).
+//
 // Internal: this is used by higher-level wrappers (graph.Softmax, nn.Dense,
 // nn.LayerNorm) that pair a fused backend call with a decomposed fallback.
 //
-// When the fused call succeeds, the decomposed version is also stored as the
-// VJP alternate output, so that reverse-mode autodiff can compute gradients
-// through the decomposed graph without hand-written VJPs.
-//
 // Note: If "GOMLX_FUSION" (see FusionEnv constant) is disabled (set to "0", "false", etc.) the fused
 // version is never used. The default is enabled though.
-func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
+func InternalFusedOpCaller(fused, decomposed func() *Node, useDecomposedAlternateVJP bool) (output *Node, opFused bool) {
 	// Build decomposed output first so it has a lower nodeIdx than the fused
 	// node. The gradient loop iterates from output down to 0, so it will
 	// visit the fused node first and transfer its VJP to the decomposed
@@ -313,58 +349,79 @@ func InternalFusedOpCaller(fused, decomposed func() *Node) *Node {
 	if enabled, err := envutil.ReadBool(FusionEnv, true); err != nil {
 		panic(err)
 	} else if !enabled {
-		return decomposedOutput
+		return decomposedOutput, false
 	}
 
-	var output *Node
+	klog.V(2).Info("Attempt to call fused op")
 	err := exceptions.TryCatch[error](func() {
 		output = fused()
 	})
 	if err != nil {
 		if compute.IsNotImplemented(err) {
+			if klog.V(2).Enabled() {
+				klog.Infof("InternalFusedOpCaller(): failed to call fused op (not implemented). Falling back to decomposed op: %v", err)
+			}
 			// Expected: fused op doesn't support this config; fall back to decomposed.
-			return decomposedOutput
+			return decomposedOutput, false
 		}
 		// Unexpected error — re-panic so it surfaces instead of being silently masked.
 		panic(err)
 	}
-	// Store decomposed version for VJP computation; dead-code-eliminated if unused.
-	output.vjpAlternateOutputs = []*Node{decomposedOutput}
-	return output
+	klog.V(2).Info("InternalFusedOpCaller(): Successfully called fused op.")
+	// Store decomposed version for VJP computation if requested; dead-code-eliminated if unused.
+	if useDecomposedAlternateVJP {
+		output.vjpAlternateOutputs = []*Node{decomposedOutput}
+	}
+	return output, true
 }
 
 // InternalFusedOpCallerMulti is the multi-output counterpart of InternalFusedOpCaller.
 // It handles fused ops that return multiple outputs (e.g. FusedAttentionQKVProjection returning q, k, v).
 //
 // Like InternalFusedOpCaller, the decomposed version is built first so it has lower
-// node indices than the fused nodes. When the fused call succeeds, the decomposed
-// outputs are stored as vjpAlternateOutputs on the multi-output parent node for
-// reverse-mode autodiff.
-func InternalFusedOpCallerMulti(fused, decomposed func() []*Node) []*Node {
+// node indices than the fused nodes. When the fused call succeeds and useDecomposedAlternateVJP
+// is set, the decomposed outputs are stored as vjpAlternateOutputs on each individual
+// output node (which are split nodes under the hood) for reverse-mode autodiff.
+// This should be set to true if there is no corresponding fused VJP.
+//
+// The returned opFused indicates whether the fused operation was taken (true) or
+// fell back to decomposed (false).
+func InternalFusedOpCallerMulti(fused, decomposed func() []*Node, useDecomposedAlternateVJP bool) (outputs []*Node, opFused bool) {
 	decomposedOutputs := decomposed()
 
-	var outputs []*Node
 	err := exceptions.TryCatch[error](func() {
 		outputs = fused()
 	})
 	if err != nil {
 		if compute.IsNotImplemented(err) {
-			return decomposedOutputs
+			if klog.V(2).Enabled() {
+				klog.Infof("InternalFusedOpCallerMulti(): failed to call fused op (not implemented). Falling back to decomposed op: %v", err)
+			}
+			return decomposedOutputs, false
 		}
 		panic(err)
 	}
+	if len(outputs) != len(decomposedOutputs) {
+		exceptions.Panicf("InternalFusedOpCallerMulti: fused function returned %d outputs, but decomposed returned %d", len(outputs), len(decomposedOutputs))
+	}
+	klog.V(2).Info("InternalFusedOpCallerMulti(): Successfully called fused op.")
 
-	// Find the multi-output parent node via the first split node.
-	// The fused function returns split nodes; we need the underlying multi-output node.
-	if len(outputs) > 0 {
-		firstSplit := outputs[0]
-		splitInputs, ok := firstSplit.inputs.(*nodeInputsSplitNode)
-		if !ok {
-			exceptions.Panicf("InternalFusedOpCallerMulti: fused function returned non-split nodes; cannot set vjpAlternateOutputs")
+	if useDecomposedAlternateVJP {
+		for i, output := range outputs {
+			output.vjpAlternateOutputs = []*Node{decomposedOutputs[i]}
 		}
-		parent := splitInputs.multiOutputNode
-		parent.vjpAlternateOutputs = decomposedOutputs
 	}
 
-	return outputs
+	return outputs, true
+}
+
+// InternalBackendOutputs retrieves the unexported backend outputs of a node.
+//
+// WARNING: This is an internal GoMLX API. It is exposed specifically for
+// layer packages (like `attention`) that need to access backend details to
+// stitch together fused operations (e.g., FusedScaledDotProductAttention).
+//
+// End-users building standard computation graphs should never need to call this.
+func InternalBackendOutputs(n *Node) []compute.Value {
+	return n.outputOps
 }

@@ -32,10 +32,12 @@ func QuantizedGather(table, indices *Node, quant *Quantization) *Node {
 		panic("nn.QuantizedGather: only QuantGGML scheme is supported")
 	}
 	if ggml.CanDecompose(quant.GGMLType) {
-		return InternalFusedOpCaller(
+		res, _ := InternalFusedOpCaller(
 			func() *Node { return BackendQuantizedEmbeddingLookup(table, indices, quant) },
 			func() *Node { return ggml.EmbeddingLookupDecomposed(table, indices, quant.GGMLType) },
+			true,
 		)
+		return res
 	}
 	return BackendQuantizedEmbeddingLookup(table, indices, quant)
 }
