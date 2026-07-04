@@ -50,7 +50,7 @@ const (
 //   - scope: Model scope passed along by the Generator.
 //   - tokens: Input token sequence, shaped [batch, paddedSeqLen].
 //   - seqLen: A [batchSize] tensor containing the unpadded sequence length for each element of the batch.
-//             If nil, the full paddedSeqLen is assumed (no padding / masking).
+//     If nil, the full paddedSeqLen is assumed (no padding / masking).
 //
 // Returns:
 //   - logits: Output logits per candidate token (vocabSize), shaped [batch, seqLen, vocabSize]

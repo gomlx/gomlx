@@ -17,12 +17,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"math"
-	"math/bits"
-	"math/rand/v2"
 	"os"
-	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -33,8 +28,10 @@ import (
 	"github.com/gomlx/go-huggingface/tokenizers"
 	"github.com/gomlx/go-huggingface/tokenizers/api"
 	. "github.com/gomlx/gomlx/core/graph"
-	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/ml/layers/attention/kvcache"
 	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/zoo/transformer/generate"
+	"github.com/gomlx/gomlx/ml/zoo/transformer/generate/sample"
 	"github.com/gomlx/onnx-gomlx/onnx"
 	onnxparser "github.com/gomlx/onnx-gomlx/onnx/parser"
 	"k8s.io/klog/v2"
@@ -57,6 +54,7 @@ var (
 	flagTopK        = flag.Int("top-k", 64, "Top-k sampling (0 = disabled).")
 	flagFP16        = flag.Bool("fp16", false, "Use fp16 (float16) model variant (570MB instead of 1.14GB).")
 	flagBackend     = flag.String("backend", "", "Backend to use (default: auto-detect).")
+	flagNaive       = flag.Bool("naive", false, "Use naive generation (re-runs the full prompt at each step) instead of KV cache.")
 )
 
 func main() {
@@ -105,13 +103,7 @@ func main() {
 	}
 	defer onnxModel.Close()
 
-	inputNames, inputShapes := onnxModel.Inputs()
-	outputNames, _ := onnxModel.Outputs()
-	fmt.Printf("Model inputs (%d):\n", len(inputNames))
-	for i, name := range inputNames {
-		fmt.Printf("  %s: %v\n", name, inputShapes[i])
-	}
-	fmt.Printf("Model outputs: %v\n\n", outputNames)
+	inputNames, _ := onnxModel.Inputs()
 
 	// Load model weights into model.
 	scope := model.NewStore().RootScope()
@@ -134,10 +126,6 @@ func main() {
 	hasPositionIDs := inputSet["position_ids"]
 	hasAttentionMask := inputSet["attention_mask"]
 
-	padID, err := tok.SpecialTokenID(api.TokPad)
-	if err != nil {
-		padID = 0
-	}
 	eosID, err := tok.SpecialTokenID(api.TokEndOfSentence)
 	if err != nil {
 		eosID = 1
@@ -149,87 +137,184 @@ func main() {
 	// Parse KV cache structure from model inputs/outputs.
 	kv := parseKVStructure(onnxModel)
 
-	if kv.hasOutputs() {
-		fmt.Printf("Using KV cache: %d layers, %d heads, dim=%d\n\n", kv.numLayers, kv.kvHeads, kv.headDim)
-		cacheSize := int(math.Log2(float64(maxSeqLen))) + 2
+	// Define NaiveModelFn using generate package's seqLen
+	var naiveModelFn generate.NaiveModelFn = func(scope *model.Scope, tokens *Node, seqLen *Node) *Node {
+		g := tokens.Graph()
+		inputs := map[string]*Node{"input_ids": ConvertType(tokens, dtypes.Int64)}
 
-		prefillExec := model.MustNewExec(backend, scope.Store(),
-			func(scope *model.Scope, idNode, maskNode, posNode, seqLenNode *Node) []*Node {
-				return prefillKVCacheGraph(scope, onnxModel, kv, hasAttentionMask, hasPositionIDs,
-					idNode, maskNode, posNode, seqLenNode)
-			},
-		)
-		prefillExec.SetMaxCache(cacheSize)
-		defer prefillExec.Finalize()
-
-		decodeExec := model.MustNewExec(backend, scope.Store(),
-			func(scope *model.Scope, idNode, maskNode, posNode, concatKeysNode, concatValuesNode, kvInsertPosNode *Node) []*Node {
-				return decodeWithKVCacheGraph(scope, onnxModel, kv, hasAttentionMask, hasPositionIDs,
-					idNode, maskNode, posNode, concatKeysNode, concatValuesNode, kvInsertPosNode)
-			},
-		)
-		// Power-of-2 padding means O(log(maxSeqLen)) unique graph shapes.
-		decodeExec.SetMaxCache(cacheSize)
-		defer decodeExec.Finalize()
-
-		benchmarkMode := *flagPromptsFile != ""
-		warmupRounds := 0
-		if benchmarkMode {
-			warmupRounds = *flagWarmup
+		if hasAttentionMask {
+			// Create attention_mask from seqLen.
+			// seqLen has shape [batchSize]. We want mask shape [batchSize, totalSeqLen]
+			totalSeqLen := tokens.Shape().Dimensions[1]
+			iotaSeq := Iota(g, shapes.Make(dtypes.Int32, 1, totalSeqLen), 1)
+			seqLenCol := ExpandDims(seqLen, 1)
+			maskNode := Where(LessThan(iotaSeq, seqLenCol), Const(g, int32(1)), Const(g, int32(0)))
+			inputs["attention_mask"] = ConvertType(maskNode, dtypes.Int64)
 		}
-		totalRounds := warmupRounds + 1
-
-		for round := range totalRounds {
-			isWarmup := round < warmupRounds
-			if isWarmup {
-				fmt.Printf("=== Warmup round %d/%d ===\n", round+1, warmupRounds)
-			} else if benchmarkMode {
-				fmt.Println("=== Measurement round ===")
-			}
-
-			var totalTokens int
-			var totalDuration time.Duration
-
-			for _, prompt := range prompts {
-				promptTokens := tokenizePrompt(tok, formatChatPrompt(prompt))
-				if len(promptTokens) >= maxSeqLen {
-					fmt.Printf("Warning: prompt %q too long (%d tokens), skipping\n", prompt, len(promptTokens))
-					continue
-				}
-
-				verbose := !isWarmup
-				if verbose {
-					fmt.Printf("Prompt: %q\n", prompt)
-					fmt.Printf("Tokenized to %d tokens\n\n", len(promptTokens))
-					fmt.Println("Generating...")
-					fmt.Println("---")
-				}
-
-				n, dur := generateOne(backend, prefillExec, decodeExec, tok, promptTokens,
-					kv, padID, eosID, maxSeqLen, maxTokens, verbose)
-
-				if verbose {
-					fmt.Println("\n---")
-					if n > 0 {
-						tokensPerSec := float64(n) / dur.Seconds()
-						fmt.Printf("Generated %d tokens in %.2fs (%.1f tokens/s)\n\n", n, dur.Seconds(), tokensPerSec)
-					}
-				}
-
-				totalTokens += n
-				totalDuration += dur
-			}
-
-			if benchmarkMode && !isWarmup && totalTokens > 0 {
-				fmt.Printf("\nAverage: %.1f tokens/s (%d tokens in %.2fs)\n",
-					float64(totalTokens)/totalDuration.Seconds(), totalTokens, totalDuration.Seconds())
-			}
+		if hasPositionIDs {
+			// Position IDs is [batchSize, totalSeqLen]. We can just use Iota.
+			totalSeqLen := tokens.Shape().Dimensions[1]
+			batchSize := tokens.Shape().Dimensions[0]
+			iotaSeq := Iota(g, shapes.Make(dtypes.Int32, 1, totalSeqLen), 1)
+			seqLenCol := ExpandDims(seqLen, 1)
+			posNode := Where(LessThan(iotaSeq, seqLenCol), iotaSeq, ConstAs(iotaSeq, 0))
+			posNode = BroadcastToDims(posNode, batchSize, totalSeqLen)
+			inputs["position_ids"] = ConvertType(posNode, dtypes.Int64)
 		}
-	} else {
-		// Non-KV-cache fallback.
 		if kv.numLayers > 0 {
-			fmt.Printf("KV cache: %d past_key_values inputs will be provided as empty zeros\n", kv.numLayers*2)
+			batchSize := tokens.Shape().Dimensions[0]
+			for i := range kv.numLayers {
+				inputs[kv.inputKeyNames[i]] = Zeros(g, shapes.Make(kv.kvDType, batchSize, kv.kvHeads, 0, kv.headDim))
+				inputs[kv.inputValueNames[i]] = Zeros(g, shapes.Make(kv.kvDType, batchSize, kv.kvHeads, 0, kv.headDim))
+			}
 		}
+
+		outputs := onnxModel.CallGraph(scope, g, inputs)
+		logits := outputs[kv.logitsIndex]
+		return logits
+	}
+
+	// Define KVCacheModelFn
+	var cacheModelFn generate.KVCacheModelFn = func(scope *model.Scope, newTokens *Node, position *Node, cache kvcache.KVCacheNodes) (*Node, kvcache.KVCacheNodes) {
+		g := newTokens.Graph()
+		batchSize := newTokens.Shape().Dimensions[0]
+		inputs := map[string]*Node{"input_ids": ConvertType(newTokens, dtypes.Int64)}
+
+		// 1. Set past key/value cache inputs from the cache map.
+		for i := range kv.numLayers {
+			layerScopePath := fmt.Sprintf("/layer_%d", i)
+			inputs[kv.inputKeyNames[i]] = cache[layerScopePath+kvcache.KeySuffix]
+			inputs[kv.inputValueNames[i]] = cache[layerScopePath+kvcache.ValueSuffix]
+		}
+
+		// 2. Create the attention mask of shape [batchSize, cacheSeqLen + newSeqLen].
+		cacheSeqLen := inputs[kv.inputKeyNames[0]].Shape().Dimensions[2]
+		newSeqLen := newTokens.Shape().Dimensions[1]
+		totalSeqLen := cacheSeqLen + newSeqLen
+		iotaSeq := Iota(g, shapes.Make(dtypes.Int32, 1, totalSeqLen), 1)
+		posCol := Reshape(position, 1, 1)
+		posCol = BroadcastToDims(posCol, batchSize, 1)
+
+		isPast := LessThan(iotaSeq, Const(g, int32(cacheSeqLen)))
+		isValidPast := And(isPast, LessThan(iotaSeq, posCol))
+		isNew := LessOrEqual(Const(g, int32(cacheSeqLen)), iotaSeq)
+
+		maskNode := Or(isValidPast, isNew)
+		maskNode = Where(maskNode, Const(g, int32(1)), Const(g, int32(0)))
+		inputs["attention_mask"] = ConvertType(maskNode, dtypes.Int64)
+
+		if hasPositionIDs {
+			iotaNew := Iota(g, shapes.Make(dtypes.Int32, 1, newSeqLen), 1)
+			posNode := Add(posCol, iotaNew)
+			inputs["position_ids"] = ConvertType(posNode, dtypes.Int64)
+		}
+
+		// 3. Call the ONNX model
+		allOutputs := onnxModel.CallGraph(scope, g, inputs)
+		logits := allOutputs[kv.logitsIndex]
+
+		// 4. Update the KV Cache
+		updatedCache := make(kvcache.KVCacheNodes)
+		for k, v := range cache {
+			updatedCache[k] = v
+		}
+
+		batchIdx := Const(g, int32(0))
+		headsIdx := Const(g, int32(0))
+		dimIdx := Const(g, int32(0))
+
+		for i := range kv.numLayers {
+			presentKeys := allOutputs[kv.outputKeyIndices[i]]
+			presentValues := allOutputs[kv.outputValueIndices[i]]
+
+			sliceDims := []int{batchSize, kv.kvHeads, newSeqLen, kv.headDim}
+			newKey := DynamicSlice(presentKeys, []*Node{
+				Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(cacheSeqLen)), Const(g, int32(0)),
+			}, sliceDims)
+			newValue := DynamicSlice(presentValues, []*Node{
+				Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(cacheSeqLen)), Const(g, int32(0)),
+			}, sliceDims)
+
+			layerScopePath := fmt.Sprintf("/layer_%d", i)
+			kKey := layerScopePath + kvcache.KeySuffix
+			vKey := layerScopePath + kvcache.ValueSuffix
+			prevK := updatedCache[kKey]
+			prevV := updatedCache[vKey]
+
+			updatedK := prevK
+			updatedV := prevV
+			for stepIdx := 0; stepIdx < newSeqLen; stepIdx++ {
+				writePos := AddScalar(position, stepIdx)
+				tokenK := Slice(newKey, AxisRange(), AxisRange(), AxisRange(stepIdx, stepIdx+1), AxisRange())
+				tokenV := Slice(newValue, AxisRange(), AxisRange(), AxisRange(stepIdx, stepIdx+1), AxisRange())
+
+				updatedK = DynamicUpdateSlice(updatedK, tokenK, []*Node{batchIdx, headsIdx, writePos, dimIdx})
+				updatedV = DynamicUpdateSlice(updatedV, tokenV, []*Node{batchIdx, headsIdx, writePos, dimIdx})
+			}
+
+			updatedCache[kKey] = updatedK
+			updatedCache[vKey] = updatedV
+		}
+
+		return logits, updatedCache
+	}
+
+	// Setup KVCache if needed
+	var kvCache *kvcache.KVCache
+	if !*flagNaive && kv.hasOutputs() {
+		kvCache = kvcache.NewKVCache().
+			WithSinkPositions(0).
+			WithMaxSeqLenPerLayerType([]int{maxSeqLen, maxSeqLen}).
+			WithMinSeqLenPerLayerType([]int{32, 32})
+
+		scopes := make([]string, kv.numLayers)
+		for i := range kv.numLayers {
+			scopes[i] = fmt.Sprintf("/layer_%d", i)
+		}
+		kvCache.WithOrderedScopes(scopes)
+	}
+
+	var decoder *generate.Generator
+	if *flagNaive || kvCache == nil {
+		fmt.Printf("Using Naive generation (without KV cache)\n\n")
+		decoder = generate.New(naiveModelFn).FromScope(scope)
+	} else {
+		fmt.Printf("Using KV cache: %d layers, %d heads, dim=%d\n\n", kv.numLayers, kv.kvHeads, kv.headDim)
+		decoder = generate.New(cacheModelFn).FromScope(scope)
+		decoder.WithKVCache(kvCache, kv.kvHeads, kv.headDim, kv.kvDType)
+	}
+
+	if *flagTemp > 0 {
+		decoder.WithStrategy(sample.StrategyTemperature).WithTemperature(float32(*flagTemp))
+	} else {
+		decoder.WithStrategy(sample.StrategyGreedy)
+	}
+	if *flagTopK > 0 {
+		decoder.WithTopK(*flagTopK)
+	}
+	decoder.WithEOS(eosID)
+	encodedEOT := tok.Encode("<end_of_turn>")
+	if len(encodedEOT) > 0 {
+		decoder.WithStopTokens(encodedEOT[len(encodedEOT)-1])
+	}
+
+	benchmarkMode := *flagPromptsFile != ""
+	warmupRounds := 0
+	if benchmarkMode {
+		warmupRounds = *flagWarmup
+	}
+	totalRounds := warmupRounds + 1
+
+	for round := range totalRounds {
+		isWarmup := round < warmupRounds
+		if isWarmup {
+			fmt.Printf("=== Warmup round %d/%d ===\n", round+1, warmupRounds)
+		} else if benchmarkMode {
+			fmt.Println("=== Measurement round ===")
+		}
+
+		var totalTokens int
+		var totalDuration time.Duration
 
 		for _, prompt := range prompts {
 			promptTokens := tokenizePrompt(tok, formatChatPrompt(prompt))
@@ -238,19 +323,49 @@ func main() {
 				continue
 			}
 
-			fmt.Printf("Prompt: %q\n", prompt)
-			fmt.Printf("Tokenized to %d tokens\n\n", len(promptTokens))
-			fmt.Println("Generating...")
-			fmt.Println("---")
-			startTime := time.Now()
-			n := generateWithoutKVCache(backend, scope, onnxModel, tok, promptTokens,
-				padID, eosID, maxSeqLen, maxTokens, hasAttentionMask, hasPositionIDs, kv)
-			duration := time.Since(startTime)
-			fmt.Println("\n---")
-			if n > 0 {
-				tokensPerSec := float64(n) / duration.Seconds()
-				fmt.Printf("Generated %d tokens in %.2fs (%.1f tokens/s)\n\n", n, duration.Seconds(), tokensPerSec)
+			verbose := !isWarmup
+			if verbose {
+				fmt.Printf("Prompt: %q\n", prompt)
+				fmt.Printf("Tokenized to %d tokens\n\n", len(promptTokens))
+				fmt.Println("Generating...")
+				fmt.Println("---")
 			}
+
+			// Adjust max length dynamically for this prompt
+			promptLen := len(promptTokens)
+			decoder.WithMaxLength(min(promptLen+maxTokens, maxSeqLen))
+
+			var n int
+			startTime := time.Now()
+			err := decoder.GenerateStreaming(backend, scope, promptTokens, func(token int) bool {
+				if verbose {
+					tokenText := tok.Decode([]int{token})
+					fmt.Print(tokenText)
+					_ = os.Stdout.Sync()
+				}
+				n++
+				return true
+			})
+			if err != nil {
+				klog.Fatalf("Generation failed: %+v", err)
+			}
+			dur := time.Since(startTime)
+
+			if verbose {
+				fmt.Println("\n---")
+				if n > 0 {
+					tokensPerSec := float64(n) / dur.Seconds()
+					fmt.Printf("Generated %d tokens in %.2fs (%.1f tokens/s)\n\n", n, dur.Seconds(), tokensPerSec)
+				}
+			}
+
+			totalTokens += n
+			totalDuration += dur
+		}
+
+		if benchmarkMode && !isWarmup && totalTokens > 0 {
+			fmt.Printf("\nAverage: %.1f tokens/s (%d tokens in %.2fs)\n",
+				float64(totalTokens)/totalDuration.Seconds(), totalTokens, totalDuration.Seconds())
 		}
 	}
 }
@@ -304,42 +419,12 @@ func tokenizePrompt(tok api.Tokenizer, prompt string) []int32 {
 	return tokens
 }
 
-// nextPow2 returns the next power of 2 >= n.
-func nextPow2(n int) int {
-	if n <= 0 {
-		return 1
-	}
-	return 1 << (bits.UintSize - bits.LeadingZeros(uint(n-1)))
-}
-
-// padSequence pads token IDs to targetLen and returns input_ids, attention_mask, and position_ids
-// as flat []int64 slices suitable for execution.
-func padSequence(tokens []int32, padID int32, targetLen int) (inputIDs []int64, attentionMask []int64, positionIDs []int64) {
-	ids := make([]int64, targetLen)
-	mask := make([]int64, targetLen)
-	pos := make([]int64, targetLen)
-
-	for i := range targetLen {
-		if i < len(tokens) {
-			ids[i] = int64(tokens[i])
-			mask[i] = 1
-			pos[i] = int64(i)
-		} else {
-			ids[i] = int64(padID)
-			mask[i] = 0
-			pos[i] = 0
-		}
-	}
-	return ids, mask, pos
-}
-
 // kvStructure holds the KV cache layout parsed from the ONNX model.
 type kvStructure struct {
 	numLayers       int
 	inputKeyNames   []string // past_key_values.{i}.key, ordered by layer
 	inputValueNames []string // past_key_values.{i}.value, ordered by layer
 	// outputKeyIndices are indices into the model's output list for the present key tensors.
-	// The model returns present KV (past KV concatenated with the newly computed token's KV).
 	outputKeyIndices []int
 	// outputValueIndices are indices into the model's output list for the present value tensors.
 	outputValueIndices []int
@@ -354,28 +439,6 @@ func (kv *kvStructure) hasOutputs() bool {
 	return kv.numLayers > 0 && len(kv.outputKeyIndices) == kv.numLayers
 }
 
-// extractOutputs collects per-layer KV outputs from the model and concatenates them
-// across layers into [numLayers, 1, kvHeads, seqLen, headDim] tensors.
-// Each layer's output contains the past concatenated KV (the full KV history for that layer),
-// and we stack them along a new leading axis so all layers can be carried as a single tensor.
-func (kv *kvStructure) extractOutputs(allOutputs []*Node) (concatKeys, concatValues *Node) {
-	keys := make([]*Node, kv.numLayers)
-	values := make([]*Node, kv.numLayers)
-	for i := range kv.numLayers {
-		keys[i] = InsertAxes(allOutputs[kv.outputKeyIndices[i]], 0)
-		values[i] = InsertAxes(allOutputs[kv.outputValueIndices[i]], 0)
-	}
-	return Concatenate(keys, 0), Concatenate(values, 0)
-}
-
-// setInputs splits concatenated KV and feeds per-layer inputs into the model input map.
-func (kv *kvStructure) setInputs(inputs map[string]*Node, concatKeys, concatValues *Node) {
-	for i := range kv.numLayers {
-		inputs[kv.inputKeyNames[i]] = Squeeze(Slice(concatKeys, AxisElem(i)), 0)
-		inputs[kv.inputValueNames[i]] = Squeeze(Slice(concatValues, AxisElem(i)), 0)
-	}
-}
-
 // parseKVStructure inspects the ONNX model's inputs and outputs to identify
 // the KV cache layout: layer count, input/output names, and shapes.
 func parseKVStructure(onnxModel onnx.Model) *kvStructure {
@@ -384,9 +447,6 @@ func parseKVStructure(onnxModel onnx.Model) *kvStructure {
 
 	kv := &kvStructure{logitsIndex: 0} // default logits at index 0
 
-	// Find KV input names and shapes.
-	// Note: fmt.Sscanf returns n=1 once the integer is parsed, even if the trailing
-	// literal doesn't match. We reconstruct and compare to ensure an exact match.
 	layerKeys := make(map[int]string)
 	layerValues := make(map[int]string)
 	for i, name := range inputNames {
@@ -408,7 +468,6 @@ func parseKVStructure(onnxModel onnx.Model) *kvStructure {
 		return kv
 	}
 
-	// Build ordered lists of KV input names.
 	kv.inputKeyNames = make([]string, kv.numLayers)
 	kv.inputValueNames = make([]string, kv.numLayers)
 	for i := range kv.numLayers {
@@ -416,7 +475,6 @@ func parseKVStructure(onnxModel onnx.Model) *kvStructure {
 		kv.inputValueNames[i] = layerValues[i]
 	}
 
-	// Find KV output indices and logits index.
 	kv.outputKeyIndices = make([]int, kv.numLayers)
 	kv.outputValueIndices = make([]int, kv.numLayers)
 	foundKeys := 0
@@ -426,7 +484,6 @@ func parseKVStructure(onnxModel onnx.Model) *kvStructure {
 			kv.logitsIndex = i
 		}
 		var layerIdx int
-		// Try "present.{i}.key" pattern (HuggingFace Optimum).
 		if n, _ := fmt.Sscanf(name, "present.%d.key", &layerIdx); n == 1 && name == fmt.Sprintf("present.%d.key", layerIdx) && layerIdx < kv.numLayers {
 			kv.outputKeyIndices[layerIdx] = i
 			foundKeys++
@@ -435,7 +492,6 @@ func parseKVStructure(onnxModel onnx.Model) *kvStructure {
 			kv.outputValueIndices[layerIdx] = i
 			foundValues++
 		}
-		// Try "present_key_values.{i}.key" pattern.
 		if n, _ := fmt.Sscanf(name, "present_key_values.%d.key", &layerIdx); n == 1 && name == fmt.Sprintf("present_key_values.%d.key", layerIdx) && layerIdx < kv.numLayers {
 			kv.outputKeyIndices[layerIdx] = i
 			foundKeys++
@@ -447,370 +503,9 @@ func parseKVStructure(onnxModel onnx.Model) *kvStructure {
 	}
 
 	if foundKeys != kv.numLayers || foundValues != kv.numLayers {
-		// Model has KV inputs but not matching outputs; can't use KV cache.
 		kv.outputKeyIndices = nil
 		kv.outputValueIndices = nil
 	}
 
 	return kv
-}
-
-// prefillKVCacheGraph builds the computation graph for the prefill step.
-// It takes the full prompt tokens (padded to power-of-2), runs them through the model
-// with empty KV caches, and returns:
-//   - lastLogits [vocabSize]: logits for the last real token position, used to sample the first generated token.
-//   - concatKeys [numLayers, 1, kvHeads, seqLen, headDim]: per-layer key caches concatenated across layers.
-//   - concatValues [numLayers, 1, kvHeads, seqLen, headDim]: per-layer value caches concatenated across layers.
-//
-// The returned KV caches initialize the decode loop. The attention mask must mark
-// which positions are real tokens vs padding so the model attends only to valid positions.
-func prefillKVCacheGraph(
-	scope *model.Scope, onnxModel onnx.Model, kv *kvStructure,
-	hasAttentionMask, hasPositionIDs bool,
-	idNode, maskNode, posNode, seqLenNode *Node,
-) []*Node {
-	g := idNode.Graph()
-	inputs := map[string]*Node{"input_ids": idNode}
-	if hasAttentionMask {
-		inputs["attention_mask"] = maskNode
-	}
-	if hasPositionIDs {
-		inputs["position_ids"] = posNode
-	}
-	for i := range kv.numLayers {
-		inputs[kv.inputKeyNames[i]] = Zeros(g, shapes.Make(kv.kvDType, 1, kv.kvHeads, 0, kv.headDim))
-		inputs[kv.inputValueNames[i]] = Zeros(g, shapes.Make(kv.kvDType, 1, kv.kvHeads, 0, kv.headDim))
-	}
-
-	allOutputs := onnxModel.CallGraph(scope, g, inputs)
-
-	// Extract last-token logits: [1, seqLen, vocabSize] -> [vocabSize]
-	logits := allOutputs[kv.logitsIndex]
-	lastPos := SubScalar(seqLenNode, int32(1))
-	vocabSize := logits.Shape().Dimensions[2]
-	lastLogits := DynamicSlice(logits, []*Node{
-		Const(g, int32(0)), lastPos, Const(g, int32(0)),
-	}, []int{1, 1, vocabSize})
-	lastLogits = Reshape(lastLogits, vocabSize)
-
-	concatKeys, concatValues := kv.extractOutputs(allOutputs)
-	return []*Node{lastLogits, concatKeys, concatValues}
-}
-
-// decodeWithKVCacheGraph builds the computation graph for a single decode step.
-// It takes one new token and the accumulated KV cache, runs the model, extracts the
-// newly computed KV entry, and inserts it into the padded cache buffer at kvInsertPos.
-//
-// The attention mask is obligatory: it tells the model which columns of the KV cache
-// contain valid past tokens (masking out unused padding slots).
-//
-// Returns:
-//   - lastLogits [vocabSize]: logits for the new token.
-//   - updatedKeys [numLayers, 1, kvHeads, paddedSize, headDim]: cache with the new key inserted.
-//   - updatedValues [numLayers, 1, kvHeads, paddedSize, headDim]: cache with the new value inserted.
-func decodeWithKVCacheGraph(
-	scope *model.Scope, onnxModel onnx.Model, kv *kvStructure,
-	hasAttentionMask, hasPositionIDs bool,
-	idNode, maskNode, posNode, concatKeysNode, concatValuesNode, kvInsertPosNode *Node,
-) []*Node {
-	g := idNode.Graph()
-	inputs := map[string]*Node{"input_ids": idNode}
-	inputs["attention_mask"] = maskNode
-	if hasPositionIDs {
-		inputs["position_ids"] = posNode
-	}
-	kv.setInputs(inputs, concatKeysNode, concatValuesNode)
-
-	allOutputs := onnxModel.CallGraph(scope, g, inputs)
-
-	// Logits for the single new token: [1, 1, vocabSize] -> [vocabSize]
-	logits := allOutputs[kv.logitsIndex]
-	vocabSize := logits.Shape().Dimensions[2]
-	lastLogits := Reshape(logits, vocabSize)
-
-	presentKeys, presentValues := kv.extractOutputs(allOutputs)
-	// presentKeys shape: [numLayers, 1, kvHeads, P+1, headDim] where P = paddedSize.
-	// The model appends the new token's KV at position P (after the padded past cache).
-	paddedSize := concatKeysNode.Shape().Dimensions[3]
-	sliceDims := []int{kv.numLayers, 1, kv.kvHeads, 1, kv.headDim}
-	newKeys := DynamicSlice(presentKeys, []*Node{
-		Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(0)),
-		Const(g, int32(paddedSize)), Const(g, int32(0)),
-	}, sliceDims)
-	newValues := DynamicSlice(presentValues, []*Node{
-		Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(0)),
-		Const(g, int32(paddedSize)), Const(g, int32(0)),
-	}, sliceDims)
-
-	// Insert new KV at kvInsertPos in the padded buffer.
-	updatedKeys := DynamicUpdateSlice(concatKeysNode, newKeys, []*Node{
-		Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(0)),
-		kvInsertPosNode, Const(g, int32(0)),
-	})
-	updatedValues := DynamicUpdateSlice(concatValuesNode, newValues, []*Node{
-		Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(0)),
-		kvInsertPosNode, Const(g, int32(0)),
-	})
-
-	return []*Node{lastLogits, updatedKeys, updatedValues}
-}
-
-// generateOne runs a single prompt through prefill and decode with KV cache,
-// returning the number of tokens generated and the wall-clock duration.
-func generateOne(
-	backend compute.Backend,
-	prefillExec *model.Exec,
-	decodeExec *model.Exec,
-	tok api.Tokenizer,
-	promptTokens []int32,
-	kv *kvStructure,
-	padID, eosID, maxSeqLen, maxTokens int,
-	verbose bool,
-) (int, time.Duration) {
-	startTime := time.Now()
-	seqLen := len(promptTokens)
-	paddedLen := nextPow2(seqLen)
-
-	// Pad prompt and run prefill.
-	ids, mask, pos := padSequence(promptTokens, int32(padID), paddedLen)
-	prefillResults := prefillExec.MustCall(
-		[][]int64{ids}, [][]int64{mask}, [][]int64{pos}, int32(seqLen),
-	)
-
-	logitsTensor := prefillResults[0]
-	kvKeys := prefillResults[1]   // [numLayers, 1, kvHeads, paddedLen, headDim]
-	kvValues := prefillResults[2] // [numLayers, 1, kvHeads, paddedLen, headDim]
-
-	// Sample first token from prefill logits.
-	logits := tensors.MustCopyFlatData[float32](logitsTensor)
-	nextToken := sampleToken(logits, *flagTemp, *flagTopK)
-	tokenText := tok.Decode([]int{int(nextToken)})
-	if int(nextToken) == eosID || tokenText == "<end_of_turn>" {
-		return 0, time.Since(startTime)
-	}
-	if verbose {
-		fmt.Print(tokenText)
-	}
-	tokensGenerated := 1
-
-	// Decode loop with power-of-2 KV cache padding.
-	// The padded buffer stays at a fixed power-of-2 size, so the decode graph
-	// only needs to be recompiled when crossing a power-of-2 boundary.
-	realKVLen := seqLen
-	paddedSize := paddedLen
-
-	for range maxTokens - 1 {
-		if realKVLen+1 >= maxSeqLen {
-			if verbose {
-				fmt.Printf("\n(reached max sequence length %d)", maxSeqLen)
-			}
-			break
-		}
-
-		// Grow buffer if the next insertion would exceed current padded size.
-		if realKVLen >= paddedSize {
-			paddedSize = nextPow2(realKVLen + 1)
-			kvKeys = growKVBuffer(backend, kvKeys, paddedSize)
-			kvValues = growKVBuffer(backend, kvValues, paddedSize)
-		}
-
-		// Build attention mask: paddedSize+1 positions (padded past + new token).
-		decodeMask := make([]int64, paddedSize+1)
-		for i := 0; i < realKVLen; i++ {
-			decodeMask[i] = 1
-		}
-		decodeMask[paddedSize] = 1 // new token position
-
-		results := decodeExec.MustCall(
-			[][]int64{{int64(nextToken)}},
-			[][]int64{decodeMask},
-			[][]int64{{int64(realKVLen)}},
-			kvKeys,
-			kvValues,
-			int32(realKVLen), // kvInsertPos
-		)
-
-		logitsTensor = results[0]
-		kvKeys = results[1]
-		kvValues = results[2]
-		realKVLen++
-
-		logits = tensors.MustCopyFlatData[float32](logitsTensor)
-		nextToken = sampleToken(logits, *flagTemp, *flagTopK)
-		tokenText = tok.Decode([]int{int(nextToken)})
-		if int(nextToken) == eosID || tokenText == "<end_of_turn>" {
-			break
-		}
-		if verbose {
-			fmt.Print(tokenText)
-		}
-		tokensGenerated++
-	}
-
-	return tokensGenerated, time.Since(startTime)
-}
-
-// growKVBuffer creates a new padded KV buffer by zero-padding along the sequence dimension.
-func growKVBuffer(backend compute.Backend, kv *tensors.Tensor, targetSeqLen int) *tensors.Tensor {
-	oldShape := kv.Shape()
-	if oldShape.Dimensions[3] >= targetSeqLen {
-		return kv
-	}
-	newShape := shapes.Make(oldShape.DType,
-		oldShape.Dimensions[0], oldShape.Dimensions[1],
-		oldShape.Dimensions[2], targetSeqLen, oldShape.Dimensions[4])
-	zeroTarget := tensors.FromShape(newShape)
-	return model.MustCallOnce(backend, nil,
-		func(_ *model.Scope, target, old *Node) *Node {
-			g := old.Graph()
-			return DynamicUpdateSlice(target, old, []*Node{
-				Const(g, int32(0)), Const(g, int32(0)), Const(g, int32(0)),
-				Const(g, int32(0)), Const(g, int32(0)),
-			})
-		},
-		zeroTarget, kv,
-	)
-}
-
-// generateWithoutKVCache runs generation without KV cache: each step processes
-// the full sequence with power-of-2 padding. A persistent Exec is created
-// outside the loop to enable compilation caching across steps.
-func generateWithoutKVCache(
-	backend compute.Backend, scope *model.Scope, onnxModel onnx.Model, tok api.Tokenizer,
-	promptTokens []int32,
-	padID, eosID, maxSeqLen, maxTokens int, hasAttentionMask, hasPositionIDs bool,
-	kv *kvStructure,
-) int {
-	// Create the Exec outside the loop. The seqLen parameter is passed dynamically
-	// so the same compiled graph works for different sequence lengths within the
-	// same power-of-2 padded shape.
-	genExec := model.MustNewExec(backend, scope.Store(),
-		func(scope *model.Scope, idNode, maskNode, posNode, seqLenNode *Node) *Node {
-			g := idNode.Graph()
-			inputs := map[string]*Node{"input_ids": idNode}
-			if hasAttentionMask {
-				inputs["attention_mask"] = maskNode
-			}
-			if hasPositionIDs {
-				inputs["position_ids"] = posNode
-			}
-			if kv.numLayers > 0 {
-				for i := range kv.numLayers {
-					inputs[kv.inputKeyNames[i]] = Zeros(g, shapes.Make(kv.kvDType, 1, kv.kvHeads, 0, kv.headDim))
-					inputs[kv.inputValueNames[i]] = Zeros(g, shapes.Make(kv.kvDType, 1, kv.kvHeads, 0, kv.headDim))
-				}
-			}
-
-			outputs := onnxModel.CallGraph(scope, g, inputs)
-			logits := outputs[0]
-
-			// Extract logits at the last real token position.
-			lastPos := SubScalar(seqLenNode, int32(1))
-			vocabSize := logits.Shape().Dimensions[2]
-			lastLogits := DynamicSlice(logits, []*Node{
-				Const(g, int32(0)), lastPos, Const(g, int32(0)),
-			}, []int{1, 1, vocabSize})
-			lastLogits = Reshape(lastLogits, vocabSize)
-			return lastLogits
-		},
-	)
-	defer genExec.Finalize()
-
-	tokens := slices.Clone(promptTokens)
-	tokensGenerated := 0
-
-	for range maxTokens {
-		seqLen := len(tokens)
-		if seqLen >= maxSeqLen {
-			fmt.Printf("\n(reached max sequence length %d)", maxSeqLen)
-			break
-		}
-
-		targetLen := min(nextPow2(seqLen), maxSeqLen)
-		ids, mask, pos := padSequence(tokens, int32(padID), targetLen)
-
-		output := genExec.MustCall1([][]int64{ids}, [][]int64{mask}, [][]int64{pos}, int32(seqLen))
-
-		logits := tensors.MustCopyFlatData[float32](output)
-		nextToken := sampleToken(logits, *flagTemp, *flagTopK)
-		tokenText := tok.Decode([]int{int(nextToken)})
-		if int(nextToken) == eosID || tokenText == "<end_of_turn>" {
-			break
-		}
-		fmt.Print(tokenText)
-		tokens = append(tokens, nextToken)
-		tokensGenerated++
-	}
-
-	return tokensGenerated
-}
-
-// sampleToken performs CPU-side sampling from logits with temperature scaling and optional top-k filtering.
-func sampleToken(logits []float32, temperature float64, topK int) int32 {
-	if temperature <= 0 {
-		// Greedy: return argmax.
-		maxIdx := 0
-		maxVal := logits[0]
-		for i, v := range logits[1:] {
-			if v > maxVal {
-				maxVal = v
-				maxIdx = i + 1
-			}
-		}
-		return int32(maxIdx)
-	}
-
-	// Apply temperature.
-	scaled := make([]float64, len(logits))
-	for i, v := range logits {
-		scaled[i] = float64(v) / temperature
-	}
-
-	// Top-k filtering.
-	if topK > 0 && topK < len(scaled) {
-		type indexedLogit struct {
-			index int
-			value float64
-		}
-		indexed := make([]indexedLogit, len(scaled))
-		for i, v := range scaled {
-			indexed[i] = indexedLogit{i, v}
-		}
-		sort.Slice(indexed, func(i, j int) bool {
-			return indexed[i].value > indexed[j].value
-		})
-		threshold := indexed[topK-1].value
-		for i := range scaled {
-			if scaled[i] < threshold {
-				scaled[i] = math.Inf(-1)
-			}
-		}
-	}
-
-	// Softmax.
-	maxVal := scaled[0]
-	for _, v := range scaled[1:] {
-		if v > maxVal {
-			maxVal = v
-		}
-	}
-	var sum float64
-	for i := range scaled {
-		scaled[i] = math.Exp(scaled[i] - maxVal)
-		sum += scaled[i]
-	}
-	for i := range scaled {
-		scaled[i] /= sum
-	}
-
-	// Categorical sample.
-	r := rand.Float64()
-	var cumulative float64
-	for i, p := range scaled {
-		cumulative += p
-		if r < cumulative {
-			return int32(i)
-		}
-	}
-	return int32(len(scaled) - 1)
 }
