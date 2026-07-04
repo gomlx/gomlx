@@ -479,9 +479,21 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	// Pass causal to Core only when not using KV cache (Core builds a simple lower-triangular mask).
 	// When using KV cache, the position-aware causal mask is already built in buildMask above.
 	useCausalMask := b.useCausalMask && mask == nil
-	attentionOutput, attentionCoefficients = Core(b.scope, projectedQuery, projectedKey, projectedValue,
-		scale, mask, b.dropoutRate, b.layout, useCausalMask, wantCoefficients, b.scoreSoftCap, b.useFusion,
-		b.querySeqLen, b.keyValueSeqLen)
+	attentionOutput, attentionCoefficients = Core(projectedQuery, projectedKey, projectedValue, b.layout, CoreOptions{
+		DisableFusion: !b.useFusion,
+
+		Scale:            scale,
+		WantCoefficients: wantCoefficients,
+		ScoreSoftCap:     b.scoreSoftCap,
+
+		AttentionMask: mask,
+		UseCausalMask: useCausalMask,
+		QuerySeqLen:   b.querySeqLen,
+		KVSeqLen:      b.keyValueSeqLen,
+
+		Scope:       b.scope,
+		DropoutRate: b.dropoutRate,
+	})
 
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
 	// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_elements>, numHeads*valueDim]
