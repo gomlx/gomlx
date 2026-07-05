@@ -177,6 +177,9 @@ type CoreOptions struct {
 	// on the builder) and from AttentionMask. On the fused path it selects the cuDNN fmhaScaleBias
 	// variant; on the decomposed path it is added to the scores before softmax. It may combine with
 	// UseCausalMask; a bias+seqlens combination the fused kernel can't take falls back to decomposed.
+	//
+	// For the fused path the bias dtype must match query/key/value (the backend does no automatic
+	// conversion): a mismatched dtype falls back to the decomposed path.
 	AttentionBias *Node
 
 	// WantCoefficients, when true, forces the decomposed path to be used for the entire computation

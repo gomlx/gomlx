@@ -197,10 +197,12 @@ func TestAttentionBiasFusedParity_cuda(t *testing.T) {
 	const B, S, H, D = 2, 64, 2, 64
 	scale := 1.0 / math.Sqrt(float64(D))
 
-	q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 10), B, S, H*D)
-	k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 11), B, S, H*D)
-	v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 12), B, S, H*D)
-	biasTensor := tensors.FromFlatDataAndDimensions(randFlat(B*H*S*S, 99), B, H, S, S)
+	// bf16 inputs and bias: the backend does no auto-conversion, so f32 would make the fused arm
+	// fall back to decomposed and the parity would pass trivially. HasFusedSDPA below guards that.
+	q := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 10), B, S, H*D)
+	k := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 11), B, S, H*D)
+	v := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 12), B, S, H*D)
+	biasTensor := tensors.FromFlatDataAndDimensions(randFlatBF16(B*H*S*S, 99), B, H, S, S)
 
 	store := model.NewStore()
 	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, biasIn *Node) []*Node {
@@ -208,27 +210,35 @@ func TestAttentionBiasFusedParity_cuda(t *testing.T) {
 		kProj := Reshape(kIn, B, S, H, D)
 		vProj := Reshape(vIn, B, S, H, D)
 
-		// Fused vs decomposed arms through the builder, sharing projection weights.
+		// Backward arms first: dQ through the fused bias path vs the decomposed one. These take the
+		// gradient, so they put both the fused forward and the fused VJP into the graph.
+		fusedBwdOut, _ := Core(qProj, kProj, vProj, LayoutBSHD, CoreOptions{Scale: scale, AttentionBias: biasIn})
+		refBwdOut, _ := Core(qProj, kProj, vProj, LayoutBSHD, CoreOptions{Scale: scale, AttentionBias: biasIn, DisableFusion: true})
+		// Gradients are w.r.t. bf16 qProj, so cast to f32 before the metric (ToScalar wants f32).
+		dqFused := ConvertDType(Gradient(ReduceAllSum(ConvertDType(fusedBwdOut, dtypes.Float32)), qProj)[0], dtypes.Float32)
+		dqRef := ConvertDType(Gradient(ReduceAllSum(ConvertDType(refBwdOut, dtypes.Float32)), qProj)[0], dtypes.Float32)
+		relBwd := Div(ReduceAllMax(Abs(Sub(dqFused, dqRef))), AddScalar(ReduceAllMax(Abs(dqRef)), 1e-6))
+
+		// Forward parity through the builder, sharing projection weights.
 		fusedOut := MultiHeadAttention(scope.In("shared"), qIn, kIn, vIn, H, D).
 			WithAttentionBias(biasIn).WithPreProjected(true).Done()
 		refOut := MultiHeadAttention(scope.Shared("shared"), qIn, kIn, vIn, H, D).
 			WithAttentionBias(biasIn).WithFusion(false).WithPreProjected(true).Done()
-
 		fusedF32 := ConvertDType(fusedOut, dtypes.Float32)
 		refF32 := ConvertDType(refOut, dtypes.Float32)
 		relFwd := Div(ReduceAllMax(Abs(Sub(fusedF32, refF32))), AddScalar(ReduceAllMax(Abs(refF32)), 1e-6))
 
-		// Backward: dQ through the fused bias path vs the decomposed one.
-		fusedBwdOut, _ := Core(qProj, kProj, vProj, LayoutBSHD, CoreOptions{Scale: scale, AttentionBias: biasIn})
-		refBwdOut, _ := Core(qProj, kProj, vProj, LayoutBSHD, CoreOptions{Scale: scale, AttentionBias: biasIn, DisableFusion: true})
-		dqFused := Gradient(ReduceAllSum(ConvertDType(fusedBwdOut, dtypes.Float32)), qProj)[0]
-		dqRef := Gradient(ReduceAllSum(ConvertDType(refBwdOut, dtypes.Float32)), qProj)[0]
-		relBwd := Div(ReduceAllMax(Abs(Sub(dqFused, dqRef))), AddScalar(ReduceAllMax(Abs(dqRef)), 1e-6))
-
 		return []*Node{fusedF32, relFwd, relBwd}
 	})
 
-	out := exec.MustCall(q, k, v, biasTensor)
+	out, g, err := exec.CallWithGraph(q, k, v, biasTensor)
+	require.NoError(t, err)
+
+	// Verify the fused bias op actually engaged, so the parity is meaningful and not a silent fallback.
+	hasFwd, hasBwd := HasFusedSDPA(g)
+	require.True(t, hasFwd, "fused bias arm must use FusedScaledDotProductAttention (not fall back to decomposed)")
+	require.True(t, hasBwd, "fused bias arm must use FusedScaledDotProductAttentionVJP in the backward")
+
 	require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions, "fused bias output shape must be [B, S, H*D]")
 	require.LessOrEqual(t, float64(tensors.ToScalar[float32](out[1])), 0.06,
 		"fused and decomposed bias outputs diverge (forward rel err)")
