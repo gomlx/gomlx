@@ -264,12 +264,11 @@ func TestAttentionBiasFusedParityMatrix_cuda(t *testing.T) {
 		name   string
 		dtype  dtypes.DType
 		layout AxesLayout
-		// fwdOnly skips the backward parity. The cuDNN fmha BACKWARD does not compile in Float16 on
-		// this GPU (sm_8.6) even without bias, so f16 is exercised forward-only here; that is a base
-		// fmha limitation, not a bias one (the f16 bias forward fuses and matches).
+		// fwdOnly skips the backward parity, kept as a knob for variants whose fused backward is
+		// unsupported. All current cases run full fwd+bwd.
 		fwdOnly bool
 	}{
-		{"f16_bshd", dtypes.Float16, LayoutBSHD, true},
+		{"f16_bshd", dtypes.Float16, LayoutBSHD, false},
 		{"bf16_bhsd", dtypes.BFloat16, LayoutBHSD, false},
 	}
 	for _, tc := range cases {
