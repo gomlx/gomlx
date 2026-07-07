@@ -182,137 +182,142 @@ func TestCoreAttentionBiasGQA(t *testing.T) {
 		"GQA biased and unbiased outputs too similar; bias appears ignored (maxDiff=%v)", maxDiff)
 }
 
-// TestAttentionBiasFusedParity_cuda [cuda] verifies the fused bias path (cfg.Bias set) matches the
-// decomposed reference, forward and gradient (dQ), within bf16 tolerance. On xla:cuda the fused arm
-// uses cuDNN ScaleBias; the reference arm handles bias in software. Skipped unless xla:cuda supports
-// fused attention.
-func TestAttentionBiasFusedParity_cuda(t *testing.T) {
-	backend := testutil.GetOfficialBackend("xla:cuda")
-	if backend == nil || !backendSupportsFusionForBFloat16(backend) {
-		t.Skip("xla:cuda fused attention backend not available")
-	}
-	require.True(t, backendSupportsBiasedFusion(backend),
-		"xla:cuda supports plain fused SDPA but not biased fusion; bias layout rejected by validateBias")
+// TestAttentionBiasFusedParity verifies the fused bias path (cfg.Bias set) matches the decomposed
+// reference, forward and gradient (dQ), within bf16 tolerance. The fused arm uses the backend's
+// biased fusion (cuDNN ScaleBias on xla:cuda); the reference arm handles bias in software. Runs on
+// every official backend; those without biased fusion skip.
+func TestAttentionBiasFusedParity(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		if !backendSupportsFusionForBFloat16(backend) {
+			t.Skipf("%s: fused attention backend not available", backend)
+		}
+		if !backendSupportsBiasedFusion(backend) {
+			t.Skipf("%s: supports plain fused SDPA but not biased fusion", backend)
+		}
 
-	const B, S, H, D = 2, 64, 2, 64
-	scale := 1.0 / math.Sqrt(float64(D))
+		const B, S, H, D = 2, 64, 2, 64
+		scale := 1.0 / math.Sqrt(float64(D))
 
-	// bf16 inputs and bias: the backend does no auto-conversion, so f32 would make the fused arm
-	// fall back to decomposed and the parity would pass trivially. HasFusedSDPA below guards that.
-	q := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 10), B, S, H*D)
-	k := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 11), B, S, H*D)
-	v := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 12), B, S, H*D)
-	biasTensor := tensors.FromFlatDataAndDimensions(randFlatBF16(B*H*S*S, 99), B, H, S, S)
+		// bf16 inputs and bias: the backend does no auto-conversion, so f32 would make the fused arm
+		// fall back to decomposed and the parity would pass trivially. HasFusedSDPA below guards that.
+		q := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 10), B, S, H*D)
+		k := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 11), B, S, H*D)
+		v := tensors.FromFlatDataAndDimensions(randFlatBF16(B*S*H*D, 12), B, S, H*D)
+		biasTensor := tensors.FromFlatDataAndDimensions(randFlatBF16(B*H*S*S, 99), B, H, S, S)
 
-	store := model.NewStore()
-	exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, biasIn *Node) []*Node {
-		qProj := Reshape(qIn, B, S, H, D)
-		kProj := Reshape(kIn, B, S, H, D)
-		vProj := Reshape(vIn, B, S, H, D)
+		store := model.NewStore()
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, qIn, kIn, vIn, biasIn *Node) []*Node {
+			qProj := Reshape(qIn, B, S, H, D)
+			kProj := Reshape(kIn, B, S, H, D)
+			vProj := Reshape(vIn, B, S, H, D)
 
-		// Backward arms first: dQ through the fused bias path vs the decomposed one. These take the
-		// gradient, so they put both the fused forward and the fused VJP into the graph.
-		fusedBwdOut, _ := Core(qProj, kProj, vProj, LayoutBSHD, CoreOptions{Scale: scale, AttentionBias: biasIn})
-		refBwdOut, _ := Core(qProj, kProj, vProj, LayoutBSHD, CoreOptions{Scale: scale, AttentionBias: biasIn, DisableFusion: true})
-		// Gradients are w.r.t. bf16 qProj, so cast to f32 before the metric (ToScalar wants f32).
-		dqFused := ConvertDType(Gradient(ReduceAllSum(ConvertDType(fusedBwdOut, dtypes.Float32)), qProj)[0], dtypes.Float32)
-		dqRef := ConvertDType(Gradient(ReduceAllSum(ConvertDType(refBwdOut, dtypes.Float32)), qProj)[0], dtypes.Float32)
-		relBwd := Div(ReduceAllMax(Abs(Sub(dqFused, dqRef))), AddScalar(ReduceAllMax(Abs(dqRef)), 1e-6))
+			// Backward arms first: dQ through the fused bias path vs the decomposed one. These take the
+			// gradient, so they put both the fused forward and the fused VJP into the graph.
+			fusedBwdOut, _ := Core(qProj, kProj, vProj, LayoutBSHD, CoreOptions{Scale: scale, AttentionBias: biasIn})
+			refBwdOut, _ := Core(qProj, kProj, vProj, LayoutBSHD, CoreOptions{Scale: scale, AttentionBias: biasIn, DisableFusion: true})
+			// Gradients are w.r.t. bf16 qProj, so cast to f32 before the metric (ToScalar wants f32).
+			dqFused := ConvertDType(Gradient(ReduceAllSum(ConvertDType(fusedBwdOut, dtypes.Float32)), qProj)[0], dtypes.Float32)
+			dqRef := ConvertDType(Gradient(ReduceAllSum(ConvertDType(refBwdOut, dtypes.Float32)), qProj)[0], dtypes.Float32)
+			relBwd := Div(ReduceAllMax(Abs(Sub(dqFused, dqRef))), AddScalar(ReduceAllMax(Abs(dqRef)), 1e-6))
 
-		// Forward parity through the builder, sharing projection weights.
-		fusedOut := MultiHeadAttention(scope.In("shared"), qIn, kIn, vIn, H, D).
-			WithAttentionBias(biasIn).WithPreProjected(true).Done()
-		refOut := MultiHeadAttention(scope.Shared("shared"), qIn, kIn, vIn, H, D).
-			WithAttentionBias(biasIn).WithFusion(false).WithPreProjected(true).Done()
-		fusedF32 := ConvertDType(fusedOut, dtypes.Float32)
-		refF32 := ConvertDType(refOut, dtypes.Float32)
-		relFwd := Div(ReduceAllMax(Abs(Sub(fusedF32, refF32))), AddScalar(ReduceAllMax(Abs(refF32)), 1e-6))
+			// Forward parity through the builder, sharing projection weights.
+			fusedOut := MultiHeadAttention(scope.In("shared"), qIn, kIn, vIn, H, D).
+				WithAttentionBias(biasIn).WithPreProjected(true).Done()
+			refOut := MultiHeadAttention(scope.Shared("shared"), qIn, kIn, vIn, H, D).
+				WithAttentionBias(biasIn).WithFusion(false).WithPreProjected(true).Done()
+			fusedF32 := ConvertDType(fusedOut, dtypes.Float32)
+			refF32 := ConvertDType(refOut, dtypes.Float32)
+			relFwd := Div(ReduceAllMax(Abs(Sub(fusedF32, refF32))), AddScalar(ReduceAllMax(Abs(refF32)), 1e-6))
 
-		return []*Node{fusedF32, relFwd, relBwd}
+			return []*Node{fusedF32, relFwd, relBwd}
+		})
+
+		out, g, err := exec.CallWithGraph(q, k, v, biasTensor)
+		require.NoError(t, err)
+
+		// Verify the fused bias op actually engaged, so the parity is meaningful and not a silent fallback.
+		hasFwd, hasBwd := HasFusedSDPA(g)
+		require.True(t, hasFwd, "fused bias arm must use FusedScaledDotProductAttention (not fall back to decomposed)")
+		require.True(t, hasBwd, "fused bias arm must use FusedScaledDotProductAttentionVJP in the backward")
+
+		require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions, "fused bias output shape must be [B, S, H*D]")
+		require.LessOrEqual(t, float64(tensors.ToScalar[float32](out[1])), 0.06,
+			"fused and decomposed bias outputs diverge (forward rel err)")
+		require.LessOrEqual(t, float64(tensors.ToScalar[float32](out[2])), 0.06,
+			"fused and decomposed bias gradients diverge (dQ rel err)")
 	})
-
-	out, g, err := exec.CallWithGraph(q, k, v, biasTensor)
-	require.NoError(t, err)
-
-	// Verify the fused bias op actually engaged, so the parity is meaningful and not a silent fallback.
-	hasFwd, hasBwd := HasFusedSDPA(g)
-	require.True(t, hasFwd, "fused bias arm must use FusedScaledDotProductAttention (not fall back to decomposed)")
-	require.True(t, hasBwd, "fused bias arm must use FusedScaledDotProductAttentionVJP in the backward")
-
-	require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions, "fused bias output shape must be [B, S, H*D]")
-	require.LessOrEqual(t, float64(tensors.ToScalar[float32](out[1])), 0.06,
-		"fused and decomposed bias outputs diverge (forward rel err)")
-	require.LessOrEqual(t, float64(tensors.ToScalar[float32](out[2])), 0.06,
-		"fused and decomposed bias gradients diverge (dQ rel err)")
 }
 
-// TestAttentionBiasFusedParityMatrix_cuda [cuda] extends the bias fused-parity check across dtype
+// TestAttentionBiasFusedParityMatrix extends the bias fused-parity check across dtype
 // (Float16) and layout (BHSD), mirroring the plain-path BF16/Float16 coverage. Each case asserts the
 // fused bias op actually engaged (HasFusedSDPA) so a silent fallback cannot pass trivially. The base
-// bf16/BSHD case lives in TestAttentionBiasFusedParity_cuda.
-func TestAttentionBiasFusedParityMatrix_cuda(t *testing.T) {
-	backend := testutil.GetOfficialBackend("xla:cuda")
-	if backend == nil || !backendSupportsFusionForBFloat16(backend) {
-		t.Skip("xla:cuda fused attention backend not available")
-	}
-	require.True(t, backendSupportsBiasedFusion(backend),
-		"xla:cuda supports plain fused SDPA but not biased fusion")
+// bf16/BSHD case lives in TestAttentionBiasFusedParity. Runs on every official backend; those
+// without biased fusion skip.
+func TestAttentionBiasFusedParityMatrix(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		if !backendSupportsFusionForBFloat16(backend) {
+			t.Skipf("%s: fused attention backend not available", backend)
+		}
+		if !backendSupportsBiasedFusion(backend) {
+			t.Skipf("%s: supports plain fused SDPA but not biased fusion", backend)
+		}
 
-	const B, S, H, D = 2, 64, 2, 64
-	scale := 1.0 / math.Sqrt(float64(D))
-	cases := []struct {
-		name   string
-		dtype  dtypes.DType
-		layout AxesLayout
-		// fwdOnly skips the backward parity, kept as a knob for variants whose fused backward is
-		// unsupported. All current cases run full fwd+bwd.
-		fwdOnly bool
-	}{
-		{"f16_bshd", dtypes.Float16, LayoutBSHD, false},
-		{"bf16_bhsd", dtypes.BFloat16, LayoutBHSD, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			// q/k/v shaped per layout; bias is [B,H,Sq,Skv] regardless. f32 seed data cast to the
-			// target dtype in-graph so the fused path engages (no auto-conversion at the backend).
-			qkvDims := []int{B, S, H, D}
-			if tc.layout == LayoutBHSD {
-				qkvDims = []int{B, H, S, D}
-			}
-			q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 10), qkvDims...)
-			k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 11), qkvDims...)
-			v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 12), qkvDims...)
-			bias := tensors.FromFlatDataAndDimensions(randFlat(B*H*S*S, 99), B, H, S, S)
-
-			store := model.NewStore()
-			exec := model.MustNewExec(backend, store, func(scope *model.Scope, qn, kn, vn, bn *Node) []*Node {
-				cast := func(n *Node) *Node { return ConvertDType(n, tc.dtype) }
-				qc, kc, vc, bc := cast(qn), cast(kn), cast(vn), cast(bn)
-				fusedOut, _ := Core(qc, kc, vc, tc.layout, CoreOptions{Scale: scale, AttentionBias: bc})
-				refOut, _ := Core(qc, kc, vc, tc.layout, CoreOptions{Scale: scale, AttentionBias: bc, DisableFusion: true})
-				fF32 := ConvertDType(fusedOut, dtypes.Float32)
-				rF32 := ConvertDType(refOut, dtypes.Float32)
-				relFwd := Div(ReduceAllMax(Abs(Sub(fF32, rF32))), AddScalar(ReduceAllMax(Abs(rF32)), 1e-6))
-				if tc.fwdOnly {
-					return []*Node{relFwd}
+		const B, S, H, D = 2, 64, 2, 64
+		scale := 1.0 / math.Sqrt(float64(D))
+		cases := []struct {
+			name   string
+			dtype  dtypes.DType
+			layout AxesLayout
+			// fwdOnly skips the backward parity, kept as a knob for variants whose fused backward is
+			// unsupported. All current cases run full fwd+bwd.
+			fwdOnly bool
+		}{
+			{"f16_bshd", dtypes.Float16, LayoutBSHD, false},
+			{"bf16_bhsd", dtypes.BFloat16, LayoutBHSD, false},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				// q/k/v shaped per layout; bias is [B,H,Sq,Skv] regardless. f32 seed data cast to the
+				// target dtype in-graph so the fused path engages (no auto-conversion at the backend).
+				qkvDims := []int{B, S, H, D}
+				if tc.layout == LayoutBHSD {
+					qkvDims = []int{B, H, S, D}
 				}
-				dqF := ConvertDType(Gradient(ReduceAllSum(fF32), qc)[0], dtypes.Float32)
-				dqR := ConvertDType(Gradient(ReduceAllSum(rF32), qc)[0], dtypes.Float32)
-				relBwd := Div(ReduceAllMax(Abs(Sub(dqF, dqR))), AddScalar(ReduceAllMax(Abs(dqR)), 1e-6))
-				return []*Node{relFwd, relBwd}
-			})
+				q := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 10), qkvDims...)
+				k := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 11), qkvDims...)
+				v := tensors.FromFlatDataAndDimensions(randFlat(B*S*H*D, 12), qkvDims...)
+				bias := tensors.FromFlatDataAndDimensions(randFlat(B*H*S*S, 99), B, H, S, S)
 
-			out, g, err := exec.CallWithGraph(q, k, v, bias)
-			require.NoError(t, err)
-			hasFwd, hasBwd := HasFusedSDPA(g)
-			require.True(t, hasFwd, "fused bias must engage in forward for %s", tc.name)
-			require.LessOrEqual(t, float64(tensors.ToScalar[float32](out[0])), 0.06, "forward rel err (%s)", tc.name)
-			if !tc.fwdOnly {
-				require.True(t, hasBwd, "fused bias must engage in backward for %s", tc.name)
-				require.LessOrEqual(t, float64(tensors.ToScalar[float32](out[1])), 0.06, "backward rel err (%s)", tc.name)
-			}
-		})
-	}
+				store := model.NewStore()
+				exec := model.MustNewExec(backend, store, func(scope *model.Scope, qn, kn, vn, bn *Node) []*Node {
+					cast := func(n *Node) *Node { return ConvertDType(n, tc.dtype) }
+					qc, kc, vc, bc := cast(qn), cast(kn), cast(vn), cast(bn)
+					fusedOut, _ := Core(qc, kc, vc, tc.layout, CoreOptions{Scale: scale, AttentionBias: bc})
+					refOut, _ := Core(qc, kc, vc, tc.layout, CoreOptions{Scale: scale, AttentionBias: bc, DisableFusion: true})
+					fF32 := ConvertDType(fusedOut, dtypes.Float32)
+					rF32 := ConvertDType(refOut, dtypes.Float32)
+					relFwd := Div(ReduceAllMax(Abs(Sub(fF32, rF32))), AddScalar(ReduceAllMax(Abs(rF32)), 1e-6))
+					if tc.fwdOnly {
+						return []*Node{relFwd}
+					}
+					dqF := ConvertDType(Gradient(ReduceAllSum(fF32), qc)[0], dtypes.Float32)
+					dqR := ConvertDType(Gradient(ReduceAllSum(rF32), qc)[0], dtypes.Float32)
+					relBwd := Div(ReduceAllMax(Abs(Sub(dqF, dqR))), AddScalar(ReduceAllMax(Abs(dqR)), 1e-6))
+					return []*Node{relFwd, relBwd}
+				})
+
+				out, g, err := exec.CallWithGraph(q, k, v, bias)
+				require.NoError(t, err)
+				hasFwd, hasBwd := HasFusedSDPA(g)
+				require.True(t, hasFwd, "fused bias must engage in forward for %s", tc.name)
+				require.LessOrEqual(t, float64(tensors.ToScalar[float32](out[0])), 0.06, "forward rel err (%s)", tc.name)
+				if !tc.fwdOnly {
+					require.True(t, hasBwd, "fused bias must engage in backward for %s", tc.name)
+					require.LessOrEqual(t, float64(tensors.ToScalar[float32](out[1])), 0.06, "backward rel err (%s)", tc.name)
+				}
+			})
+		}
+	})
 }
 
 func abs32(x float32) float32 {

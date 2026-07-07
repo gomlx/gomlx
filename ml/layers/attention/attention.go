@@ -173,13 +173,13 @@ type CoreOptions struct {
 	QuerySeqLen, KVSeqLen *Node
 
 	// AttentionBias is an optional additive attention-score bias [batch, numHeads, q_seq, kv_seq]
-	// (ALiBi / relative-position). It is DISTINCT from the Q/K/V projection bias (UseProjectionBias
-	// on the builder) and from AttentionMask. On the fused path it selects the cuDNN fmhaScaleBias
-	// variant; on the decomposed path it is added to the scores before softmax. It may combine with
-	// UseCausalMask; a bias+seqlens combination the fused kernel can't take falls back to decomposed.
+	// (ALiBi / relative-position), added to the scores before softmax. It is DISTINCT from the
+	// Q/K/V projection bias (UseProjectionBias on the builder) and from AttentionMask. It may
+	// combine with UseCausalMask.
 	//
-	// For the fused path the bias dtype must match query/key/value (the backend does no automatic
-	// conversion): a mismatched dtype falls back to the decomposed path.
+	// To keep it on the fused (faster) path the bias dtype must match query/key/value, since the
+	// backend does no automatic conversion; a mismatched dtype, or a bias+seqlens combination the
+	// fused kernel can't take, falls back to the decomposed path.
 	AttentionBias *Node
 
 	// WantCoefficients, when true, forces the decomposed path to be used for the entire computation
