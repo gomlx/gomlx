@@ -81,6 +81,10 @@ type MultiHeadAttentionBuilder struct {
 	// threaded into the fused SDPA config for padding masking. Mutually exclusive with queryKeyMatrixMask.
 	querySeqLen    *Node
 	keyValueSeqLen *Node
+
+	// attentionBias is an optional additive attention-score bias [B,H,Sq,Skv] (ALiBi /
+	// relative-position). Distinct from UseProjectionBias. Threaded to CoreOptions.AttentionBias.
+	attentionBias *Node
 }
 
 // MultiHeadAttention defines a multi-head attention layers, as described in [1], plus some modern extensions.
@@ -366,6 +370,14 @@ func (b *MultiHeadAttentionBuilder) WithSeqLens(querySeqLen, keyValueSeqLen *Nod
 	return b
 }
 
+// WithAttentionBias supplies an additive attention-score bias [B,H,Sq,Skv] (ALiBi /
+// relative-position), threaded to CoreOptions.AttentionBias. It is DISTINCT from UseProjectionBias
+// (the Q/K/V dense bias). nil (the default) disables it.
+func (b *MultiHeadAttentionBuilder) WithAttentionBias(bias *Node) *MultiHeadAttentionBuilder {
+	b.attentionBias = bias
+	return b
+}
+
 // DoneWithCoefficients or Done should be called after all optional settings are configured.
 // It returns both the attention output and the attention coefficients (matrix) used.
 //
@@ -490,6 +502,7 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 		UseCausalMask: useCausalMask,
 		QuerySeqLen:   b.querySeqLen,
 		KVSeqLen:      b.keyValueSeqLen,
+		AttentionBias: b.attentionBias,
 
 		Scope:       b.scope,
 		DropoutRate: b.dropoutRate,

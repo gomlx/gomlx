@@ -172,6 +172,16 @@ type CoreOptions struct {
 	// If one is set the other must also be set.
 	QuerySeqLen, KVSeqLen *Node
 
+	// AttentionBias is an optional additive attention-score bias [batch, numHeads, q_seq, kv_seq]
+	// (ALiBi / relative-position), added to the scores before softmax. It is DISTINCT from the
+	// Q/K/V projection bias (UseProjectionBias on the builder) and from AttentionMask. It may
+	// combine with UseCausalMask.
+	//
+	// To keep it on the fused (faster) path the bias dtype must match query/key/value, since the
+	// backend does no automatic conversion; a mismatched dtype, or a bias+seqlens combination the
+	// fused kernel can't take, falls back to the decomposed path.
+	AttentionBias *Node
+
 	// WantCoefficients, when true, forces the decomposed path to be used for the entire computation
 	// (no fused op) and returns coefficients. When false, the fused op is attempted for
 	// the output and coefficients is nil.
@@ -217,6 +227,9 @@ func (o CoreOptions) String() string {
 	}
 	if o.KVSeqLen != nil {
 		parts = append(parts, fmt.Sprintf("KVSeqLen: %s", o.KVSeqLen.Shape()))
+	}
+	if o.AttentionBias != nil {
+		parts = append(parts, fmt.Sprintf("AttentionBias: %s", o.AttentionBias.Shape()))
 	}
 	if o.WantCoefficients {
 		parts = append(parts, "WantCoefficients: true")
@@ -323,10 +336,19 @@ func Core(query, key, value *Node, layout AxesLayout, options CoreOptions) (outp
 		// only a free reshape of Q is needed.
 		isGQA := numQueryHeads != numKVHeads
 		decomposedQuery := query
+		// Bias convention is [B,H,Sq,Skv] (heads-major). BSHD scores are [B,Sq,H,Skv], so permute
+		// [0,2,1,3] before Add. BHSD scores are already [B,H,Sq,Skv]: no permute.
+		decomposedBias := options.AttentionBias
+		if decomposedBias != nil && layout == LayoutBSHD {
+			decomposedBias = TransposeAllAxes(decomposedBias, 0, 2, 1, 3)
+		}
 		if isGQA {
 			decomposedQuery = reshapeQueryForGQA(query, numQueryHeads, numKVHeads, layout)
 			if decomposedMask != nil {
 				decomposedMask = reshapeMaskForGQA(decomposedMask, numQueryHeads, numKVHeads, layout)
+			}
+			if decomposedBias != nil {
+				decomposedBias = reshapeMaskForGQA(decomposedBias, numQueryHeads, numKVHeads, layout)
 			}
 		}
 
@@ -336,6 +358,12 @@ func Core(query, key, value *Node, layout AxesLayout, options CoreOptions) (outp
 
 		if options.ScoreSoftCap > 0 {
 			scores = nn.SoftCap(scores, options.ScoreSoftCap)
+		}
+
+		// Additive attention bias (ALiBi / relative-position) before softmax; reshaped above to the
+		// score layout (and to 5D when GQA).
+		if decomposedBias != nil {
+			scores = Add(scores, decomposedBias)
 		}
 
 		if decomposedMask != nil && decomposedMask.DType() != dtypes.Bool {
@@ -379,13 +407,16 @@ func Core(query, key, value *Node, layout AxesLayout, options CoreOptions) (outp
 		output, isFused = InternalFusedOpCaller(
 			func() *Node {
 				var fusedConfig *compute.ScaledDotProductAttentionConfig
-				if options.QuerySeqLen != nil || options.KVSeqLen != nil {
+				if options.QuerySeqLen != nil || options.KVSeqLen != nil || options.AttentionBias != nil {
 					fusedConfig = &compute.ScaledDotProductAttentionConfig{}
 					if options.QuerySeqLen != nil {
 						fusedConfig.QuerySeqLen = InternalBackendOutputs(options.QuerySeqLen)[0]
 					}
 					if options.KVSeqLen != nil {
 						fusedConfig.KeyValueSeqLen = InternalBackendOutputs(options.KVSeqLen)[0]
+					}
+					if options.AttentionBias != nil {
+						fusedConfig.Bias = InternalBackendOutputs(options.AttentionBias)[0]
 					}
 				}
 				klog.V(2).Info("attention.Core(): attempting to use FusedScaledDotProductAttention op.")
