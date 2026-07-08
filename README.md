@@ -2,7 +2,6 @@
 
 [![GoDev](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/gomlx/gomlx?tab=doc)
 [![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/gomlx/gomlx/blob/main/LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/gomlx/gomlx)](https://goreportcard.com/report/github.com/gomlx/gomlx)
 [![Linux/amd64 Tests](https://github.com/gomlx/gomlx/actions/workflows/linux_amd64_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/linux_amd64_tests.yaml)
 [![Linux/arm64 Tests](https://github.com/gomlx/gomlx/actions/workflows/linux_arm64_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/linux_arm64_tests.yaml)
 [![Darwin/arm64 Tests](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml)
