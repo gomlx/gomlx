@@ -127,17 +127,20 @@ func Download(url, filePath string, showProgressBar bool) (size int64, err error
 // If checkHash is provided, it checks that the file has the hash or fail.
 func DownloadIfMissing(url, filePath, checkHash string) error {
 	filePath = fsutil.MustReplaceTildeInDir(filePath)
-	if !fsutil.MustFileExists(filePath) {
-		// Download the compressed file first.
-		fmt.Printf("Downloading %s ...\n", url)
-		_, err := Download(url, filePath, true)
-		if err != nil {
-			return err
+
+	if fsutil.MustFileExists(filePath) {
+		if err := fsutil.ValidateChecksum(filePath, checkHash); err == nil {
+			return nil
 		}
 	}
-	if checkHash == "" {
-		return nil
+
+	// Download the compressed file.
+	fmt.Printf("Downloading %s ...\n", url)
+	_, err := Download(url, filePath, true)
+	if err != nil {
+		return err
 	}
+
 	return fsutil.ValidateChecksum(filePath, checkHash)
 }
 
