@@ -177,9 +177,7 @@ type CoreOptions struct {
 	// Q/K/V projection bias (UseProjectionBias on the builder) and from AttentionMask. It may
 	// combine with UseCausalMask.
 	//
-	// To keep it on the fused (faster) path the bias dtype must match query/key/value, since the
-	// backend does no automatic conversion; a mismatched dtype, or a bias+seqlens combination the
-	// fused kernel can't take, falls back to the decomposed path.
+	// The dtype should match those of the query/key/value.
 	AttentionBias *Node
 
 	// WantCoefficients, when true, forces the decomposed path to be used for the entire computation
