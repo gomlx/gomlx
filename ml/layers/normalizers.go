@@ -19,6 +19,9 @@ const (
 	NormalizationRMSNorm = "rms"
 	// NormalizationBatchNorm is the value for norm.BatchNorm.
 	NormalizationBatchNorm = "batch"
+	// NormalizationDyT is the value for norm.DynamicTanh.
+	// DyT is a drop-in replacement for layer normalization; see norm.DynamicTanh for details.
+	NormalizationDyT = "dyt"
 	// NormalizationNone is the value for no normalization.
 	NormalizationNone = "none"
 )
@@ -44,6 +47,9 @@ var (
 		NormalizationRMSNorm: func(scope *model.Scope, input *Node) *Node {
 			return norm.RMSNorm(scope, input).Done()
 		},
+		NormalizationDyT: func(scope *model.Scope, input *Node) *Node {
+			return norm.DynamicTanh(scope, input).Done()
+		},
 		NormalizationNone: func(scope *model.Scope, input *Node) *Node {
 			return input
 		},
@@ -56,8 +62,8 @@ var (
 	// between layers.
 	// This is usually applied after a residual sum (but model choices varies).
 	//
-	// Valid values are "layer" for LayerNormalization, "batch" for batchnorm.New,
-	// "rms" for RMSNorm or "none".
+	// Valid values are "layer" for LayerNormalization, "batch" for BatchNorm,
+	// "rms" for RMSNorm, "dyt" for DynamicTanh, or "none".
 	//
 	// Notice that this won't work for special shapes setups.
 	// New will normalize on the batch axis (assumed to be axis-0), and
@@ -131,8 +137,10 @@ func MaskedNormalizeFromScope(scope *model.Scope, input, mask *Node) *Node {
 				ParamNormalization)
 		}
 		return norm.BatchNorm(scope, input, -1).Done()
+	case NormalizationDyT:
+		return norm.DynamicTanh(scope, input).Done()
 	default:
-		Panicf("invalid normalization type %q given in scope parameter %q -- valid values are 'none', 'layer' or 'batch'",
+		Panicf("invalid normalization type %q given in scope parameter %q -- valid values are 'none', 'layer', 'rms', 'batch', or 'dyt'",
 			normType, ParamNormalization)
 	}
 	return input
