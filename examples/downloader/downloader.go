@@ -125,10 +125,10 @@ func Download(url, filePath string, showProgressBar bool) (size int64, err error
 	return size, nil
 }
 
-// DownloadIfMissing will check if the path exists already, and if not it will download the file
-// from the given URL.
+// DownloadIfMissing will check if the path exists already and has a valid checksum, and if not it will download the file
+// from the given URL to a .part file, validate the checksum, and rename it to the final path.
 //
-// If checkHash is provided, it checks that the file has the hash or fail.
+// If checkHash is provided, it checks that the file has the hash or returns an error.
 func DownloadIfMissing(url, filePath, checkHash string) error {
 	filePath = fsutil.MustReplaceTildeInDir(filePath)
 
