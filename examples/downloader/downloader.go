@@ -134,14 +134,23 @@ func DownloadIfMissing(url, filePath, checkHash string) error {
 		}
 	}
 
+	partPath := filePath + ".part"
+
 	// Download the compressed file.
 	fmt.Printf("Downloading %s ...\n", url)
-	_, err := Download(url, filePath, true)
-	if err != nil {
+	if _, err := Download(url, partPath, true); err != nil {
+		os.Remove(partPath)
 		return err
 	}
-
-	return fsutil.ValidateChecksum(filePath, checkHash)
+	if err := fsutil.ValidateChecksum(partPath, checkHash); err != nil {
+		os.Remove(partPath)
+		return err
+	}
+	if err := os.Rename(partPath, filePath); err != nil {
+		os.Remove(partPath)
+		return err
+	}
+	return nil
 }
 
 // Untar file, using decompression flags according to suffix: .gz for gzip, bz2 for bzip2.
