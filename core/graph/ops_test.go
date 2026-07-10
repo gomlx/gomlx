@@ -10,6 +10,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
@@ -242,7 +243,7 @@ func TestConvertDType(t *testing.T) {
 	}, []any{wantF32, wantF64}, -1)
 }
 
-type BinaryOpsTestCase[T dtypes.Supported] struct {
+type BinaryOpsTestCase[T gotype.Supported] struct {
 	fnGraph  func(x, y *Node) *Node
 	fnScalar func(x, y T) T
 	name     string
@@ -347,7 +348,7 @@ func TestBinaryOps(t *testing.T) {
 	}
 }
 
-type OneArgTestCase[T dtypes.Supported] struct {
+type OneArgTestCase[T gotype.Supported] struct {
 	fnGraph    func(x *Node) *Node
 	goFnScalar func(x T) T
 }
@@ -1521,4 +1522,3 @@ func TestBarriers(t *testing.T) {
 		[]float64{1.0, 2.0},
 	}, -1)
 }
-

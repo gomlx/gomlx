@@ -12,6 +12,7 @@ import (
 
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
+	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"k8s.io/klog/v2"
@@ -178,7 +179,7 @@ func (t *Tensor) lockedConstFlatData(accessFn func(flat any)) error {
 //
 // See Tensor.Size for the number of elements, and Tensor.LayoutStrides to calculate the offset of individual
 // positions, given the indices at each axis.
-func ConstFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) error {
+func ConstFlatData[T gotype.Supported](t *Tensor, accessFn func(flat []T)) error {
 	if t.shape.DType != dtypes.FromGenericsType[T]() {
 		var v T
 		return errors.Errorf("MustConstFlatData[%T] is incompatible with Tensor's dtype %s -- expected dtype %s",
@@ -208,7 +209,7 @@ func ConstFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) error
 // positions, given the indices at each axis.
 //
 // It panics if the tensor is in an invalid state (if it was finalized), or if it is a tuple.
-func MustConstFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) {
+func MustConstFlatData[T gotype.Supported](t *Tensor, accessFn func(flat []T)) {
 	if t.shape.DType != dtypes.FromGenericsType[T]() {
 		var v T
 		exceptions.Panicf("MustConstFlatData[%T] is incompatible with Tensor's dtype %s -- expected dtype %s",
@@ -337,7 +338,7 @@ func (t *Tensor) MutableBytes(accessFn func(data []byte)) error {
 // inside accessFn.
 //
 // It panics if the tensor is in an invalid state (if it was finalized), or if it is a tuple.
-func MustMutableFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) {
+func MustMutableFlatData[T gotype.Supported](t *Tensor, accessFn func(flat []T)) {
 	must(MutableFlatData(t, accessFn))
 }
 
@@ -350,7 +351,7 @@ func MustMutableFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T))
 //
 // This returns the actual Tensor data (not a copy), and the data owned by the Tensor, and should only be changed
 // inside accessFn.
-func MutableFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) error {
+func MutableFlatData[T gotype.Supported](t *Tensor, accessFn func(flat []T)) error {
 	if t.shape.Size() == 0 {
 		accessFn(nil)
 		return nil
@@ -380,7 +381,7 @@ func MutableFlatData[T dtypes.Supported](t *Tensor, accessFn func(flat []T)) err
 
 // AssignFlatData will copy over the values in fromFlat to the storage used by toTensor.
 // If the dtypes are not compatible or if the size is wrong, it will panic.
-func AssignFlatData[T dtypes.Supported](toTensor *Tensor, fromFlat []T) error {
+func AssignFlatData[T gotype.Supported](toTensor *Tensor, fromFlat []T) error {
 	var lenErr error
 	accessErr := MutableFlatData(toTensor, func(toFlat []T) {
 		if len(toFlat) != len(fromFlat) {
@@ -410,7 +411,7 @@ func AssignFlatData[T dtypes.Supported](toTensor *Tensor, fromFlat []T) error {
 // It triggers a synchronous transfer from device to local if the tensor is only on-device.
 //
 // It will panic if the given generic type doesn't match the DType of the tensor.
-func ToScalar[T dtypes.Supported](t *Tensor) T {
+func ToScalar[T gotype.Supported](t *Tensor) T {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.AssertValid()
@@ -432,7 +433,7 @@ func ToScalar[T dtypes.Supported](t *Tensor) T {
 // It triggers a synchronous transfer from device to local if the tensor is only on-device.
 //
 // It returns an error if the given generic type doesn't match the DType of the tensor.
-func CopyFlatData[T dtypes.Supported](t *Tensor) ([]T, error) {
+func CopyFlatData[T gotype.Supported](t *Tensor) ([]T, error) {
 	var flatCopy []T
 	err := ConstFlatData(t, func(flat []T) {
 		flatCopy = xslices.Copy(flat)
@@ -448,7 +449,7 @@ func CopyFlatData[T dtypes.Supported](t *Tensor) ([]T, error) {
 // It triggers a synchronous transfer from device to local if the tensor is only on-device.
 //
 // It will panic if the given generic type doesn't match the DType of the tensor.
-func MustCopyFlatData[T dtypes.Supported](t *Tensor) []T {
+func MustCopyFlatData[T gotype.Supported](t *Tensor) []T {
 	flatCopy, err := CopyFlatData[T](t)
 	if err != nil {
 		panic(err)
@@ -730,14 +731,14 @@ func (t *Tensor) String() string {
 
 // FromScalar creates a local tensor with the given scalar.
 // The `DType` is inferred from the value.
-func FromScalar[T dtypes.Supported](value T) (t *Tensor) {
+func FromScalar[T gotype.Supported](value T) (t *Tensor) {
 	return FromScalarAndDimensions(value)
 }
 
 // FromScalarAndDimensions creates a local tensor with the given dimensions, filled with the
 // given scalar value replicated everywhere.
 // The `DType` is inferred from the value.
-func FromScalarAndDimensions[T dtypes.Supported](value T, dimensions ...int) *Tensor {
+func FromScalarAndDimensions[T gotype.Supported](value T, dimensions ...int) *Tensor {
 	dtype := dtypes.FromGenericsType[T]()
 	shape := shapes.Make(dtype, dimensions...)
 	t := FromShape(shape)
@@ -752,7 +753,7 @@ func FromScalarAndDimensions[T dtypes.Supported](value T, dimensions ...int) *Te
 // The `DType` is inferred from the `data` type.
 //
 // It panics if the size of data is wrong for the shape.
-func FromFlatDataAndDimensions[T dtypes.Supported](data []T, dimensions ...int) *Tensor {
+func FromFlatDataAndDimensions[T gotype.Supported](data []T, dimensions ...int) *Tensor {
 	dtype := dtypes.FromGenericsType[T]()
 	shape := shapes.Make(dtype, dimensions...)
 	if len(data) != shape.Size() {

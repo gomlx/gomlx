@@ -15,6 +15,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/gomlx/compute/shapes"
 	_ "github.com/gomlx/gomlx/backends/default" // Use xla backend.
 	"github.com/gomlx/gomlx/core/tensors"
@@ -60,7 +61,7 @@ func setupTest(t *testing.T) {
 	})
 }
 
-func testOnDeviceInputOutputImpl[T dtypes.Number](t *testing.T, backend compute.Backend) {
+func testOnDeviceInputOutputImpl[T gotype.Numeric](t *testing.T, backend compute.Backend) {
 	dtype := dtypes.FromGenericsType[T]()
 	deviceNum := compute.DeviceNum(0)
 

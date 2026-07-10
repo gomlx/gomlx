@@ -4,6 +4,7 @@ package graph
 
 import (
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -18,7 +19,7 @@ import (
 // The value is first converted to float64 to serve as index to a cache and later converted to the requested dtype.
 // This may lose bits of precision to very large integers.
 // If you are worried with any of these conversions, use Const instead.
-func Scalar[N dtypes.NumberNotComplex](g *Graph, dtype dtypes.DType, value N) *Node {
+func Scalar[N gotype.NumericNotComplex](g *Graph, dtype dtypes.DType, value N) *Node {
 	return g.getScalarConst(dtype, float64(value))
 }
 
@@ -50,7 +51,7 @@ func ScalarOne(g *Graph, dtype dtypes.DType) *Node {
 
 // MulScalar converts scalar to a constant with x's DType and returns `x * scalar`
 // with proper broadcasting.
-func MulScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
+func MulScalar[N gotype.NumericNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Mul(x, Scalar(g, x.DType(), scalar))
 }
@@ -59,7 +60,7 @@ func MulScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
 // with proper broadcasting.
 //
 // For float DType's, DivScalar instead uses MulScalar(x, 1/scalar).
-func DivScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
+func DivScalar[N gotype.NumericNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	if scalar == 0 {
 		Panicf("division by zero in DivScalar")
@@ -73,7 +74,7 @@ func DivScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
 
 // PowScalar converts scalar to a constant with x's DType and returns `Pow(x, scalar)` (or `x ** scalar`)
 // with proper broadcasting.
-func PowScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
+func PowScalar[N gotype.NumericNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Pow(x, Scalar(g, x.DType(), scalar))
 }
@@ -84,32 +85,32 @@ func Square(x *Node) *Node {
 }
 
 // AddScalar converts scalar to a constant with x's DType and returns `x + scalar` with proper broadcasting.
-func AddScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
+func AddScalar[N gotype.NumericNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Add(x, Scalar(g, x.DType(), scalar))
 }
 
 // SubScalar converts scalar to a constant with x's DType and returns `x - scalar` with proper broadcasting.
-func SubScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
+func SubScalar[N gotype.NumericNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Sub(x, Scalar(g, x.DType(), scalar))
 }
 
 // ModScalar converts scalar to a constant with x's DType and returns `x % scalar`
 // with proper broadcasting.
-func ModScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
+func ModScalar[N gotype.NumericNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Mod(x, Scalar(g, x.DType(), scalar))
 }
 
 // MaxScalar converts scalar to a constant with x's DType and returns element-wise `Max(x, scalar)`.
-func MaxScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
+func MaxScalar[N gotype.NumericNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Max(x, Scalar(g, x.DType(), scalar))
 }
 
 // MinScalar converts scalar to a constant with x's DType and returns element-wise `Min(x, scalar)`.
-func MinScalar[N dtypes.NumberNotComplex](x *Node, scalar N) *Node {
+func MinScalar[N gotype.NumericNotComplex](x *Node, scalar N) *Node {
 	g := x.Graph()
 	return Min(x, Scalar(g, x.DType(), scalar))
 }
