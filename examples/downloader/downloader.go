@@ -90,6 +90,12 @@ func Download(url, filePath string, showProgressBar bool) (size int64, err error
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed creating file %q", filePath)
 	}
+	defer func() {
+		if cerr := file.Close(); cerr != nil && err == nil {
+			size = 0
+			err = errors.Wrapf(cerr, "failed closing %q", filePath)
+		}
+	}()
 	client := http.Client{
 		CheckRedirect: func(r *http.Request, via []*http.Request) error {
 			r.URL.Opaque = r.URL.Path
@@ -101,6 +107,12 @@ func Download(url, filePath string, showProgressBar bool) (size int64, err error
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed downloading %q", url)
 	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil && err == nil {
+			size = 0
+			err = errors.Wrapf(cerr, "failed closing connection to %q", url)
+		}
+	}()
 
 	if showProgressBar {
 		size, err = CopyWithProgressBar(file, resp.Body, resp.ContentLength)
@@ -109,14 +121,6 @@ func Download(url, filePath string, showProgressBar bool) (size int64, err error
 	}
 	if err != nil {
 		return 0, errors.Wrapf(err, "downloading %q to %q", url, filePath)
-	}
-	err = file.Close()
-	if err != nil {
-		return 0, errors.Wrapf(err, "failed closing %q", filePath)
-	}
-	err = resp.Body.Close()
-	if err != nil {
-		return 0, errors.Wrapf(err, "failed closing connection to %q", url)
 	}
 	return size, nil
 }
