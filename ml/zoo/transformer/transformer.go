@@ -41,6 +41,7 @@ const (
 	ParamArchitecture          = "transformer_architecture"
 	ParamNormalization         = "transformer_normalization"
 	ParamNormEpsilon           = "transformer_norm_epsilon"
+	ParamDyTAlpha              = "transformer_dyt_alpha"
 	ParamActivation            = "transformer_activation"
 	ParamNumKVHeads            = "transformer_num_kv_heads"
 	ParamGlobalHeadDim         = "transformer_global_head_dim"
@@ -123,8 +124,9 @@ type Model struct {
 	Architecture         Architecture    // e.g. ArchitectureStandard, ArchitectureGemma
 	EmbedNormalization   string          // e.g. "layer", "rms", "none" or ""
 	TokenTypeEmbedSize   int             // e.g. Number of token types, 2 for BERT. See WithTokenTypeEmbedding.
-	Normalization        string          // e.g. "layer", "rms", "batch", "none" or "" (see layers.Normalization*)
+	Normalization        string          // e.g. "layer", "rms", "batch", "dyt", "none" or "" (see layers.Normalization*)
 	NormEpsilon          float64         // Epsilon for normalization
+	DyTAlpha             float64         // Initial alpha for Dynamic Tanh
 	Activation           activation.Type // e.g. "gelu", "silu", "gelu_approximate"
 	NumKVHeads           int             // For Grouped Query Attention (GQA), 0 means equal to NumHeads
 
@@ -176,6 +178,7 @@ func New(scope *model.Scope) *Model {
 		Architecture:                 ArchitectureStandard,
 		Normalization:                layers.NormalizationLayerNorm,
 		NormEpsilon:                  1e-5,
+		DyTAlpha:                     0.5,
 		Activation:                   activation.TypeGelu,
 		NumKVHeads:                   0,
 		posEncoder:                   nil,
@@ -216,6 +219,7 @@ func New(scope *model.Scope) *Model {
 			exceptions.Panicf("invalid architecture name %q: options are %v", archStr, ArchitectureValues())
 		}
 		m.NormEpsilon = model.GetParamOr(scope, ParamNormEpsilon, m.NormEpsilon)
+		m.DyTAlpha = model.GetParamOr(scope, ParamDyTAlpha, m.DyTAlpha)
 		m.Activation = activation.FromName(model.GetParamOr(scope, ParamActivation, m.Activation.String()))
 		m.NumKVHeads = model.GetParamOr(scope, ParamNumKVHeads, m.NumKVHeads)
 		m.GlobalHeadDim = model.GetParamOr(scope, ParamGlobalHeadDim, m.GlobalHeadDim)
@@ -461,11 +465,13 @@ func (m *Model) WithArchitecture(arch Architecture) *Model {
 	return m
 }
 
-// WithNormalization sets the normalization type ("layer", "rms", "batch", "none" or "").
+// WithNormalization sets the normalization type used inside transformer layers.
 //
+// Valid values are "layer", "rms", "dyt", "batch", "none" or "".
 // The values "none" or "" mean no normalization.
 //
-// See constants layers.NormalizationLayerNorm ("layer"), layers.NormalizationRMSNorm ("rms"), layers.NormalizationBatchNorm ("batch")
+// See constants layers.NormalizationLayerNorm ("layer"), layers.NormalizationRMSNorm ("rms"),
+// layers.NormalizationDyT ("dyt"), layers.NormalizationBatchNorm ("batch")
 // and layers.NormalizationNone ("none").
 func (m *Model) WithNormalization(norm string) *Model {
 	if norm == "" {
@@ -478,6 +484,12 @@ func (m *Model) WithNormalization(norm string) *Model {
 // WithNormEpsilon sets the epsilon value used for normalization layers.
 func (m *Model) WithNormEpsilon(eps float64) *Model {
 	m.NormEpsilon = eps
+	return m
+}
+
+// WithDyTAlpha sets the initial value for the learnable alpha parameter when using Dynamic Tanh.
+func (m *Model) WithDyTAlpha(alpha float64) *Model {
+	m.DyTAlpha = alpha
 	return m
 }
 
@@ -1092,6 +1104,8 @@ func (m *Model) normalize(scope *model.Scope, operand *Node, normType string) *N
 		return builder.Done()
 	case layers.NormalizationLayerNorm:
 		return norm.LayerNorm(scope, operand, -1).Epsilon(m.NormEpsilon).Done()
+	case layers.NormalizationDyT:
+		return norm.DynamicTanh(scope, operand).WithAlpha(m.DyTAlpha).Done()
 	default:
 		exceptions.Panicf("unsupported normalization type: %q", normType)
 		return nil

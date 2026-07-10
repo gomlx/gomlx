@@ -301,6 +301,28 @@ func TestTransformerVariants(t *testing.T) {
 		assert.Equal(t, []int{2, 8, 100}, logits.Shape().Dimensions)
 	})
 
+	t.Run("WithDyTNormalization", func(t *testing.T) {
+		backend := testutil.BuildTestBackend()
+		store := model.NewStore()
+		scope := store.RootScope()
+		m := New(scope).
+			WithVocabSize(100).
+			WithEmbedDim(64).
+			WithNumLayers(2).
+			WithNumHeads(4).
+			WithHeadDim(16).
+			WithFFNDim(128).
+			WithMaxPosEmbed(128).
+			WithNormalization(layers.NormalizationDyT).
+			WithDyTAlpha(0.75)
+		g := NewGraph(backend, "WithDyTNormalization")
+		tokens := IotaFull(g, shapes.Make(dtypes.Int32, 2, 8))
+		tokens = Mod(tokens, Const(g, int32(m.VocabSize)))
+		logits := m.Logits(tokens, CallOptions{})
+		require.NotNil(t, logits)
+		assert.Equal(t, []int{2, 8, 100}, logits.Shape().Dimensions)
+	})
+
 	t.Run("WithoutBias", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
 		store := model.NewStore()
