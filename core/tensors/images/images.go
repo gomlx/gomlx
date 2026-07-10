@@ -12,6 +12,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
+	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -191,7 +192,7 @@ func toTensorImpl(tt *ToTensorConfig, images []image.Image, batch bool) (t *tens
 	return
 }
 
-func toTensorGenericsImpl[T dtypes.NumberNotComplex | float16.Float16 | bfloat16.BFloat16](
+func toTensorGenericsImpl[T gotype.NumericNotComplex | float16.Float16 | bfloat16.BFloat16](
 	tt *ToTensorConfig, images []image.Image, batch bool) (t *tensors.Tensor) {
 	if len(images) > 1 && !batch {
 		Panicf("image.ToTensor in none-batch mode, but more than one image (%d) requested for conversion", len(images))
@@ -381,7 +382,7 @@ func toImageImpl(ti *ToImageConfig, imagesTensor *tensors.Tensor) (images []imag
 	return
 }
 
-func toImageGenericsImpl[T dtypes.NumberNotComplex | float16.Float16 | bfloat16.BFloat16](
+func toImageGenericsImpl[T gotype.NumericNotComplex | float16.Float16 | bfloat16.BFloat16](
 	imagesTensor *tensors.Tensor, numImages, height, width, channels int, maxValue float64) (images []image.Image) {
 	images = make([]image.Image, 0, numImages)
 	tensorPos := 0

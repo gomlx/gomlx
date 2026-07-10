@@ -46,6 +46,7 @@ func RefactorFile(filename string, rules RewriteRules) (bool, error) {
 	}
 
 	modified := false
+	usesGotype := false
 
 	// 1. Rewrite import paths
 	for oldPath, newPath := range rules.ImportPathMap {
@@ -77,10 +78,20 @@ func RefactorFile(filename string, rules RewriteRules) (bool, error) {
 					modified = true
 				}
 
-				// Type rename (e.g., model.Context -> model.Scope)
+				// Type rename (e.g., model.Context -> model.Scope, or dtypes.Supported -> gotype.Supported)
 				fullID := x.Name + "." + node.Sel.Name
 				if newTypeName, found := rules.TypeNameMap[fullID]; found {
-					node.Sel.Name = newTypeName
+					if idx := strings.Index(newTypeName, "."); idx != -1 {
+						newPkg := newTypeName[:idx]
+						newType := newTypeName[idx+1:]
+						x.Name = newPkg
+						node.Sel.Name = newType
+						if newPkg == "gotype" {
+							usesGotype = true
+						}
+					} else {
+						node.Sel.Name = newTypeName
+					}
 					modified = true
 				}
 
@@ -152,6 +163,12 @@ func RefactorFile(filename string, rules RewriteRules) (bool, error) {
 		}
 		return true
 	})
+
+	if usesGotype {
+		if astutil.AddImport(fset, f, "github.com/gomlx/compute/dtypes/gotype") {
+			modified = true
+		}
+	}
 
 	if modified {
 		out, err := os.Create(filename)

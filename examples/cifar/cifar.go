@@ -14,6 +14,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -87,7 +88,7 @@ var (
 const C10ExamplesPerFile = 10000
 const imageSizeBytes = Height * Width * Depth
 
-func convertBytesToTensor[T dtypes.GoFloat](image []byte, imagesT *tensors.Tensor, exampleNum int) error {
+func convertBytesToTensor[T gotype.Float](image []byte, imagesT *tensors.Tensor, exampleNum int) error {
 	var t T
 	if dtypes.FromGoType(reflect.TypeOf(t)) != imagesT.DType() {
 		return errors.Errorf("trying to convert to dtype %s from go type %t", imagesT.DType(), any(t))

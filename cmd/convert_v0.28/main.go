@@ -89,7 +89,15 @@ func main() {
 			"context":  "model",
 		},
 		TypeNameMap: map[string]string{
-			"model.Context": "Scope",
+			"model.Context":               "Scope",
+			"dtypes.Supported":            "gotype.Supported",
+			"dtypes.Number":               "gotype.Numeric",
+			"dtypes.NumberNotComplex":     "gotype.NumericNotComplex",
+			"dtypes.NumberComplex":        "gotype.Complex",
+			"dtypes.NumberHalfPrecision":  "gotype.AnyHalfPrecision",
+			"dtypes.GoFloat":              "gotype.Float",
+			"dtypes.HalfPrecision":        "gotype.HalfPrecision",
+			"dtypes.HalfPrecisionPtr":      "gotype.HalfPrecisionPtr",
 		},
 		FunctionNameMap: map[string]string{
 			"commandline.CreateContextSettingsFlag":     "CreateSettingsFlag",

@@ -371,8 +371,9 @@ func (b *MultiHeadAttentionBuilder) WithSeqLens(querySeqLen, keyValueSeqLen *Nod
 }
 
 // WithAttentionBias supplies an additive attention-score bias [B,H,Sq,Skv] (ALiBi /
-// relative-position), threaded to CoreOptions.AttentionBias. It is DISTINCT from UseProjectionBias
-// (the Q/K/V dense bias). nil (the default) disables it.
+// relative-position), threaded to CoreOptions.AttentionBias.
+// It is DISTINCT from UseProjectionBias (the Q/K/V dense bias).
+// The default is nil, which disables it.
 func (b *MultiHeadAttentionBuilder) WithAttentionBias(bias *Node) *MultiHeadAttentionBuilder {
 	b.attentionBias = bias
 	return b

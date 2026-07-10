@@ -16,6 +16,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -279,7 +280,7 @@ func parseInt32(str string) (int32, error) {
 }
 
 // parseNumbersFromCSV returns the numbers in a CSV file as a tensor.
-func parseNumbersFromCSV[E dtypes.NumberNotComplex](
+func parseNumbersFromCSV[E gotype.NumericNotComplex](
 	inputFilePath, outputFilePath string,
 	numRows, numCols int,
 	parseNumberFn func(string) (E, error),

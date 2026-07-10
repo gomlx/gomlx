@@ -15,6 +15,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
+	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/stretchr/testify/assert"
@@ -197,7 +198,7 @@ func TestFromValue(t *testing.T) {
 //
 //	https://stackoverflow.com/questions/73591149/generics-type-inference-when-cascaded-calls-of-generic-functions
 //	https://groups.google.com/g/golang-nuts/c/abILUXiD8-k
-func testValueOf[T dtypes.Number | complex64 | complex128](t *testing.T) {
+func testValueOf[T gotype.Numeric | complex64 | complex128](t *testing.T) {
 	want := [][]T{{1, 2, 3}, {10, 11, 12}}
 	var tensor *Tensor
 	require.NotPanics(t, func() { tensor = MustFromAnyValue(want) })
@@ -292,7 +293,7 @@ func testSaveLoadStumpImpl(t *testing.T, tensor *Tensor) (loadedTensor *Tensor) 
 	return
 }
 
-func testSaveLoadGenericsImpl[T dtypes.Number](t *testing.T) {
+func testSaveLoadGenericsImpl[T gotype.Numeric](t *testing.T) {
 	values := []T{0, 1, 2, 3, 4, 11}
 	dtype := dtypes.FromGenericsType[T]()
 	var tensor *Tensor
