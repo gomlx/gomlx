@@ -95,8 +95,8 @@ func backendSupportsFusionForBFloat16(backend compute.Backend) bool {
 	probeErr := exceptions.TryCatch[error](func() {
 		exec := MustNewExec(backend, func(qIn, kIn, vIn *Node) *Node {
 			fused, _ := BackendFusedScaledDotProductAttention(
-				qIn, kIn, vIn, nil, H, H,
-				compute.AxesLayoutBSHD, 0.125, true, nil)
+				qIn, kIn, vIn,
+				compute.AxesLayoutBSHD, &compute.ScaledDotProductAttentionConfig{Scale: 0.125, Causal: true})
 			// Make the returned node depend on the fused output so the fused op is genuinely
 			// part of the executable graph and exercised at compile/exec time. A backend whose
 			// ErrNotImplemented surfaces only at compile/exec (not graph-build) would otherwise
@@ -176,7 +176,7 @@ func TestFusionFallbackParity(t *testing.T) {
 // reference on every official backend, forward and gradients. group=3 (6 query / 2 kv heads).
 //
 // FIXME: add support grouped query attention.
-func disabledTestFusionGQAParity(t *testing.T) {
+func TestFusionGQAParity(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		const B, S, QH, KVH, D = 1, 128, 6, 2, 64
 		scale := 0.125

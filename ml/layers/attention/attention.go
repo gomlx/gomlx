@@ -404,23 +404,25 @@ func Core(query, key, value *Node, layout AxesLayout, options CoreOptions) (outp
 		useDecomposedVJP := !hasFusedVJP // If FusedVJP is not registered for backprop, fall back to use the decomposed.
 		output, isFused = InternalFusedOpCaller(
 			func() *Node {
-				var fusedConfig *compute.ScaledDotProductAttentionConfig
-				if options.QuerySeqLen != nil || options.KVSeqLen != nil || options.AttentionBias != nil {
-					fusedConfig = &compute.ScaledDotProductAttentionConfig{}
-					if options.QuerySeqLen != nil {
-						fusedConfig.QuerySeqLen = InternalBackendOutputs(options.QuerySeqLen)[0]
-					}
-					if options.KVSeqLen != nil {
-						fusedConfig.KeyValueSeqLen = InternalBackendOutputs(options.KVSeqLen)[0]
-					}
-					if options.AttentionBias != nil {
-						fusedConfig.Bias = InternalBackendOutputs(options.AttentionBias)[0]
-					}
+				fusedConfig := &compute.ScaledDotProductAttentionConfig{
+					Scale:  options.Scale,
+					Causal: options.UseCausalMask,
+				}
+				if options.AttentionMask != nil {
+					fusedConfig.Mask = InternalBackendOutputs(options.AttentionMask)[0]
+				}
+				if options.QuerySeqLen != nil {
+					fusedConfig.QuerySeqLen = InternalBackendOutputs(options.QuerySeqLen)[0]
+				}
+				if options.KVSeqLen != nil {
+					fusedConfig.KeyValueSeqLen = InternalBackendOutputs(options.KVSeqLen)[0]
+				}
+				if options.AttentionBias != nil {
+					fusedConfig.Bias = InternalBackendOutputs(options.AttentionBias)[0]
 				}
 				klog.V(2).Info("attention.Core(): attempting to use FusedScaledDotProductAttention op.")
 				out, _ := BackendFusedScaledDotProductAttention(
-					query, key, value, options.AttentionMask,
-					numQueryHeads, numKVHeads, layout, scale, options.UseCausalMask, fusedConfig)
+					query, key, value, layout, fusedConfig)
 				return out
 			},
 			func() *Node {

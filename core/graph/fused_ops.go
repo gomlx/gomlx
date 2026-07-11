@@ -165,8 +165,8 @@ func BackendFusedDense(x, weight, bias *Node, activation compute.ActivationType)
 //
 // Internal: prefer to use the package ml/layers/attention instead, which provides the standard (and
 // stable) API for attention layers. This is an internal API that may change without notice.
-func BackendFusedScaledDotProductAttention(query, key, value, mask *Node, numHeads, numKVHeads int, axesLayout compute.AxesLayout, scale float64, causal bool, options *compute.ScaledDotProductAttentionConfig) (output *Node, statesForVJP []*Node) {
-	return backendFusedScaledDotProductAttention(query, key, value, mask, numHeads, numKVHeads, axesLayout, scale, causal, options)
+func BackendFusedScaledDotProductAttention(query, key, value *Node, axesLayout compute.AxesLayout, options *compute.ScaledDotProductAttentionConfig) (output *Node, statesForVJP []*Node) {
+	return backendFusedScaledDotProductAttention(query, key, value, axesLayout, options)
 }
 
 // fusedScaledDotProductAttentionVJP is the registered VJP for NodeTypeFusedScaledDotProductAttention.
@@ -177,18 +177,15 @@ func fusedScaledDotProductAttentionVJP(node *Node, vjps []*Node, _ shapes.Shape)
 	output, statesForVJP := splitOutputs[0], splitOutputs[1:]
 	dOutput := vjps[0] // adjoint of the attention output; the state adjoints are unused.
 	dQuery, dKey, dValue := backendFusedScaledDotProductAttentionVJP(
-		inputs.query, inputs.key, inputs.value, inputs.mask,
-		inputs.numHeads, inputs.numKVHeads, inputs.axesLayout, inputs.scale, inputs.causal, inputs.options,
+		inputs.query, inputs.key, inputs.value,
+		inputs.axesLayout, inputs.options,
 		output, statesForVJP, dOutput)
-	// Grads align to node.inputNodes = [query, key, value (, mask)]. The fused backward runs in bf16;
+	// Grads align to node.inputNodes = [query, key, value]. The fused backward runs in bf16;
 	// cast each grad back to its input's dtype so autodiff accumulation matches.
 	grads := []*Node{
 		ConvertDType(dQuery, inputs.query.DType()),
 		ConvertDType(dKey, inputs.key.DType()),
 		ConvertDType(dValue, inputs.value.DType()),
-	}
-	if inputs.mask != nil {
-		grads = append(grads, nil) // causal flash takes no mask operand; mask is not differentiated.
 	}
 	return grads
 }
