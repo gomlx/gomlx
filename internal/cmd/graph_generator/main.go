@@ -66,8 +66,6 @@ var (
 	nillableParams = sets.MakeWith(
 		"FusedLayerNorm.gamma", "FusedLayerNorm.beta",
 		"FusedDense.bias",
-		"FusedScaledDotProductAttention.mask",
-		"FusedScaledDotProductAttentionVJP.mask",
 		"FusedAttentionQKVProjection.biasQ", "FusedAttentionQKVProjection.biasK", "FusedAttentionQKVProjection.biasV",
 	)
 

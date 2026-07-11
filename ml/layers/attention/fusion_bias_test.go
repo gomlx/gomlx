@@ -28,10 +28,14 @@ func backendSupportsBiasedFusion(backend compute.Backend) bool {
 	probeErr := exceptions.TryCatch[error](func() {
 		exec := MustNewExec(backend, func(qn, bn *Node) *Node {
 			round := func(n *Node) *Node { return ConvertDType(n, dtypes.BFloat16) }
-			cfg := &compute.ScaledDotProductAttentionConfig{Bias: InternalBackendOutputs(round(bn))[0]}
+			cfg := &compute.ScaledDotProductAttentionConfig{
+				Bias:   InternalBackendOutputs(round(bn))[0],
+				Scale:  scale,
+				Causal: false,
+			}
 			fused, _ := BackendFusedScaledDotProductAttention(
-				round(qn), round(qn), round(qn), nil, H, H,
-				compute.AxesLayoutBSHD, scale, false, cfg)
+				round(qn), round(qn), round(qn),
+				compute.AxesLayoutBSHD, cfg)
 			return ConvertDType(ReduceAllSum(fused), dtypes.Float32)
 		})
 		_ = exec.MustCall(q, biasTensor)
