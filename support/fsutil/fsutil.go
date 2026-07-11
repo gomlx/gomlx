@@ -140,7 +140,11 @@ func ReportedClose(closer io.Closer, name string, reportErrPtr *error) {
 
 // ValidateChecksum verifies that the checksum of the file in the given path matches the checksum
 // given. If it fails, it will remove the file (!) and return and error.
+// If checkHash is empty, this is a no-op.
 func ValidateChecksum(path, checkHash string) error {
+	if checkHash == "" {
+		return nil
+	}
 	hasher := sha256.New()
 	f, err := os.Open(path)
 	if err != nil {

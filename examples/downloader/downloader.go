@@ -90,6 +90,12 @@ func Download(url, filePath string, showProgressBar bool) (size int64, err error
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed creating file %q", filePath)
 	}
+	defer func() {
+		if cerr := file.Close(); cerr != nil && err == nil {
+			size = 0
+			err = errors.Wrapf(cerr, "failed closing %q", filePath)
+		}
+	}()
 	client := http.Client{
 		CheckRedirect: func(r *http.Request, via []*http.Request) error {
 			r.URL.Opaque = r.URL.Path
@@ -101,6 +107,12 @@ func Download(url, filePath string, showProgressBar bool) (size int64, err error
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed downloading %q", url)
 	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil && err == nil {
+			size = 0
+			err = errors.Wrapf(cerr, "failed closing connection to %q", url)
+		}
+	}()
 
 	if showProgressBar {
 		size, err = CopyWithProgressBar(file, resp.Body, resp.ContentLength)
@@ -110,35 +122,39 @@ func Download(url, filePath string, showProgressBar bool) (size int64, err error
 	if err != nil {
 		return 0, errors.Wrapf(err, "downloading %q to %q", url, filePath)
 	}
-	err = file.Close()
-	if err != nil {
-		return 0, errors.Wrapf(err, "failed closing %q", filePath)
-	}
-	err = resp.Body.Close()
-	if err != nil {
-		return 0, errors.Wrapf(err, "failed closing connection to %q", url)
-	}
 	return size, nil
 }
 
-// DownloadIfMissing will check if the path exists already, and if not it will download the file
-// from the given URL.
+// DownloadIfMissing will check if the path exists already and has a valid checksum, and if not it will download the file
+// from the given URL to a .part file, validate the checksum, and rename it to the final path.
 //
-// If checkHash is provided, it checks that the file has the hash or fail.
+// If checkHash is provided, it checks that the file has the hash or returns an error.
 func DownloadIfMissing(url, filePath, checkHash string) error {
 	filePath = fsutil.MustReplaceTildeInDir(filePath)
-	if !fsutil.MustFileExists(filePath) {
-		// Download the compressed file first.
-		fmt.Printf("Downloading %s ...\n", url)
-		_, err := Download(url, filePath, true)
-		if err != nil {
-			return err
+
+	if fsutil.MustFileExists(filePath) {
+		if err := fsutil.ValidateChecksum(filePath, checkHash); err == nil {
+			return nil
 		}
 	}
-	if checkHash == "" {
-		return nil
+
+	partPath := filePath + ".part"
+
+	// Download the compressed file.
+	fmt.Printf("Downloading %s ...\n", url)
+	if _, err := Download(url, partPath, true); err != nil {
+		os.Remove(partPath)
+		return err
 	}
-	return fsutil.ValidateChecksum(filePath, checkHash)
+	if err := fsutil.ValidateChecksum(partPath, checkHash); err != nil {
+		os.Remove(partPath)
+		return err
+	}
+	if err := os.Rename(partPath, filePath); err != nil {
+		os.Remove(partPath)
+		return err
+	}
+	return nil
 }
 
 // Untar file, using decompression flags according to suffix: .gz for gzip, bz2 for bzip2.
