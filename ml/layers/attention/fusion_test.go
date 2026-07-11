@@ -176,7 +176,7 @@ func TestFusionFallbackParity(t *testing.T) {
 // reference on every official backend, forward and gradients. group=3 (6 query / 2 kv heads).
 //
 // FIXME: add support grouped query attention.
-func disabledTestFusionGQAParity(t *testing.T) {
+func TestFusionGQAParity(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		const B, S, QH, KVH, D = 1, 128, 6, 2, 64
 		scale := 0.125
