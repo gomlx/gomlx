@@ -203,6 +203,36 @@ func (s *Store) DeleteVariable(fullPath string) error {
 	return nil
 }
 
+// MoveVariable moves a variable from one absolute path to another.
+//
+// This cannot be called from a graph-building function, as it will invalidate any existing executor that uses this
+// variable. Any executor using the variable on the older path must be discarded and recreated.
+func (s *Store) MoveVariable(fromPath, toPath string) error {
+	if !strings.HasPrefix(fromPath, "/") {
+		fromPath = "/" + fromPath
+	}
+	if !strings.HasPrefix(toPath, "/") {
+		toPath = "/" + toPath
+	}
+	v, ok := s.variablesMap[fromPath]
+	if !ok {
+		return errors.Errorf("variable %q not found in store", fromPath)
+	}
+	if _, exists := s.variablesMap[toPath]; exists {
+		return errors.Errorf("variable at target path %q already exists in store", toPath)
+	}
+
+	parts := strings.Split(toPath, "/")
+	name := parts[len(parts)-1]
+
+	delete(s.variablesMap, fromPath)
+	s.variablesMap[toPath] = v
+	v.name = name
+	v.fullPath = toPath
+
+	return nil
+}
+
 // DeleteVariablesInScope deletes all variables under the given absolute path.
 func (s *Store) DeleteVariablesInScope(fullPath string) error {
 	if !strings.HasPrefix(fullPath, "/") {
