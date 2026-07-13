@@ -104,6 +104,7 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
 **Inference Examples:**
 
+  * **🚀 NEW 🚀** [SAM2: Segment Anything Model (Facebook)](https://github.com/gomlx/go-huggingface/blob/main/models/sam2/README.md): model to segment images (videos version not ported yet).
   * **🚀 NEW 🚀** [Gemma4-4B-it library and demo](https://github.com/gomlx/go-huggingface/tree/main/examples/gemma4-e4bit): 
     Google's new free generative LLM, instrunction tuned. See also [HuggingFace's "google/gemma-4-E4B-it" model page](https://huggingface.co/google/gemma-4-E4B-it).
   * [KaLM-Gema3 12B parameters](https://github.com/gomlx/go-huggingface/tree/main/examples/kalmgemma3): 
