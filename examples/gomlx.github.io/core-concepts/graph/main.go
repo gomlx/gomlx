@@ -16,7 +16,7 @@ func main() {
 	fmt.Println("md:cell1")
 
 	//md_start:backend
-	backend := compute.MustNew() // auto-selects best available backend
+	backend := compute.MustNew() // auto-selects best available backend //md:cell1
 	fmt.Printf("Backend: %s\n", backend.Description())
 	//md_end:backend
 
