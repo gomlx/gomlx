@@ -8,12 +8,14 @@ import ( //md:main_exec
 	. "github.com/gomlx/gomlx/core/graph"       //md:main_exec
 ) //md:main_exec
 
-//md:distance_fn,main_exec
+//md_start:distance_fn,main_exec
 
 // EuclideanDistance between two values.
-func EuclideanDistance(a, b *Node) *Node { //md:distance_fn,main_exec
-	return Sqrt(ReduceAllSum(Square(Sub(a, b)))) //md:distance_fn,main_exec
-} //md:distance_fn,main_exec
+func EuclideanDistance(a, b *Node) *Node {
+	return Sqrt(ReduceAllSum(Square(Sub(a, b))))
+}
+
+//md_end:distance_fn,main_exec
 
 func main() {
 	backend := compute.MustNew() // auto-selects best available backend
@@ -35,6 +37,6 @@ func main() {
 	}
 
 	// 3. Print the result: float64(5)
-	fmt.Printf("Distance: %v\n", resultTensor.Value())
+	fmt.Printf("Distance: %s\n", resultTensor)
 	//md_end:main_exec
 }
