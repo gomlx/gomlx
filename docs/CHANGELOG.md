@@ -172,6 +172,7 @@ And a few small renaming:
   - Added options `WithFinalNormalization`, `WithScalingOfTokenEmbeddings`, `WithArchitecture`, `WithSlidingWindow`
     and `WithLayerTypes`, `WithEmbedNormalization`, `WithTokenTypeEmbedding`.
   - Added BERT and Gemma types of models.
+- Added Dynamic Tanh (DyT) "pseudo" normalizer (https://arxiv.org/abs/2503.10622).
 
 ### Packages in `pkg/support`
 
