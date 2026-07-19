@@ -16,18 +16,18 @@ func main() {
 	// Output to cell1
 	fmt.Println("md:cell1")
 
-	//md_start:backend
-	backend, err := compute.New() // auto-selects best available backend //md:cell1
+	//md_start:backend(-1)
+	backend, err := compute.New() // auto-selects best available backend //md:cell1(-1)
 	if err != nil {
 		log.Fatalf("error creating backend: %+v\n", err)
 	}
-	fmt.Printf("Backend: %s\n", backend.Description())
+	fmt.Printf("Backend: %s\n", backend.Description()) //md:cell1
 	//md_end:backend
 
 	// Output to cell2
 	fmt.Println("md:cell2")
 
-	//md_start:cell2
+	//md_start:cell2(-1)
 	addFn := func(a, b *Node) *Node {
 		fmt.Printf("* building addFn computation graph: a.shape=%s, b.shape=%s\n", a.Shape(), b.Shape())
 		return Add(a, b)
@@ -47,7 +47,7 @@ func main() {
 	// Output to cell3
 	fmt.Println("md:cell3")
 
-	_, err = addExec.Call(int32(1), float32(1.0)) //md:cell3
+	_, err = addExec.Call(int32(1), float32(1.0)) //md:cell3(-1)
 	if err != nil {                               //md:cell3
 		//... //md:cell3
 		// Only output the relevant part of the error for the snippet:
