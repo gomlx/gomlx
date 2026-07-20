@@ -4,7 +4,7 @@ It hasn't reached yet a 1.0 release yet (it is close), so instead we use every m
 
 ---
 
-# (In progress) v0.28.0: Large API and Packages Improvementes, Cleanup and Reorganization:
+# (In progress) v0.28.0: Large API and Packages Improvements, Cleanups and Reorganization:
 
 To faciliate conversion to this updated API, we added the CLI tool `cmd/convert_v0.28`.
 It won't fully fix the code (mostly because of the `context.Context` to `model.Store`/`model.Scope` redesign),
@@ -113,8 +113,7 @@ And a few small renaming:
   - `SchedulingBarrier` and `OptimizationBarrier`: they are implemented in the Go and XLA backends. 
 - Gradient Checkpointing: Added `Node.Checkpoint()` and `Node.StopCheckpoint()`.
 - Updates to `FusedScaledDotProductAttention`, including adding support to the corresponding VJP: enabling the **flash attention** in XLA+CUDA.
-  
-
+ 
 ## Tensors (github.com/gomlx/gomlx/core/tensors):
 - Renamed `FromAnyValue` to `MustFromAnyValue` and added `FromAnyValue` returning `(tensor, error)`.
 
@@ -124,6 +123,7 @@ And a few small renaming:
 - Many improvements to `ml/zoo/transformer`: it nows support Gemma4 class of transformer models.
 - Added `nn.SoftCap` and in the `ml/layers/attention` added support for attention scores soft-cap (used by Gemma models).
 - Added `activation.SwiGLU` for Swish Gated Linear activation, and updated corresponding support in the `fnn` package.
+- Added Dynamic Tanh (DyT) "pseudo" normalizer (https://arxiv.org/abs/2503.10622).
 
 ---
 

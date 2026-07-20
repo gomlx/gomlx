@@ -66,7 +66,7 @@ type Plotter interface {
 // plot. Use
 type CustomMetricFn func(plotter Plotter, step float64) error
 
-// AddTrainAndEvalMetrics is used by plotters (see [margaid.PLots] and [plotly.PlotConfig]) to include the metrics
+// AddTrainAndEvalMetrics is used by plotters (see [margaid.Plots] and [plotly.PlotConfig]) to include the metrics
 // generated given training, plus to run evaluation on the given datasets.
 //
 // Notice it evaluate on the datasets sequentially -- presumably the training could go in parallel if there is

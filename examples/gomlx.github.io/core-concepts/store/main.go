@@ -13,7 +13,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 )
 
-//md_start:scopes
+// //md_start:scopes
 func denseLayer(scope *model.Scope, x *Node, outputDims int) *Node {
 	g := x.Graph()
 	dtype := x.DType()
@@ -35,7 +35,7 @@ func main() {
 	// Output to counter
 	fmt.Println("md:counter")
 
-	//md_start:counter
+	//md_start:counter(-1)
 	store := model.NewStore()
 	counterFn := func(scope *model.Scope, g *Graph) *Node {
 		counterVar := scope.VariableWithValue("counter", int32(0))
@@ -53,6 +53,7 @@ func main() {
 	// Output to scopes
 	fmt.Println("md:scopes")
 
+	//md:scopes(-1)
 	//md_start:scopes
 	modelFn := func(scope *model.Scope, x *Node) *Node {
 		// Use scope.In to partition variable names under sub-scopes:

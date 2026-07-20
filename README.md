@@ -179,7 +179,7 @@ Some selected highlights:
 * Autodiff: automatic differentiation—only gradients for now, no jacobian.
 * `Store` and `Scope`: simple variable management for ML models.
 * ML layers library with the most popular machine learning "layers": FFN layers,  
-  various activation functions, layer and batch normalization, convolutions, pooling, dropout, Multi-Head-Attention
+  various activation functions, layer and batch normalization, DyT (Dynamic Tanh normalizer, https://arxiv.org/abs/2503.10622), convolutions, pooling, dropout, Multi-Head-Attention
   (for transformer layers), LSTM, KAN (B-Splines, [GR-KAN/KAT networks](https://arxiv.org/abs/2409.10594), 
   Discrete-KAN, PiecewiseLinear KAN), PiecewiseLinear (for calibration and normalization), various regularizations,
   FFT (reverse/differentiable), learnable rational functions (both for activations and [GR-KAN/KAT networks](https://arxiv.org/abs/2409.10594)),
