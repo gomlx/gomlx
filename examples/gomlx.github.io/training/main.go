@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/gomlx/compute"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/adult"
-	"github.com/gomlx/gomlx/ml/layers"
 	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/model"
@@ -26,7 +27,7 @@ import (
 )
 
 var (
-	flagDataDir   = flag.String("data", "~/work/uci-adult", "Directory to save dataset and checkpoint files.")
+	flagDataDir    = flag.String("data", "~/work/uci-adult", "Directory to save dataset and checkpoint files.")
 	flagCheckpoint = flag.String("checkpoint", "checkpoint", "Checkpoint subdirectory name.")
 )
 
@@ -41,7 +42,7 @@ func main() {
 	// Configure hyperparameters in the model store
 	store.SetParams(map[string]any{
 		"batch_size":                128,
-		"train_steps":                1000,
+		"train_steps":               1000,
 		optimizer.ParamOptimizer:    "adam",
 		optimizer.ParamLearningRate: 0.001,
 		activation.ParamActivation:  "relu",
@@ -104,7 +105,7 @@ func main() {
 			DirFromBase(*flagCheckpoint, *flagDataDir).
 			Keep(3).
 			Done()
-		
+
 		// Save checkpoints periodically every minute
 		train.PeriodicCallback(loop, time.Minute, true, "checkpoint", 100, checkpointHandler.SaveOnStepFn)
 	}
