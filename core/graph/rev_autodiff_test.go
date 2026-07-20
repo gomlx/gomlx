@@ -147,7 +147,7 @@ func testGradientsWithBackend(t *testing.T, name string, backend compute.Backend
 }
 
 // testGradientsInDelta run testFn to build a graph, calculates the gradients of the ReduceAllSum(output) with respect
-// to the nodesForGrad, and check that it gets the corresponding values in wantForGrad, withing a delta-margin (at every element).
+// to the nodesForGrad, and check that it gets the corresponding values in wantForGrad, within a delta-margin (at every element).
 //
 // It will print out the inputNodes and outputs to help debugging.
 func testGradientsInDelta(t *testing.T, name string, backend compute.Backend, testFn gradTestFunc, wantForGrad []any, delta float64) {
@@ -174,7 +174,7 @@ func testGradientsInDelta(t *testing.T, name string, backend compute.Backend, te
 				require.Truef(t, output.Shape().Equal(wantShape), "Wanted shape %s, got %s", wantShape, output.Shape())
 			} else {
 				require.Truef(t, tensors.MustFromAnyValue(wantForGrad[ii]).InDelta(output, delta),
-					"%s: gradient #%d doesn't match wanted value (withing %g delta/margin)\n\t%v", name, ii, delta, wantForGrad[ii])
+					"%s: gradient #%d doesn't match wanted value (within %g delta/margin)\n\t%v", name, ii, delta, wantForGrad[ii])
 			}
 		}
 	})
