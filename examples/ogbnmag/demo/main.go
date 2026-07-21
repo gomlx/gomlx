@@ -169,7 +169,7 @@ func main() {
 	mag.WithReplacement = model.GetParamOr(store.RootScope(), paramWithReplacement, false)
 	var err error
 	if *flagEval {
-		err = mag.EvalWithStore(backend, store, *flagDataDir, *flagCheckpoint, *flagLayerWise, *flagSkipTrainEval)
+		err = mag.Eval(backend, store, *flagDataDir, *flagCheckpoint, *flagLayerWise, *flagSkipTrainEval)
 	} else {
 		if mag.WithReplacement {
 			fmt.Println("Training dataset with replacement")
