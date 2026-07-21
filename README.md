@@ -375,9 +375,10 @@ Multi-GPU/TPU, NVidia DGX Spark, Tenstorrent, etc.
 ## 🚀 Advanced Topics
 
 * [CHANGELOG](docs/CHANGELOG.md)
+* [Debugging](https://gomlx.github.io/docs/debugging/)
+* [Error Handling](https://gomlx.github.io/docs/error-handling/)
+* [Developing in GoMLX](https://gomlx.github.io/docs/developing/)
 * [TODO](docs/TODO.md)
-* [Error Handling](docs/error_handling.md)
-* [Developing](docs/developing.md)
 
 ##  💖 Thanks
 
@@ -391,7 +392,7 @@ Multi-GPU/TPU, NVidia DGX Spark, Tenstorrent, etc.
 
 ## ⚖️ License 
 
-> Copyright 2025 Jan Pfeifer
+> Copyright 2026 Jan Pfeifer & other GoMLX authors
 
 **GoMLX** is distributed under the terms of the [Apache License Version 2.0](https://github.com/gomlx/gomlx/blob/main/LICENSE).
 Unless it is explicitly stated otherwise, any contribution intentionally submitted for inclusion in this project shall be licensed under [Apache License Version 2.0](https://github.com/gomlx/gomlx/blob/main/LICENSE)
