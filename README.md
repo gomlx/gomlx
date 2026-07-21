@@ -3,15 +3,16 @@
 [![Documentation](https://img.shields.io/badge/docs-gomlx.github.io-blue.svg)](https://gomlx.github.io/)
 [![GoDev](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/gomlx/gomlx?tab=doc)
 [![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/gomlx/gomlx/blob/main/LICENSE)
+[![Slack](https://img.shields.io/badge/Slack-GoMLX-purple.svg?logo=slack)](https://app.slack.com/client/T029RQSE6/C08TX33BX6U)
+[![Sponsor gomlx](https://img.shields.io/badge/Sponsor-gomlx-white?logo=github&style=flat-square)](https://github.com/sponsors/gomlx)
+<br/>
 [![Linux/amd64 Tests](https://github.com/gomlx/gomlx/actions/workflows/linux_amd64_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/linux_amd64_tests.yaml)
 [![Linux/arm64 Tests](https://github.com/gomlx/gomlx/actions/workflows/linux_arm64_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/linux_arm64_tests.yaml)
 [![Darwin/arm64 Tests](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml)
 [![Windows/amd64 Tests](https://github.com/gomlx/gomlx/actions/workflows/windows_amd64_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/windows_amd64_tests.yaml)
 ![Coverage](https://img.shields.io/badge/Coverage-67.0%25-yellow)
-[![Slack](https://img.shields.io/badge/Slack-GoMLX-purple.svg?logo=slack)](https://app.slack.com/client/T029RQSE6/C08TX33BX6U)
-[![Sponsor gomlx](https://img.shields.io/badge/Sponsor-gomlx-white?logo=github&style=flat-square)](https://github.com/sponsors/gomlx)
 
-## 📖 About **_GoMLX_**
+## 📖 About **_GoMLX_** - [gomlx.github.io](https://gomlx.github.io/)
 <img align="right" src="docs/gomlx_gopher2.png" alt="GoMLX Gopher" width="220px"/>
 
 **GoMLX** is an easy-to-use set of Machine Learning and generic math libraries and tools. 
@@ -33,10 +34,11 @@ It's the same engine that powers Google's [Jax](https://github.com/google/jax),
 [TensorFlow](https://tensorflow.org/) and [Pytorch/XLA](https://docs.pytorch.org/xla/master/learn/xla-overview.html),
 and it has the same speed in many cases (*). 
 
+**Documentation at [gomlx.github.io](https://gomlx.github.io/)**.
+
 > [!Tip]
 > * See our 🎓 [**tutorial**](https://gomlx.github.io/gomlx/notebooks/tutorial.html) 🎓
 > * A [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
-> * A simple [GoMLX slide deck](https://docs.google.com/presentation/d/1QWp_N9_7_n7gQKePHfmb5AFFBXnN6DTqjpWxNC0Ecpk/edit?usp=sharing) with small sample code.  
 
 <div>
 <p>It was developed to be a full-featured ML platform for Go, productionizable and easily to experiment with ML ideas
@@ -53,11 +55,11 @@ Documentation is kept up to date (if it is not well-documented, it is as if the 
 and error messages are useful (always with a stack-trace) and try to make it easy to solve issues.
 </div>
 
-## 🔮 Upcoming 🔮
+## 🚀 v0.28.0 Release 🚀
 
 <img align="right" src="docs/gomlx_gopher_hiking.jpeg" alt="GoMLX Gopher" width="220px"/>
 
-**Large API and package re-organization coming soon in v0.28 release (already in the `main` branch):**
+**Large API and package re-organization:**
 
 - `backends` moved to `github.com/gomlx/compute` repository!
   - Packages `backends`, `dtypes`, `shapes` and `distributed` moved to `github.com/gomlx/compute`.
@@ -69,15 +71,24 @@ and error messages are useful (always with a stack-trace) and try to make it eas
 - The `train.Dataset` (package `ml/train`) interface was modernized (and simplified) to use Go's standard iterators. Also now with clearer ownership rules.
 - The `train.NewTrainer` now uses a generic `modelFn` type, with a friendlier more flexible signature, using generics and the `ModelFnCompatible` constraint.
 
-See more details in the our [CHANGELOG](docs/CHANGELOG.md), including how to use `cmd/convert_v0.28`, 
-a tool that facilitates the changes needed to move to the new API -- details in the [CHANGELOG](docs/CHANGELOG.md).
+**New GoMLX Documentation: [gomlx.github.io](https://gomlx.github.io/)**
 
-**Upcoming features for the upcoming v0.28.0 release:**
+**New features:**
 
 * Dynamic shapes support for GoMLX: **alpha**/**experimental**, only for the Go backend (XLA only supports static shapes).
   But it will allow more efficient and padding-free (sometimes) models with Go. It also opens up better support
   for ONNXRuntime backend (a goal for after the v0.28 release).  
 * Improvements and some SIMD support for the Go backend (now in repo `github.com/gomlx/compute/gobackend`).
+* Gradient checkpointing.
+* DyT normalizer.
+* New `SchedulingBarrier` and `OptimizationBarrier` primitives.
+* Proper KV-Cache implementation.
+* Package `transformer` improvements, supporting newer models (Gemma4, etc.)
+* Updates to `FusedScaledDotProductAttention`, including adding support to the corresponding VJP: enabling the **flash attention** in XLA+CUDA.
+
+> [!Tip]
+> See more details in the our [CHANGELOG](docs/CHANGELOG.md), including how to use `cmd/convert_v0.28`, 
+> a tool that facilitates the changes needed to move to the new API.
 
 ## 🗺️ Overview
 
