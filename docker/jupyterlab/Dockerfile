@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 ubuntu:noble AS gomlx_jupyterlab_base
+FROM --platform=linux/amd64 ubuntu:resolute AS gomlx_jupyterlab_base
 LABEL maintainer="pfeifer@gmail.com"
 
 #######################################################################################################
@@ -12,8 +12,7 @@ USER root
 
 # Update apt and install basic utils.
 # C compiler is included because some of the Go dependencies require C.
-RUN apt-get update --yes && \
-    apt-get install --yes --no-install-recommends sudo wget vim micro unzip hdf5-tools libc6-dev curl gcc g++ git openssh-client
+RUN apt-get update -y && apt-get install --yes --no-install-recommends sudo wget vim micro unzip hdf5-tools libc6-dev curl gcc g++ git openssh-client
 
 # Create NB_USER (jovyan) and its home directory.
 ARG NB_USER="jupyter"
@@ -26,7 +25,7 @@ ENV HOME /home/${NB_USER}
 # Jupyter Lab
 #######################################################################################################
 USER root
-RUN apt install --yes --no-install-recommends python3 python3-venv
+RUN apt-get install --yes --no-install-recommends python3 python3-venv
 ENV PATH=${PATH}:${HOME}/.local/bin
 
 USER ${NB_USER}
@@ -42,7 +41,7 @@ EOF
 #######################################################################################################
 # Go, GoNB and go-xla
 #######################################################################################################
-ARG GO_VERSION="1.26.2"
+ARG GO_VERSION="1.26.5"
 ENV LD_LIBRARY_PATH /usr/local/lib:${LD_LIBRARY_PATH}
 
 # Download Go in users home directory.
@@ -73,8 +72,8 @@ FROM gomlx_jupyterlab_base AS gomlx_jupyterlab_goxla
 USER ${NB_USER}
 WORKDIR ${HOME}
 RUN <<EOF
-mkdir Projects
-cd Projects
+mkdir -p Projects/gomlx
+cd Projects/gomlx
 git clone https://github.com/gomlx/go-xla.git
 cd go-xla/cmd/pjrt_installer
 go install .
@@ -88,7 +87,7 @@ EOF
 
 # Test go-xla
 RUN <<EOF
-cd Projects/go-xla
+cd Projects/gomlx/go-xla
 go test
 go test ./...
 EOF
@@ -105,27 +104,23 @@ ARG GOMLX_REPOSITORY_BRANCH="main"
 USER ${NB_USER}
 WORKDIR ${HOME}
 RUN <<EOF
-cd Projects
+cd Projects/gomlx
 git clone -b ${GOMLX_REPOSITORY_BRANCH} https://github.com/gomlx/gomlx.git
+git clone https://github.com/gomlx/compute.git
 git clone https://github.com/gomlx/onnx-gomlx.git
 git clone https://github.com/gomlx/go-huggingface.git
+git clone https://github.com/gomlx/gomlx.github.io.git
 
 # GoMLX setup: use local modules, so they can be edited by the user, if they want.
 ln "./gomlx/examples/tutorial/tutorial.ipynb" "${HOME}/"
 ln "./gomlx/examples/tutorial/"*.jpg "${HOME}/"
+go work init
+go work use ./compute ./gomlx ./gomlx/examples ./gomlx/cmd/gomlx_checkpoints ./go-xla ./onnx-gomlx ./go-huggingface ./go-xla
 cd gomlx
-go work init && go work use . ./examples ./cmd/gomlx_checkpointss ../onnx-gomlx ../go-huggingface ../go-xla
-go install ./cmd/gomlx_checkpointss && gomlx_checkpointss -help
-go test ./types/... ./graph/... ./ml/... ./backends/...
-go build ./examples/... ./models/...
-
-# ONNX-GoMLX and go-huggingface setup.
-cd ../go-huggingface
-go work init && go work use . ../gomlx
-
-cd ../onnx-gomlx
-go work init && go work use . ../gomlx ../go-huggingface
-
+pwd ; ls -l
+go install ./cmd/gomlx_checkpoints && gomlx_checkpoints -help
+go test ./core/... ./ml/...
+go test -short ./examples/...
 EOF
 
 #######################################################################################################
@@ -140,7 +135,7 @@ EOF
 # https://stackoverflow.com/questions/59691207/docker-build-with-nvidia-runtime/61737404#61737404
 #
 # So for now, the alternative if to run this after building the image, and then we commit the container.
-RUN cd Projects/gomlx && go run ./examples/linear
+RUN cd Projects/gomlx/gomlx && go run ./examples/linear
 
 #######################################################################################################
 # Finishing touches.
