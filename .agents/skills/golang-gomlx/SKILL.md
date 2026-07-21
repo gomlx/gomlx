@@ -6,7 +6,7 @@ license: MIT
 compatibility: Designed for Claude Code or similar AI coding agents, and for projects using Golang.
 metadata:
   author: janpfeifer
-  version: "1.0.0"
+  version: "0.28.0"
   openclaw:
     emoji: "🤖"
     homepage: https://github.com/gomlx/gomlx
@@ -26,11 +26,18 @@ allowed-tools: Read Edit Write Glob Grep Bash(go:*) Bash(golangci-lint:*) Bash(g
 **Official Resources:**
 
 - GoMLX:
+  - [gomlx.github.io](https://gomlx.github.io/) - GoMLX Documentation
   - [pkg.go.dev/github.com/gomlx/gomlx](https://pkg.go.dev/github.com/gomlx/gomlx)
   - [github.com/gomlx/gomlx](https://github.com/gomlx/gomlx)
 - Compute Backend API and Go backend implementation:
   - [pkg.go.dev/github.com/gomlx/compute](https://pkg.go.dev/github.com/gomlx/compute)
   - [github.com/gomlx/compute](https://github.com/gomlx/compute)
+- Related Projects
+  - [github.com/gomlx/go-huggingface](https://github.com/gomlx/go-huggingface): downloading HuggingFace model files, 
+    iterating over datasets, tokenizing, "transformer" model library (capable of importing several HuggingFace models
+    directly as GoMLX computation graphs), etc.
+  - [github.com/gomlx/onnx-gomlx](https://github.com/gomlx/onnx-gomlx): importing ONNX models into GoMLX computation
+    graphs. Also allows re-exporting weights after fine-tuning.
 
 This skill is not exhaustive. Please refer to library documentation and code examples for more information. 
 
