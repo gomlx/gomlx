@@ -34,9 +34,9 @@ It's the same engine that powers Google's [Jax](https://github.com/google/jax),
 [TensorFlow](https://tensorflow.org/) and [Pytorch/XLA](https://docs.pytorch.org/xla/master/learn/xla-overview.html),
 and it has the same speed in many cases (*). 
 
-**Documentation at [gomlx.github.io](https://gomlx.github.io/)**.
 
 > [!Tip]
+> * **Documentation at [gomlx.github.io](https://gomlx.github.io/)**.
 > * See our 🎓 [**tutorial**](https://gomlx.github.io/gomlx/notebooks/tutorial.html) 🎓
 > * A [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
 
@@ -260,9 +260,10 @@ More details on the [docker here](docker/jupyterlab/README.md).
 
 It runs on Windows as well: _Docker Desktop_ uses WSL2 under the hood.
 
-## 🧭 Tutorial
+## 🧭 Documentation & Tutorial
 
-See the [tutorial here](examples/tutorial/tutorial.ipynb). It covers a bit of everything. 
+* **[gomlx.github.io](https://gomlx.github.io/)** - Most up-to-date documentation with an easy _get started_ section, along with the more comprehensive details of each aspect.
+* **[Tutorial notebook](examples/tutorial/tutorial.ipynb)** - It covers a bit of everything in a nice to use/read Jupyter notebook.
 
 After that, look at the demos in the [examples/](https://github.com/gomlx/gomlx/tree/main/examples) directory.
 
