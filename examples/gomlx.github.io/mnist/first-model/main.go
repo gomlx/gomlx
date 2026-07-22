@@ -62,7 +62,7 @@ func prepareDatasets(backend compute.Backend, dataDir string) (trainDS, testDS t
 	return
 }
 
-//md_end:dataset
+//md_end:dataset,full
 
 //md_start:model,full
 
@@ -100,10 +100,10 @@ func ConvModel(scope *model.Scope, spec any, inputs []*Node) []*Node {
 	return []*Node{logits}
 }
 
-//md_end:model
+//md_end:model,full
 
 func main() {
-	//md_start:training,full
+	//md_start:training(-1),full(-1)
 	backend := compute.MustNew()
 	defer backend.Finalize()
 	fmt.Printf("Backend: %s (%s)\n", backend.Name(), backend.Description())
@@ -124,9 +124,9 @@ func main() {
 
 	const epochs = 5
 	loop := train.NewLoop(trainer)
-	//md_end:training
+	//md_end:training,full
 
-	//md_start:checkpoint_setup,full
+	//md_start:checkpoint_setup(-1),full(-1)
 	// Save a checkpoint every minute, keeping the 3 most recent ones. checkpoint.Build
 	// also *loads* an existing checkpoint from checkpointDir if one is already there, so
 	// re-running this program resumes training instead of starting over.
@@ -138,9 +138,9 @@ func main() {
 		log.Fatalf("Failed to create checkpoint handler: %+v", err)
 	}
 	train.PeriodicCallback(loop, time.Minute, true, "saving checkpoint", 100, checkpointHandler.SaveOnStepFn)
-	//md_end:checkpoint_setup
+	//md_end:checkpoint_setup,full
 
-	//md_start:training,full
+	//md_start:training(-1),full(-1)
 	// AttachProgressBar gives you a live progress bar with loss/metric values -- there's no
 	// need to print them by hand.
 	commandline.AttachProgressBar(loop)
@@ -154,5 +154,5 @@ func main() {
 	if err := commandline.ReportEval(trainer, testDS); err != nil {
 		log.Fatalf("Evaluation failed: %+v", err)
 	}
-	//md_end:training
+	//md_end:training,full
 }
