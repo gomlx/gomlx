@@ -67,6 +67,7 @@ RUN go install github.com/go-delve/delve/cmd/dlv@latest
 # Install go-xla: this include NVidia libraries, and hence in a separate sub-docker.
 #######################################################################################################
 FROM gomlx_jupyterlab_base AS gomlx_jupyterlab_goxla
+ARG GOXLA_REPOSITORY_BRANCH="main"
 
 # Clone and install gopjrt_installer.
 USER ${NB_USER}
@@ -74,7 +75,7 @@ WORKDIR ${HOME}
 RUN <<EOF
 mkdir -p Projects/gomlx
 cd Projects/gomlx
-git clone https://github.com/gomlx/go-xla.git
+git clone -b ${GOXLA_REPOSITORY_BRANCH} https://github.com/gomlx/go-xla.git
 cd go-xla/cmd/pjrt_installer
 go install .
 EOF
