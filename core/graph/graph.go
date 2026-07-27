@@ -504,8 +504,8 @@ type donateBuffer struct {
 // value is no longer used.
 // In particular, this is very useful when updating some state (variable) in a loop.
 //
-// This doesn't work if the tensor shares the buffer with
-// the device (usually CPU plugins). You can check that with IsShared().
+// If the tensor uses shared buffers (usually CPU backends, see Tensor.IsShared), the tensor
+// will be invalidated after the donation, since there is no separate local copy.
 //
 // Example:
 //
