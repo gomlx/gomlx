@@ -277,5 +277,6 @@ func (t *Tensor) lockedFinalizeAll() error {
 	}
 	t.shape = shapes.Invalid()
 	t.isShared = false
+	t.sharedFlat = nil
 	return err
 }
