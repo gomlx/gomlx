@@ -172,8 +172,17 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			case "ActivationType":
 				pi.BackendType = "compute." + pi.BackendType
 				pi.Format = "%s"
-			case "AxesLayout":
+			case "DenseConfig":
 				pi.BackendType = "compute." + pi.BackendType
+				pi.Format = "%+v"
+			case "DenseLayout":
+				pi.BackendType = "compute." + pi.BackendType
+				pi.Format = "%s"
+			case "AttentionAxesLayout":
+				pi.BackendType = "compute." + pi.BackendType
+				pi.Format = "%s"
+			case "AxesLayout":
+				pi.BackendType = "compute.AttentionAxesLayout"
 				pi.Format = "%s"
 			case "QuantizationScheme":
 				pi.BackendType = "compute." + pi.BackendType

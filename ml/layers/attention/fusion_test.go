@@ -96,7 +96,7 @@ func backendSupportsFusionForBFloat16(backend compute.Backend) bool {
 		exec := MustNewExec(backend, func(qIn, kIn, vIn *Node) *Node {
 			fused, _ := BackendFusedScaledDotProductAttention(
 				qIn, kIn, vIn,
-				compute.AxesLayoutBSHD, &compute.ScaledDotProductAttentionConfig{Scale: 0.125, Causal: true})
+				compute.AttentionAxesLayoutBSHD, &compute.ScaledDotProductAttentionConfig{Scale: 0.125, Causal: true})
 			// Make the returned node depend on the fused output so the fused op is genuinely
 			// part of the executable graph and exercised at compile/exec time. A backend whose
 			// ErrNotImplemented surfaces only at compile/exec (not graph-build) would otherwise

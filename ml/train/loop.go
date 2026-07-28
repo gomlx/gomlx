@@ -29,9 +29,15 @@ type Priority int
 type OnStartFn func(loop *Loop, ds Dataset) error
 
 // OnStepFn is the type of OnStep hooks.
+// The `metrics` slice passed to the hook corresponds 1-to-1 with `loop.Trainer.TrainMetrics()`.
+// Index 0 is the current batch's "Loss", index 1 is the "Moving Average Loss", and subsequent indices
+// correspond to custom `trainMetrics` passed to `train.NewTrainer`.
 type OnStepFn func(loop *Loop, metrics []*tensors.Tensor) error
 
 // OnEndFn is the type of OnEnd hooks.
+// The `metrics` slice passed to the hook corresponds 1-to-1 with `loop.Trainer.TrainMetrics()`.
+// Index 0 is the current batch's "Loss", index 1 is the "Moving Average Loss", and subsequent indices
+// correspond to custom `trainMetrics` passed to `train.NewTrainer`.
 type OnEndFn func(loop *Loop, metrics []*tensors.Tensor) error
 
 // Loop will run a training loop, invoking Trainer.TrainStep every step,
@@ -303,6 +309,9 @@ func freeMetrics(metricsInterfaces []metric.Interface, metrics []*tensors.Tensor
 
 // RunToGlobalStep runs the loop until the target global step is reached.
 // If targetGlobalStep is smaller than the current global step, it does nothing and returns nil metrics.
+//
+// The returned `metrics` slice corresponds 1-to-1 with `loop.Trainer.TrainMetrics()` (index 0 is "Loss",
+// index 1 is "Moving Average Loss", followed by custom trainMetrics).
 func (loop *Loop) RunToGlobalStep(ds Dataset, targetGlobalStep int) (metrics []*tensors.Tensor, err error) {
 	scope := loop.Trainer.Store()
 	var globalStep int
@@ -321,6 +330,9 @@ func (loop *Loop) RunToGlobalStep(ds Dataset, targetGlobalStep int) (metrics []*
 
 // RunSteps runs those many steps. StartStep and EndStep are adjusted to the current
 // LoopStep, so it can be called multiple times, and it will simply pick up where it left of last time.
+//
+// The returned `metrics` slice corresponds 1-to-1 with `loop.Trainer.TrainMetrics()` (index 0 is "Loss",
+// index 1 is "Moving Average Loss", followed by custom trainMetrics).
 func (loop *Loop) RunSteps(ds Dataset, steps int) (metrics []*tensors.Tensor, err error) {
 	if steps <= 0 {
 		return nil, nil
@@ -434,6 +446,9 @@ func (loop *Loop) runStepsDistributed(ds DistributedDataset, steps int) (metrics
 // RunEpochs runs those many steps. StartStep is adjusted to the current
 // LoopStep, so it can be called multiple times, and it will simply pick up
 // where it left of last time.
+//
+// The returned `metrics` slice corresponds 1-to-1 with `loop.Trainer.TrainMetrics()` (index 0 is "Loss",
+// index 1 is "Moving Average Loss", followed by custom trainMetrics).
 func (loop *Loop) RunEpochs(ds Dataset, epochs int) (metrics []*tensors.Tensor, err error) {
 	if err = loop.Trainer.ResetTrainMetrics(); err != nil {
 		return

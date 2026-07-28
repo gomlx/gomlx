@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
@@ -533,40 +534,13 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 }
 
 // dense executes a Dense projection layer.
-// If UseTransposedWeights() has been called, it uses Einsum to compute the projection
-// using PyTorch's default transposed weight schema ([outDim, inDim]).
+// If UseTransposedWeights() has been called, it uses DenseWithLayout with DenseLayoutOutputsInput
+// for PyTorch's default transposed weight schema ([outDim, inDim]).
 func (b *MultiHeadAttentionBuilder) dense(scope *model.Scope, x *Node, useBias bool, outputDims ...int) *Node {
 	if !b.useTransposedWeights {
 		return layers.Dense(scope, x, useBias, outputDims...)
 	}
-	scope = scope.In("dense")
-	g := x.Graph()
-	inDim := x.Shape().Dim(-1)
-	outDim := 1
-	for _, d := range outputDims {
-		outDim *= d
-	}
-	wVar := scope.VariableWithShape("weights", shapes.Make(x.DType(), outDim, inDim))
-	w := wVar.NodeValue(g)
-
-	y := DotGeneral(x, []int{-1}, nil, w, []int{1}, nil)
-
-	if useBias {
-		bVar := scope.VariableWithShape("biases", shapes.Make(x.DType(), outDim))
-		bias := bVar.NodeValue(g)
-		for bias.Rank() < y.Rank() {
-			bias = ExpandAxes(bias, 0)
-		}
-		y = Add(y, BroadcastToShape(bias, y.Shape()))
-	}
-
-	if len(outputDims) > 1 {
-		newDims := make([]int, x.Rank()-1+len(outputDims))
-		copy(newDims, x.Shape().Dimensions[:x.Rank()-1])
-		copy(newDims[x.Rank()-1:], outputDims)
-		y = Reshape(y, newDims...)
-	}
-	return y
+	return layers.DenseWithLayout(scope, x, compute.DenseLayoutOutputsInput, useBias, outputDims...)
 }
 
 // qkvProject performs a fused QKV projection using a single weight matrix.
