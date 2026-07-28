@@ -9,9 +9,9 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/compute v0.1.0
-	github.com/gomlx/go-huggingface v0.4.0
-	github.com/gomlx/gomlx v0.28.1-0.20260728063001-c3ec2a3dc51f
-	github.com/gomlx/onnx-gomlx v0.5.1-0.20260728055418-b7aee7063249
+	github.com/gomlx/go-huggingface v0.4.1
+	github.com/gomlx/gomlx v0.28.1
+	github.com/gomlx/onnx-gomlx v0.5.1
 	github.com/janpfeifer/gonb v0.11.3
 	github.com/janpfeifer/must v0.2.0
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
