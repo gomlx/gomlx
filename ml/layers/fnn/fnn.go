@@ -21,6 +21,7 @@
 package fnn
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
@@ -348,7 +349,7 @@ func (c *Config) Done() *Node {
 		}
 
 		if !isEnsemble {
-			x = nn.Dense(x, weights, biasNode)
+			x = nn.Dense(x, weights, biasNode, compute.DenseLayoutInputOutputs)
 		} else if c.ensembleAxis >= 0 {
 			if ii == 0 {
 				x = Dot(x, weights).General([]int{x.Rank() - 1}, []int{c.ensembleAxis}, []int{1}, []int{0})

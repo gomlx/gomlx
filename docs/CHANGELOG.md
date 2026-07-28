@@ -2,6 +2,14 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+
+- 2026-07-28:
+  - Updated `Backend.FusedDense` to take a `compute.DenseConfig` options parameter, which now includes layout information of the weights.
+  - Renamed `compute.AxesLayout` -> `compute.AttentionAxesLayout` (since it's for attention only).
+  - `nn.Dense`: update to use `compute.DenseConfig` options parameter, and accept `compute.DenseLayout` for weights layout.
+  - Added `layers.DenseWithLayout` (exposed Layout parameter) and added `fnn.WithWeightsLayout`.
+  
+
 ---
 
 # (In progress) v0.28.0: Large API and Packages Improvements, Cleanups and Reorganization:

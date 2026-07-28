@@ -2392,10 +2392,10 @@ func backendFusedAttentionQKVProjection(x *Node, wQKV *Node, biasQ *Node, biasK 
 
 // nodeInputsFusedDense holds the inputs used for the call to compute.FusedDense.
 type nodeInputsFusedDense struct {
-	x          *Node
-	weight     *Node
-	bias       *Node
-	activation compute.ActivationType
+	x       *Node
+	weight  *Node
+	bias    *Node
+	options compute.DenseConfig
 }
 
 // Type implements the interface NodeInputs.
@@ -2405,12 +2405,12 @@ func (ni *nodeInputsFusedDense) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsFusedDense) String() string {
-	return fmt.Sprintf("%s(x=[#%d], weight=[#%d], bias=%s, activation=%s)",
+	return fmt.Sprintf("%s(x=[#%d], weight=[#%d], bias=%s, options=%+v)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.weight.Id(),
 		strNillableNode(ni.bias),
-		ni.activation,
+		ni.options,
 	)
 }
 
@@ -2427,11 +2427,11 @@ func (ni *nodeInputsFusedDense) CloneWithInputs(originalNode *Node, newInputs ..
 		new_bias = newInputs[idx]
 		idx++
 	}
-	return backendFusedDense(new_x, new_weight, new_bias, ni.activation)
+	return backendFusedDense(new_x, new_weight, new_bias, ni.options)
 }
 
 // backendFusedDense is a Graph wrapper for the backend.Builder.FusedDense method.
-func backendFusedDense(x *Node, weight *Node, bias *Node, activation compute.ActivationType) (
+func backendFusedDense(x *Node, weight *Node, bias *Node, options compute.DenseConfig) (
 	node *Node) {
 	inputNodes := []*Node{x, weight}
 	if bias != nil {
@@ -2439,16 +2439,16 @@ func backendFusedDense(x *Node, weight *Node, bias *Node, activation compute.Act
 	}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsFusedDense{
-		x:          x,
-		weight:     weight,
-		bias:       bias,
-		activation: activation,
+		x:       x,
+		weight:  weight,
+		bias:    bias,
+		options: options,
 	}
 	var biasVal compute.Value
 	if bias != nil {
 		biasVal = bias.outputOps[0]
 	}
-	result, err := g.currentFunc.backendFunc.FusedDense(x.outputOps[0], weight.outputOps[0], biasVal, inputs.activation)
+	result, err := g.currentFunc.backendFunc.FusedDense(x.outputOps[0], weight.outputOps[0], biasVal, inputs.options)
 	if err != nil {
 		panic(err)
 	}
@@ -2607,7 +2607,7 @@ type nodeInputsFusedScaledDotProductAttention struct {
 	query      *Node
 	key        *Node
 	value      *Node
-	axesLayout compute.AxesLayout
+	axesLayout compute.AttentionAxesLayout
 	options    *compute.ScaledDotProductAttentionConfig
 }
 
@@ -2643,7 +2643,7 @@ func (ni *nodeInputsFusedScaledDotProductAttention) CloneWithInputs(originalNode
 }
 
 // backendFusedScaledDotProductAttention is a Graph wrapper for the backend.Builder.FusedScaledDotProductAttention method.
-func backendFusedScaledDotProductAttention(query *Node, key *Node, value *Node, axesLayout compute.AxesLayout, options *compute.ScaledDotProductAttentionConfig) (
+func backendFusedScaledDotProductAttention(query *Node, key *Node, value *Node, axesLayout compute.AttentionAxesLayout, options *compute.ScaledDotProductAttentionConfig) (
 	output *Node, statesForVJP []*Node) {
 	inputNodes := []*Node{query, key, value}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -2679,7 +2679,7 @@ type nodeInputsFusedScaledDotProductAttentionVJP struct {
 	query        *Node
 	key          *Node
 	value        *Node
-	axesLayout   compute.AxesLayout
+	axesLayout   compute.AttentionAxesLayout
 	options      *compute.ScaledDotProductAttentionConfig
 	output       *Node
 	statesForVJP []*Node
@@ -2727,7 +2727,7 @@ func (ni *nodeInputsFusedScaledDotProductAttentionVJP) CloneWithInputs(originalN
 }
 
 // backendFusedScaledDotProductAttentionVJP is a Graph wrapper for the backend.Builder.FusedScaledDotProductAttentionVJP method.
-func backendFusedScaledDotProductAttentionVJP(query *Node, key *Node, value *Node, axesLayout compute.AxesLayout, options *compute.ScaledDotProductAttentionConfig, output *Node, statesForVJP []*Node, dOutput *Node) (
+func backendFusedScaledDotProductAttentionVJP(query *Node, key *Node, value *Node, axesLayout compute.AttentionAxesLayout, options *compute.ScaledDotProductAttentionConfig, output *Node, statesForVJP []*Node, dOutput *Node) (
 	dQuery, dKey, dValue *Node) {
 	inputNodes := []*Node{query, key, value, output, dOutput}
 	inputNodes = append(inputNodes, statesForVJP...)

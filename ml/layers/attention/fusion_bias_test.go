@@ -35,7 +35,7 @@ func backendSupportsBiasedFusion(backend compute.Backend) bool {
 			}
 			fused, _ := BackendFusedScaledDotProductAttention(
 				round(qn), round(qn), round(qn),
-				compute.AxesLayoutBSHD, cfg)
+				compute.AttentionAxesLayoutBSHD, cfg)
 			return ConvertDType(ReduceAllSum(fused), dtypes.Float32)
 		})
 		_ = exec.MustCall(q, biasTensor)

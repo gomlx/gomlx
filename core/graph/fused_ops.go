@@ -150,8 +150,8 @@ func BackendFusedLayerNorm(x *Node, axes []int, epsilon float64, gamma, beta *No
 
 // BackendFusedDense performs fused matmul + optional bias + optional activation.
 // Internal: prefer nn.Dense which handles fallback and gradients.
-func BackendFusedDense(x, weight, bias *Node, activation compute.ActivationType) *Node {
-	return backendFusedDense(x, weight, bias, activation)
+func BackendFusedDense(x, weight, bias *Node, options compute.DenseConfig) *Node {
+	return backendFusedDense(x, weight, bias, options)
 }
 
 // BackendFusedScaledDotProductAttention computes multi-head scaled dot-product attention via the
@@ -165,7 +165,7 @@ func BackendFusedDense(x, weight, bias *Node, activation compute.ActivationType)
 //
 // Internal: prefer to use the package ml/layers/attention instead, which provides the standard (and
 // stable) API for attention layers. This is an internal API that may change without notice.
-func BackendFusedScaledDotProductAttention(query, key, value *Node, axesLayout compute.AxesLayout, options *compute.ScaledDotProductAttentionConfig) (output *Node, statesForVJP []*Node) {
+func BackendFusedScaledDotProductAttention(query, key, value *Node, axesLayout compute.AttentionAxesLayout, options *compute.ScaledDotProductAttentionConfig) (output *Node, statesForVJP []*Node) {
 	return backendFusedScaledDotProductAttention(query, key, value, axesLayout, options)
 }
 

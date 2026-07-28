@@ -10,6 +10,7 @@ package layers
 import (
 	"cmp"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
@@ -101,7 +102,7 @@ func Dense(scope *model.Scope, input *Node, useBias bool, outputDimensions ...in
 		biasVar := scope.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
 		biasNode = biasVar.NodeValue(g)
 	}
-	return nn.Dense(input, weights, biasNode)
+	return nn.Dense(input, weights, biasNode, compute.DenseLayoutInputOutputs)
 }
 
 // Embedding creates an embedding table with vocabSize elements (typically a vocabulary size)

@@ -18,15 +18,15 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// AxesLayout is a type alias for compute.AxesLayout, re-exported for convenience.
-type AxesLayout = compute.AxesLayout
+// AxesLayout is a type alias for compute.AttentionAxesLayout, re-exported for convenience.
+type AxesLayout = compute.AttentionAxesLayout
 
 const (
 	// LayoutBHSD is the [batch, heads, seq, dim] layout.
-	LayoutBHSD = compute.AxesLayoutBHSD
+	LayoutBHSD = compute.AttentionAxesLayoutBHSD
 
 	// LayoutBSHD is the [batch, seq, heads, dim] layout.
-	LayoutBSHD = compute.AxesLayoutBSHD
+	LayoutBSHD = compute.AttentionAxesLayoutBSHD
 )
 
 // Letters used in Einsum equations below:
