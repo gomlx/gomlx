@@ -1,13 +1,14 @@
 module github.com/gomlx/gomlx
 
-go 1.26
+go 1.26.5
 
 require (
 	github.com/MetalBlueberry/go-plotly v0.7.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/erkkah/margaid v0.3.0
 	github.com/gomlx/bsplines v0.2.0
-	github.com/gomlx/compute v0.0.0-20260716164435-04857206aff7
+	github.com/gomlx/compute v0.0.0-20260728052203-194c83015e3e
+	github.com/gomlx/compute-onnx v0.0.0-20260727144917-270d819490b5
 	github.com/gomlx/go-xla v0.3.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
