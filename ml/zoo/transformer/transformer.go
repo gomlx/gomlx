@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
@@ -1057,36 +1058,14 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x *N
 }
 
 // normalize according to configuration.
-// dense behaves like layers.dense but checks whether the model is configured to use transposed projections.
-// If it is, it computes the dense layer using DotGeneral (Einsum), expecting weights in the format [outDim, inDim].
+// dense behaves like layers.Dense but checks whether the model is configured to use transposed projections.
+// If it is, it computes the dense layer using DenseWithLayout with DenseLayoutOutputsInput, expecting weights in the format [outDim, inDim].
 // PyTorch nn.Linear stores its matrix in this transposed format.
 func (m *Model) dense(scope *model.Scope, op *Node, useBias bool, outputDims ...int) *Node {
 	if !m.TransposedProjections {
 		return layers.Dense(scope, op, useBias, outputDims...)
 	}
-	scope = scope.In("dense")
-	g := op.Graph()
-	inDim := op.Shape().Dim(-1)
-	outDim := 1
-	for _, d := range outputDims {
-		outDim *= d
-	}
-	wVar := scope.VariableWithShape("weights", shapes.Make(op.DType(), outDim, inDim))
-	w := wVar.NodeValue(g)
-	y := DotGeneral(op, []int{-1}, nil, w, []int{1}, nil)
-
-	if useBias {
-		bVar := scope.VariableWithShape("biases", shapes.Make(op.DType(), outDim))
-		y = Add(y, broadcastPrefixToMatch(bVar.NodeValue(g), y))
-	}
-
-	if len(outputDims) > 1 {
-		newDims := make([]int, op.Rank()-1+len(outputDims))
-		copy(newDims, op.Shape().Dimensions[:op.Rank()-1])
-		copy(newDims[op.Rank()-1:], outputDims)
-		y = Reshape(y, newDims...)
-	}
-	return y
+	return layers.DenseWithLayout(scope, op, compute.DenseLayoutOutputsInput, useBias, outputDims...)
 }
 
 func (m *Model) normalize(scope *model.Scope, operand *Node, normType string) *Node {
