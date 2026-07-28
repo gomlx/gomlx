@@ -82,8 +82,8 @@ github.com/gomlx/go-huggingface v0.4.0 h1:/aNoI1sgCTn24pekz7F+bgVBw4Bung7cZi2Dwq
 github.com/gomlx/go-huggingface v0.4.0/go.mod h1:96KRsxdqizaUsZeO2Sylea+L7CERH1KO/B4ZkTTfHp8=
 github.com/gomlx/go-xla v0.3.1-0.20260728053232-4a8b029269e2 h1:i1sLm7BGY5Cm07Gmdi2hi/dNwCoRxwOJpGI3sx+IkLU=
 github.com/gomlx/go-xla v0.3.1-0.20260728053232-4a8b029269e2/go.mod h1:yo9khhNlVWyQ63UDX+StUKirM/IfJkslWLWVMHkGfJE=
-github.com/gomlx/gomlx v0.28.1-0.20260728053419-52436207da17 h1:WgyGdegfw6gKPIi4hGifvl+DJT8r78FHuGjLXeYQrpw=
-github.com/gomlx/gomlx v0.28.1-0.20260728053419-52436207da17/go.mod h1:jA+i3qZioK6JGYJKoOBWFJ2YNZ0ajDM73xAxOfEHso8=
+github.com/gomlx/gomlx v0.28.1-0.20260728063001-c3ec2a3dc51f h1:OXiSK79LT90K54S7ggFCIkXdbEa2pMhsgS9H2H2lvQo=
+github.com/gomlx/gomlx v0.28.1-0.20260728063001-c3ec2a3dc51f/go.mod h1:jA+i3qZioK6JGYJKoOBWFJ2YNZ0ajDM73xAxOfEHso8=
 github.com/gomlx/onnx-gomlx v0.5.1-0.20260728055418-b7aee7063249 h1:aAqdtpsBDCVUgefFrk2ymeyeo4NAAcMGQpWqsMMCLcE=
 github.com/gomlx/onnx-gomlx v0.5.1-0.20260728055418-b7aee7063249/go.mod h1:9mt3vHJ8M5HarTrOIHWWh+gnJoKmCFdBgwJqTDBl3Xs=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
