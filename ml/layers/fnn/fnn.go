@@ -76,6 +76,7 @@ type Config struct {
 	normalization                   string
 	dropoutRatio                    float64
 	useBias, useResidual            bool
+	weightsLayout                   compute.DenseLayout
 
 	regularizer regularizer.Regularizer
 }
@@ -129,6 +130,7 @@ func New(scope *model.Scope, input *Node, outputDimensions ...int) *Config {
 		dropoutRatio:     model.GetParamOr(scope, ParamDropoutRate, -1.0),
 		useResidual:      model.GetParamOr(scope, ParamResidual, false),
 		useBias:          true,
+		weightsLayout:    compute.DenseLayoutInputOutputs,
 	}
 
 	// Fallback parameters.
@@ -259,6 +261,16 @@ func (c *Config) Dropout(ratio float64) *Config {
 	return c
 }
 
+// WithWeightsLayout sets the weight layout for linear transformation weights in the FNN layers.
+//
+// Supported layouts are compute.DenseLayoutInputOutputs (default, 0) where weights shape is
+// `[in_features, out_features...]` or compute.DenseLayoutOutputsInput where weights shape is
+// `[out_features..., in_features]`.
+func (c *Config) WithWeightsLayout(layout compute.DenseLayout) *Config {
+	c.weightsLayout = layout
+	return c
+}
+
 // Done takes the configuration and apply the FNN as configured.
 func (c *Config) Done() *Node {
 	scope := c.scope
@@ -329,8 +341,16 @@ func (c *Config) Done() *Node {
 		if isEnsemble {
 			weightsDims = append(weightsDims, c.ensembleSize)
 		}
-		weightsDims = append(weightsDims, inputLastDimension)
-		weightsDims = append(weightsDims, outputDims...)
+		switch c.weightsLayout {
+		case compute.DenseLayoutInputOutputs:
+			weightsDims = append(weightsDims, inputLastDimension)
+			weightsDims = append(weightsDims, outputDims...)
+		case compute.DenseLayoutOutputsInput:
+			weightsDims = append(weightsDims, outputDims...)
+			weightsDims = append(weightsDims, inputLastDimension)
+		default:
+			exceptions.Panicf("fnn: unknown weightsLayout %v", c.weightsLayout)
+		}
 		weightsVar := layerScope.VariableWithShape("weights", shapes.Make(dtype, weightsDims...))
 		if c.regularizer != nil {
 			// Only for the weights, not for the bias.
@@ -349,7 +369,7 @@ func (c *Config) Done() *Node {
 		}
 
 		if !isEnsemble {
-			x = nn.Dense(x, weights, biasNode, compute.DenseLayoutInputOutputs)
+			x = nn.Dense(x, weights, biasNode, c.weightsLayout)
 		} else if c.ensembleAxis >= 0 {
 			if ii == 0 {
 				x = Dot(x, weights).General([]int{x.Rank() - 1}, []int{c.ensembleAxis}, []int{1}, []int{0})

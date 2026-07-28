@@ -7,8 +7,7 @@ It hasn't reached yet a 1.0 release yet (it is close), so instead we use every m
   - Updated `Backend.FusedDense` to take a `compute.DenseConfig` options parameter, which now includes layout information of the weights.
   - Renamed `compute.AxesLayout` -> `compute.AttentionAxesLayout` (since it's for attention only).
   - `nn.Dense`: update to use `compute.DenseConfig` options parameter, and accept `compute.DenseLayout` for weights layout.
-  - Added `layers.DenseWithLayout` (exposed Layout parameter) and added `fnn.WithWeightsLayout`.
-  
+  - Exposed `DenseLayout` configuration in `layers.DenseWithLayout` and `fnn.Config.WithWeightsLayout()`.
 
 ---
 
