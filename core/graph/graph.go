@@ -282,6 +282,14 @@ func (g *Graph) setBuilding() {
 // Backend this Graph is using.
 func (g *Graph) Backend() compute.Backend { return g.backend }
 
+// Executable returns the [compute.Executable] associated with this graph.
+//
+// It's a escape hatch to allow access to the backend implementation,
+// and it's only available after the graph is compiled.
+func (g *Graph) Executable() compute.Executable {
+	return g.executable
+}
+
 // Name of the computation this Graph defines, set during its construction.
 func (g *Graph) Name() string { return g.name }
 
