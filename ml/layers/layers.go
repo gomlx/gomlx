@@ -52,6 +52,8 @@ const (
 
 // DenseWithBias adds a single dense linear layer, a learnable linear transformation plus a bias term.
 //
+// It creates a "dense" sub-scope under `scope`.
+//
 // It the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
 //
@@ -62,6 +64,8 @@ func DenseWithBias(scope *model.Scope, input *Node, outputDimensions ...int) *No
 
 // Dense adds a single dense linear layer, a learnable linear transformation.
 // Optionally, it can include a bias term. Weight layout is compute.DenseLayoutInputOutputs.
+//
+// It creates a "dense" sub-scope under `scope`.
 //
 // It automatically adds regularization to the weights (not to biases) configured in hyperparameters -- see regularizers.FromScope.
 //
@@ -75,6 +79,8 @@ func Dense(scope *model.Scope, input *Node, useBias bool, outputDimensions ...in
 
 // DenseWithLayout adds a single dense linear layer with a specific weight layout.
 //
+// It creates a "dense" sub-scope under `scope`.
+//
 // If layout is compute.DenseLayoutInputOutputs, weights have shape `[inputLastDimension, outputDimensions...]`.
 // If layout is compute.DenseLayoutOutputsInput, weights have shape `[outputDimensions..., inputLastDimension]`.
 //
@@ -84,8 +90,8 @@ func Dense(scope *model.Scope, input *Node, useBias bool, outputDimensions ...in
 // If the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
 func DenseWithLayout(scope *model.Scope, input *Node, layout compute.DenseLayout, useBias bool, outputDimensions ...int) *Node {
-	g := input.Graph()
 	scope = scope.In("dense")
+	g := input.Graph()
 	regularizer := regularizer.FromScope(scope)
 
 	inputShape := input.Shape()
@@ -99,14 +105,17 @@ func DenseWithLayout(scope *model.Scope, input *Node, layout compute.DenseLayout
 	inputLastDimension := inputShape.Dimensions[inputShape.Rank()-1]
 
 	// Linear transformation.
-	weightsDims := make([]int, 1+len(outputDimensions))
+	outDim := 1
+	for _, d := range outputDimensions {
+		outDim *= d
+	}
+
+	var weightsDims []int
 	switch layout {
 	case compute.DenseLayoutInputOutputs:
-		weightsDims[0] = inputLastDimension
-		copy(weightsDims[1:], outputDimensions)
+		weightsDims = []int{inputLastDimension, outDim}
 	case compute.DenseLayoutOutputsInput:
-		copy(weightsDims, outputDimensions)
-		weightsDims[len(outputDimensions)] = inputLastDimension
+		weightsDims = []int{outDim, inputLastDimension}
 	default:
 		Panicf("layers.DenseWithLayout: unknown layout %v", layout)
 	}
@@ -122,10 +131,17 @@ func DenseWithLayout(scope *model.Scope, input *Node, layout compute.DenseLayout
 	// output weights, and fused ops.
 	var biasNode *Node
 	if useBias {
-		biasVar := scope.VariableWithShape("biases", shapes.Make(inputShape.DType, outputDimensions...))
+		biasVar := scope.VariableWithShape("biases", shapes.Make(inputShape.DType, outDim))
 		biasNode = biasVar.NodeValue(g)
 	}
-	return nn.Dense(input, weights, biasNode, layout)
+	res := nn.Dense(input, weights, biasNode, layout)
+	if len(outputDimensions) > 1 {
+		newDims := make([]int, inputRank-1+len(outputDimensions))
+		copy(newDims, inputShape.Dimensions[:inputRank-1])
+		copy(newDims[inputRank-1:], outputDimensions)
+		res = Reshape(res, newDims...)
+	}
+	return res
 }
 
 // Embedding creates an embedding table with vocabSize elements (typically a vocabulary size)
