@@ -405,3 +405,26 @@ func TestExecWrappers(t *testing.T) {
 	})
 }
 
+func TestExecDynamicShapes(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		if !backend.Capabilities().DynamicAxes {
+			t.Skipf("Backend %q does not support DynamicAxes", backend.Name())
+		}
+
+		exec, err := NewExec(backend, EuclideanDistance)
+		require.NoError(t, err)
+		exec.WithDynamicAxes([]string{"batch", "seq_len"}, []string{"batch", "seq_len"})
+
+		a1 := [][]float32{{0, 0}, {1, 1}}
+		b1 := [][]float32{{1, 1}, {2, 2}}
+		_, g1, err := exec.CallWithGraph(a1, b1)
+		require.NoError(t, err)
+
+		a2 := [][]float32{{0, 0, 0}, {1, 1, 1}, {2, 2, 2}}
+		b2 := [][]float32{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}}
+		_, g2, err := exec.CallWithGraph(a2, b2)
+		require.NoError(t, err)
+
+		assert.Same(t, g1, g2, "Expected both calls to reuse the same Graph (compiled once for dynamic shape)")
+	})
+}
