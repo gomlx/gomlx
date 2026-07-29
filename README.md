@@ -363,14 +363,18 @@ See the section Support above to get in touch (Slack channel or Google Groups)!
 
 ## 💖 Support the Project
 
-If you find this project helpful, please consider 
-[supporting our work through GitHub Sponsors](https://github.com/sponsors/gomlx). 
+If you find this project helpful, please consider donating (using Stripe, for fewer currency conversions than GitHub):
+
+- [GoMLX Sponsorship for Users](https://donate.stripe.com/aFa6oGcrmghAaItbo4gnK00)
+- [GoMLX Sponsorship for Organizations](https://donate.stripe.com/dRmdR80IEc1k5o92RygnK01)
 
 Your contribution helps us (currently mostly [me](https://github.com/janpfeifer)) dedicate more time to maintenance
 and add new features for the entire GoMLX ecosystem.
 
 It also helps us acquire access (buying or cloud) to hardware for more portability: e.g.: ROCm, Apple Metal (GPU), 
 Multi-GPU/TPU, NVidia DGX Spark, Tenstorrent, etc.
+
+And we are happy to prioritize features for donations.
 
 ## 🚀 Advanced Topics
 
