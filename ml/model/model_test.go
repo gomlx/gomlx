@@ -294,7 +294,8 @@ func TestWithVariableAsConst(t *testing.T) {
 		store.WithVariableAsConst(true)
 		assert.True(t, store.VariablesAsConst())
 
-		v := store.RootScope().VariableWithValue("w", []float32{3.0, 4.0})
+		v, err := store.CreateVariable("w", tensors.FromValue([]float32{3.0, 4.0}))
+		require.NoError(t, err)
 
 		// 1. Verify execution with variables embedded as Const nodes.
 		e := MustNewExec(backend, store, func(s *Scope, x *graph.Node) *graph.Node {
@@ -318,4 +319,3 @@ func TestWithVariableAsConst(t *testing.T) {
 		}, "Expected panic when calling SetNodeValue with WithVariableAsConst(true)")
 	})
 }
-

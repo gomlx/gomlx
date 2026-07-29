@@ -592,6 +592,8 @@ func EscapeScopeName(scopeName string) string {
 }
 
 // VariableWithShape creates or returns an existing variable with the given shape.
+//
+// It is intended to be used within a graph building function, and panics on errors.
 func (s *Store) VariableWithShape(fullPath string, shape shapes.Shape, initializer VariableInitializer) *Variable {
 	if !strings.HasPrefix(fullPath, "/") {
 		fullPath = "/" + fullPath
@@ -637,36 +639,53 @@ func (s *Store) VariableWithNodeValue(fullPath string, value *Node) *Variable {
 }
 
 // VariableWithValue creates or returns a variable initialized with the given value in the given variable path.
+//
+// It is intended to be used within a graph building function, and panics on errors.
+// Outside of a graph building context, prefer using [Store.CreateVariable] instead.
 func (s *Store) VariableWithValue(fullPath string, defaultValue any) *Variable {
-	if !strings.HasPrefix(fullPath, "/") {
-		fullPath = "/" + fullPath
-	}
-	v := s.GetVariable(fullPath)
 	valueT, err := valueToTensor(defaultValue)
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to parse value for variable %q", fullPath))
 	}
+	v, err := s.CreateVariable(fullPath, valueT)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
 
+// CreateVariable creates or returns a variable initialized with the given value in the given variable path.
+//
+// This method is intended to be used outside of a graph building context (e.g., during setup or initialization)
+// and returns errors instead of panicking. Inside a graph building context, use [Store.VariableWithValue] instead.
+func (s *Store) CreateVariable(fullPath string, value *tensors.Tensor) (*Variable, error) {
+	if !strings.HasPrefix(fullPath, "/") {
+		fullPath = "/" + fullPath
+	}
+	if value == nil {
+		return nil, errors.Errorf("cannot create variable %q with nil value", fullPath)
+	}
+	v := s.GetVariable(fullPath)
 	if v != nil {
-		if !valueT.Shape().Equal(v.shape) {
-			Panicf(
-				"requested to reuse variable %q, but with defaultValue with different shape from original: previous shape=%s, requested defaultValue shape=%s",
+		if !value.Shape().Equal(v.shape) {
+			return nil, errors.Errorf(
+				"requested to reuse variable %q, but with value with different shape from original: previous shape=%s, requested shape=%s",
 				fullPath,
 				v.shape,
-				valueT.Shape(),
+				value.Shape(),
 			)
 		}
-		return v
+		return v, nil
 	}
 
 	v = &Variable{
 		store:     s,
 		fullPath:  fullPath,
-		shape:     valueT.Shape(),
-		value:     valueT,
+		shape:     value.Shape(),
+		value:     value,
 		Trainable: true,
 	}
 	_, v.name = SplitPath(fullPath)
 	s.setVariable(v)
-	return v
+	return v, nil
 }

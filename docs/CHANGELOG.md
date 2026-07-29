@@ -7,6 +7,7 @@ It hasn't reached yet a 1.0 release yet (it is close), so instead we use every m
   - Added `Exec.Compile(shapes)` to build and compile graphs for the given shape.
   - Removed `Exec.PreCompile` -- no longer needed.
   - Added `Store.WithVariableAsConst(enabled bool)`.
+  - Added `Store.CreateVariable` (and corresponding `Scope.CreateVariable`).
 
 - 2026-07-28:
   - Updated `Backend.FusedDense` to take a `compute.DenseConfig` options parameter, which now includes layout information of the weights.
