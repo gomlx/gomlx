@@ -363,7 +363,7 @@ See the section Support above to get in touch (Slack channel or Google Groups)!
 
 ## 💖 Support the Project
 
-If you find this project helpful, please consider donating (using Stripe, for fewer currency conversions than GitHub):
+If you find this project helpful, please consider donating (using Stripe.com):
 
 - [GoMLX Sponsorship for Users](https://donate.stripe.com/aFa6oGcrmghAaItbo4gnK00)
 - [GoMLX Sponsorship for Organizations](https://donate.stripe.com/dRmdR80IEc1k5o92RygnK01)
