@@ -442,11 +442,11 @@ func TestCompileGraph(t *testing.T) {
 	require.NoError(t, err)
 
 	s := shapes.Make(dtypes.Float32, 2, 3)
-	g1, err := exec.CompileGraph(s)
+	g1, err := exec.Compile(s)
 	require.NoError(t, err)
 	require.NotNil(t, g1)
 
-	g2, err := exec.CompileGraph(s)
+	g2, err := exec.Compile(s)
 	require.NoError(t, err)
 	assert.Same(t, g1, g2)
 }

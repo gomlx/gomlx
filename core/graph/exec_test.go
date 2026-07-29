@@ -439,7 +439,7 @@ func TestExecCompileGraph(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, g1)
 
-		// Calling CompileGraph again with the same shapes should hit the cache and return the same graph.
+		// Calling Compile again with the same shapes should hit the cache and return the same graph.
 		g2, err := exec.Compile(s, s)
 		require.NoError(t, err)
 		assert.Same(t, g1, g2)

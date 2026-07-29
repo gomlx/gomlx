@@ -167,8 +167,12 @@ func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []compute.Buffer
 
 	for _, nodes := range gs.IterVariables() {
 		v := nodes.variable
-		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
+		if nodes == nil || nodes.paramNode == nil {
 			return errors.Errorf("invalid paramNode for variable %q", v.Path())
+		}
+		if nodes.paramNode.Type() != graph.NodeTypeParameter {
+			// Variable was embedded as a Const node (Store.WithVariableAsConst), skip setting parameter buffer.
+			continue
 		}
 		handle := nodes.paramNode.GetParameterHandle()
 
@@ -218,8 +222,12 @@ func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []compute.Buffer,
 
 	for _, nodes := range gs.IterVariables() {
 		v := nodes.variable
-		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
+		if nodes == nil || nodes.paramNode == nil {
 			return errors.Errorf("invalid paramNode for variable %q", v.Path())
+		}
+		if nodes.paramNode.Type() != graph.NodeTypeParameter {
+			// Variable was embedded as a Const node (Store.WithVariableAsConst), skip setting parameter buffer.
+			continue
 		}
 		handle := int(nodes.paramNode.GetParameterHandle())
 
@@ -437,7 +445,7 @@ func (e *Exec) SetStore(store *Store) *Exec {
 	return e
 }
 
-// CompileGraph creates (if not yet created) and compiles the computation graph for the given input shapes,
+// Compile creates (if not yet created) and compiles the computation graph for the given input shapes,
 // without executing it.
 func (e *Exec) Compile(inputShapes ...shapes.Shape) (*graph.Graph, error) {
 	return e.exec.Compile(inputShapes...)

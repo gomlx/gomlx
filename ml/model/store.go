@@ -50,6 +50,9 @@ type Store struct {
 
 	// defaultShardingSpec used for new variables, if execution is distributed.
 	defaultShardingSpec *distributed.ShardingSpec
+
+	// variablesAsConst embeds variable values as Const graph nodes instead of graph Parameters.
+	variablesAsConst bool
 }
 
 // Loader can be implemented by any library providing loading of variables for
@@ -95,6 +98,21 @@ func (s *Store) Scope(fullPath string) *Scope {
 	}
 }
 
+// WithVariableAsConst enables or disables embedding variable values as Constant nodes in the computation graph.
+//
+// When enabled:
+// (A) The variable values will be hard-coded into the model as graph Constant nodes and cannot be changed later.
+// (B) During graph construction, setting variable values (e.g. via Variable.SetNodeValue) is disabled and will panic.
+func (s *Store) WithVariableAsConst(enabled bool) *Store {
+	s.variablesAsConst = enabled
+	return s
+}
+
+// VariablesAsConst returns whether variables are embedded as Constant nodes in computation graphs.
+func (s *Store) VariablesAsConst() bool {
+	return s.variablesAsConst
+}
+
 // RootScope returns a new Scope for the given Store.
 func (s *Store) RootScope() *Scope {
 	return s.Scope("/")
@@ -107,6 +125,7 @@ func (s *Store) Clone() (*Store, error) {
 	newStore.params = s.params.Clone()
 	newStore.defaultShardingSpec = s.defaultShardingSpec
 	newStore.loader = s.loader
+	newStore.variablesAsConst = s.variablesAsConst
 
 	for _, v := range s.variables {
 		_, err := v.CloneToStore(newStore)
