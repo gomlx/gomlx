@@ -428,3 +428,27 @@ func TestExecDynamicShapes(t *testing.T) {
 		assert.Same(t, g1, g2, "Expected both calls to reuse the same Graph (compiled once for dynamic shape)")
 	})
 }
+
+func TestExecCompileGraph(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		exec, err := NewExec(backend, EuclideanDistance)
+		require.NoError(t, err)
+
+		s := shapes.Make(dtypes.Float32, 2, 3)
+		g1, err := exec.Compile(s, s)
+		require.NoError(t, err)
+		require.NotNil(t, g1)
+
+		// Calling CompileGraph again with the same shapes should hit the cache and return the same graph.
+		g2, err := exec.Compile(s, s)
+		require.NoError(t, err)
+		assert.Same(t, g1, g2)
+
+		// Executing with inputs of that shape should also return the same graph.
+		a := [][]float32{{1, 2, 3}, {4, 5, 6}}
+		b := [][]float32{{2, 3, 4}, {5, 6, 7}}
+		_, g3, err := exec.CallWithGraph(a, b)
+		require.NoError(t, err)
+		assert.Same(t, g1, g3)
+	})
+}
