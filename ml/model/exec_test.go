@@ -433,3 +433,22 @@ func TestExecWrappers(t *testing.T) {
 	})
 }
 
+func TestCompileGraph(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	store := model.NewStore()
+	exec, err := model.NewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+		return AddScalar(x, 5)
+	})
+	require.NoError(t, err)
+
+	s := shapes.Make(dtypes.Float32, 2, 3)
+	g1, err := exec.Compile(s)
+	require.NoError(t, err)
+	require.NotNil(t, g1)
+
+	g2, err := exec.Compile(s)
+	require.NoError(t, err)
+	assert.Same(t, g1, g2)
+}
+
+

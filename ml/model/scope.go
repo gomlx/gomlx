@@ -12,6 +12,7 @@ import (
 
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/internal/scoped"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/sets"
@@ -412,6 +413,8 @@ func (s *Scope) SetGraphParam(g *Graph, key string, value any) {
 }
 
 // VariableWithShape creates or returns an existing variable with the given shape in the current scope.
+//
+// It is intended to be used within a graph building function, and panics on errors.
 func (s *Scope) VariableWithShape(name string, shape shapes.Shape) *Variable {
 	s.checkName(name)
 	fullPath := JoinPath(s.scope, name)
@@ -419,10 +422,23 @@ func (s *Scope) VariableWithShape(name string, shape shapes.Shape) *Variable {
 }
 
 // VariableWithValue creates or returns a variable initialized with the given value in the current scope.
+//
+// It is intended to be used within a graph building function, and panics on errors.
+// Outside of a graph building context, prefer using [Scope.CreateVariable] instead.
 func (s *Scope) VariableWithValue(name string, defaultValue any) *Variable {
 	s.checkName(name)
 	fullPath := JoinPath(s.scope, name)
 	return s.store.VariableWithValue(fullPath, defaultValue)
+}
+
+// CreateVariable creates or returns a variable initialized with the given value in the current scope.
+//
+// This method is intended to be used outside of a graph building context (e.g., during setup or initialization)
+// and returns errors instead of panicking. Inside a graph building context, use [Scope.VariableWithValue] instead.
+func (s *Scope) CreateVariable(name string, value *tensors.Tensor) (*Variable, error) {
+	s.checkName(name)
+	fullPath := JoinPath(s.scope, name)
+	return s.store.CreateVariable(fullPath, value)
 }
 
 // VariableWithNodeValue creates a variable in the current scope and sets it with graph computed *Node.

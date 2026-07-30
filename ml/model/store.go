@@ -50,6 +50,9 @@ type Store struct {
 
 	// defaultShardingSpec used for new variables, if execution is distributed.
 	defaultShardingSpec *distributed.ShardingSpec
+
+	// variablesAsConst embeds variable values as Const graph nodes instead of graph Parameters.
+	variablesAsConst bool
 }
 
 // Loader can be implemented by any library providing loading of variables for
@@ -95,6 +98,21 @@ func (s *Store) Scope(fullPath string) *Scope {
 	}
 }
 
+// WithVariableAsConst enables or disables embedding variable values as Constant nodes in the computation graph.
+//
+// When enabled:
+// (A) The variable values will be hard-coded into the model as graph Constant nodes and cannot be changed later.
+// (B) During graph construction, setting variable values (e.g. via Variable.SetNodeValue) is disabled and will panic.
+func (s *Store) WithVariableAsConst(enabled bool) *Store {
+	s.variablesAsConst = enabled
+	return s
+}
+
+// VariablesAsConst returns whether variables are embedded as Constant nodes in computation graphs.
+func (s *Store) VariablesAsConst() bool {
+	return s.variablesAsConst
+}
+
 // RootScope returns a new Scope for the given Store.
 func (s *Store) RootScope() *Scope {
 	return s.Scope("/")
@@ -107,6 +125,7 @@ func (s *Store) Clone() (*Store, error) {
 	newStore.params = s.params.Clone()
 	newStore.defaultShardingSpec = s.defaultShardingSpec
 	newStore.loader = s.loader
+	newStore.variablesAsConst = s.variablesAsConst
 
 	for _, v := range s.variables {
 		_, err := v.CloneToStore(newStore)
@@ -573,6 +592,8 @@ func EscapeScopeName(scopeName string) string {
 }
 
 // VariableWithShape creates or returns an existing variable with the given shape.
+//
+// It is intended to be used within a graph building function, and panics on errors.
 func (s *Store) VariableWithShape(fullPath string, shape shapes.Shape, initializer VariableInitializer) *Variable {
 	if !strings.HasPrefix(fullPath, "/") {
 		fullPath = "/" + fullPath
@@ -618,36 +639,53 @@ func (s *Store) VariableWithNodeValue(fullPath string, value *Node) *Variable {
 }
 
 // VariableWithValue creates or returns a variable initialized with the given value in the given variable path.
+//
+// It is intended to be used within a graph building function, and panics on errors.
+// Outside of a graph building context, prefer using [Store.CreateVariable] instead.
 func (s *Store) VariableWithValue(fullPath string, defaultValue any) *Variable {
-	if !strings.HasPrefix(fullPath, "/") {
-		fullPath = "/" + fullPath
-	}
-	v := s.GetVariable(fullPath)
 	valueT, err := valueToTensor(defaultValue)
 	if err != nil {
 		panic(errors.WithMessagef(err, "failed to parse value for variable %q", fullPath))
 	}
+	v, err := s.CreateVariable(fullPath, valueT)
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
 
+// CreateVariable creates or returns a variable initialized with the given value in the given variable path.
+//
+// This method is intended to be used outside of a graph building context (e.g., during setup or initialization)
+// and returns errors instead of panicking. Inside a graph building context, use [Store.VariableWithValue] instead.
+func (s *Store) CreateVariable(fullPath string, value *tensors.Tensor) (*Variable, error) {
+	if !strings.HasPrefix(fullPath, "/") {
+		fullPath = "/" + fullPath
+	}
+	if value == nil {
+		return nil, errors.Errorf("cannot create variable %q with nil value", fullPath)
+	}
+	v := s.GetVariable(fullPath)
 	if v != nil {
-		if !valueT.Shape().Equal(v.shape) {
-			Panicf(
-				"requested to reuse variable %q, but with defaultValue with different shape from original: previous shape=%s, requested defaultValue shape=%s",
+		if !value.Shape().Equal(v.shape) {
+			return nil, errors.Errorf(
+				"requested to reuse variable %q, but with value with different shape from original: previous shape=%s, requested shape=%s",
 				fullPath,
 				v.shape,
-				valueT.Shape(),
+				value.Shape(),
 			)
 		}
-		return v
+		return v, nil
 	}
 
 	v = &Variable{
 		store:     s,
 		fullPath:  fullPath,
-		shape:     valueT.Shape(),
-		value:     valueT,
+		shape:     value.Shape(),
+		value:     value,
 		Trainable: true,
 	}
 	_, v.name = SplitPath(fullPath)
 	s.setVariable(v)
-	return v
+	return v, nil
 }

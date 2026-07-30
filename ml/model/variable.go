@@ -9,6 +9,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
+	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -499,6 +500,9 @@ func (v *Variable) ValueGraph(nodeOrGraph graph.GraphProvider) *Node {
 // It's a computation graph building function, and panics on errors.
 func (v *Variable) SetNodeValue(value *Node) {
 	v.AssertValid()
+	if v.store != nil && v.store.variablesAsConst {
+		exceptions.Panicf("cannot call SetNodeValue on variable %q when Store.WithVariableAsConst is set to true (variables are embedded as constant graph nodes and cannot be mutated in the graph)", v.Path())
+	}
 	g := value.Graph()
 	g.AssertValid()
 	gs := getGraphStore(g)
@@ -521,7 +525,7 @@ func (v *Variable) SetValueGraph(value *Node) {
 	v.SetNodeValue(value)
 }
 
-// paramNode creates a Node in g that corresponds to the parameter that will be fed with
+// paramNode creates a Node in g that corresponds to the parameter (or constant) that will be fed with
 // the current variable value when the graph is executed.
 // It's the initial value of the variable in the computation Graph.
 func (v *Variable) paramNode(g *Graph) (*Node, error) {
@@ -535,6 +539,20 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 	nodes, found := gs.getVariableNodes(v)
 	if found {
 		return nodes.paramNode, nil
+	}
+
+	if v.store != nil && v.store.variablesAsConst {
+		if !v.HasValue() {
+			return nil, errors.Errorf("variable %q has no value initialized when Store.WithVariableAsConst is set to true", v.Path())
+		}
+		val, err := v.Value()
+		if err != nil {
+			return nil, errors.WithMessagef(err, "failed to get value of variable %q for graph Constant node", v.Path())
+		}
+		constNode := graph.ConstTensor(g, val)
+		nodes = &variableNodes{variable: v, valueNode: constNode, paramNode: constNode}
+		gs.setVariableNodes(v, nodes)
+		return constNode, nil
 	}
 
 	paramName := v.Path()

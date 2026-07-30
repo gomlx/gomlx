@@ -2,6 +2,20 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-07-30:
+  - Added experimental "onnx" backend procted by `-tags=onnx` tag.
+  - New `ml/model/onnx` package:
+    - `Save(backend, exec, w, inputShapes, inputNames, outputNames)`: saves to a `.onnnx` model. Only works with "onnx" backend.
+    - `SaveToFile(backend, exec, filePath, inputShapes, inputNames, outputNames)`: version to save to file.
+    - `Load(backend, r) & LoadFromFile(backend, filePath)`: Loads an ONNX model from a reader/filepath into an onnx.Executable.
+    - `(*Executable).Call(inputs...)`: Converts input arguments to `*tensors.Tensor` / `compute.Buffer`, executes the loaded ONNX graph, and converts output buffers back into `[]*tensors.Tensor`.
+
+- 2026-07-29:
+  - Added another test for `Exec` with dynamic shapes.
+  - Added `Exec.Compile(shapes)` to build and compile graphs for the given shape.
+  - Removed `Exec.PreCompile` -- no longer needed.
+  - Added `Store.WithVariableAsConst(enabled bool)`.
+  - Added `Store.CreateVariable` (and corresponding `Scope.CreateVariable`).
 
 - 2026-07-28:
   - Updated `Backend.FusedDense` to take a `compute.DenseConfig` options parameter, which now includes layout information of the weights.
@@ -9,6 +23,7 @@ It hasn't reached yet a 1.0 release yet (it is close), so instead we use every m
   - `nn.Dense`: update to use `compute.DenseConfig` options parameter, and accept `compute.DenseLayout` for weights layout.
   - Exposed `DenseLayout` configuration in `layers.DenseWithLayout` and `fnn.Config.WithWeightsLayout()`.
   - Updated `transformer` and `attention` packages to make use of the `DenseLayout` configuration when requested.
+  - Added `Graph.Executable()` to return the corresponding backend `Executable` object.
 
 ---
 

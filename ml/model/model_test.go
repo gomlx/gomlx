@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	graph "github.com/gomlx/gomlx/core/graph"
@@ -285,4 +286,36 @@ func TestGraphStore(t *testing.T) {
 	// Verify that a manually created graph has no Store associated.
 	gManual := graph.NewGraph(backend, "manual")
 	assert.Nil(t, GetStore(gManual))
+}
+
+func TestWithVariableAsConst(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		store := NewStore()
+		store.WithVariableAsConst(true)
+		assert.True(t, store.VariablesAsConst())
+
+		v, err := store.CreateVariable("w", tensors.FromValue([]float32{3.0, 4.0}))
+		require.NoError(t, err)
+
+		// 1. Verify execution with variables embedded as Const nodes.
+		e := MustNewExec(backend, store, func(s *Scope, x *graph.Node) *graph.Node {
+			w := v.NodeValue(x.Graph())
+			// w should be a Constant node in the graph, not a Parameter.
+			assert.Equal(t, graph.NodeTypeConstant, w.Type())
+			return graph.Mul(x, w)
+		})
+
+		out := e.MustCall([]float32{2.0, 2.0})[0]
+		assert.Equal(t, []float32{6.0, 8.0}, out.Value())
+
+		// 2. Verify that calling SetNodeValue panics when WithVariableAsConst is true.
+		require.Panicsf(t, func() {
+			e2 := MustNewExec(backend, store, func(s *Scope, x *graph.Node) *graph.Node {
+				w := v.NodeValue(x.Graph())
+				v.SetNodeValue(graph.AddScalar(w, 1))
+				return x
+			})
+			_ = e2.MustCall([]float32{1.0, 1.0})
+		}, "Expected panic when calling SetNodeValue with WithVariableAsConst(true)")
+	})
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
@@ -166,8 +167,12 @@ func (e *Exec) setSideParamsSingleDevice(g *Graph, inputBuffers []compute.Buffer
 
 	for _, nodes := range gs.IterVariables() {
 		v := nodes.variable
-		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
+		if nodes == nil || nodes.paramNode == nil {
 			return errors.Errorf("invalid paramNode for variable %q", v.Path())
+		}
+		if nodes.paramNode.Type() != graph.NodeTypeParameter {
+			// Variable was embedded as a Const node (Store.WithVariableAsConst), skip setting parameter buffer.
+			continue
 		}
 		handle := nodes.paramNode.GetParameterHandle()
 
@@ -217,8 +222,12 @@ func (e *Exec) setSideParamsDistributed(g *Graph, inputBuffers []compute.Buffer,
 
 	for _, nodes := range gs.IterVariables() {
 		v := nodes.variable
-		if nodes == nil || nodes.paramNode == nil || nodes.paramNode.Type() != graph.NodeTypeParameter {
+		if nodes == nil || nodes.paramNode == nil {
 			return errors.Errorf("invalid paramNode for variable %q", v.Path())
+		}
+		if nodes.paramNode.Type() != graph.NodeTypeParameter {
+			// Variable was embedded as a Const node (Store.WithVariableAsConst), skip setting parameter buffer.
+			continue
 		}
 		handle := int(nodes.paramNode.GetParameterHandle())
 
@@ -436,6 +445,12 @@ func (e *Exec) SetStore(store *Store) *Exec {
 	return e
 }
 
+// Compile creates (if not yet created) and compiles the computation graph for the given input shapes,
+// without executing it.
+func (e *Exec) Compile(inputShapes ...shapes.Shape) (*graph.Graph, error) {
+	return e.exec.Compile(inputShapes...)
+}
+
 // Exec parses the arguments and executes the graph.
 func (e *Exec) Exec(args ...any) ([]*tensors.Tensor, error) {
 	outputs, _, err := e.CallWithGraph(args...)
@@ -562,9 +577,4 @@ func (e *Exec) collectOutputsForDistributed(
 		}
 	}
 	return newOutputs, nil
-}
-
-// PreCompile will build the computation graph, JIT-compile and cache it, but not yet execute.
-func (e *Exec) PreCompile(args ...any) error {
-	return e.exec.PreCompile(args...)
 }

@@ -116,13 +116,12 @@ func pathToKey(path string) string {
 	return variableParameterPrefix + path
 }
 
-// keyToScopeAndName extracts the scope and name from a variable's unique id in a checkpointHandler.
-func keyToScopeAndName(key string) (scope, name string) {
+// keyToFullPath extracts the full path of a variable from its unique id in a checkpointHandler.
+func keyToFullPath(key string) string {
 	if !strings.HasPrefix(key, variableParameterPrefix) {
-		return scope, name
+		return ""
 	}
-	fullPath := key[len(variableParameterPrefix):]
-	return model.SplitPath(fullPath)
+	return key[len(variableParameterPrefix):]
 }
 
 // Config for the checkpoint Handler to be created. This is created with Build() and
@@ -448,11 +447,17 @@ func (c *Config) Done() (*Handler, error) {
 	if c.immediate {
 		for paramName, value := range handler.variableValues {
 			v := c.store.GetVariable(paramName)
+			var err error
 			if v != nil {
-				v.MustSetValue(value)
+				err := v.SetValue(value)
+				if err != nil {
+					return nil, errors.WithMessagef(err, "failed to set value for variable %q", variableToKey(v))
+				}
 			} else {
-				scopePath, name := keyToScopeAndName(paramName)
-				c.store.Scope(scopePath).VariableWithValue(name, value)
+				v, err = c.store.CreateVariable(keyToFullPath(paramName), value)
+				if err != nil {
+					return nil, errors.WithMessagef(err, "failed to create variable %q", keyToFullPath(paramName))
+				}
 			}
 		}
 		// Empty remaining variableValues.
@@ -511,8 +516,8 @@ func (c *Config) MustDone() *Handler {
 // This is because once a variable is loaded, it is transferred to the model.Store, and handler does
 // not keep it.
 type Handler struct {
-	config            *Config
-	store             *model.Store
+	config          *Config
+	store           *model.Store
 	prevStoreLoader model.Loader
 
 	serialized     *serializedData

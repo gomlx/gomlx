@@ -34,7 +34,7 @@ func LayerWiseEvaluation(
 	if klog.V(1).Enabled() {
 		// Report timings.
 		start := time.Now()
-		err := exec.PreCompile()
+		_, err := exec.Compile()
 		if err != nil {
 			panic(err)
 		}

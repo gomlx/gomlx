@@ -183,8 +183,10 @@ func TestMergedCheckpoints(t *testing.T) {
 		globalStepV := optimizer.GetGlobalStepVar(store)
 		err := globalStepV.SetValue(tensors.FromValue(int64(1)))
 		require.NoError(t, err)
-		xV := store.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
-		yV := store.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
+		xV, err := store.CreateVariable("x", tensors.FromValue([]float64{1.0, 1.0, 1.0}))
+		require.NoError(t, err)
+		yV, err := store.CreateVariable("y", tensors.FromValue([][]float32{{4.0}, {4.0}}))
+		require.NoError(t, err)
 		require.NoError(t, checkpointHandler.Save())
 
 		err = globalStepV.SetValue(tensors.FromValue(int64(10)))
@@ -201,10 +203,12 @@ func TestMergedCheckpoints(t *testing.T) {
 		_ = Build(store).Dir(dir).Keep(2).TakeMean(-1, backend).MustDone()
 		globalStep := optimizer.GetGlobalStep(store)
 		assert.Equal(t, int64(10), globalStep, "GlobalStep")
-		xV := store.VariableWithValue("x", []float64{1.0, 1.0, 1.0})
+		xV := store.GetVariable("x")
+		require.NotNil(t, xV)
 		// Assume X will be loaded with the mean of the previous 2 checkpoints:
 		assert.Equal(t, []float64{2.0, 2.0, 2.0}, xV.MustValue().Value(), "X")
-		yV := store.VariableWithValue("y", [][]float32{{4.0}, {4.0}})
+		yV := store.GetVariable("y")
+		require.NotNil(t, yV)
 		assert.Equal(t, [][]float32{{5.0}, {5.0}}, yV.MustValue().Value(), "Y")
 	}
 

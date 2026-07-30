@@ -444,16 +444,6 @@ func (e *Exec) ExecWithGraphOnDevice(defaultDevice compute.DeviceNum, args ...an
 	return e.CallWithGraphOnDevice(defaultDevice, args...)
 }
 
-// PreCompile will build the computation graph and compile it but not yet execute.
-// Useful when one wants to measure the time separately, from graph compilation and its execution.
-//
-// Notice, this will include the time to convert args to tensors. If you want to isolate that time,
-// pre-convert args to tensors first.
-func (e *Exec) PreCompile(args ...any) error {
-	_, _, err := e.compileAndExecute(false, 0, args...)
-	return err
-}
-
 // unwrapListOfTensors converts something like []any{[]*tensors.Tensor{t1, t2, ...}} to []any{t1, t2,...}.
 // If args is something else, it remains untouched.
 func unwrapListOfTensors(args []any) []any {
@@ -618,6 +608,32 @@ func (e *Exec) expandArgsToTotalParams(g *Graph, argsAsBuffers []compute.Buffer,
 	return argsAsBuffers, argsDonate
 }
 
+// Compile creates (if not yet created) and compiles the computation graph for the given input shapes,
+// without executing it.
+func (e *Exec) Compile(inputShapes ...shapes.Shape) (*Graph, error) {
+	entry, err := e.compile(inputShapes...)
+	if err != nil {
+		return nil, err
+	}
+	return entry.graph, nil
+}
+
+// compile creates (if not yet created) and compiles the computation graph for the given input shapes.
+func (e *Exec) compile(inputShapes ...shapes.Shape) (*execGraphCacheEntry, error) {
+	entry, err := e.findOrCreateGraph(inputShapes)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed during graph construction/compilation")
+	}
+	if entry == nil {
+		return nil, errors.Errorf(
+			"maximum cache size of %d reached for %q, cannot create another graph -- "+
+				"a new computation graph needs to be created+compiled for each different shape of "+
+				"the input, consider using padding, or if this is not a concern change "+
+				"the cache size with executable.SetMaxCache()", e.maxCacheSize, e.Name())
+	}
+	return entry, nil
+}
+
 // compileAndExecute compiles a graph for arguments and optionally executes it.
 //
 // defaultDevice is used for single-device computations that are portable (no fixed device assignment set
@@ -641,16 +657,9 @@ func (e *Exec) compileAndExecute(execute bool, defaultDevice compute.DeviceNum, 
 	}
 
 	// Get or build the graph.
-	entry, err := e.findOrCreateGraph(argsShapes)
+	entry, err := e.compile(argsShapes...)
 	if err != nil {
-		return nil, nil, errors.WithMessagef(err, "failed during graph construction/compilation")
-	}
-	if entry == nil {
-		return nil, nil, errors.Errorf(
-			"maximum cache size of %d reached for %q, cannot create another graph -- "+
-				"a new computation graph needs to be created+compiled for each different shape of "+
-				"the input, consider using padding, or if this is not a concern change "+
-				"the cache size with executable.SetMaxCache()", e.maxCacheSize, e.Name())
+		return nil, nil, err
 	}
 	g := entry.graph
 
