@@ -3,39 +3,57 @@
 package main
 
 import (
-	"encoding/base64"
-	"encoding/json"
+	"bytes"
 	"flag"
 	"fmt"
-	"html/template"
-	"io"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strings"
+	"time"
 
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/support/fsutil"
 	"github.com/gomlx/gomlx/support/sets"
 	"github.com/gomlx/gomlx/ui/plot"
-	"github.com/janpfeifer/gonb/gonbui/plotly"
 	"github.com/pkg/errors"
-
-	grob "github.com/MetalBlueberry/go-plotly/generated/v2.34.0/graph_objects"
-	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
+	"k8s.io/klog/v2"
 )
 
 var (
 	flagPlot = flag.Bool("plot", false,
-		fmt.Sprintf("Plots the metrics collected for plotting in file %q. "+
+		fmt.Sprintf("Plots the metrics collected for plotting in file %q, using the vizb CLI tool "+
+			"(https://vizb.goptics.org/ -- must be installed separately and present on PATH). "+
 			"You can control which metrics to plot with -metrics_names and -metrics_types", plot.TrainingPlotFileName))
-	flagBrowser    = flag.Bool("browser", true, "Opens the generated plots file in the default browser.")
+	flagBrowser    = flag.Bool("browser", true, "Opens the generated plots file in the default browser (once, even under -loop).")
 	flagPlotOutput = flag.String("plot_output", "", "File to generate HTML file with plots. "+
 		"**It is relative to the first dataset directory given**. "+
-		"If empty (the default) it will create a temporary file.")
+		"If empty (the default), a random path in the OS temp dir is picked once and reused for the "+
+		"rest of the session -- so repeated runs (e.g. under -loop) overwrite the same file instead "+
+		"of accumulating a new one each time.")
+)
+
+// browserOpenedOnce guards against opening a new browser tab on every -loop
+// iteration: the same file gets regenerated each time, but the already-open
+// tab just needs a refresh, not a new tab. Process-lifetime state, reset
+// naturally on every new invocation of the tool.
+var browserOpenedOnce bool
+
+// cachedOutputPath holds the randomly-chosen output path (when -plot_output
+// isn't set) for the lifetime of this process, so it doesn't need to be
+// deterministic across separate invocations -- just stable for the duration
+// of one session (in particular, across all -loop iterations of one run).
+var cachedOutputPath string
+
+// hasRenderedOnce and lastRenderModTime support skipping regeneration under
+// -loop when the underlying metrics haven't changed since the last render --
+// each regeneration re-invokes vizb as a subprocess per metric type, plus
+// merge/ui, which isn't free to redo on every tick if nothing new landed.
+var (
+	hasRenderedOnce   bool
+	lastRenderModTime time.Time
 )
 
 // createSortedMetricTypes collects all metric types and sort them.
@@ -134,253 +152,136 @@ func createPlotLines(metricType string, modelNames []string, metricsOrder map[Mo
 	return lines
 }
 
-// BuildPlots from the models' metrics points.
+// BuildPlots from the models' metrics points, using the `vizb` CLI tool: one
+// dataset per metric type, combined into a single self-contained HTML file.
 func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[ModelNameAndMetric]int, points [][]plot.Point) {
+	if err := checkVizbAvailable(); err != nil {
+		klog.Fatalf("%v", err)
+	}
+
+	outputFilePath := resolveOutputFilePath(checkpointPaths)
+	currentModTime := latestMetricsModTime(checkpointPaths)
+	if hasRenderedOnce && !currentModTime.After(lastRenderModTime) {
+		// Nothing new since the last render: regenerating would mean
+		// re-invoking vizb as a subprocess per metric type, plus merge/ui --
+		// real work, not free to redo on every -loop tick for no reason.
+		fmt.Printf("\nNo new metrics since last update. Plot at:\t%s\n\n", outputFilePath)
+		if *flagBrowser && !browserOpenedOnce {
+			openBrowser(outputFilePath)
+			browserOpenedOnce = true
+		}
+		return
+	}
+
 	metricTypes := createSortedMetricTypes(metricsOrder)
-	numPlots := len(metricTypes)
 	modelNamesToIndex := make(map[string]int)
 	for idx, name := range modelNames {
 		modelNamesToIndex[name] = idx + 1
 	}
-	legendsHoverTexts := make([][]string, 0, numPlots)
 
-	// Create one plot per metric type.
-	serializedPlots := make([][]byte, 0, numPlots)
+	tmpDir, err := os.MkdirTemp("", "gomlx-vizb-*")
+	if err != nil {
+		panic(errors.Wrap(err, "failed to create temporary directory for vizb"))
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// One vizb DataSet JSON per metric type (e.g. "loss", "accuracy").
+	jsonPaths := make([]string, 0, len(metricTypes))
 	for _, metricType := range metricTypes {
-		fig := &grob.Fig{
-			Layout: &grob.Layout{
-				Title: &grob.LayoutTitle{
-					Text: ptypes.S(metricType),
-				},
-				Xaxis: &grob.LayoutXaxis{
-					Showgrid: ptypes.B(true),
-					Type:     grob.LayoutXaxisTypeLog,
-					Title: &grob.LayoutXaxisTitle{
-						Text: ptypes.S("Step"),
-					},
-				},
-				Yaxis: &grob.LayoutYaxis{
-					Showgrid: ptypes.B(true),
-					Type:     grob.LayoutYaxisTypeLog,
-				},
-				Legend: &grob.LayoutLegend{
-					//Y:       -0.2,
-					//X:       1.0,
-					//X anchor: grob.LayoutLegendX anchorRight,
-					//Y anchor: grob.LayoutLegendY anchorTop,
-				},
-				Template: plotly.PlotlyDarkTheme,
-			},
-		}
-		// Add scatter lines to the plot.
 		lines := createPlotLines(metricType, modelNames, metricsOrder, points, modelNamesToIndex)
-		lineHovers := make([]string, 0, len(lines))
-		for _, line := range lines {
-			fig.Data = append(fig.Data, &grob.Scatter{
-				Name: ptypes.S(line.short),
-				Line: &grob.ScatterLine{
-					Shape: grob.ScatterLineShapeLinear,
-				},
-				Mode: "lines+markers",
-				X:    ptypes.DataArray(line.steps),
-				Y:    ptypes.DataArray(line.values),
-			})
-			lineHovers = append(lineHovers, line.desc)
-		}
-
-		// Convert the plot to JSON and serialize it.
-		figAsJSON, err := json.Marshal(fig)
+		jsonPath, err := runVizbLine(tmpDir, metricType, lines)
 		if err != nil {
-			panic(errors.Wrapf(err, "failed to marshal plotly figure for metric type %q", metricType))
+			panic(errors.Wrapf(err, "failed to build vizb dataset for metric type %q", metricType))
 		}
-		serializedPlots = append(serializedPlots, figAsJSON)
-		legendsHoverTexts = append(legendsHoverTexts, lineHovers)
+		jsonPaths = append(jsonPaths, jsonPath)
 	}
 
-	// Set the title.
-	var title string
-	if len(modelNames) == 1 {
-		title = modelNames[0]
-	} else {
-		title = fmt.Sprintf("Models: %s", strings.Join(modelNames, ", "))
+	if err := mergeAndRenderVizb(tmpDir, jsonPaths, outputFilePath); err != nil {
+		panic(errors.Wrap(err, "failed to render plots with vizb"))
+	}
+	hasRenderedOnce = true
+	lastRenderModTime = currentModTime
+
+	if *flagLoop > 0 {
+		if err := injectAutoRefresh(outputFilePath, *flagLoop); err != nil {
+			// Not fatal: the plots are still written and viewable, just without
+			// self-refresh -- the user can reload the tab manually instead.
+			klog.Warningf("Failed to inject auto-refresh into %s: %v", outputFilePath, err)
+		}
 	}
 
-	// Create a temporary file for the serializedPlots if needed.
+	fmt.Printf("\nPlots written to:\t%s\n\n", outputFilePath)
+	if *flagBrowser && !browserOpenedOnce {
+		openBrowser(outputFilePath)
+		browserOpenedOnce = true
+	}
+}
+
+// resolveOutputFilePath returns the path to write the plots HTML to.
+//
+// If -plot_output is set explicitly, it's used (resolved relative to the
+// first checkpoint path, if not already absolute).
+//
+// Otherwise, a random path in the OS temp dir is picked *once* and cached
+// for the remaining lifetime of this process (see cachedOutputPath) -- it
+// doesn't need to be deterministic across separate invocations of the tool,
+// just stable across repeated calls within one session (in particular, each
+// -loop iteration), so an already-open browser tab can be refreshed to see
+// updated data instead of a new tab (and a new file) accumulating every time.
+func resolveOutputFilePath(checkpointPaths []string) string {
 	outputFilePath := *flagPlotOutput
 	if outputFilePath != "" {
 		outputFilePath = fsutil.MustReplaceTildeInDir(outputFilePath)
 		if !filepath.IsAbs(outputFilePath) {
 			outputFilePath = path.Join(checkpointPaths[0], outputFilePath)
 		}
-	} else {
-		tmpFile, err := os.CreateTemp("", "gomlx-serializedPlots-*.html")
+		return outputFilePath
+	}
+
+	if cachedOutputPath == "" {
+		tmpFile, err := os.CreateTemp("", "gomlx-plots-*.html")
 		if err != nil {
-			panic(errors.Wrap(err, "failed to create temporary file for serializedPlots"))
+			panic(errors.Wrap(err, "failed to create temporary file for plots"))
 		}
-		outputFilePath = tmpFile.Name()
+		_ = tmpFile.Close()
+		cachedOutputPath = tmpFile.Name()
 	}
-
-	// Write serializedPlots to a temporary file
-	if err := PlotlyToHTMLFile(outputFilePath, title, serializedPlots, legendsHoverTexts); err != nil {
-		panic(errors.Wrap(err, "failed to write serializedPlots to temporary file"))
-	}
-
-	fmt.Printf("\nPlots written to:\t%s\n\n", outputFilePath)
-	if *flagBrowser {
-		openBrowser(outputFilePath)
-	}
+	return cachedOutputPath
 }
 
-var (
-	singleFileHTML = `<!DOCTYPE html>
-	<head>
-		<meta charset="utf-8">
-		<script src="{{ .CDN }}"></script>
-		<style>
-			body {
-				background-color: #1a1a1a;
-				color: #ffffff;
-				font-family: 'Segoe UI', 'Arial', sans-serif;
-				margin: 0;
-				padding: 20px;
-			}
-			h1 {
-				color: #00ffcc;
-				text-align: center;
-				font-weight: 300;
-				margin-bottom: 40px;
-			}
-			hr {
-				border: none;
-				height: 1px;
-				background: linear-gradient(90deg, transparent, #404040, transparent);
-				margin: 30px 0;
-			}
-			.plot-container {
-				background-color: #222222;
-				border-radius: 8px;
-				padding: 20px;
-				margin: 20px 0;
-				box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-			}
-			#custom-tooltip {
-				position: absolute; /* Allows us to position it with JS */
-				display: none;      /* Start hidden */
-				top: 0;
-				left: 0;
-				padding: 8px;
-				background-color: #2a2a2a;
-				color: #fff;
-				border: 1px solid #555;
-				border-radius: 4px;
-				/* font-family: sans-serif; */
-				font-size: 12px;
-				z-index: 1000;      /* Ensure it appears on top of everything */
-				pointer-events: none; /* VERY IMPORTANT: Prevents the tooltip from blocking mouse events on elements underneath it */
-			}
-		</style>
-	</head>
-	<body>
-		<h1>{{ .Title }}</h1>
-	    <div id="custom-tooltip"></div>
-{{- range $i, $f := .Figures }}
-		<div class="plot-container">
-			<div id="plot{{ $i }}"></div>
-		</div>
-		<hr>
-{{- end }}
-	<script>
-{{- range .Figures }}
-const {{.LegendsVar}} = [
-{{- range .LegendsHover }}
-	"{{ . }}",
-{{- end }}
-];
-{{- end }}
-
-{{- range $i, $f := .Figures }}
-		data = JSON.parse(atob('{{ $f.Figure }}'))
-		Plotly.newPlot('plot{{ $i }}', data, {
-			paper_bgcolor: '#222222',
-			plot_bgcolor: '#222222',
-			font: { color: '#ffffff' }
-		}).then(() => {
-			const tooltip = document.getElementById('custom-tooltip');
-			const legendItems = document.querySelectorAll('#plot{{ $i }} .legend .traces');
-			legendItems.forEach((item, index) => {
-
-				// When the mouse enters the legend item...
-				item.addEventListener('mouseover', (event) => {
-					// Set the tooltip's text
-					tooltip.innerHTML = {{$f.LegendsVar}}[index];
-					// Make it visible
-					tooltip.style.display = 'block';
-				});
-
-				// When the mouse moves over the legend item...
-				item.addEventListener('mousemove', (event) => {
-					// Update the tooltip's position to follow the cursor
-					// The 10px offset prevents the tooltip from flickering
-					tooltip.style.left = (event.pageX - tooltip.offsetWidth - 10) + 'px';
-					//tooltip.style.left = (event.pageX + 10) + 'px';
-					tooltip.style.top = (event.pageY + 10) + 'px';
-				});
-
-				// When the mouse leaves the legend item...
-				item.addEventListener('mouseout', () => {
-					// Hide the tooltip
-					tooltip.style.display = 'none';
-				});
-			});
-		});
-{{- end }}
-	</script>
-	</body>
-</html>`
-	singleFileHTMLTmpl = template.Must(template.New("plotly").Funcs(template.FuncMap{
-		"lastIdx": func(a []string) int { return len(a) - 1 },
-	}).Parse(singleFileHTML))
-)
-
-// WritePlotlyAsHTML renders the Plotly figures (given as JSON) to an HTML page that can be
-// served or saved to a file.
-func WritePlotlyAsHTML(w io.Writer, title string, figuresAsJSON [][]byte, legendHoverTests [][]string) error {
-	type FigureData struct {
-		Figure       string
-		LegendsVar   template.JS
-		LegendsHover []string
+// latestMetricsModTime returns the most recent modification time across all
+// checkpoints' training_plot_points.json files, or the zero Time if none of
+// them exist yet.
+func latestMetricsModTime(checkpointPaths []string) time.Time {
+	var latest time.Time
+	for _, dir := range checkpointPaths {
+		filePath := path.Join(fsutil.MustReplaceTildeInDir(dir), plot.TrainingPlotFileName)
+		info, err := os.Stat(filePath)
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(latest) {
+			latest = info.ModTime()
+		}
 	}
-	type RootData struct {
-		CDN     string
-		Title   string
-		Figures []FigureData
-	}
-	data := &RootData{
-		CDN:     plotly.PlotlySrc,
-		Title:   title,
-		Figures: make([]FigureData, len(figuresAsJSON)),
-	}
-	for i, fig := range figuresAsJSON {
-		data.Figures[i].Figure = base64.StdEncoding.EncodeToString(fig)
-		data.Figures[i].LegendsVar = template.JS(fmt.Sprintf("legendsHover%d", i))
-		data.Figures[i].LegendsHover = legendHoverTests[i]
-	}
-
-	err := singleFileHTMLTmpl.Execute(w, data)
-	if err != nil {
-		return errors.Wrap(err, "failed to render plotly")
-	}
-	return nil
+	return latest
 }
 
-// PlotlyToHTMLFile renders the Plotly figure (given as JSON) to an HTML file.
-func PlotlyToHTMLFile(fileName, title string, figuresAsJSon [][]byte, legendHoverTests [][]string) error {
-	f, err := os.Create(fileName)
+// injectAutoRefresh adds a <meta http-equiv="refresh"> tag to the generated
+// HTML so an already-open browser tab reloads itself automatically after
+// each -loop iteration, instead of requiring a manual refresh.
+func injectAutoRefresh(htmlPath string, period time.Duration) error {
+	content, err := os.ReadFile(htmlPath)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create file %q", fileName)
+		return errors.Wrapf(err, "failed to read %q", htmlPath)
 	}
-	defer func() { _ = f.Close() }()
-	return WritePlotlyAsHTML(f, title, figuresAsJSon, legendHoverTests)
+	seconds := max(1, int(period.Seconds()))
+	metaTag := fmt.Sprintf(`<meta http-equiv="refresh" content="%d">`, seconds)
+	updated := bytes.Replace(content, []byte("<head>"), []byte("<head>"+metaTag), 1)
+	if bytes.Equal(updated, content) {
+		return errors.Errorf("could not find a <head> tag to inject auto-refresh into")
+	}
+	return os.WriteFile(htmlPath, updated, 0644)
 }
 
 // openBrowser opens the given file in the default browser.
