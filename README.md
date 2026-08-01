@@ -1,16 +1,21 @@
 # **_GoMLX_**, an Accelerated ML and Math Framework
 
+
 [![Documentation](https://img.shields.io/badge/docs-gomlx.github.io-blue.svg)](https://gomlx.github.io/)
 [![GoDev](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/gomlx/gomlx?tab=doc)
+[![DockerHub](https://img.shields.io/docker/pulls/janpfeifer/gomlx_jupyterlab?logo=docker&label=Docker)](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
+
 [![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/gomlx/gomlx/blob/main/LICENSE)
 [![Slack](https://img.shields.io/badge/Slack-GoMLX-purple.svg?logo=slack)](https://app.slack.com/client/T029RQSE6/C08TX33BX6U)
-[![Sponsor GoMLX](https://img.shields.io/badge/Sponsor-GoMLX-white?logo=github&style=flat-square)](https://github.com/gomlx/gomlx/blob/main/README.md#-support-the-project)
+[![Mentioned in Awesome Go](https://awesome.re/badge.svg)](https://github.com/avelino/awesome-go#machine-learning)
+[![Sponsor GoMLX](https://img.shields.io/badge/Sponsor-GoMLX-pink?logo=github&style=round-square)](https://github.com/gomlx/gomlx/blob/main/README.md#-support-the-project)
 <br/>
 [![Linux/amd64 Tests](https://github.com/gomlx/gomlx/actions/workflows/linux_amd64_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/linux_amd64_tests.yaml)
 [![Linux/arm64 Tests](https://github.com/gomlx/gomlx/actions/workflows/linux_arm64_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/linux_arm64_tests.yaml)
 [![Darwin/arm64 Tests](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/darwin_tests.yaml)
 [![Windows/amd64 Tests](https://github.com/gomlx/gomlx/actions/workflows/windows_amd64_tests.yaml/badge.svg)](https://github.com/gomlx/gomlx/actions/workflows/windows_amd64_tests.yaml)
 ![Coverage](https://img.shields.io/badge/Coverage-67.0%25-yellow)
+
 
 ## 📖 About **_GoMLX_** - [gomlx.github.io](https://gomlx.github.io/)
 <img align="right" src="docs/gomlx_gopher2.png" alt="GoMLX Gopher" width="220px"/>
