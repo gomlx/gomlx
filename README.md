@@ -297,6 +297,8 @@ without linking GoMLX -- it will save a little executable size.
 
 ## 🎯 Long-term Goals
 
+<img align="right" src="docs/gomlx_animation.apng" alt="GoMLX Machine Learning Animation" width="220px"/>
+
 1. Building and training models in Go -- as opposed to Python (or some other language) -- with focus on:
    - Being easy(ier) to read and reason about, leading the user to a correct and transparent mental
      model of what is going on. Even if that means being more verbose when writing.
