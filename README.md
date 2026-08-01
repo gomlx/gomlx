@@ -4,7 +4,6 @@
 [![Documentation](https://img.shields.io/badge/docs-gomlx.github.io-blue.svg)](https://gomlx.github.io/)
 [![GoDev](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/gomlx/gomlx?tab=doc)
 [![DockerHub](https://img.shields.io/docker/pulls/janpfeifer/gomlx_jupyterlab?logo=docker&label=Docker)](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
-
 [![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/gomlx/gomlx/blob/main/LICENSE)
 [![Slack](https://img.shields.io/badge/Slack-GoMLX-purple.svg?logo=slack)](https://app.slack.com/client/T029RQSE6/C08TX33BX6U)
 [![Mentioned in Awesome Go](https://awesome.re/badge.svg)](https://github.com/avelino/awesome-go#machine-learning)
