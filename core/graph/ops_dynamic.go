@@ -148,39 +148,28 @@ func DynamicReshape(operand *Node, axisSpecs ...ReshapeDimensionSpec) *Node {
 	return backendDynamicReshape(operand, dimensions...)
 }
 
-// DynamicReshapeLike reshapes the operand to the same dynamic shape (and axis names) as reference.
+// DynamicReshapeLike reshapes the operand to the same dynamic shape (and axis names) as the reference node.
 // The DType of reference is ignored; the returned node will retain operand's DType.
-// `reference` can be anything implementing shapes.HasShape (such as a *Node, a Tensor, or a shapes.Shape).
-func DynamicReshapeLike(operand *Node, reference shapes.HasShape) *Node {
+func DynamicReshapeLike(operand, reference *Node) *Node {
 	refShape := reference.Shape()
 	refRank := refShape.Rank()
 	specs := make([]ReshapeDimensionSpec, refRank)
-	refNode, _ := reference.(*Node)
 
-	for axis := 0; axis < refRank; axis++ {
+	if !operand.Shape().IsDynamic() && !refShape.IsDynamic() {
+		// Both are static.
+		return ReshapeWithShape(operand, reference.Shape())
+	}
+
+	for axis := range refRank {
 		dim := refShape.Dimensions[axis]
 		name := refShape.AxisName(axis)
 		if dim != shapes.DynamicDim {
-			if name != "" {
-				specs[axis] = NamedDynamicDim(name, nil)
-			} else {
-				specs[axis] = StaticDim(dim)
-			}
+			// Static dimension.
+			specs[axis] = StaticDim(dim)
 		} else {
-			if refNode != nil {
-				dimSizeNode := DynamicDimensionSize(refNode, axis)
-				if name != "" {
-					specs[axis] = NamedDynamicDim(name, dimSizeNode)
-				} else {
-					specs[axis] = DynamicDim(dimSizeNode)
-				}
-			} else {
-				if name != "" {
-					specs[axis] = NamedDynamicDim(name, nil)
-				} else {
-					specs[axis] = InferredDim()
-				}
-			}
+			// Dynamic dimension.
+			dimSizeNode := DynamicDimensionSize(reference, axis)
+			specs[axis] = NamedDynamicDim(name, dimSizeNode)
 		}
 	}
 	return DynamicReshape(operand, specs...)
