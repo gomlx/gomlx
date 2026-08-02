@@ -84,15 +84,20 @@ func main() {
 		*flagMetricsLabels = true
 	}
 
+	// Constructed once, regardless of -loop: PlotBuilder's session state (output path, whether
+	// the browser tab has been opened yet, last-render time) needs to survive across every
+	// Reports call below, not just be created fresh on each one.
+	plotBuilder := NewPlotBuilder(*flagBrowser, *flagPlotOutput, *flagLoop)
+
 	if *flagLoop > 0 {
 		for {
 			ClearScreen()
-			Reports(args)
+			Reports(args, plotBuilder)
 			fmt.Println(italicStyle.Render(fmt.Sprintf("(... refreshing every %s ...)", *flagLoop)))
 			time.Sleep(*flagLoop)
 		}
 	}
-	Reports(args)
+	Reports(args, plotBuilder)
 }
 
 func ClearScreen() {
@@ -106,7 +111,7 @@ var (
 	sectionStyle  = lipgloss.NewStyle().Underline(true).Faint(false)
 )
 
-func Reports(checkpointPaths []string) {
+func Reports(checkpointPaths []string, plotBuilder *PlotBuilder) {
 	numCheckpoints := len(checkpointPaths)
 	stores := make([]*model.Store, 0, len(checkpointPaths))
 	scopes := make([]*model.Scope, 0, len(checkpointPaths))
@@ -137,7 +142,7 @@ func Reports(checkpointPaths []string) {
 		Params(stores, scopes, names)
 	}
 	if *flagMetrics || *flagMetricsLabels || *flagPlot {
-		metrics(checkpointPaths, names)
+		metrics(checkpointPaths, names, plotBuilder)
 	}
 	if *flagVars {
 		if numCheckpoints > 1 {
