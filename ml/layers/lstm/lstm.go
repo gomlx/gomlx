@@ -112,7 +112,7 @@ const (
 	DirBidirectional
 )
 
-//go:generate enumer -trimprefix Dir -type=DirectionType -transform=snake -values -text -json -yaml lstm.go
+//go:generate go tool enumer -trimprefix Dir -type=DirectionType -transform=snake -values -text -json -yaml lstm.go
 
 // Direction configures in which direction to run the LSTM: DirForward, DirReverse or both.
 func (l *LSTM) Direction(dir DirectionType) *LSTM {

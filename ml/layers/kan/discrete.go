@@ -196,7 +196,7 @@ const (
 	SoftnessScheduleLast
 )
 
-//go:generate enumer -type=SoftnessScheduleType -trimprefix=SoftnessSchedule -transform=snake -values -text -json -yaml discrete.go
+//go:generate go tool enumer -type=SoftnessScheduleType -trimprefix=SoftnessSchedule -transform=snake -values -text -json -yaml discrete.go
 
 // DiscreteSoftnessScheduleType configures the type of schedule of the softness for Discrete-KAN.
 //
@@ -511,7 +511,7 @@ const (
 	PerturbationNormal
 )
 
-//go:generate enumer -type=PerturbationType -trimprefix=Perturbation -transform=snake -values -text -json -yaml discrete.go
+//go:generate go tool enumer -type=PerturbationType -trimprefix=Perturbation -transform=snake -values -text -json -yaml discrete.go
 
 // PiecewiseConstantFunctionWithInputPerturbation works similarly to PiecewiseConstantFunction but
 // adds a "perturbation" of the inputs by a noise distribution of the value, controlled by smoothness.
