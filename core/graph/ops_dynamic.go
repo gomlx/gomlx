@@ -92,6 +92,36 @@ func DynamicReshape(operand *Node, axisSpecs ...ReshapeDimensionSpec) *Node {
 	}
 	_ = validateBuildingGraphFromInputs(inputsToValidate...)
 
+	// Check if operand and all axisSpecs are completely static (or inferred from a static operand shape).
+	if !operand.Shape().IsDynamic() {
+		staticDims := make([]int, len(axisSpecs))
+		allStatic := true
+		inferredIdx := -1
+		for i, spec := range axisSpecs {
+			if spec.dynamic != nil {
+				allStatic = false
+				break
+			}
+			if spec.static > 0 {
+				staticDims[i] = spec.static
+			} else if spec.static == 0 {
+				// Inferred dimension spec (static == 0 and dynamic == nil)
+				if inferredIdx != -1 {
+					allStatic = false // More than one inferred dim
+					break
+				}
+				inferredIdx = i
+				staticDims[i] = -1
+			} else {
+				allStatic = false
+				break
+			}
+		}
+		if allStatic {
+			return Reshape(operand, staticDims...)
+		}
+	}
+
 	dimensions := make([]compute.DynamicDimensionSpec, len(axisSpecs))
 	for i, spec := range axisSpecs {
 		var name string

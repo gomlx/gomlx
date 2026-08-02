@@ -146,5 +146,19 @@ func TestDynamicShapes(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, [][][]float32{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}, out[0].Value())
 		})
+
+		t.Run("DynamicReshapeStaticFallback", func(t *testing.T) {
+			// When operand and specs are completely static, DynamicReshape should fallback to static Reshape.
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				// x has static shape [2, 4]
+				return DynamicReshape(x, StaticDim(2), StaticDim(2), InferredDim())
+			})
+			require.NoError(t, err)
+
+			xInput := [][]float32{{1, 2, 3, 4}, {5, 6, 7, 8}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][][]float32{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}, out[0].Value())
+		})
 	})
 }
