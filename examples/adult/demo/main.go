@@ -195,6 +195,14 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 	// Load training data and initialize statistics (vocabularies and quantiles).
 	adult.LoadAndPreprocessData(dataDir, *flagNumQuantiles, *flagForceDownload, *flagVerbosity)
 
+	handled, err := handleSaveONNX(backend, store)
+	if err != nil {
+		return err
+	}
+	if handled {
+		return nil
+	}
+
 	// Crate Backend and upload data to device tensors.
 	if *flagVerbosity >= 1 {
 		fmt.Printf("Backend: %s\n", backend.Name())
