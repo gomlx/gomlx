@@ -108,5 +108,25 @@ func TestDynamicShapes(t *testing.T) {
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "rank mismatch")
 		})
+
+		t.Run("DynamicReshape", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				// x has shape [batch, 4].
+				// We reshape it to [batch, 2, 2].
+				// Get the dynamic batch size.
+				batchSize := DynamicDimensionSize(x, 0)
+				batchSpec := NamedDynamicDim("batch", batchSize)
+				return DynamicReshape(x, batchSpec, StaticDim(2), NamedInferredDim("inferred_dim"))
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", ""})
+
+			// Run with batch = 2
+			input := [][]float32{{1, 2, 3, 4}, {5, 6, 7, 8}}
+			out, err := exec.Call(input)
+			require.NoError(t, err)
+			// Target shape should be [2, 2, 2]
+			assert.Equal(t, [][][]float32{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}, out[0].Value())
+		})
 	})
 }
