@@ -84,3 +84,19 @@ func TestGraphState(t *testing.T) {
 		t.Errorf("Expected nil after deleting key1{}, got %v", got)
 	}
 }
+
+func TestUniqueName(t *testing.T) {
+	g := graph.NewGraph(nil, "TestUniqueName")
+	if got := g.UniqueName("pwl_calibration_size"); got != "pwl_calibration_size" {
+		t.Errorf("Expected 'pwl_calibration_size', got %q", got)
+	}
+	if got := g.UniqueName("pwl_calibration_size"); got != "pwl_calibration_size_1" {
+		t.Errorf("Expected 'pwl_calibration_size_1', got %q", got)
+	}
+	if got := g.UniqueName("pwl_calibration_size"); got != "pwl_calibration_size_2" {
+		t.Errorf("Expected 'pwl_calibration_size_2', got %q", got)
+	}
+	if got := g.UniqueName("other"); got != "other" {
+		t.Errorf("Expected 'other', got %q", got)
+	}
+}
