@@ -227,10 +227,8 @@ func PieceWiseLinearCalibration(scope *model.Scope, input, keypoints *Node, outp
 	dtype := inputShape.DType
 	numKeypoints := keypoints.Shape().Dimensions[0]
 
-	// Normalize input to rank-2: [batch_size, 1]
-	numInputs := inputShape.Size()
-	input2D := Reshape(input, numInputs, 1)
-	_ = input2D
+	// Normalize input to rank-2: [batch_size, 1] -- it works with both static and dynamic shapes.
+	input2D := DynamicReshape(input, NamedInferredDim("pwl_calibraiton_size"), StaticDim(1))
 
 	// Initialize outputKeypoints uniformly.
 	outputKeypoints := make([]float64, numKeypoints)
@@ -281,7 +279,7 @@ func PieceWiseLinearCalibration(scope *model.Scope, input, keypoints *Node, outp
 
 	// The calibrated value is the weighted sum of the output keypoints.
 	calibrated := ReduceSum(Mul(weights, InsertAxes(outputKeypointsNode, 0)), 1)
-	return ReshapeWithShape(calibrated, inputShape)
+	return DynamicReshapeLike(calibrated, inputShape)
 }
 
 // PieceWiseLinearCalibrationCascaded is a similar implementation for PieceWiseLinearCalibration that
