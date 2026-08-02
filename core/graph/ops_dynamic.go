@@ -67,6 +67,8 @@ func NamedInferredDim(name string) ReshapeDimensionSpec {
 // Because the shape is not known in graph building time, it is only supported in backends that
 // support dynamic axes (shapes), see backend.Capabilities().
 //
+// If both the operand and all of the axis specs have static dimensions, this uses the static Reshape instead.
+//
 // Each axis can have its dimension specified in one of 4 ways:
 //
 //   - StaticDim(dim): the dimension is a constant known at graph building time.
@@ -157,7 +159,7 @@ func DynamicReshapeLike(operand *Node, reference shapes.HasShape) *Node {
 
 	for axis := 0; axis < refRank; axis++ {
 		dim := refShape.Dimensions[axis]
-		name := refShape.AxisNames[axis]
+		name := refShape.AxisName(axis)
 		if dim != shapes.DynamicDim {
 			if name != "" {
 				specs[axis] = NamedDynamicDim(name, nil)
@@ -183,4 +185,3 @@ func DynamicReshapeLike(operand *Node, reference shapes.HasShape) *Node {
 	}
 	return DynamicReshape(operand, specs...)
 }
-
