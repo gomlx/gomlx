@@ -157,6 +157,9 @@ type Graph struct {
 	// Arbitrary "global" (graph-scoped) state stored in the graph.
 	// See Graph.SetState and Graph.State for details.
 	state map[any]any
+
+	// uniqueNames tracks counter for UniqueName(base).
+	uniqueNames map[string]int
 }
 
 // GraphId is globally unique.
@@ -199,7 +202,8 @@ func NewGraph(backend compute.Backend, name string) *Graph {
 		distStrategy: distributed.None,
 		numDevices:   1,
 
-		state: make(map[any]any),
+		state:       make(map[any]any),
+		uniqueNames: make(map[string]int),
 	}
 	graphCount += 1
 	return g
@@ -876,4 +880,18 @@ func (g *Graph) AttachState(key any, value any) {
 //	state := g.State(myStateKey{})
 func (g *Graph) State(key any) any {
 	return g.state[key]
+}
+
+// UniqueName generates a graph-unique name with the given base string as prefix.
+// The first call with a base name returns "base", while subsequent calls return "base_1", "base_2", etc.
+func (g *Graph) UniqueName(base string) string {
+	if g.uniqueNames == nil {
+		g.uniqueNames = make(map[string]int)
+	}
+	count, found := g.uniqueNames[base]
+	g.uniqueNames[base] = count + 1
+	if !found {
+		return base
+	}
+	return fmt.Sprintf("%s_%d", base, count)
 }
