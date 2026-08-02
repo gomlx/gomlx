@@ -205,10 +205,13 @@ Some selected highlights:
   * Various debugging tools: collecting values for particular nodes for plotting, simply logging the value
     of nodes during training, stack-trace of the code where nodes are created.
 * `gomlx_checkpoints`, the command line tool to inspect checkpoint of train(-ing) models, **generate plots**
-  with loss and arbitrary evaluation metrics using Plotly.
-  See [example of training session](https://gomlx.github.io/gomlx/notebooks/gomlx_checkpoints_plot_example.html),
-  with the effects of a learning rate change during the training.
-  It also allows plotting different models together, to compare their evolution.
+  with loss and arbitrary evaluation metrics using [Vizb](https://vizb.goptics.org/) (a separate CLI tool --
+  `--plot` is the only flag that needs it installed; everything else works without it).
+  See [`cmd/gomlx_checkpoints/README.md`](cmd/gomlx_checkpoints/README.md) for usage details.
+  It also allows plotting different models together, to compare their evolution, and `-loop` gives you a
+  live, auto-refreshing view while a model is still training.
+  <!-- TODO: the linked example notebook (gomlx_checkpoints_plot_example.html) predates the Plotly->Vizb
+  switch and should be regenerated to show the current UI. -->
 * Various optimizers: SGD, Adam (AdamW and Adamax).
 * Various losses and metrics.
 * Read Numpy arrays into GoMLX tensors -- see package `github.com/gomlx/gomlx/core/tensors/numpy`.
