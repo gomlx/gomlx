@@ -279,7 +279,7 @@ func PieceWiseLinearCalibration(scope *model.Scope, input, keypoints *Node, outp
 
 	// The calibrated value is the weighted sum of the output keypoints.
 	calibrated := ReduceSum(Mul(weights, InsertAxes(outputKeypointsNode, 0)), 1)
-	return DynamicReshapeLike(calibrated, inputShape)
+	return DynamicReshapeLike(calibrated, input)
 }
 
 // PieceWiseLinearCalibrationCascaded is a similar implementation for PieceWiseLinearCalibration that
