@@ -29,7 +29,7 @@ var (
 	flagMetricsTypes = flag.String("metrics_types", "", "Comma-separate list of metric types to include in metrics Reports. ")
 )
 
-func metrics(checkpointPaths, modelNames []string) {
+func metrics(checkpointPaths, modelNames []string, plotBuilder *PlotBuilder) {
 	numCheckpoints := len(modelNames)
 	_ = numCheckpoints
 
@@ -103,7 +103,7 @@ func metrics(checkpointPaths, modelNames []string) {
 	}
 
 	if *flagPlot {
-		BuildPlots(checkpointPaths, modelNames, metricsOrder, points)
+		plotBuilder.Plot(checkpointPaths, modelNames, metricsOrder, points)
 	}
 }
 

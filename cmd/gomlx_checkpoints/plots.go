@@ -35,26 +35,41 @@ var (
 		"of accumulating a new one each time.")
 )
 
-// browserOpenedOnce guards against opening a new browser tab on every -loop
-// iteration: the same file gets regenerated each time, but the already-open
-// tab just needs a refresh, not a new tab. Process-lifetime state, reset
-// naturally on every new invocation of the tool.
-var browserOpenedOnce bool
+// PlotBuilder renders training metrics to a self-contained HTML file using the `vizb` CLI tool,
+// across possibly many calls to Plot within one process (e.g. once per -loop iteration).
+//
+// It exists (rather than a handful of package-level variables) so that: (1) every test can
+// construct its own PlotBuilder and run in parallel, with no risk of one test's state leaking
+// into another's; (2) the session state it carries -- has a plot ever been rendered yet, has the
+// browser tab already been opened, what output path and last-render time are we using -- is
+// visible in one place instead of scattered across the package; and (3) nothing stops two
+// PlotBuilders (say, one per session in some future server-like use) from existing side by side.
+//
+// Construct one with NewPlotBuilder and call Plot as many times as needed.
+type PlotBuilder struct {
+	// Configuration, fixed for the lifetime of this PlotBuilder.
+	openBrowser    bool
+	outputOverride string        // corresponds to -plot_output; if empty, a random path is picked once (see cachedOutputPath) and reused.
+	loopPeriod     time.Duration // corresponds to -loop; > 0 enables the auto-refresh <meta> tag.
 
-// cachedOutputPath holds the randomly-chosen output path (when -plot_output
-// isn't set) for the lifetime of this process, so it doesn't need to be
-// deterministic across separate invocations -- just stable for the duration
-// of one session (in particular, across all -loop iterations of one run).
-var cachedOutputPath string
-
-// hasRenderedOnce and lastRenderModTime support skipping regeneration under
-// -loop when the underlying metrics haven't changed since the last render --
-// each regeneration re-invokes vizb as a subprocess per metric type, plus
-// merge/ui, which isn't free to redo on every tick if nothing new landed.
-var (
+	// Session state, mutated across repeated Plot calls.
+	browserOpenedOnce bool
+	cachedOutputPath  string
 	hasRenderedOnce   bool
 	lastRenderModTime time.Time
-)
+}
+
+// NewPlotBuilder creates a PlotBuilder configured to render plots across however many times
+// Plot is called on it -- e.g. once per -loop iteration, in which case the resulting PlotBuilder
+// must be created once and reused for every iteration, not recreated each time, since that's what
+// makes the output path stable and the browser tab open only once.
+func NewPlotBuilder(openBrowser bool, outputOverride string, loopPeriod time.Duration) *PlotBuilder {
+	return &PlotBuilder{
+		openBrowser:    openBrowser,
+		outputOverride: outputOverride,
+		loopPeriod:     loopPeriod,
+	}
+}
 
 // createSortedMetricTypes collects all metric types and sort them.
 func createSortedMetricTypes(metricsOrder map[ModelNameAndMetric]int) []string {
@@ -152,24 +167,22 @@ func createPlotLines(metricType string, modelNames []string, metricsOrder map[Mo
 	return lines
 }
 
-// BuildPlots from the models' metrics points, using the `vizb` CLI tool: one
-// dataset per metric type, combined into a single self-contained HTML file.
-func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[ModelNameAndMetric]int, points [][]plot.Point) {
+// Plot the models' metrics points, using the `vizb` CLI tool: one dataset per metric type,
+// combined into a single self-contained HTML file. Safe to call repeatedly on the same
+// PlotBuilder (e.g. once per -loop iteration) -- see PlotBuilder's doc comment.
+func (pb *PlotBuilder) Plot(checkpointPaths []string, modelNames []string, metricsOrder map[ModelNameAndMetric]int, points [][]plot.Point) {
 	if err := checkVizbAvailable(); err != nil {
 		klog.Fatalf("%v", err)
 	}
 
-	outputFilePath := resolveOutputFilePath(checkpointPaths)
+	outputFilePath := pb.resolveOutputFilePath(checkpointPaths)
 	currentModTime := latestMetricsModTime(checkpointPaths)
-	if hasRenderedOnce && !currentModTime.After(lastRenderModTime) {
+	if pb.hasRenderedOnce && !currentModTime.After(pb.lastRenderModTime) {
 		// Nothing new since the last render: regenerating would mean
 		// re-invoking vizb as a subprocess per metric type, plus merge/ui --
 		// real work, not free to redo on every -loop tick for no reason.
 		fmt.Printf("\nNo new metrics since last update. Plot at:\t%s\n\n", outputFilePath)
-		if *flagBrowser && !browserOpenedOnce {
-			openBrowser(outputFilePath)
-			browserOpenedOnce = true
-		}
+		pb.openBrowserOnce(outputFilePath)
 		return
 	}
 
@@ -199,11 +212,11 @@ func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[
 	if err := mergeAndRenderVizb(tmpDir, jsonPaths, outputFilePath); err != nil {
 		panic(errors.Wrap(err, "failed to render plots with vizb"))
 	}
-	hasRenderedOnce = true
-	lastRenderModTime = currentModTime
+	pb.hasRenderedOnce = true
+	pb.lastRenderModTime = currentModTime
 
-	if *flagLoop > 0 {
-		if err := injectAutoRefresh(outputFilePath, *flagLoop); err != nil {
+	if pb.loopPeriod > 0 {
+		if err := injectAutoRefresh(outputFilePath, pb.loopPeriod); err != nil {
 			// Not fatal: the plots are still written and viewable, just without
 			// self-refresh -- the user can reload the tab manually instead.
 			klog.Warningf("Failed to inject auto-refresh into %s: %v", outputFilePath, err)
@@ -211,9 +224,16 @@ func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[
 	}
 
 	fmt.Printf("\nPlots written to:\t%s\n\n", outputFilePath)
-	if *flagBrowser && !browserOpenedOnce {
+	pb.openBrowserOnce(outputFilePath)
+}
+
+// openBrowserOnce opens outputFilePath in the browser, but only the first time it's called on
+// this PlotBuilder and only if openBrowser was requested at construction -- an already-open tab
+// just needs the file underneath it to change, not a second tab.
+func (pb *PlotBuilder) openBrowserOnce(outputFilePath string) {
+	if pb.openBrowser && !pb.browserOpenedOnce {
 		openBrowser(outputFilePath)
-		browserOpenedOnce = true
+		pb.browserOpenedOnce = true
 	}
 }
 
@@ -223,13 +243,14 @@ func BuildPlots(checkpointPaths []string, modelNames []string, metricsOrder map[
 // first checkpoint path, if not already absolute).
 //
 // Otherwise, a random path in the OS temp dir is picked *once* and cached
-// for the remaining lifetime of this process (see cachedOutputPath) -- it
-// doesn't need to be deterministic across separate invocations of the tool,
-// just stable across repeated calls within one session (in particular, each
-// -loop iteration), so an already-open browser tab can be refreshed to see
-// updated data instead of a new tab (and a new file) accumulating every time.
-func resolveOutputFilePath(checkpointPaths []string) string {
-	outputFilePath := *flagPlotOutput
+// for the remaining lifetime of this PlotBuilder (see cachedOutputPath) --
+// it doesn't need to be deterministic across separate invocations of the
+// tool, just stable across repeated calls within one session (in particular,
+// each -loop iteration), so an already-open browser tab can be refreshed to
+// see updated data instead of a new tab (and a new file) accumulating every
+// time.
+func (pb *PlotBuilder) resolveOutputFilePath(checkpointPaths []string) string {
+	outputFilePath := pb.outputOverride
 	if outputFilePath != "" {
 		outputFilePath = fsutil.MustReplaceTildeInDir(outputFilePath)
 		if !filepath.IsAbs(outputFilePath) {
@@ -238,15 +259,15 @@ func resolveOutputFilePath(checkpointPaths []string) string {
 		return outputFilePath
 	}
 
-	if cachedOutputPath == "" {
+	if pb.cachedOutputPath == "" {
 		tmpFile, err := os.CreateTemp("", "gomlx-plots-*.html")
 		if err != nil {
 			panic(errors.Wrap(err, "failed to create temporary file for plots"))
 		}
 		_ = tmpFile.Close()
-		cachedOutputPath = tmpFile.Name()
+		pb.cachedOutputPath = tmpFile.Name()
 	}
-	return cachedOutputPath
+	return pb.cachedOutputPath
 }
 
 // latestMetricsModTime returns the most recent modification time across all

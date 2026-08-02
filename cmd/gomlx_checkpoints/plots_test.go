@@ -11,88 +11,65 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// withPlotOutput temporarily sets *flagPlotOutput for the duration of the
-// test, restoring it afterward -- flagPlotOutput is a package-level flag var,
-// shared across tests, so it must always be restored.
-func withPlotOutput(t *testing.T, value string) {
-	t.Helper()
-	old := *flagPlotOutput
-	*flagPlotOutput = value
-	t.Cleanup(func() { *flagPlotOutput = old })
-}
-
-// resetPlotsSessionState resets the package-level, process-lifetime state
-// resolveOutputFilePath/BuildPlots rely on (cachedOutputPath, browserOpenedOnce,
-// hasRenderedOnce, lastRenderModTime), both before and after the test -- these
-// are deliberately global (real session state, not per-call), so tests that
-// touch them must isolate themselves from each other explicitly.
-func resetPlotsSessionState(t *testing.T) {
-	t.Helper()
-	reset := func() {
-		cachedOutputPath = ""
-		browserOpenedOnce = false
-		hasRenderedOnce = false
-		lastRenderModTime = time.Time{}
-	}
-	reset()
-	t.Cleanup(reset)
-}
-
 func TestResolveOutputFilePath_DefaultIsStableWithinASession(t *testing.T) {
-	resetPlotsSessionState(t)
-	withPlotOutput(t, "")
+	t.Parallel()
+	pb := NewPlotBuilder(false, "", 0)
 	checkpointPaths := []string{"/home/user/mnist_data/checkpoint"}
 
 	// Calling it twice must return the exact same path -- that's the whole
-	// point (see BuildPlots' doc comment): a stable path lets repeated -loop
+	// point (see PlotBuilder's doc comment): a stable path lets repeated -loop
 	// iterations overwrite the same file instead of a new one accumulating
 	// every time. It does NOT need to be reproducible across separate
-	// process runs -- just stable within one (per maintainer feedback).
-	path1 := resolveOutputFilePath(checkpointPaths)
-	path2 := resolveOutputFilePath(checkpointPaths)
+	// process runs -- just stable within one PlotBuilder's lifetime (per
+	// maintainer feedback).
+	path1 := pb.resolveOutputFilePath(checkpointPaths)
+	path2 := pb.resolveOutputFilePath(checkpointPaths)
 	require.Equal(t, path1, path2)
 	require.True(t, filepath.IsAbs(path1))
 }
 
 func TestResolveOutputFilePath_CacheIgnoresCheckpointPathsArgument(t *testing.T) {
-	resetPlotsSessionState(t)
-	withPlotOutput(t, "")
+	t.Parallel()
+	pb := NewPlotBuilder(false, "", 0)
 
-	// Once cached, the *same session* reuses the same path regardless of what
-	// checkpointPaths is passed on a later call -- correct, because in real
-	// usage one process is invoked with one fixed set of checkpoint paths for
-	// its entire lifetime; the cache is intentionally not keyed by them.
-	pathA := resolveOutputFilePath([]string{"/checkpoints/model-a"})
-	pathB := resolveOutputFilePath([]string{"/checkpoints/model-b"})
+	// Once cached, the *same PlotBuilder* reuses the same path regardless of
+	// what checkpointPaths is passed on a later call -- correct, because in
+	// real usage one PlotBuilder is used for one fixed set of checkpoint
+	// paths for its entire lifetime; the cache is intentionally not keyed by
+	// them.
+	pathA := pb.resolveOutputFilePath([]string{"/checkpoints/model-a"})
+	pathB := pb.resolveOutputFilePath([]string{"/checkpoints/model-b"})
 	require.Equal(t, pathA, pathB)
 }
 
 func TestResolveOutputFilePath_ExplicitRelativePath(t *testing.T) {
-	resetPlotsSessionState(t)
-	withPlotOutput(t, "plot.html")
-	got := resolveOutputFilePath([]string{"/checkpoints/model-a"})
+	t.Parallel()
+	pb := NewPlotBuilder(false, "plot.html", 0)
+	got := pb.resolveOutputFilePath([]string{"/checkpoints/model-a"})
 	require.Equal(t, "/checkpoints/model-a/plot.html", got)
 }
 
 func TestResolveOutputFilePath_ExplicitAbsolutePath(t *testing.T) {
-	resetPlotsSessionState(t)
+	t.Parallel()
 	// t.TempDir(), not a hardcoded "/tmp/..." literal: a Unix-style leading-slash
 	// path isn't absolute by Windows' rules (filepath.IsAbs requires a drive
 	// letter there), so a hardcoded literal passes on Unix and fails on the
 	// Windows CI runner -- t.TempDir() is a real absolute path on whichever OS
 	// the test is running on.
 	absPath := filepath.Join(t.TempDir(), "my-plot.html")
-	withPlotOutput(t, absPath)
-	got := resolveOutputFilePath([]string{"/checkpoints/model-a"})
+	pb := NewPlotBuilder(false, absPath, 0)
+	got := pb.resolveOutputFilePath([]string{"/checkpoints/model-a"})
 	require.Equal(t, absPath, got)
 }
 
 func TestLatestMetricsModTime_NoFilesReturnsZero(t *testing.T) {
+	t.Parallel()
 	got := latestMetricsModTime([]string{filepath.Join(t.TempDir(), "does-not-exist")})
 	require.True(t, got.IsZero())
 }
 
 func TestLatestMetricsModTime_ReturnsMostRecent(t *testing.T) {
+	t.Parallel()
 	dirA, dirB := t.TempDir(), t.TempDir()
 	older := time.Now().Add(-time.Hour)
 	newer := time.Now()
@@ -110,6 +87,7 @@ func TestLatestMetricsModTime_ReturnsMostRecent(t *testing.T) {
 }
 
 func TestLatestMetricsModTime_SkipsMissingFilesAmongMultiple(t *testing.T) {
+	t.Parallel()
 	dirWithFile := t.TempDir()
 	modTime := time.Now()
 	filePath := filepath.Join(dirWithFile, "training_plot_points.json")
@@ -123,6 +101,7 @@ func TestLatestMetricsModTime_SkipsMissingFilesAmongMultiple(t *testing.T) {
 }
 
 func TestInjectAutoRefresh_InsertsTag(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	htmlPath := filepath.Join(dir, "plot.html")
 	require.NoError(t, os.WriteFile(htmlPath, []byte("<!DOCTYPE html><html><head><title>x</title></head><body></body></html>"), 0644))
@@ -137,6 +116,7 @@ func TestInjectAutoRefresh_InsertsTag(t *testing.T) {
 }
 
 func TestInjectAutoRefresh_SubSecondPeriodClampsToOne(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	htmlPath := filepath.Join(dir, "plot.html")
 	require.NoError(t, os.WriteFile(htmlPath, []byte("<head></head>"), 0644))
@@ -149,6 +129,7 @@ func TestInjectAutoRefresh_SubSecondPeriodClampsToOne(t *testing.T) {
 }
 
 func TestInjectAutoRefresh_NoHeadTagReturnsError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	htmlPath := filepath.Join(dir, "plot.html")
 	require.NoError(t, os.WriteFile(htmlPath, []byte("<html><body>no head here</body></html>"), 0644))
