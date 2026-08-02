@@ -302,12 +302,12 @@ func OneHot(indices *Node, depth int, dtype dtypes.DType) *Node {
 
 // ReduceAndKeep applies the given reduction function but regenerate the reduced dimensions with size 1.
 // If len(reduceAxes) is 0 (no axes given) it's assumed it is being reduced on all axes.
-func ReduceAndKeep(x *Node, reduceFn func(x *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
-	_ = validateBuildingGraphFromInputs(x)
-	rank := x.Rank()
-	reduceAxes = adjustAxesToRankAndSort(rank, reduceAxes, "x")
-	reduced := reduceFn(x, reduceAxes...)
-	shapeWithRecoveredDims := x.Shape().Clone()
+func ReduceAndKeep(operand *Node, reduceFn func(operand *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(operand)
+	rank := operand.Rank()
+	reduceAxes = adjustAxesToRankAndSort(rank, reduceAxes, "operand")
+	reduced := reduceFn(operand, reduceAxes...)
+	shapeWithRecoveredDims := operand.Shape().Clone()
 	if len(reduceAxes) == 0 {
 		// Reduce all axes, so all dimensions are set to 1.
 		for axis := range shapeWithRecoveredDims.Dimensions {
@@ -316,31 +316,51 @@ func ReduceAndKeep(x *Node, reduceFn func(x *Node, reduceAxes ...int) *Node, red
 
 	} else {
 		// Reduced axes dimensions are set to 1
-		for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {
-			if ii == reduceAxes[0] {
-				shapeWithRecoveredDims.Dimensions[ii] = 1
+		for axis := 0; axis < rank && len(reduceAxes) > 0; axis++ {
+			if axis == reduceAxes[0] {
+				shapeWithRecoveredDims.Dimensions[axis] = 1
 				reduceAxes = reduceAxes[1:]
 			}
 		}
 	}
-	return Reshape(reduced, shapeWithRecoveredDims.Dimensions...)
+
+	// Adjust for shaped inputs: works for both static and dynamic shapes.
+	reshapeSpecs := dynamicReshapeSpecsForRecoveredDims(operand, shapeWithRecoveredDims)
+	return DynamicReshape(reduced, reshapeSpecs...)
+}
+
+// dynamicReshapeSpecsForRecoveredDims creates the specs to dynamically reshape a value to the given shape.
+// Notice this works for static shapes as well, in which case this will eventually use the normal Reshape.
+func dynamicReshapeSpecsForRecoveredDims(operand *Node, s shapes.Shape) []ReshapeDimensionSpec {
+	specs := make([]ReshapeDimensionSpec, s.Rank())
+	for axis, dim := range s.Dimensions {
+		name := s.AxisName(axis)
+		if dim != shapes.DynamicDim {
+			specs[axis] = StaticDim(dim)
+		} else {
+			specs[axis] = NamedDynamicDim(name, DynamicDimensionSize(operand, axis))
+		}
+	}
+	return specs
 }
 
 // MaskedReduceAndKeep applies the given masked reduction function but regenerates the reduced
 // dimensions with size 1.
-func MaskedReduceAndKeep(x, mask *Node, reduceFn func(x, mask *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
-	_ = validateBuildingGraphFromInputs(x)
-	rank := x.Rank()
-	reduceAxes = adjustAxesToRankAndSort(rank, reduceAxes, "x")
-	reduced := reduceFn(x, mask, reduceAxes...)
-	shapeWithRecoveredDims := x.Shape().Clone()
+func MaskedReduceAndKeep(operand, mask *Node, reduceFn func(operand, mask *Node, reduceAxes ...int) *Node, reduceAxes ...int) *Node {
+	_ = validateBuildingGraphFromInputs(operand)
+	rank := operand.Rank()
+	reduceAxes = adjustAxesToRankAndSort(rank, reduceAxes, "operand")
+	reduced := reduceFn(operand, mask, reduceAxes...)
+	shapeWithRecoveredDims := operand.Shape().Clone()
 	for ii := 0; ii < rank && len(reduceAxes) > 0; ii++ {
 		if ii == reduceAxes[0] {
 			shapeWithRecoveredDims.Dimensions[ii] = 1
 			reduceAxes = reduceAxes[1:]
 		}
 	}
-	return Reshape(reduced, shapeWithRecoveredDims.Dimensions...)
+	// Adjust for shaped inputs: works for both static and dynamic shapes.
+	reshapeSpecs := dynamicReshapeSpecsForRecoveredDims(operand, shapeWithRecoveredDims)
+	return DynamicReshape(reduced, reshapeSpecs...)
 }
 
 // ReduceAndKeepMasked is an alias for MaskedReduceAndKeep.
