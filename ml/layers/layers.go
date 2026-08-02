@@ -228,7 +228,7 @@ func PieceWiseLinearCalibration(scope *model.Scope, input, keypoints *Node, outp
 	numKeypoints := keypoints.Shape().Dimensions[0]
 
 	// Normalize input to rank-2: [batch_size, 1] -- it works with both static and dynamic shapes.
-	input2D := DynamicReshape(input, NamedInferredDim("pwl_calibraiton_size"), StaticDim(1))
+	input2D := DynamicReshape(input, NamedInferredDim(g.UniqueName("piecewise_linear_calibration_size")), StaticDim(1))
 
 	// Initialize outputKeypoints uniformly.
 	outputKeypoints := make([]float64, numKeypoints)
