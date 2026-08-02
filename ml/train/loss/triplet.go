@@ -7,8 +7,8 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 )
 
-//go:generate enumer -type=PairwiseDistanceMetric -trimprefix=PairwiseDistanceMetric -transform=snake -values -text -json -yaml triplet.go
-//go:generate enumer -type=TripletMiningStrategy -trimprefix=TripletMiningStrategy -transform=snake -values -text -json -yaml triplet.go
+//go:generate go tool enumer -type=PairwiseDistanceMetric -trimprefix=PairwiseDistanceMetric -transform=snake -values -text -json -yaml triplet.go
+//go:generate go tool enumer -type=TripletMiningStrategy -trimprefix=TripletMiningStrategy -transform=snake -values -text -json -yaml triplet.go
 
 type PairwiseDistanceMetric int
 

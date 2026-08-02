@@ -65,7 +65,7 @@ var (
 // Type of loss, an enumeration of losses supported by
 type Type int
 
-//go:generate enumer -type=Type -trimprefix=Type -transform=snake -values -text -json -yaml losses.go
+//go:generate go tool enumer -type=Type -trimprefix=Type -transform=snake -values -text -json -yaml loss.go
 
 const (
 	// TypeMAE corresponds to MeanAbsoluteError.
