@@ -115,3 +115,42 @@ func DynamicReshape(operand *Node, axisSpecs ...ReshapeDimensionSpec) *Node {
 	}
 	return backendDynamicReshape(operand, dimensions...)
 }
+
+// DynamicReshapeLike reshapes the operand to the same dynamic shape (and axis names) as reference.
+// The DType of reference is ignored; the returned node will retain operand's DType.
+// `reference` can be anything implementing shapes.HasShape (such as a *Node, a Tensor, or a shapes.Shape).
+func DynamicReshapeLike(operand *Node, reference shapes.HasShape) *Node {
+	refShape := reference.Shape()
+	refRank := refShape.Rank()
+	specs := make([]ReshapeDimensionSpec, refRank)
+	refNode, _ := reference.(*Node)
+
+	for axis := 0; axis < refRank; axis++ {
+		dim := refShape.Dimensions[axis]
+		name := refShape.AxisNames[axis]
+		if dim != shapes.DynamicDim {
+			if name != "" {
+				specs[axis] = NamedDynamicDim(name, nil)
+			} else {
+				specs[axis] = StaticDim(dim)
+			}
+		} else {
+			if refNode != nil {
+				dimSizeNode := DynamicDimensionSize(refNode, axis)
+				if name != "" {
+					specs[axis] = NamedDynamicDim(name, dimSizeNode)
+				} else {
+					specs[axis] = DynamicDim(dimSizeNode)
+				}
+			} else {
+				if name != "" {
+					specs[axis] = NamedDynamicDim(name, nil)
+				} else {
+					specs[axis] = InferredDim()
+				}
+			}
+		}
+	}
+	return DynamicReshape(operand, specs...)
+}
+

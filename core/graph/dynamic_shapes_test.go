@@ -128,5 +128,23 @@ func TestDynamicShapes(t *testing.T) {
 			// Target shape should be [2, 2, 2]
 			assert.Equal(t, [][][]float32{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}, out[0].Value())
 		})
+
+		t.Run("DynamicReshapeLike", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x, ref *Node) *Node {
+				// x has flat shape [batch*4], ref has dynamic shape [batch, 2, 2]
+				return DynamicReshapeLike(x, ref)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes(
+				[]string{"batch", ""},
+				[]string{"batch", "", ""},
+			)
+
+			xInput := [][]float32{{1, 2, 3, 4}, {5, 6, 7, 8}}
+			refInput := [][][]float32{{{0, 0}, {0, 0}}, {{0, 0}, {0, 0}}}
+			out, err := exec.Call(xInput, refInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][][]float32{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}, out[0].Value())
+		})
 	})
 }
