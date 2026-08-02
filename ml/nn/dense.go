@@ -58,10 +58,10 @@ func denseDecomposed(x, weight, bias *Node, weightLayout compute.DenseLayout, ac
 
 	// Flatten x to 2D [batchSize, inFeatures] if needed.
 	inFeatures := xShape.Dimensions[xRank-1]
-	xBatchSize := xShape.Size() / inFeatures
 	x2d := x
 	if xRank > 2 {
-		x2d = Reshape(x, xBatchSize, inFeatures)
+		g := x.Graph()
+		x2d = DynamicReshape(x, NamedInferredDim(g.UniqueName("dense_x_batch")), StaticDim(inFeatures))
 	}
 
 	var y2d *Node
@@ -102,7 +102,36 @@ func denseDecomposed(x, weight, bias *Node, weightLayout compute.DenseLayout, ac
 	if xRank <= 2 && wRank <= 2 {
 		y = y2d
 	} else {
-		y = Reshape(y2d, outDims...)
+		// Build output shape: x batch dimensions + weight output dimensions
+		outAxisSpecs := make([]ReshapeDimensionSpec, len(outDims))
+		for i := range xRank - 1 {
+			dim := xShape.Dimensions[i]
+			name := xShape.AxisName(i)
+			if dim >= 0 {
+				outAxisSpecs[i] = StaticDim(dim)
+			} else if name != "" {
+				outAxisSpecs[i] = NamedDynamicDim(name, DynamicDimensionSize(x, i))
+			} else {
+				outAxisSpecs[i] = DynamicDim(DynamicDimensionSize(x, i))
+			}
+		}
+		offset := xRank - 1
+		for j := range wRank - 1 {
+			wAxis := j + 1
+			if weightLayout == compute.DenseLayoutOutputsInput {
+				wAxis = j
+			}
+			dim := wShape.Dimensions[wAxis]
+			name := wShape.AxisName(wAxis)
+			if dim >= 0 {
+				outAxisSpecs[offset+j] = StaticDim(dim)
+			} else if name != "" {
+				outAxisSpecs[offset+j] = NamedDynamicDim(name, DynamicDimensionSize(weight, wAxis))
+			} else {
+				outAxisSpecs[offset+j] = DynamicDim(DynamicDimensionSize(weight, wAxis))
+			}
+		}
+		y = DynamicReshape(y2d, outAxisSpecs...)
 	}
 	if bias != nil {
 		y = Add(y, ExpandLeftToRank(bias, y.Rank()))
