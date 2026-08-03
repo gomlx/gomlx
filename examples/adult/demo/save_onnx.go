@@ -6,7 +6,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
@@ -15,6 +14,7 @@ import (
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 )
 
 var flagSaveONNX = flag.String("save_onnx", "", "Save model to ONNX format.")
@@ -45,21 +45,26 @@ func handleSaveONNX(backend compute.Backend, store *model.Store) (bool, error) {
 		[]string{"batch", ""},
 	)
 
-	// Create zero inputs for testing with batch size 1.
-	numCat := len(adult.Data.VocabulariesFeatures)
-	numCont := len(adult.Data.Quantiles)
+	// Test: call inference model.Exec to test dynamic shape handling.
+	if klog.V(1).Enabled() {
+		// Create zero inputs for testing with batch size 1.
+		numCat := len(adult.Data.VocabulariesFeatures)
+		numCont := len(adult.Data.Quantiles)
 
-	catInput := tensors.FromShape(shapes.Make(dtypes.Int64, 1, numCat))
-	contInput := tensors.FromShape(shapes.Make(ModelDType, 1, numCont))
-	weightsInput := tensors.FromShape(shapes.Make(ModelDType, 1, 1))
+		catInput := tensors.FromShape(shapes.Make(dtypes.Int64, 1, numCat))
+		contInput := tensors.FromShape(shapes.Make(ModelDType, 1, numCont))
+		weightInput := tensors.FromShape(shapes.Make(ModelDType, 1, 1))
 
-	// Call inference model.Exec to test dynamic shape handling.
-	out, err := exec.Call(catInput, contInput, weightsInput)
-	if err != nil {
-		return true, errors.Wrap(err, "failed to execute model with dynamic batch shape")
+		klog.Infof("Testing dynamic batch shape with batch_size=1, inputs:")
+		klog.Infof("- Categorical: %s", catInput.Shape())
+		klog.Infof("- Continuous: %s", contInput.Shape())
+		klog.Infof("- Weight: %s", weightInput.Shape())
+		outputs, err := exec.Call(catInput, contInput, weightInput)
+		if err != nil {
+			return true, errors.Wrap(err, "failed to execute model with dynamic batch shape")
+		}
+		klog.Infof("Output: shape=%s, value=%s\n", outputs[0].Shape(), outputs[0])
 	}
-
-	fmt.Printf("Successfully executed dynamic shape model. Output shape: %s, value: %v\n", out[0].Shape(), out[0].Value())
 
 	return true, nil
 }
