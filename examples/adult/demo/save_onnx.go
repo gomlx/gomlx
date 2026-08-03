@@ -13,6 +13,7 @@ import (
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/examples/adult"
 	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/model/onnx"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
@@ -45,14 +46,15 @@ func handleSaveONNX(backend compute.Backend, store *model.Store) (bool, error) {
 		[]string{"batch", ""},
 	)
 
+	// Feature counts.
+	numCategoricalFeatures := len(adult.Data.VocabulariesFeatures)
+	numContinuousFeatures := len(adult.Data.Quantiles)
+
 	// Test: call inference model.Exec to test dynamic shape handling.
 	if klog.V(1).Enabled() {
 		// Create zero inputs for testing with batch size 1.
-		numCat := len(adult.Data.VocabulariesFeatures)
-		numCont := len(adult.Data.Quantiles)
-
-		catInput := tensors.FromShape(shapes.Make(dtypes.Int64, 1, numCat))
-		contInput := tensors.FromShape(shapes.Make(ModelDType, 1, numCont))
+		catInput := tensors.FromShape(shapes.Make(dtypes.Int64, 1, numCategoricalFeatures))
+		contInput := tensors.FromShape(shapes.Make(ModelDType, 1, numContinuousFeatures))
 		weightInput := tensors.FromShape(shapes.Make(ModelDType, 1, 1))
 
 		klog.Infof("Testing dynamic batch shape with batch_size=1, inputs:")
@@ -64,6 +66,18 @@ func handleSaveONNX(backend compute.Backend, store *model.Store) (bool, error) {
 			return true, errors.Wrap(err, "failed to execute model with dynamic batch shape")
 		}
 		klog.Infof("Output: shape=%s, value=%s\n", outputs[0].Shape(), outputs[0])
+	}
+
+	// Input shapes with dynamic batch size.
+	categoricalShape := shapes.MakeDynamic(dtypes.Int64, []int{shapes.DynamicDim, numCategoricalFeatures}, []string{"batch", ""})
+	continuousShape := shapes.MakeDynamic(ModelDType, []int{shapes.DynamicDim, numContinuousFeatures}, []string{"batch", ""})
+	weightShape := shapes.MakeDynamic(ModelDType, []int{shapes.DynamicDim, 1}, []string{"batch", ""})
+	err = onnx.SaveToFile(backend, exec, *flagSaveONNX,
+		[]shapes.Shape{categoricalShape, continuousShape, weightShape},
+		[]string{"categorical", "continuous", "weight"},
+		[]string{"is_>50K_logit"})
+	if err != nil {
+		return true, err
 	}
 
 	return true, nil
