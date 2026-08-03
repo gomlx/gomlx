@@ -13,7 +13,7 @@ import (
 
 func TestResolveOutputFilePath_DefaultIsStableWithinASession(t *testing.T) {
 	t.Parallel()
-	pb := NewPlotBuilder(false, "", 0)
+	pb := NewPlotBuilder(false, "", 0, "")
 	checkpointPaths := []string{"/home/user/mnist_data/checkpoint"}
 
 	// Calling it twice must return the exact same path -- that's the whole
@@ -30,7 +30,7 @@ func TestResolveOutputFilePath_DefaultIsStableWithinASession(t *testing.T) {
 
 func TestResolveOutputFilePath_CacheIgnoresCheckpointPathsArgument(t *testing.T) {
 	t.Parallel()
-	pb := NewPlotBuilder(false, "", 0)
+	pb := NewPlotBuilder(false, "", 0, "")
 
 	// Once cached, the *same PlotBuilder* reuses the same path regardless of
 	// what checkpointPaths is passed on a later call -- correct, because in
@@ -44,7 +44,7 @@ func TestResolveOutputFilePath_CacheIgnoresCheckpointPathsArgument(t *testing.T)
 
 func TestResolveOutputFilePath_ExplicitRelativePath(t *testing.T) {
 	t.Parallel()
-	pb := NewPlotBuilder(false, "plot.html", 0)
+	pb := NewPlotBuilder(false, "plot.html", 0, "")
 	got := pb.resolveOutputFilePath([]string{"/checkpoints/model-a"})
 	require.Equal(t, "/checkpoints/model-a/plot.html", got)
 }
@@ -57,7 +57,7 @@ func TestResolveOutputFilePath_ExplicitAbsolutePath(t *testing.T) {
 	// Windows CI runner -- t.TempDir() is a real absolute path on whichever OS
 	// the test is running on.
 	absPath := filepath.Join(t.TempDir(), "my-plot.html")
-	pb := NewPlotBuilder(false, absPath, 0)
+	pb := NewPlotBuilder(false, absPath, 0, "")
 	got := pb.resolveOutputFilePath([]string{"/checkpoints/model-a"})
 	require.Equal(t, absPath, got)
 }
@@ -135,5 +135,183 @@ func TestInjectAutoRefresh_NoHeadTagReturnsError(t *testing.T) {
 	require.NoError(t, os.WriteFile(htmlPath, []byte("<html><body>no head here</body></html>"), 0644))
 
 	err := injectAutoRefresh(htmlPath, 30*time.Second)
+	require.Error(t, err)
+}
+
+// TestDisambiguateShortLabels_NoCollision characterizes the common case: when every line's
+// short is already unique within the metric type, nothing changes.
+func TestDisambiguateShortLabels_NoCollision(t *testing.T) {
+	t.Parallel()
+	lines := []*plotLineInfo{
+		{short: "T/loss"},
+		{short: "T/~loss"},
+	}
+	disambiguateShortLabels(lines)
+	require.Equal(t, "T/loss", lines[0].short)
+	require.Equal(t, "T/~loss", lines[1].short)
+}
+
+// TestDisambiguateShortLabels_Collision reproduces the real bug found in the maintainer's
+// FlowMatching fixture: "Mean Loss on train" and "Mean Loss on validation" both produce the
+// Short "#loss()" (their eval dataset's ShortName came out empty), so without disambiguation
+// they'd collide into a single series in vizb's chart (vizb groups by this label). Every line
+// must end up with a distinct short after the call.
+func TestDisambiguateShortLabels_Collision(t *testing.T) {
+	t.Parallel()
+	lines := []*plotLineInfo{
+		{short: "#loss()", desc: "Mean Loss on train"},
+		{short: "#loss()", desc: "Mean Loss on validation"},
+		{short: "T/loss", desc: "Train: Loss"}, // Unrelated, must be untouched.
+	}
+	disambiguateShortLabels(lines)
+
+	seen := make(map[string]bool)
+	for _, line := range lines {
+		require.False(t, seen[line.short], "short %q is not unique after disambiguation", line.short)
+		seen[line.short] = true
+	}
+	require.Equal(t, "T/loss", lines[2].short, "non-colliding line must be left untouched")
+	require.Contains(t, lines[0].short, "#loss()")
+	require.Contains(t, lines[1].short, "#loss()")
+}
+
+// TestDisambiguateShortLabels_ThreeWayCollision checks the disambiguation counter handles more
+// than two lines sharing the same short.
+func TestDisambiguateShortLabels_ThreeWayCollision(t *testing.T) {
+	t.Parallel()
+	lines := []*plotLineInfo{
+		{short: "x"}, {short: "x"}, {short: "x"},
+	}
+	disambiguateShortLabels(lines)
+	seen := make(map[string]bool)
+	for _, line := range lines {
+		require.False(t, seen[line.short])
+		seen[line.short] = true
+	}
+}
+
+func TestBuildPageSidebarHTML_EmptyWhenNothingToShow(t *testing.T) {
+	t.Parallel()
+	require.Empty(t, buildPageSidebarHTML("", nil, nil))
+}
+
+func TestBuildPageSidebarHTML_TitleOnly(t *testing.T) {
+	t.Parallel()
+	got := buildPageSidebarHTML("My Title", nil, nil)
+	require.Contains(t, got, `id="gomlx-sidebar"`)
+	require.Contains(t, got, "<h1")
+	require.Contains(t, got, "My Title")
+	require.NotContains(t, got, "Models compared")
+}
+
+func TestBuildPageSidebarHTML_EscapesUserContent(t *testing.T) {
+	t.Parallel()
+	got := buildPageSidebarHTML(`<script>alert(1)</script>`, []legendEntry{{text: `<b>evil</b>`}}, nil)
+	require.NotContains(t, got, "<script>")
+	require.NotContains(t, got, "<b>evil</b>")
+	require.Contains(t, got, "&lt;script&gt;")
+}
+
+func TestBuildPageSidebarHTML_ModelsAndDescriptions(t *testing.T) {
+	t.Parallel()
+	got := buildPageSidebarHTML("",
+		[]legendEntry{{modelIdx: 0, text: "#1 model-a (path/a)"}, {modelIdx: 1, text: "#2 model-b (path/b)"}},
+		[]legendEntry{{modelIdx: 0, text: "T/loss: Train: Loss"}})
+	require.Contains(t, got, "Models compared")
+	require.Contains(t, got, "#1 model-a (path/a)")
+	require.Contains(t, got, "Metric labels")
+	require.Contains(t, got, "T/loss: Train: Loss")
+}
+
+// TestBuildPageSidebarHTML_SwatchesOnlyInMultiModelMode characterizes that color swatches (a
+// small colored <span>) only appear when modelEntries is non-empty -- single-model mode has
+// nothing to color-code against, so entries stay plain, matching today's simpler common case.
+func TestBuildPageSidebarHTML_SwatchesOnlyInMultiModelMode(t *testing.T) {
+	t.Parallel()
+	singleModel := buildPageSidebarHTML("", nil, []legendEntry{{text: "T/loss: Train: Loss"}})
+	require.NotContains(t, singleModel, "border-radius:50%")
+
+	multiModel := buildPageSidebarHTML("",
+		[]legendEntry{{modelIdx: 0, text: "#1 model-a"}},
+		[]legendEntry{{modelIdx: 0, text: "T/loss: Train: Loss"}})
+	require.Contains(t, multiModel, "border-radius:50%")
+	require.Contains(t, multiModel, modelColor(0))
+}
+
+func TestModelColor_DistinctAndStable(t *testing.T) {
+	t.Parallel()
+	require.NotEqual(t, modelColor(0), modelColor(1))
+	require.Equal(t, modelColor(0), modelColor(0))
+	// Cycles once we run out of palette entries, rather than panicking.
+	require.NotPanics(t, func() { modelColor(len(modelColorPalette) + 3) })
+}
+
+func TestInjectPageExtras_NoOpWhenNothingToInject(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	htmlPath := filepath.Join(dir, "plot.html")
+	original := "<html><head><title>Vizb</title></head><body><div id=\"app\"></div></body></html>"
+	require.NoError(t, os.WriteFile(htmlPath, []byte(original), 0644))
+
+	require.NoError(t, injectPageExtras(htmlPath, "", nil, nil))
+
+	content, err := os.ReadFile(htmlPath)
+	require.NoError(t, err)
+	require.Equal(t, original, string(content))
+}
+
+func TestInjectPageExtras_TitleUpdatesTagAndInjectsHeading(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	htmlPath := filepath.Join(dir, "plot.html")
+	require.NoError(t, os.WriteFile(htmlPath,
+		[]byte(`<html><head><title>Vizb</title></head><body><div id="app"></div></body></html>`), 0644))
+
+	require.NoError(t, injectPageExtras(htmlPath, "FlowMatching results", nil, nil))
+
+	content, err := os.ReadFile(htmlPath)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "<title>FlowMatching results</title>")
+	require.Contains(t, string(content), "#gomlx-sidebar")
+	// The sidebar must land before vizb's own <div id="app">, which its JS fully replaces, and
+	// the CSS giving #app room for the sidebar must land in <head>.
+	require.Regexp(t, `(?s)<style>.*#app\{margin-left:300px\}.*</style>.*<div id="gomlx-sidebar"><h1>FlowMatching results</h1>.*<div id="app">`,
+		string(content))
+}
+
+func TestInjectPageExtras_ModelsAndDescriptionsSurviveInBody(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	htmlPath := filepath.Join(dir, "plot.html")
+	require.NoError(t, os.WriteFile(htmlPath,
+		[]byte(`<html><head><title>Vizb</title></head><body><div id="app"></div></body></html>`), 0644))
+
+	require.NoError(t, injectPageExtras(htmlPath, "",
+		[]legendEntry{{modelIdx: 0, text: "#1 model-a (dir-a)"}},
+		[]legendEntry{{modelIdx: 0, text: "T/loss: Train: Loss"}}))
+
+	content, err := os.ReadFile(htmlPath)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "#1 model-a (dir-a)")
+	require.Contains(t, string(content), "T/loss: Train: Loss")
+}
+
+func TestInjectPageExtras_NoHeadTagReturnsError(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	htmlPath := filepath.Join(dir, "plot.html")
+	require.NoError(t, os.WriteFile(htmlPath, []byte("<html>no head here<body><div id=\"app\"></div></body></html>"), 0644))
+
+	err := injectPageExtras(htmlPath, "", []legendEntry{{text: "#1 model-a (dir-a)"}}, nil)
+	require.Error(t, err)
+}
+
+func TestInjectPageExtras_NoBodyTagReturnsError(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	htmlPath := filepath.Join(dir, "plot.html")
+	require.NoError(t, os.WriteFile(htmlPath, []byte("<html><head><title>Vizb</title></head>no body here</html>"), 0644))
+
+	err := injectPageExtras(htmlPath, "", []legendEntry{{text: "#1 model-a (dir-a)"}}, nil)
 	require.Error(t, err)
 }

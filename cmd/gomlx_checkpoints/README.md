@@ -56,7 +56,15 @@ go install github.com/goptics/vizb@latest
 
 One HTML file is generated (a temp file by default, or `-plot_output <path>` for a fixed location), with
 one chart panel per metric type (e.g. "loss", "accuracy") and one line per metric within it (e.g. train
-vs. eval). It opens in your default browser unless `-browser=false`.
+vs. eval) — all metrics of the same type share a panel, so you can see e.g. train and validation loss
+diverge on the same chart. It opens in your default browser unless `-browser=false`.
+
+Pass more than one `<checkpoint_path>` to compare models side by side: each metric line is prefixed with
+`#1`, `#2`, ... and a persistent sidebar on the left lists the models being compared and every metric's
+short label (e.g. `T/~loss`) next to its full name (e.g. "Train: Moving Average Loss") — each entry gets
+a color-coded dot matching its model, so it's easy to tell at a glance which sidebar entries belong to
+which run. Add `-plot_title "<text>"` to title the page — handy when sharing the generated HTML file
+with others.
 
 Narrow down what gets plotted (or listed with `-metrics`) with `-metrics_names <regex>` (matches metric
 name or short name) and `-metrics_types <type1,type2,...>`.
