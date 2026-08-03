@@ -5,8 +5,6 @@
 package main
 
 import (
-	"flag"
-
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
@@ -18,22 +16,17 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var flagSaveONNX = flag.String("save_onnx", "", "Save model to ONNX format.")
-
-func handleSaveONNX(backend compute.Backend, store *model.Store) (bool, error) {
-	if *flagSaveONNX == "" {
-		return false, nil
-	}
-
+// saveONNX saves the model with the weights in store to onnxPath.
+func saveONNX(backend compute.Backend, store *model.Store, onnxPath string) error {
 	if !backend.Capabilities().DynamicAxes {
-		return true, errors.Errorf("backend %s does not support DynamicAxes", backend.Name())
+		return errors.Errorf("backend %s does not support DynamicAxes", backend.Name())
 	}
 
 	// Create inference model.Exec wrapping Model graph function.
 	// Model takes: scope, categorical, continuous, weights
 	exec, err := model.NewExec(backend, store, Model)
 	if err != nil {
-		return true, errors.Wrap(err, "failed to create model.Exec for ONNX export")
+		return errors.WithMessagef(err, "failed to create inference model.Exec for ONNX export")
 	}
 
 	// Configure dynamic batch axis for the 3 input parameters:
@@ -63,7 +56,7 @@ func handleSaveONNX(backend compute.Backend, store *model.Store) (bool, error) {
 		klog.Infof("- Weight: %s", weightInput.Shape())
 		outputs, err := exec.Call(catInput, contInput, weightInput)
 		if err != nil {
-			return true, errors.Wrap(err, "failed to execute model with dynamic batch shape")
+			return errors.WithMessagef(err, "failed to execute model with dynamic batch shape")
 		}
 		klog.Infof("Output: shape=%s, value=%s\n", outputs[0].Shape(), outputs[0])
 	}
@@ -72,13 +65,13 @@ func handleSaveONNX(backend compute.Backend, store *model.Store) (bool, error) {
 	categoricalShape := shapes.MakeDynamic(dtypes.Int64, []int{shapes.DynamicDim, numCategoricalFeatures}, []string{"batch", ""})
 	continuousShape := shapes.MakeDynamic(ModelDType, []int{shapes.DynamicDim, numContinuousFeatures}, []string{"batch", ""})
 	weightShape := shapes.MakeDynamic(ModelDType, []int{shapes.DynamicDim, 1}, []string{"batch", ""})
-	err = onnx.SaveToFile(backend, exec, *flagSaveONNX,
+	err = onnx.SaveToFile(backend, exec, onnxPath,
 		[]shapes.Shape{categoricalShape, continuousShape, weightShape},
 		[]string{"categorical", "continuous", "weight"},
 		[]string{"is_>50K_logit"})
 	if err != nil {
-		return true, err
+		return err
 	}
 
-	return true, nil
+	return nil
 }

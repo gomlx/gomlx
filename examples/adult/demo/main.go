@@ -146,6 +146,7 @@ var (
 			"devices available in the backend.")
 	flagPrefetchOnDevice = flag.Int("prefetch_on_device", 0,
 		"Number of batches to prefetch and upload to the device in parallel to training.")
+	flagSaveONNX = flag.String("save_onnx", "", "Save model to ONNX format.")
 )
 
 func main() {
@@ -195,12 +196,9 @@ func mainWithStore(store *model.Store, dataDir, checkpointPath string, paramsSet
 	// Load training data and initialize statistics (vocabularies and quantiles).
 	adult.LoadAndPreprocessData(dataDir, *flagNumQuantiles, *flagForceDownload, *flagVerbosity)
 
-	handled, err := handleSaveONNX(backend, store)
-	if err != nil {
+	if *flagSaveONNX != "" {
+		err := saveONNX(backend, store, *flagSaveONNX)
 		return err
-	}
-	if handled {
-		return nil
 	}
 
 	// Crate Backend and upload data to device tensors.
