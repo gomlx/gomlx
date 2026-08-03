@@ -2,6 +2,12 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-08-02:
+  - Added graph.DynamicReshape and graph.DynamicReshapeLike -- they fallback to Reshape if the shapes (input and target) are static.
+  - Added graph.Graph.UniqueName, to allow easy creation of unique axes names.
+  - Fixed some ops to handle dynamic shapes (using DynamicReshape)
+  - Added -save_onnx flag to `./examples/adult/demo` using dynamic batch size.
+
 - 2026-07-30:
   - Added experimental "onnx" backend procted by `-tags=onnx` tag.
   - New `ml/model/onnx` package:

@@ -54,7 +54,11 @@ var (
 		"FusedDense", "FusedGelu", "FusedLayerNorm", "FusedSoftmax",
 		"FusedScaledDotProductAttention", "FusedScaledDotProductAttentionVJP",
 		"FusedAttentionQKVProjection",
-		"FusedQuantizedDense", "QuantizedEmbeddingLookup")
+		"FusedQuantizedDense", "QuantizedEmbeddingLookup",
+
+		// Dynamic shape methods:
+		"DynamicReshape",
+	)
 
 	// methodsNotGenerated get a NodeType but no auto-generated wrapper
 	// (hand-written implementations).
@@ -195,6 +199,15 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.Format = "%+v"
 			case "*ScaledDotProductAttentionConfig":
 				pi.BackendType = "*compute.ScaledDotProductAttentionConfig"
+				pi.Format = "%+v"
+			case "DynamicDimensionSpec":
+				pi.BackendType = "compute." + pi.BackendType
+				pi.Format = "%+v"
+			case "...DynamicDimensionSpec":
+				pi.BackendType = "...compute." + pi.BackendType[3:]
+				pi.NodeInputType = "[]" + pi.BackendType[3:]
+				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
+				pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
 				pi.Format = "%+v"
 			default:
 				switch {

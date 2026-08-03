@@ -108,5 +108,57 @@ func TestDynamicShapes(t *testing.T) {
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "rank mismatch")
 		})
+
+		t.Run("DynamicReshape", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				// x has shape [batch, 4].
+				// We reshape it to [batch, 2, 2].
+				// Get the dynamic batch size.
+				batchSize := DynamicDimensionSize(x, 0)
+				batchSpec := NamedDynamicDim("batch", batchSize)
+				return DynamicReshape(x, batchSpec, StaticDim(2), NamedInferredDim("inferred_dim"))
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", ""})
+
+			// Run with batch = 2
+			input := [][]float32{{1, 2, 3, 4}, {5, 6, 7, 8}}
+			out, err := exec.Call(input)
+			require.NoError(t, err)
+			// Target shape should be [2, 2, 2]
+			assert.Equal(t, [][][]float32{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}, out[0].Value())
+		})
+
+		t.Run("DynamicReshapeLike", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x, ref *Node) *Node {
+				// x has flat shape [batch*4], ref has dynamic shape [batch, 2, 2]
+				return DynamicReshapeLike(x, ref)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes(
+				[]string{"batch", ""},
+				[]string{"batch", "", ""},
+			)
+
+			xInput := [][]float32{{1, 2, 3, 4}, {5, 6, 7, 8}}
+			refInput := [][][]float32{{{0, 0}, {0, 0}}, {{0, 0}, {0, 0}}}
+			out, err := exec.Call(xInput, refInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][][]float32{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}, out[0].Value())
+		})
+
+		t.Run("DynamicReshapeStaticFallback", func(t *testing.T) {
+			// When operand and specs are completely static, DynamicReshape should fallback to static Reshape.
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				// x has static shape [2, 4]
+				return DynamicReshape(x, StaticDim(2), StaticDim(2), InferredDim())
+			})
+			require.NoError(t, err)
+
+			xInput := [][]float32{{1, 2, 3, 4}, {5, 6, 7, 8}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][][]float32{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}, out[0].Value())
+		})
 	})
 }

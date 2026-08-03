@@ -23,7 +23,7 @@ import (
 func Save(backend compute.Backend, exec *model.Exec, w io.Writer, inputShapes []shapes.Shape, inputNames, outputNames []string) error {
 	onnxBackend, ok := backend.(*onnxbackend.Backend)
 	if !ok {
-		return errors.Errorf("backend %T is not an *onnxbackend.Backend", backend)
+		return errors.Errorf("backend %q (%T) is not an \"onnx\" backend (*onnxbackend.Backend) required to generate a .onnx model", backend.Name(), backend)
 	}
 
 	prevKeepModelProto := onnxBackend.KeepModelProto()

@@ -54,6 +54,7 @@ const (
 	NodeTypeDiv
 	NodeTypeDotGeneral
 	NodeTypeDynamicDimensionSize
+	NodeTypeDynamicReshape
 	NodeTypeDynamicShape
 	NodeTypeDynamicSlice
 	NodeTypeDynamicUpdateSlice
@@ -1705,6 +1706,59 @@ func DynamicDimensionSize(operand *Node, axis int) (
 		axis:    axis,
 	}
 	result, err := g.currentFunc.backendFunc.DynamicDimensionSize(operand.outputOps[0], inputs.axis)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsDynamicReshape holds the inputs used for the call to compute.DynamicReshape.
+type nodeInputsDynamicReshape struct {
+	operand    *Node
+	dimensions []compute.DynamicDimensionSpec
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsDynamicReshape) Type() NodeType {
+	return NodeTypeDynamicReshape
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsDynamicReshape) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], dimensions=%+v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.dimensions,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsDynamicReshape) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	return backendDynamicReshape(new_operand, ni.dimensions...)
+}
+
+// backendDynamicReshape is a Graph wrapper for the backend.Builder.DynamicReshape method.
+func backendDynamicReshape(operand *Node, dimensions ...compute.DynamicDimensionSpec) (
+	node *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsDynamicReshape{
+		operand:    operand,
+		dimensions: slices.Clone(dimensions),
+	}
+	result, err := g.currentFunc.backendFunc.DynamicReshape(operand.outputOps[0], inputs.dimensions...)
 	if err != nil {
 		panic(err)
 	}
