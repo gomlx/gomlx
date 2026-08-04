@@ -22,6 +22,13 @@ func saveONNX(backend compute.Backend, store *model.Store, onnxPath string) erro
 		return errors.Errorf("backend %s does not support DynamicAxes", backend.Name())
 	}
 
+	type keepModelProtoSetter interface {
+		SetKeepModelProto(keep bool)
+	}
+	if setter, ok := backend.(keepModelProtoSetter); ok {
+		setter.SetKeepModelProto(true)
+	}
+
 	// Create inference model.Exec wrapping Model graph function.
 	// Model takes: scope, categorical, continuous, weights
 	exec, err := model.NewExec(backend, store, Model)
@@ -43,6 +50,20 @@ func saveONNX(backend compute.Backend, store *model.Store, onnxPath string) erro
 	numCategoricalFeatures := len(adult.Data.VocabulariesFeatures)
 	numContinuousFeatures := len(adult.Data.Quantiles)
 
+	if onnx.IsONNX(backend) {
+		// Input shapes with dynamic batch size.
+		categoricalShape := shapes.MakeDynamic(dtypes.Int64, []int{shapes.DynamicDim, numCategoricalFeatures}, []string{"batch", ""})
+		continuousShape := shapes.MakeDynamic(ModelDType, []int{shapes.DynamicDim, numContinuousFeatures}, []string{"batch", ""})
+		weightShape := shapes.MakeDynamic(ModelDType, []int{shapes.DynamicDim, 1}, []string{"batch", ""})
+		err = onnx.SaveToFile(backend, exec, onnxPath,
+			[]shapes.Shape{categoricalShape, continuousShape, weightShape},
+			[]string{"categorical", "continuous", "weight"},
+			[]string{"is_>50K_logit"})
+		if err != nil {
+			return err
+		}
+	}
+
 	// Test: call inference model.Exec to test dynamic shape handling.
 	if klog.V(1).Enabled() {
 		// Create zero inputs for testing with batch size 1.
@@ -61,17 +82,9 @@ func saveONNX(backend compute.Backend, store *model.Store, onnxPath string) erro
 		klog.Infof("Output: shape=%s, value=%s\n", outputs[0].Shape(), outputs[0])
 	}
 
-	// Input shapes with dynamic batch size.
-	categoricalShape := shapes.MakeDynamic(dtypes.Int64, []int{shapes.DynamicDim, numCategoricalFeatures}, []string{"batch", ""})
-	continuousShape := shapes.MakeDynamic(ModelDType, []int{shapes.DynamicDim, numContinuousFeatures}, []string{"batch", ""})
-	weightShape := shapes.MakeDynamic(ModelDType, []int{shapes.DynamicDim, 1}, []string{"batch", ""})
-	err = onnx.SaveToFile(backend, exec, onnxPath,
-		[]shapes.Shape{categoricalShape, continuousShape, weightShape},
-		[]string{"categorical", "continuous", "weight"},
-		[]string{"is_>50K_logit"})
-	if err != nil {
-		return err
+	// If it was not an ONNX backend, we cannot save an ONNX model.
+	if !onnx.IsONNX(backend) {
+		return errors.Errorf("backend %q (%T) is not an \"onnx\" backend (*onnxbackend.Backend) required to generate a .onnx model", backend.Name(), backend)
 	}
-
 	return nil
 }

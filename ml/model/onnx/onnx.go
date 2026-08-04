@@ -16,6 +16,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// IsONNX checks if the given backend is an ONNX backend.
+func IsONNX(backend compute.Backend) bool {
+	_, ok := backend.(*onnxbackend.Backend)
+	return ok
+}
+
 // Save exports the computation graph associated with the given model.Exec as an ONNX model to w.
 //
 // It temporary sets store.WithVariableAsConst(true) and backend.SetKeepModelProto(true) while compiling
@@ -47,7 +53,13 @@ func Save(backend compute.Backend, exec *model.Exec, w io.Writer, inputShapes []
 	if onnxExecutable == nil {
 		return errors.Errorf("compiled graph has no compute.Executable")
 	}
-
+	if onExec, ok := onnxExecutable.(*onnxbackend.Executable); ok && onExec.ModelProto() == nil {
+		g, err = exec.Compile(inputShapes...)
+		if err != nil {
+			return errors.Wrap(err, "failed to re-compile computation graph for ONNX export with retained proto")
+		}
+		onnxExecutable = g.Executable()
+	}
 	err = onnxbackend.SaveModel(backend, onnxExecutable, w, inputNames, outputNames)
 	if err != nil {
 		return errors.Wrap(err, "failed to save ONNX model")
@@ -57,6 +69,10 @@ func Save(backend compute.Backend, exec *model.Exec, w io.Writer, inputShapes []
 
 // SaveToFile exports the computation graph associated with the given model.Exec as an ONNX model to filePath.
 func SaveToFile(backend compute.Backend, exec *model.Exec, filePath string, inputShapes []shapes.Shape, inputNames, outputNames []string) error {
+	if !IsONNX(backend) {
+		return errors.Errorf("backend %q (%T) is not an \"onnx\" backend (*onnxbackend.Backend) required to generate a .onnx model", backend.Name(), backend)
+	}
+
 	f, err := os.Create(filePath)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create ONNX file %q", filePath)
