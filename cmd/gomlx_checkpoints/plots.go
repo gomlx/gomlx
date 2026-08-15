@@ -41,9 +41,14 @@ var (
 )
 
 // PlotBuilder renders training metrics to a self-contained HTML file using the `vizb` CLI tool,
-// across possibly many calls to Plot within one process (e.g. once per -loop iteration). Holds
-// session state as fields rather than package-level variables, so tests can construct their own
-// instance and run in parallel without leaking state into each other.
+// across possibly many calls to Plot within one process (e.g. once per -loop iteration).
+//
+// It exists (rather than a handful of package-level variables) so that: (1) every test can
+// construct its own PlotBuilder and run in parallel, with no risk of one test's state leaking
+// into another's; (2) the session state it carries -- has a plot ever been rendered yet, has the
+// browser tab already been opened, what output path and last-render time are we using -- is
+// visible in one place instead of scattered across the package; and (3) nothing stops two
+// PlotBuilders (say, one per session in some future server-like use) from existing side by side.
 //
 // Construct one with NewPlotBuilder and call Plot as many times as needed.
 type PlotBuilder struct {
@@ -122,7 +127,7 @@ func createPlotLines(metricType string, modelNames []string, metricsOrder map[Mo
 	for modelIdx, modelPoints := range points {
 		modelName := modelNames[modelIdx]
 		modelNum := modelNamesToIndex[modelName]
-
+		// Group points by metric name.
 		metricPoints := make(map[string]*plotLineInfo)
 		for _, pt := range modelPoints {
 			if pt.MetricType != metricType {
@@ -134,6 +139,7 @@ func createPlotLines(metricType string, modelNames []string, metricsOrder map[Mo
 				MetricType: pt.MetricType,
 			}
 			if _, ok := metricsOrder[metricKey]; !ok {
+				// Metric was not selected, skip.
 				continue
 			}
 			info, exists := metricPoints[pt.MetricName]
@@ -150,8 +156,11 @@ func createPlotLines(metricType string, modelNames []string, metricsOrder map[Mo
 			metricPoints[pt.MetricName] = info
 		}
 
+		// Sort points by steps.
 		for _, info := range metricPoints {
+			// Create the indices array.
 			indices := xslices.Iota(0, len(info.steps))
+			// Sort indices.
 			slices.SortFunc(indices, func(i, j int) int {
 				if info.steps[i] < info.steps[j] {
 					return -1
@@ -161,6 +170,7 @@ func createPlotLines(metricType string, modelNames []string, metricsOrder map[Mo
 				}
 				return 0
 			})
+			// Apply sorted order.
 			steps := make([]float64, len(info.steps))
 			values := make([]float64, len(info.values))
 			for ii, idx := range indices {
@@ -171,6 +181,7 @@ func createPlotLines(metricType string, modelNames []string, metricsOrder map[Mo
 			info.values = values
 		}
 
+		// Collect all lines.
 		for _, info := range metricPoints {
 			lines = append(lines, info)
 		}
@@ -319,8 +330,8 @@ func (pb *PlotBuilder) Plot(checkpointPaths []string, modelNames []string, metri
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	// One vizb DataSet JSON per metric type. Also collect every line across every type, to build
-	// the sidebar from once the loop is done (see buildDescriptionEntries).
+	// One vizb DataSet JSON per metric type (e.g. "loss", "accuracy"). Also collect every line
+	// across every type, to build the sidebar from once the loop is done (see buildDescriptionEntries).
 	jsonPaths := make([]string, 0, len(metricTypes))
 	var allLines []*plotLineInfo
 	for _, metricType := range metricTypes {
