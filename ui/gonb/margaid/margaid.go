@@ -25,22 +25,17 @@ package margaid
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
-	"math"
 	"os"
 	"path"
 	"strings"
 
 	mg "github.com/erkkah/margaid"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/train"
 	stdplots "github.com/gomlx/gomlx/ui/plot"
 	"github.com/janpfeifer/gonb/gonbui"
 	"github.com/pkg/errors"
-	"k8s.io/klog/v2"
 )
 
 var (
@@ -54,33 +49,33 @@ var (
 	ParamPlots = "plots"
 )
 
+// onEndName is used both to name the loop.OnEnd callback that triggers the final plot and, in
+// Attach, to name the NTimesDuringLoop collection callback -- matching what both did before this
+// type became a thin wrapper around plot.Config.
+const onEndName = "margaid plots"
+
+// scheduleName names the ExponentialCallback (NewDefault) and EveryNSteps (PlotEveryNSteps)
+// collection callbacks -- distinct from onEndName, matching pre-existing (slightly inconsistent)
+// naming.
+const scheduleName = "margaid.Plot"
+
 // Plots holds many plots for different metrics. They are organized per "metric type", where
 // the metric type is a unit/quantity unique name. It's assumed that series of the same "metric type"
 // can share the same Y-Axis and hence the same plot.
 type Plots struct {
+	*stdplots.Config
+
 	// Image dimensions.
 	Width, Height int
-
-	// EvalDatasets will be evaluated with `train.Trainer.Eval()` and its metrics collected.
-	EvalDatasets []train.Dataset
-
-	// batchNormAveragesDS is used to update the batch normalization averages, if configured.
-	batchNormAveragesDS train.Dataset
 
 	// Plot per metric name.
 	PerMetricType map[string]*Plot
 
 	// UniqueID for dynamic plotting for GoNB.
-	gonbID      string
-	pointsAdded int
+	gonbID string
 
 	// Default projection of the graph on X, Y axis.
 	xProjection, yProjection mg.Projection
-
-	// filePath where to load data points from and save to. Only used if not empty.
-	filePath      string
-	fileWriter    chan<- stdplots.Point
-	errFileWriter <-chan error
 
 	evalLossMetricType string
 }
@@ -91,13 +86,23 @@ type Plots struct {
 //
 // Use Plots.Plot() to actually generate the plots.
 func New(width, height int, evalDatasets ...train.Dataset) *Plots {
-	return &Plots{
-		Width:        width,
-		Height:       height,
-		EvalDatasets: evalDatasets,
-		xProjection:  mg.Lin,
-		yProjection:  mg.Lin,
+	ps := &Plots{
+		Width:       width,
+		Height:      height,
+		xProjection: mg.Lin,
+		yProjection: mg.Lin,
 	}
+	ps.Config = stdplots.NewConfig(ps, onEndName, func() {
+		// Final plot.
+		if ps.gonbID != "" {
+			// Erase intermediary transient plots.
+			ps.DynamicPlot(true)
+		} else {
+			ps.Plot()
+		}
+	})
+	ps.Config.WithDatasets(evalDatasets...)
+	return ps
 }
 
 // NewDefault creates a new Margaid plots with the usual defaults.
@@ -134,12 +139,7 @@ func NewDefault(loop *train.Loop, dir string, startStep int, stepFactor float64,
 
 	// Notice that plot points will be generated even if not running in a notebook -- just no plot will be displayed.
 	// Register plot points at exponential steps.
-	train.ExponentialCallback(loop, startStep, stepFactor, true,
-		"margaid.Plot", 0, func(loop *train.Loop, metrics []*tensors.Tensor) error {
-			// Update plots with metrics.
-			return stdplots.AddTrainAndEvalMetrics(plots, loop, metrics, plots.EvalDatasets, plots.batchNormAveragesDS)
-		})
-	plots.attachOnEnd(loop)
+	plots.Config.ScheduleExponential(loop, startStep, stepFactor, scheduleName)
 	return plots
 }
 
@@ -160,12 +160,7 @@ type Plot struct {
 // PlotEveryNSteps calls an evaluation and plot every `n` steps. Useful if one wants
 // an evaluation at given points.
 func (ps *Plots) PlotEveryNSteps(loop *train.Loop, n int) {
-	train.EveryNSteps(loop, n, "margaid.Plot", 0,
-		func(loop *train.Loop, metrics []*tensors.Tensor) error {
-			// Update plots with metrics.
-			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets, ps.batchNormAveragesDS)
-		})
-	ps.attachOnEnd(loop)
+	ps.Config.ScheduleEveryNSteps(loop, n, scheduleName)
 }
 
 // WithFile uses the filePath both to load data points and to save any new data points.
@@ -182,8 +177,16 @@ func (ps *Plots) WithFile(filePath string) (*Plots, error) {
 	if err != nil && !os.IsNotExist(errors.Cause(err)) {
 		return nil, err
 	}
-	ps.fileWriter, ps.errFileWriter = stdplots.CreatePointsWriter(filePath)
+	ps.Config.StartWriting(filePath)
 	return ps, nil
+}
+
+// WithDatasets configures the datasets to evaluate at each collecting step.
+//
+// It returns itself to allow cascading configuration method calls.
+func (ps *Plots) WithDatasets(datasets ...train.Dataset) *Plots {
+	ps.Config.WithDatasets(datasets...)
+	return ps
 }
 
 // WithBatchNormalizationAveragesUpdate configures a dataset to use to update the averages (of mean and variance)
@@ -195,7 +198,16 @@ func (ps *Plots) WithFile(filePath string) (*Plots, error) {
 //
 // If the model is not using batch normalization this is a no-op and nothing is executed.
 func (ps *Plots) WithBatchNormalizationAveragesUpdate(oneEpochDS train.Dataset) *Plots {
-	ps.batchNormAveragesDS = oneEpochDS
+	ps.Config.WithBatchNormalizationAveragesUpdate(oneEpochDS)
+	return ps
+}
+
+// WithCustomMetricFn registers the given function to run at every step it collects metrics.
+// Only one function can be registered. Set to nil to reset.
+//
+// It returns itself to allow cascading configuration method calls.
+func (ps *Plots) WithCustomMetricFn(fn stdplots.CustomMetricFn) *Plots {
+	ps.Config.WithCustomMetricFn(fn)
 	return ps
 }
 
@@ -205,33 +217,17 @@ func (ps *Plots) WithBatchNormalizationAveragesUpdate(oneEpochDS train.Dataset) 
 // If used with DynamicUpdates, call this first, so when DynamicUpdates is called, and dynamic plot
 // is immediately created.
 func (ps *Plots) PreloadFile(filePath string, renameFn func(metricName string) string) (*Plots, error) {
-	f, err := os.Open(filePath)
+	points, err := stdplots.LoadPoints(filePath)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read Plots file %q", filePath)
+		return nil, err
 	}
-
-	// Read previously stored points.
-	dec := json.NewDecoder(f)
-	var point stdplots.Point
-	for {
-		err := dec.Decode(&point)
-		if err == nil {
-			if renameFn != nil {
-				point.MetricName = renameFn(point.MetricName)
-			}
-			ps.AddPoint(point)
-			continue
+	for _, point := range points {
+		if renameFn != nil {
+			point.MetricName = renameFn(point.MetricName)
 		}
-		if err == io.EOF {
-			break
-		}
-		return nil, errors.Wrapf(err, "error while decoding Plots file %q", filePath)
+		ps.AddPoint(point)
 	}
-	_ = f.Close()
-	minPoints := ps.minPoints()
-	if minPoints > ps.pointsAdded {
-		ps.pointsAdded = minPoints
-	}
+	ps.Config.SetPointsAddedIfGreater(ps.minPoints())
 	return ps, nil
 }
 
@@ -248,18 +244,6 @@ func (ps *Plots) minPoints() int {
 		}
 	}
 	return minPoints
-}
-
-// stopWriting indicates no more points to be written. This closes the asynchronous job writing new points.
-func (ps *Plots) stopWriting() {
-	if ps.fileWriter != nil {
-		close(ps.fileWriter)
-		ps.fileWriter = nil
-		err := <-ps.errFileWriter
-		if err != nil {
-			klog.Errorf("Failed to write plots data: %+v", err)
-		}
-	}
 }
 
 // LogScaleX sets Plots to use a log scale on the X-axis.
@@ -287,7 +271,7 @@ func (ps *Plots) DynamicUpdates() *Plots {
 		return ps
 	}
 	ps.gonbID = gonbui.UniqueId()
-	if ps.pointsAdded < 3 {
+	if ps.PointsAdded() < 3 {
 		// If we are having a dynamically updating plot, we reserve the transient HTML block
 		// upfront -- otherwise it will interfere with the progressbar the first time it is displayed.
 		gonbui.UpdateHtml(ps.gonbID, "(...collecting metrics, minimum 3 required to start plotting...)")
@@ -308,30 +292,11 @@ func (ps *Plots) WithEvalLossType(evalLossMetricType string) *Plots {
 	return ps
 }
 
-// attachOnEnd of the loop to draw the final plot -- and clear the transient area if using dynamic plots.
-func (ps *Plots) attachOnEnd(loop *train.Loop) {
-	loop.OnEnd("margaid plots", 120, func(_ *train.Loop, _ []*tensors.Tensor) error {
-		// Final plot.
-		if ps.gonbID != "" {
-			// Erase intermediary transient plots.
-			ps.DynamicPlot(true)
-		} else {
-			ps.Plot()
-		}
-		ps.stopWriting()
-		return nil
-	})
-}
-
 // Attach plots to the given loop, collecting metric values for plot. For each EvalDatasets given
 // to `Plots.New()`, their metrics are evaluated and also plotted.
 // It automatically calls Plots.Plot at the end of the loop (`loop.OnEnd()`).
 func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
-	train.NTimesDuringLoop(loop, numPoints, "margaid plots", 0,
-		func(loop *train.Loop, metrics []*tensors.Tensor) error {
-			return stdplots.AddTrainAndEvalMetrics(ps, loop, metrics, ps.EvalDatasets, ps.batchNormAveragesDS)
-		})
-	ps.attachOnEnd(loop)
+	ps.Config.ScheduleNTimes(loop, numPoints, onEndName)
 }
 
 // DynamicSampleDone is called after all the data points recorded for this sample (evaluation at a time step).
@@ -341,9 +306,7 @@ func (ps *Plots) Attach(loop *train.Loop, numPoints int) {
 //
 // It implements [plot.Plotter]
 func (ps *Plots) DynamicSampleDone(incomplete bool) {
-	if !incomplete {
-		ps.pointsAdded++
-	}
+	ps.Config.MarkSampleDone(incomplete)
 	if gonbui.IsNotebook && ps.gonbID != "" {
 		ps.DynamicPlot(false)
 	}
@@ -353,13 +316,8 @@ func (ps *Plots) DynamicSampleDone(incomplete bool) {
 // Metrics with the same type share the same plot and y-axis.
 // It implements [plots.Plotter].
 func (ps *Plots) AddPoint(pt stdplots.Point) {
-	if math.IsNaN(pt.Value) || math.IsInf(pt.Value, 0) || math.IsNaN(pt.Step) || math.IsInf(pt.Step, 0) {
-		// Ignore invalid points.
+	if !ps.Config.FilterAndWrite(pt) {
 		return
-	}
-	if ps.fileWriter != nil {
-		// Save point asynchronously.
-		ps.fileWriter <- pt
 	}
 	if ps.PerMetricType == nil {
 		ps.PerMetricType = make(map[string]*Plot)
@@ -435,7 +393,7 @@ func (ps *Plots) DynamicPlot(final bool) {
 	if ps.gonbID == "" {
 		return
 	}
-	if ps.pointsAdded < 3 {
+	if ps.PointsAdded() < 3 {
 		return
 	}
 	if final == true {

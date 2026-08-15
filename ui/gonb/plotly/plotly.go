@@ -16,14 +16,12 @@ package plotly
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"path"
 
 	grob "github.com/MetalBlueberry/go-plotly/generated/v2.34.0/graph_objects"
 	ptypes "github.com/MetalBlueberry/go-plotly/pkg/types"
 	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
 	"github.com/gomlx/gomlx/ml/train"
 	"github.com/gomlx/gomlx/support/fsutil"
@@ -43,8 +41,20 @@ var (
 	ParamPlots = "plots"
 )
 
+// onEndName is used both to name the collection callbacks registered on the train.Loop (see the
+// Schedule* methods) and, once, to name the loop.OnEnd callback that triggers the final plot.
+const onEndName = "plotly.DynamicPlot"
+
+// PointFilter can change any [plot.Point] arbitrarily. If it returns false means the point should be dropped.
+type PointFilter = plot.PointFilter
+
 // PlotConfig hold the configuration object that will generate the plot. Create it with [New].
+//
+// The generic, rendering-independent parts (scheduling metric collection, persisting points to
+// a file) live in the embedded *plot.Config -- see its documentation for those.
 type PlotConfig struct {
+	*plot.Config
+
 	// figs is the list of figures, one per metric type.
 	figs []*grob.Fig
 
@@ -55,31 +65,11 @@ type PlotConfig struct {
 	// metricsTypesToFig maps a metric type to a figure index in `figs`.
 	metricsTypesToFig map[string]int
 
-	// pointsAdded limits plotting only if enough points have been added.
-	pointsAdded int
-
-	// EvalDatasets registered to be used during evaluation when dynamically capturing points during training.
-	EvalDatasets []train.Dataset
-
-	// batchNormAveragesDS is used to update the batch normalization averages, if configured.
-	batchNormAveragesDS train.Dataset
-
 	// gonbId of the `<div>` tag where to generate dynamic plots.
 	gonbId string
 
-	// lastStepCollected that metrics was collected.
-	lastStepCollected int
-
-	customMetricFn plot.CustomMetricFn
-
 	// finalPlot indicates whether the final plot has already been drawn.
-	scheduledFinalPlot, finalPlot bool
-
-	// filePath where to save data points to. Only used if not empty.
-	enablePointsWriting bool
-	filePath            string
-	fileWriter          chan<- plot.Point
-	errFileWriter       <-chan error
+	finalPlot bool
 }
 
 // New creates a new PlotConfig, that can be used to generate plots.
@@ -98,14 +88,25 @@ type PlotConfig struct {
 //			WithBatchNormalizationAveragesUpdate(evalOnTrainDS)
 //	}
 func New() *PlotConfig {
-	return &PlotConfig{
+	pc := &PlotConfig{
 		metricsTypesToFig: make(map[string]int),
 	}
+	pc.Config = plot.NewConfig(pc, onEndName, func() {
+		// Final plot: only called once to the transient plots.
+		if pc.gonbId != "" && !pc.finalPlot {
+			// Erase intermediary transient plots.
+			pc.DynamicPlot(true)
+			pc.finalPlot = true
+		}
+	})
+	return pc
 }
 
 // WithDatasets configures the datasets to evaluate at each collecting step (see `Schedule*` methods).
+//
+// It returns itself to allow cascading configuration method calls.
 func (pc *PlotConfig) WithDatasets(datasets ...train.Dataset) *PlotConfig {
-	pc.EvalDatasets = datasets
+	pc.Config.WithDatasets(datasets...)
 	return pc
 }
 
@@ -117,8 +118,10 @@ func (pc *PlotConfig) WithDatasets(datasets ...train.Dataset) *PlotConfig {
 // If oneEpochDS is nil, it disabled the updating of the averages.
 //
 // If the model is not using batch normalization, this is a no-op and nothing is executed.
+//
+// It returns itself to allow cascading configuration method calls.
 func (pc *PlotConfig) WithBatchNormalizationAveragesUpdate(oneEpochDS train.Dataset) *PlotConfig {
-	pc.batchNormAveragesDS = oneEpochDS
+	pc.Config.WithBatchNormalizationAveragesUpdate(oneEpochDS)
 	return pc
 }
 
@@ -133,7 +136,7 @@ func (pc *PlotConfig) Dynamic() *PlotConfig {
 		return pc
 	}
 	pc.gonbId = gonbui.UniqueId()
-	if pc.pointsAdded < 3 {
+	if pc.PointsAdded() < 3 {
 		// If we are having a dynamically updating plot, we reserve the transient HTML block
 		// upfront -- otherwise it will interfere with the progressbar the first time it is displayed.
 		gonbui.UpdateHTML(pc.gonbId, "(...collecting metrics, minimum 3 required to start plotting...)")
@@ -149,8 +152,7 @@ func (pc *PlotConfig) Dynamic() *PlotConfig {
 //
 // It returns itself to allow cascading configuration method calls.
 func (pc *PlotConfig) ScheduleExponential(loop *train.Loop, startStep int, stepFactor float64) *PlotConfig {
-	train.ExponentialCallback(loop, startStep, stepFactor, true, "plotly.DynamicPlot", 0, pc.addMetrics)
-	pc.attachOnEnd(loop)
+	pc.Config.ScheduleExponential(loop, startStep, stepFactor, onEndName)
 	return pc
 }
 
@@ -158,8 +160,7 @@ func (pc *PlotConfig) ScheduleExponential(loop *train.Loop, startStep int, stepF
 //
 // It returns itself to allow cascading configuration method calls.
 func (pc *PlotConfig) ScheduleNTimes(loop *train.Loop, numPoints int) *PlotConfig {
-	train.NTimesDuringLoop(loop, numPoints, "plotly.DynamicPlot", 0, pc.addMetrics)
-	pc.attachOnEnd(loop)
+	pc.Config.ScheduleNTimes(loop, numPoints, onEndName)
 	return pc
 }
 
@@ -167,8 +168,7 @@ func (pc *PlotConfig) ScheduleNTimes(loop *train.Loop, numPoints int) *PlotConfi
 //
 // It returns itself to allow cascading configuration method calls.
 func (pc *PlotConfig) ScheduleEveryNSteps(loop *train.Loop, n int) *PlotConfig {
-	train.EveryNSteps(loop, n, "plotly.DynamicPlot", 0, pc.addMetrics)
-	pc.attachOnEnd(loop)
+	pc.Config.ScheduleEveryNSteps(loop, n, onEndName)
 	return pc
 }
 
@@ -177,46 +177,8 @@ func (pc *PlotConfig) ScheduleEveryNSteps(loop *train.Loop, n int) *PlotConfig {
 //
 // It returns itself to allow cascading configuration method calls.
 func (pc *PlotConfig) WithCustomMetricFn(fn plot.CustomMetricFn) *PlotConfig {
-	pc.customMetricFn = fn
+	pc.Config.WithCustomMetricFn(fn)
 	return pc
-}
-
-func (pc *PlotConfig) addMetrics(loop *train.Loop, metrics []*tensors.Tensor) error {
-	// Only add metrics once per step: multiple calls here can happen if plotting was scheduled more than
-	// one way with functions `Schedule*`.
-	if pc.lastStepCollected >= loop.LoopStep {
-		return nil
-	}
-	pc.lastStepCollected = loop.LoopStep
-
-	// Custom metric:
-	if pc.customMetricFn != nil {
-		err := pc.customMetricFn(pc, float64(loop.LoopStep))
-		if err != nil {
-			return errors.WithMessagef(err, "plotly.PlotConfig CustomMetricFn returned an error at step %d", loop.LoopStep)
-		}
-	}
-
-	return plot.AddTrainAndEvalMetrics(pc, loop, metrics, pc.EvalDatasets, pc.batchNormAveragesDS)
-}
-
-// attachOnEnd registers a final call to DynamicPlot when training finishes. After that, no more dynamic plots
-// are allowed.
-func (pc *PlotConfig) attachOnEnd(loop *train.Loop) {
-	if pc.scheduledFinalPlot {
-		return
-	}
-	pc.scheduledFinalPlot = true
-	loop.OnEnd("plotly.DynamicPlot", 120, func(_ *train.Loop, _ []*tensors.Tensor) error {
-		// Final plot: only called once to the transient plots
-		if pc.gonbId != "" && !pc.finalPlot {
-			// Erase intermediary transient plots.
-			pc.DynamicPlot(true)
-			pc.finalPlot = true
-		}
-		pc.stopWriting()
-		return nil
-	})
 }
 
 // WithCheckpoint uses the checkpoint both to load data points and to save any new data points.
@@ -237,26 +199,9 @@ func (pc *PlotConfig) WithCheckpoint(checkpointHandler *checkpoint.Handler) *Plo
 	_ = pc.LoadCheckpointData(checkpointDir)
 	checkpointDir = fsutil.MustReplaceTildeInDir(checkpointDir)
 	filePath := path.Join(checkpointDir, plot.TrainingPlotFileName)
-	pc.fileWriter, pc.errFileWriter = plot.CreatePointsWriter(filePath)
-	pc.enablePointsWriting = true
+	pc.Config.StartWriting(filePath)
 	return pc
 }
-
-// stopWriting indicates that no more points are coming. This closes the asynchronous job writing new points.
-func (pc *PlotConfig) stopWriting() {
-	if pc.fileWriter != nil {
-		close(pc.fileWriter)
-		pc.fileWriter = nil
-		err := <-pc.errFileWriter
-		if err != nil {
-			klog.Errorf("Failed to write plots data: %+v", err)
-		}
-		pc.enablePointsWriting = false
-	}
-}
-
-// PointFilter can change any [plot.Point] arbitrarily. If it returns false means the point should be dropped.
-type PointFilter func(p *plot.Point) bool
 
 // LoadCheckpointData loads plotting data from a checkpoint path.
 // Notice this only works if the model was trained with plotting, with the metrics saved into the file
@@ -286,10 +231,6 @@ func (pc *PlotConfig) LoadCheckpointData(dataDirOrFile string, filters ...PointF
 	}
 
 	steps := sets.Make[float64]()
-	enableWriting := pc.enablePointsWriting
-	pc.enablePointsWriting = false
-	defer func() { pc.enablePointsWriting = enableWriting }()
-
 nextPoint:
 	for _, point := range points {
 		for _, filter := range filters {
@@ -299,7 +240,7 @@ nextPoint:
 		}
 		pc.AddPoint(point)
 		if !steps.Has(point.Step) {
-			pc.pointsAdded++ // Count the number of points per different value of the global step.
+			pc.Config.IncrementPointsAdded() // Count the number of points per different value of the global step.
 			steps.Insert(point.Step)
 		}
 	}
@@ -311,13 +252,8 @@ nextPoint:
 // Usually not called directly, instead use [LoadCheckpointData] or [Dynamic], which will attach to a
 // training loop and call this automatically.
 func (pc *PlotConfig) AddPoint(pt plot.Point) {
-	if math.IsNaN(pt.Value) || math.IsInf(pt.Value, 0) || math.IsNaN(pt.Step) || math.IsInf(pt.Step, 0) {
-		// Ignore invalid points.
+	if !pc.Config.FilterAndWrite(pt) {
 		return
-	}
-	if pc.fileWriter != nil {
-		// Save point asynchronously.
-		pc.fileWriter <- pt
 	}
 	figIdx, found := pc.metricsTypesToFig[pt.MetricType]
 	if !found {
@@ -382,9 +318,7 @@ func (pc *PlotConfig) AddPoint(pt plot.Point) {
 //
 // It implements [plot.Plotter]
 func (pc *PlotConfig) DynamicSampleDone(incomplete bool) {
-	if !incomplete {
-		pc.pointsAdded++
-	}
+	pc.Config.MarkSampleDone(incomplete)
 	if gonbui.IsNotebook && pc.gonbId != "" {
 		pc.DynamicPlot(false)
 	}
@@ -419,7 +353,7 @@ func (pc *PlotConfig) DynamicPlot(final bool) {
 	if pc.gonbId == "" {
 		return
 	}
-	if pc.pointsAdded < 3 {
+	if pc.PointsAdded() < 3 {
 		return
 	}
 	if final == true {

@@ -1,0 +1,252 @@
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 50, "Value": 2.0555770719383153}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 50, "Value": 2.05}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 50, "Value": 0.09050021510445332}
+{"MetricName": "Accuracy on validation", "Short": "acc(val)", "MetricType": "accuracy", "Step": 50, "Value": 0.050000000000000044}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 50, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 100, "Value": 1.9434600217361928}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 100, "Value": 1.952458849001428}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 100, "Value": 0.13119370336475203}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 100, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 150, "Value": 1.8691336846384796}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 150, "Value": 1.859674836071919}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 150, "Value": 0.17549401658206723}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 150, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 200, "Value": 1.7871031355583096}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 200, "Value": 1.7714159528501157}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 200, "Value": 0.1974915643264524}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 200, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 250, "Value": 1.6843383789433746}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 250, "Value": 1.6874615061559637}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 250, "Value": 0.2287623919872087}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 250, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 300, "Value": 1.596347085134954}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 300, "Value": 1.6076015661428098}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 300, "Value": 0.26936439422649566}
+{"MetricName": "Accuracy on validation", "Short": "acc(val)", "MetricType": "accuracy", "Step": 300, "Value": 0.20913391801897752}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 300, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 350, "Value": 1.5126978801507904}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 350, "Value": 1.5316364413634358}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 350, "Value": 0.29305604824946857}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 350, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 400, "Value": 1.4653715569486079}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 400, "Value": 1.459376179437427}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 400, "Value": 0.32858307933267505}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 400, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 450, "Value": 1.3794577169529065}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 450, "Value": 1.3906400920712787}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 450, "Value": 0.3569071341611078}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 450, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 500, "Value": 1.3376335215106598}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 500, "Value": 1.3252563032435467}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 500, "Value": 0.3715696242816862}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 500, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 550, "Value": 1.2752940894985791}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 550, "Value": 1.263061319425267}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 550, "Value": 0.4106462207193652}
+{"MetricName": "Accuracy on validation", "Short": "acc(val)", "MetricType": "accuracy", "Step": 550, "Value": 0.3416114109178806}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 550, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 600, "Value": 1.1975096414216932}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 600, "Value": 1.2038996207609736}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 600, "Value": 0.4240065940286108}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 600, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 650, "Value": 1.165911795076324}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 650, "Value": 1.1476232721880528}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 650, "Value": 0.45085429716088243}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 650, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 700, "Value": 1.077801387257238}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 700, "Value": 1.0940915535220321}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 700, "Value": 0.4683342947478419}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 700, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 750, "Value": 1.0570703822367176}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 750, "Value": 1.043170607582819}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 750, "Value": 0.49984288943429545}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 750, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 800, "Value": 1.0070182364130047}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 800, "Value": 0.9947331054820294}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 800, "Value": 0.522859350066785}
+{"MetricName": "Accuracy on validation", "Short": "acc(val)", "MetricType": "accuracy", "Step": 800, "Value": 0.4518976801385377}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 800, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 850, "Value": 0.9501070518926312}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 850, "Value": 0.9486579282344432}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 850, "Value": 0.5473869081502546}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 850, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 900, "Value": 0.8999712389857876}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 900, "Value": 0.9048298638974535}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 900, "Value": 0.5578229537175957}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 900, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 950, "Value": 0.8763155060513181}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 950, "Value": 0.8631393194811984}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 950, "Value": 0.5772404975803717}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 950, "Value": 0.001}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1000, "Value": 0.8379503229214336}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1000, "Value": 0.8234820469090025}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1000, "Value": 0.5937669273529831}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1000, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1050, "Value": 0.7939417557914816}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1050, "Value": 0.7857588823428847}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1050, "Value": 0.5997781000167428}
+{"MetricName": "Accuracy on validation", "Short": "acc(val)", "MetricType": "accuracy", "Step": 1050, "Value": 0.5437099639646906}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1050, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1100, "Value": 0.7389914292483728}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1100, "Value": 0.7498754982223109}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1100, "Value": 0.6206119415613846}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1100, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1150, "Value": 0.6989338464731043}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1150, "Value": 0.7157421673961593}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1150, "Value": 0.6347911288168578}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1150, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1200, "Value": 0.6673135959344956}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1200, "Value": 0.6832735387581064}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1200, "Value": 0.6503810564735222}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1200, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1250, "Value": 0.6578158015949801}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1250, "Value": 0.6523884238244041}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1250, "Value": 0.6662051465251035}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1250, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1300, "Value": 0.6178168324050556}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1300, "Value": 0.6230095937203802}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1300, "Value": 0.6766106673024658}
+{"MetricName": "Accuracy on validation", "Short": "acc(val)", "MetricType": "accuracy", "Step": 1300, "Value": 0.6201428283723951}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1300, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1350, "Value": 0.5857426989499898}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1350, "Value": 0.5950635860680252}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1350, "Value": 0.7041142091581819}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1350, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1400, "Value": 0.5744019367016469}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1400, "Value": 0.5684805212917831}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1400, "Value": 0.709995399490825}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1400, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1450, "Value": 0.5300394738111368}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1450, "Value": 0.543193927883213}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1450, "Value": 0.7243196344358691}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1450, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1500, "Value": 0.5056766759380725}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1500, "Value": 0.5191405761875953}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1500, "Value": 0.7287638884753425}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1500, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1550, "Value": 0.5158412543223234}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1550, "Value": 0.4962603202968596}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1550, "Value": 0.7449456780229108}
+{"MetricName": "Accuracy on validation", "Short": "acc(val)", "MetricType": "accuracy", "Step": 1550, "Value": 0.6837724704868244}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1550, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1600, "Value": 0.4767739374044719}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1600, "Value": 0.474495947653486}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1600, "Value": 0.7563611425162567}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1600, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1650, "Value": 0.46750711279690316}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1650, "Value": 0.45379303598931076}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1650, "Value": 0.7682825739267708}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1650, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1700, "Value": 0.42326174012007234}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1700, "Value": 0.43409981724150815}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1700, "Value": 0.7630863686538089}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1700, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1750, "Value": 0.4079851700278326}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1750, "Value": 0.4153670481054693}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1750, "Value": 0.7770858503474302}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1750, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1800, "Value": 0.38598720064434333}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1800, "Value": 0.39754788690089027}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1800, "Value": 0.7994969021611377}
+{"MetricName": "Accuracy on validation", "Short": "acc(val)", "MetricType": "accuracy", "Step": 1800, "Value": 0.7367435502309229}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1800, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1850, "Value": 0.3956524815020799}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1850, "Value": 0.3805977764431731}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1850, "Value": 0.7954764134823827}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1850, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1900, "Value": 0.3706918792390504}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1900, "Value": 0.3644743326272552}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1900, "Value": 0.8052909505615107}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1900, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1950, "Value": 0.36571914203489186}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 1950, "Value": 0.3491372384452701}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 1950, "Value": 0.8144163452298296}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 1950, "Value": 0.0005}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2000, "Value": 0.3251433498329492}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2000, "Value": 0.33454814317302706}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2000, "Value": 0.8177120424701051}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2000, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2050, "Value": 0.3231252918397514}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2050, "Value": 0.3206705664732254}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2050, "Value": 0.8252667896166531}
+{"MetricName": "Accuracy on validation", "Short": "acc(val)", "MetricType": "accuracy", "Step": 2050, "Value": 0.7808414768577854}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2050, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2100, "Value": 0.31085324678455006}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2100, "Value": 0.30746980717560846}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2100, "Value": 0.8449057194198196}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2100, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2150, "Value": 0.29088887671157976}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2150, "Value": 0.2949128565059639}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2150, "Value": 0.837989866077745}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2150, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2200, "Value": 0.30286981980679833}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2200, "Value": 0.2829683155469939}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2200, "Value": 0.8501766048433774}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2200, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2250, "Value": 0.2552426932116196}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2250, "Value": 0.27160631672466784}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2250, "Value": 0.8470505560367702}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2250, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2300, "Value": 0.24518441433775504}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2300, "Value": 0.2607984491237287}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2300, "Value": 0.8645294506736262}
+{"MetricName": "Accuracy on validation", "Short": "acc(val)", "MetricType": "accuracy", "Step": 2300, "Value": 0.8175525868102836}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2300, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2350, "Value": 0.262200862020126}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2350, "Value": 0.25051768744560743}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2350, "Value": 0.8660563786823146}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2350, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2400, "Value": 0.2232794326771775}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2400, "Value": 0.24073832443109922}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2400, "Value": 0.8706483430989234}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2400, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2450, "Value": 0.25128076178842884}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2450, "Value": 0.23143590657882496}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2450, "Value": 0.8787805319890313}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2450, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2500, "Value": 0.2414303081032857}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2500, "Value": 0.22258717299874098}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2500, "Value": 0.8903846348747958}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2500, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2550, "Value": 0.1946292381255104}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2550, "Value": 0.21416999724779762}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2550, "Value": 0.8923514120874931}
+{"MetricName": "Accuracy on validation", "Short": "acc(val)", "MetricType": "accuracy", "Step": 2550, "Value": 0.8481142412242908}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2550, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2600, "Value": 0.21343174676336935}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2600, "Value": 0.20616333200230635}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2600, "Value": 0.8932497351681283}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2600, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2650, "Value": 0.18922016402676947}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2650, "Value": 0.19854715642866777}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2650, "Value": 0.8997162763781772}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2650, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2700, "Value": 0.17576451306469423}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2700, "Value": 0.19130242612085918}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2700, "Value": 0.8998000331746251}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2700, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2750, "Value": 0.18255997373266775}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2750, "Value": 0.1844110254794995}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2750, "Value": 0.9142170164447436}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2750, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2800, "Value": 0.1928898400285429}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2800, "Value": 0.17785572241341513}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2800, "Value": 0.9042797385265249}
+{"MetricName": "Accuracy on validation", "Short": "acc(val)", "MetricType": "accuracy", "Step": 2800, "Value": 0.8735565316298317}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2800, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2850, "Value": 0.17164356977244788}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2850, "Value": 0.17162012525043596}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2850, "Value": 0.9062982665326381}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2850, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2900, "Value": 0.18219375532346976}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2900, "Value": 0.16568864174967696}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2900, "Value": 0.9236973311071383}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2900, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2950, "Value": 0.1519842317707598}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 2950, "Value": 0.16004644011281446}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 2950, "Value": 0.9224823242289859}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 2950, "Value": 0.00025}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 3000, "Value": 0.15903822035439172}
+{"MetricName": "Train: Moving Average Loss", "Short": "T/~loss", "MetricType": "loss", "Step": 3000, "Value": 0.15467941189686482}
+{"MetricName": "Train: Accuracy", "Short": "T/acc", "MetricType": "accuracy", "Step": 3000, "Value": 0.9160370702209094}
+{"MetricName": "Learning Rate", "Short": "LR", "MetricType": "learning_rate", "Step": 3000, "Value": 0.000125}

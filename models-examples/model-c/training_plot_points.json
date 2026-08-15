@@ -1,0 +1,54 @@
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 50, "Value": 1.5764766552966634}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 50, "Value": 1.6}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 100, "Value": 1.499861120229561}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 150, "Value": 1.4402748165147365}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 200, "Value": 1.3625106903709376}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 200, "Value": 1.4105738675320518}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 250, "Value": 1.3088137697031066}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 300, "Value": 1.245514952945359}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 350, "Value": 1.182387309518071}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 350, "Value": 1.2450692415052798}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 400, "Value": 1.1371808492418587}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 450, "Value": 1.0762299822222987}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 500, "Value": 1.0351151411059079}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 500, "Value": 1.1004652162877115}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 550, "Value": 0.9811930980404425}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 600, "Value": 0.9372389758376072}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 650, "Value": 0.9017078379238898}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 650, "Value": 0.9741223785609844}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 700, "Value": 0.8696057076349648}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 750, "Value": 0.8173539949101072}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 800, "Value": 0.7830146084036622}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 800, "Value": 0.8637346309113237}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 850, "Value": 0.756542110623944}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 900, "Value": 0.73007657677223}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 950, "Value": 0.6913965485832485}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 950, "Value": 0.7672870993344116}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1000, "Value": 0.6580451446747674}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1050, "Value": 0.6413442638690219}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1100, "Value": 0.5958382772790881}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 1100, "Value": 0.6830193563526294}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1150, "Value": 0.5864759947280929}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1200, "Value": 0.5507473397952134}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1250, "Value": 0.5246764195354519}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 1250, "Value": 0.6093932884674086}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1300, "Value": 0.5021130400518524}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1350, "Value": 0.48496732603305764}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1400, "Value": 0.4751829181512379}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 1400, "Value": 0.5450650214410678}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1450, "Value": 0.4435099735108885}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1500, "Value": 0.4334874354139458}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1550, "Value": 0.4174735096011684}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 1550, "Value": 0.48886039096883727}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1600, "Value": 0.39581991159462915}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1650, "Value": 0.38379966630617424}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1700, "Value": 0.3593306424305977}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 1700, "Value": 0.43975351101470317}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1750, "Value": 0.34521730947842666}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1800, "Value": 0.33478008943205423}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1850, "Value": 0.3315563317960155}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 1850, "Value": 0.396848048625422}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1900, "Value": 0.31440759558382947}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 1950, "Value": 0.3006358722414884}
+{"MetricName": "Train: Loss", "Short": "T/loss", "MetricType": "loss", "Step": 2000, "Value": 0.29512234464992315}
+{"MetricName": "Mean Loss on validation", "Short": "#loss()", "MetricType": "loss", "Step": 2000, "Value": 0.35936086343757456}

@@ -1,0 +1,630 @@
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":201,"Value":0.06750018894672394}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":201,"Value":0.13194775581359863}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":201,"Value":0.13194775581359863}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":201,"Value":0.23343534767627716}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":201,"Value":0.07291796803474426}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":201,"Value":0.1923006922006607}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":201,"Value":0.0713924914598465}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":201,"Value":0.0713924914598465}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":201,"Value":0.21914134919643402}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":201,"Value":0.18916578590869904}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":201,"Value":0.07127632945775986}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":201,"Value":0.07127632945775986}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":201,"Value":0.22263941168785095}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":201,"Value":0.1888483464717865}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":441,"Value":0.057687096297740936}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":441,"Value":0.0689450278878212}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":441,"Value":0.0689450278878212}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":441,"Value":0.18710796535015106}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":441,"Value":0.06036052107810974}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":441,"Value":0.17177951335906982}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":441,"Value":0.05998263508081436}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":441,"Value":0.05998263508081436}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":441,"Value":0.1876981109380722}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":441,"Value":0.1708090603351593}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":441,"Value":0.06079181283712387}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":441,"Value":0.06079181283712387}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":441,"Value":0.18559907376766205}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":441,"Value":0.17248345911502838}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":729,"Value":0.06110721081495285}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":729,"Value":0.057093650102615356}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":729,"Value":0.057093650102615356}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":729,"Value":0.17688848078250885}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":729,"Value":0.05563875287771225}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":729,"Value":0.16324329376220703}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":729,"Value":0.05449958145618439}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":729,"Value":0.05449958145618439}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":729,"Value":0.17287549376487732}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":729,"Value":0.1614028662443161}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":729,"Value":0.05605269968509674}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":729,"Value":0.05605269968509674}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":729,"Value":0.16856294870376587}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":729,"Value":0.1641729325056076}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":1075,"Value":0.054711680859327316}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":1075,"Value":0.05306088924407959}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":1075,"Value":0.05306088924407959}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":1075,"Value":0.16432668268680573}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":1075,"Value":0.053215350955724716}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":1075,"Value":0.15909720957279205}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":1075,"Value":0.05265834555029869}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":1075,"Value":0.05265834555029869}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":1075,"Value":0.16628316044807434}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":1075,"Value":0.15804405510425568}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":1075,"Value":0.052271436899900436}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":1075,"Value":0.052271436899900436}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":1075,"Value":0.16543132066726685}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":1075,"Value":0.15802109241485596}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":1490,"Value":0.05218613147735596}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":1490,"Value":0.05083652585744858}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":1490,"Value":0.05083652585744858}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":1490,"Value":0.1607973724603653}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":1490,"Value":0.050512418150901794}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":1490,"Value":0.15457190573215485}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":1490,"Value":0.051313869655132294}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":1490,"Value":0.051313869655132294}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":1490,"Value":0.16040194034576416}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":1490,"Value":0.15543532371520996}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":1490,"Value":0.05037086084485054}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":1490,"Value":0.05037086084485054}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":1490,"Value":0.16336578130722046}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":1490,"Value":0.15387952327728271}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":1988,"Value":0.04583814740180969}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":1988,"Value":0.04947810620069504}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":1988,"Value":0.04947810620069504}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":1988,"Value":0.1577865034341812}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":1988,"Value":0.048636794090270996}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":1988,"Value":0.1510666310787201}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":1988,"Value":0.049788881093263626}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":1988,"Value":0.049788881093263626}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":1988,"Value":0.15859173238277435}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":1988,"Value":0.15247195959091187}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":1988,"Value":0.05048506706953049}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":1988,"Value":0.05048506706953049}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":1988,"Value":0.15853016078472137}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":1988,"Value":0.15329965949058533}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":2586,"Value":0.05061078071594238}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":2586,"Value":0.048728130757808685}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":2586,"Value":0.048728130757808685}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":2586,"Value":0.15568451583385468}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":2586,"Value":0.04836417734622955}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":2586,"Value":0.15024402737617493}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":2586,"Value":0.04876865819096565}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":2586,"Value":0.04876865819096565}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":2586,"Value":0.15372994542121887}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":2586,"Value":0.1509014368057251}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":2586,"Value":0.0482943169772625}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":2586,"Value":0.0482943169772625}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":2586,"Value":0.15808872878551483}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":2586,"Value":0.1503956913948059}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":3304,"Value":0.048765312880277634}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":3304,"Value":0.04793176427483559}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":3304,"Value":0.04793176427483559}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":3304,"Value":0.1524832397699356}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":3304,"Value":0.048081882297992706}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":3304,"Value":0.14976242184638977}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":3304,"Value":0.04737100750207901}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":3304,"Value":0.04737100750207901}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":3304,"Value":0.1549466997385025}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":3304,"Value":0.14844557642936707}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":3304,"Value":0.04772142693400383}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":3304,"Value":0.04772142693400383}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":3304,"Value":0.1547919511795044}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":3304,"Value":0.14907464385032654}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":4166,"Value":0.0546385794878006}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":4166,"Value":0.04771936684846878}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":4166,"Value":0.04771936684846878}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":4166,"Value":0.15229880809783936}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":4166,"Value":0.04815848171710968}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":4166,"Value":0.14974276721477509}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":4166,"Value":0.04782967269420624}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":4166,"Value":0.04782967269420624}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":4166,"Value":0.15406657755374908}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":4166,"Value":0.14924000203609467}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":4166,"Value":0.04832474887371063}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":4166,"Value":0.04832474887371063}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":4166,"Value":0.14851057529449463}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":4166,"Value":0.15057037770748138}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":5200,"Value":0.04549158737063408}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":5200,"Value":0.04708535969257355}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":5200,"Value":0.04708535969257355}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":5200,"Value":0.14733795821666718}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":5200,"Value":0.04678779095411301}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":5200,"Value":0.14727509021759033}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":5200,"Value":0.04636327177286148}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":5200,"Value":0.04636327177286148}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":5200,"Value":0.15229207277297974}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":5200,"Value":0.1458810716867447}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":5200,"Value":0.046958450227975845}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":5200,"Value":0.046958450227975845}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":5200,"Value":0.1536675989627838}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":5200,"Value":0.14679229259490967}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":6441,"Value":0.04817721247673035}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":6441,"Value":0.04639825597405434}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":6441,"Value":0.04639825597405434}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":6441,"Value":0.1516745686531067}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":6441,"Value":0.045759718865156174}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":6441,"Value":0.14517748355865479}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":6441,"Value":0.04595259949564934}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":6441,"Value":0.04595259949564934}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":6441,"Value":0.1497793197631836}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":6441,"Value":0.1454007625579834}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":6441,"Value":0.046349406242370605}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":6441,"Value":0.046349406242370605}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":6441,"Value":0.1518019288778305}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":6441,"Value":0.14601612091064453}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":7930,"Value":0.047610774636268616}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":7930,"Value":0.04634585604071617}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":7930,"Value":0.04634585604071617}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":7930,"Value":0.1462520956993103}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":7930,"Value":0.04658735916018486}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":7930,"Value":0.14696335792541504}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":7930,"Value":0.04504631087183952}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":7930,"Value":0.04504631087183952}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":7930,"Value":0.1529841423034668}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":7930,"Value":0.1435384303331375}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":7930,"Value":0.046822234988212585}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":7930,"Value":0.046822234988212585}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":7930,"Value":0.14660820364952087}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":7930,"Value":0.14713993668556213}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":9717,"Value":0.04740945249795914}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":9717,"Value":0.045796386897563934}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":9717,"Value":0.045796386897563934}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":9717,"Value":0.14751002192497253}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":9717,"Value":0.04548843204975128}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":9717,"Value":0.14458420872688293}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":9717,"Value":0.04588676616549492}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":9717,"Value":0.04588676616549492}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":9717,"Value":0.14830711483955383}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":9717,"Value":0.14516565203666687}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":9717,"Value":0.04674263671040535}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":9717,"Value":0.04674263671040535}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":9717,"Value":0.149956613779068}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":9717,"Value":0.1462944597005844}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":11861,"Value":0.040524985641241074}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":11861,"Value":0.04505122825503349}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":11861,"Value":0.04505122825503349}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":11861,"Value":0.15215809643268585}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":11861,"Value":0.0440104603767395}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":11861,"Value":0.14127115905284882}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":11861,"Value":0.044973842799663544}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":11861,"Value":0.044973842799663544}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":11861,"Value":0.148377925157547}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":11861,"Value":0.14362874627113342}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":11861,"Value":0.045468639582395554}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":11861,"Value":0.045468639582395554}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":11861,"Value":0.14784306287765503}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":11861,"Value":0.14451761543750763}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":14434,"Value":0.03141849488019943}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":14434,"Value":0.04479963332414627}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":14434,"Value":0.04479963332414627}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":14434,"Value":0.14876404404640198}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":14434,"Value":0.044404286891222}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":14434,"Value":0.14259910583496094}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":14434,"Value":0.04503481462597847}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":14434,"Value":0.04503481462597847}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":14434,"Value":0.14679449796676636}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":14434,"Value":0.14371266961097717}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":14434,"Value":0.04559745267033577}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":14434,"Value":0.04559745267033577}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":14434,"Value":0.14725518226623535}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":14434,"Value":0.14445002377033234}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":17522,"Value":0.042365819215774536}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":17522,"Value":0.045022137463092804}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":17522,"Value":0.045022137463092804}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":17522,"Value":0.14383159577846527}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":17522,"Value":0.04527705907821655}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":17522,"Value":0.14396405220031738}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":17522,"Value":0.04496806859970093}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":17522,"Value":0.04496806859970093}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":17522,"Value":0.14375244081020355}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":17522,"Value":0.14359359443187714}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":17522,"Value":0.045433975756168365}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":17522,"Value":0.045433975756168365}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":17522,"Value":0.14921952784061432}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":17522,"Value":0.14405493438243866}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":21228,"Value":0.04818158969283104}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":21228,"Value":0.04485231265425682}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":21228,"Value":0.04485231265425682}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":21228,"Value":0.149055615067482}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":21228,"Value":0.0457395538687706}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":21228,"Value":0.14429816603660583}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":21228,"Value":0.044718895107507706}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":21228,"Value":0.044718895107507706}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":21228,"Value":0.14590486884117126}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":21228,"Value":0.14283831417560577}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":21228,"Value":0.04542098194360733}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":21228,"Value":0.04542098194360733}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":21228,"Value":0.14664742350578308}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":21228,"Value":0.1437312513589859}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":25675,"Value":0.04176842421293259}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":25675,"Value":0.04426409676671028}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":25675,"Value":0.04426409676671028}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":25675,"Value":0.14296001195907593}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":25675,"Value":0.04449407756328583}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":25675,"Value":0.14271779358386993}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":25675,"Value":0.04499569162726402}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":25675,"Value":0.04499569162726402}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":25675,"Value":0.14290043711662292}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":25675,"Value":0.14348559081554413}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":25675,"Value":0.044573988765478134}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":25675,"Value":0.044573988765478134}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":25675,"Value":0.14678530395030975}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":25675,"Value":0.14252910017967224}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":31011,"Value":0.047843094915151596}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":31011,"Value":0.04418771713972092}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":31011,"Value":0.04418771713972092}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":31011,"Value":0.14271481335163116}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":31011,"Value":0.04448089376091957}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":31011,"Value":0.142670676112175}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":31011,"Value":0.0439688004553318}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":31011,"Value":0.0439688004553318}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":31011,"Value":0.14488160610198975}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":31011,"Value":0.1415001004934311}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":31011,"Value":0.045749444514513016}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":31011,"Value":0.045749444514513016}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":31011,"Value":0.1421864777803421}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":31011,"Value":0.1444445252418518}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":37414,"Value":0.044800929725170135}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":37414,"Value":0.043758492916822433}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":37414,"Value":0.043758492916822433}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":37414,"Value":0.1460600644350052}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":37414,"Value":0.04381429776549339}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":37414,"Value":0.1409674435853958}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":37414,"Value":0.044087477028369904}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":37414,"Value":0.044087477028369904}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":37414,"Value":0.14387018978595734}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":37414,"Value":0.14186522364616394}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":37414,"Value":0.04502061754465103}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":37414,"Value":0.04502061754465103}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":37414,"Value":0.14327749609947205}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":37414,"Value":0.1436295062303543}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":45098,"Value":0.041132234036922455}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":45098,"Value":0.04408062994480133}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":45098,"Value":0.04408062994480133}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":45098,"Value":0.14242815971374512}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":45098,"Value":0.04437462240457535}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":45098,"Value":0.1423032134771347}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":45098,"Value":0.0440412275493145}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":45098,"Value":0.0440412275493145}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":45098,"Value":0.1438620686531067}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":45098,"Value":0.14147169888019562}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":45098,"Value":0.04483674094080925}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":45098,"Value":0.04483674094080925}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":45098,"Value":0.14150922000408173}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":45098,"Value":0.14343689382076263}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":54319,"Value":0.04256032407283783}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":54319,"Value":0.043742693960666656}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":54319,"Value":0.043742693960666656}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":54319,"Value":0.14280278980731964}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":54319,"Value":0.04360940307378769}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":54319,"Value":0.1409909576177597}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":54319,"Value":0.04395762085914612}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":54319,"Value":0.04395762085914612}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":54319,"Value":0.14326044917106628}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":54319,"Value":0.14137840270996094}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":54319,"Value":0.04512058198451996}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":54319,"Value":0.04512058198451996}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":54319,"Value":0.14501629769802094}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":54319,"Value":0.1431942880153656}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":65384,"Value":0.043989479541778564}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":65384,"Value":0.043434321880340576}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":65384,"Value":0.043434321880340576}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":65384,"Value":0.1443616896867752}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":65384,"Value":0.04311150312423706}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":65384,"Value":0.14006108045578003}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":65384,"Value":0.04376035928726196}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":65384,"Value":0.04376035928726196}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":65384,"Value":0.1420273333787918}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":65384,"Value":0.14085471630096436}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":65384,"Value":0.04500361904501915}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":65384,"Value":0.04500361904501915}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":65384,"Value":0.14354093372821808}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":65384,"Value":0.14303931593894958}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":78662,"Value":0.04641289636492729}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":78662,"Value":0.04362276941537857}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":78662,"Value":0.04362276941537857}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":78662,"Value":0.14280608296394348}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":78662,"Value":0.0432424396276474}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":78662,"Value":0.13999338448047638}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":78662,"Value":0.04357117787003517}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":78662,"Value":0.04357117787003517}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":78662,"Value":0.14182785153388977}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":78662,"Value":0.14042061567306519}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":78662,"Value":0.0449594110250473}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":78662,"Value":0.0449594110250473}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":78662,"Value":0.14105141162872314}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":78662,"Value":0.14343897998332977}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":94596,"Value":0.04496283829212189}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":94596,"Value":0.04308121278882027}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":94596,"Value":0.04308121278882027}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":94596,"Value":0.14177829027175903}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":94596,"Value":0.04319772869348526}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":94596,"Value":0.1399569809436798}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":94596,"Value":0.04277268052101135}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":94596,"Value":0.04277268052101135}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":94596,"Value":0.14312461018562317}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":94596,"Value":0.13918541371822357}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":94596,"Value":0.045950088649988174}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":94596,"Value":0.045950088649988174}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":94596,"Value":0.13972701132297516}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":94596,"Value":0.1450066864490509}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":113717,"Value":0.045902326703071594}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":113717,"Value":0.042774517089128494}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":113717,"Value":0.042774517089128494}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":113717,"Value":0.1418878585100174}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":113717,"Value":0.04260410740971565}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":113717,"Value":0.13897547125816345}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":113717,"Value":0.042834457010030746}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":113717,"Value":0.042834457010030746}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":113717,"Value":0.13866375386714935}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":113717,"Value":0.13954874873161316}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":113717,"Value":0.045244138687849045}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":113717,"Value":0.045244138687849045}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":113717,"Value":0.13908962905406952}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":113717,"Value":0.14403797686100006}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":136662,"Value":0.04219449684023857}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":136662,"Value":0.043095752596855164}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":136662,"Value":0.043095752596855164}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":136662,"Value":0.14279235899448395}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":136662,"Value":0.042723946273326874}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":136662,"Value":0.1392647922039032}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":136662,"Value":0.04279881715774536}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":136662,"Value":0.04279881715774536}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":136662,"Value":0.13996876776218414}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":136662,"Value":0.1392209231853485}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":136662,"Value":0.04504845663905144}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":136662,"Value":0.04504845663905144}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":136662,"Value":0.14231868088245392}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":136662,"Value":0.14354178309440613}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":164196,"Value":0.039381347596645355}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":164196,"Value":0.04255174845457077}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":164196,"Value":0.04255174845457077}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":164196,"Value":0.14351430535316467}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":164196,"Value":0.04268030822277069}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":164196,"Value":0.138779878616333}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":164196,"Value":0.04300592094659805}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":164196,"Value":0.04300592094659805}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":164196,"Value":0.14143282175064087}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":164196,"Value":0.13939891755580902}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":164196,"Value":0.043864961713552475}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":164196,"Value":0.043864961713552475}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":164196,"Value":0.14455530047416687}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":164196,"Value":0.1411365419626236}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":197237,"Value":0.037987153977155685}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":197237,"Value":0.042540937662124634}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":197237,"Value":0.042540937662124634}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":197237,"Value":0.13864277303218842}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":197237,"Value":0.042660560458898544}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":197237,"Value":0.13931013643741608}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":197237,"Value":0.04252368211746216}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":197237,"Value":0.04252368211746216}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":197237,"Value":0.14149357378482819}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":197237,"Value":0.13878922164440155}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":197237,"Value":0.04424978047609329}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":197237,"Value":0.04424978047609329}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":197237,"Value":0.14286375045776367}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":197237,"Value":0.14190368354320526}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":236886,"Value":0.04744920879602432}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":236886,"Value":0.04244055598974228}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":236886,"Value":0.04244055598974228}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":236886,"Value":0.14065907895565033}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":236886,"Value":0.04257971793413162}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":236886,"Value":0.13880959153175354}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":236886,"Value":0.04221469536423683}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":236886,"Value":0.04221469536423683}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":236886,"Value":0.13983456790447235}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":236886,"Value":0.13864243030548096}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":236886,"Value":0.04439576715230942}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":236886,"Value":0.04439576715230942}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":236886,"Value":0.146750345826149}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":236886,"Value":0.14153704047203064}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":284465,"Value":0.04290204867720604}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":284465,"Value":0.042150288820266724}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":284465,"Value":0.042150288820266724}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":284465,"Value":0.13849543035030365}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":284465,"Value":0.04255305975675583}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":284465,"Value":0.13883788883686066}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":284465,"Value":0.0428791418671608}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":284465,"Value":0.0428791418671608}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":284465,"Value":0.13828063011169434}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":284465,"Value":0.13951249420642853}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":284465,"Value":0.044124774634838104}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":284465,"Value":0.044124774634838104}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":284465,"Value":0.14612901210784912}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":284465,"Value":0.14082586765289307}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":341560,"Value":0.040325187146663666}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":341560,"Value":0.04234565794467926}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":341560,"Value":0.04234565794467926}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":341560,"Value":0.13809113204479218}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":341560,"Value":0.04270166903734207}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":341560,"Value":0.13935479521751404}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":341560,"Value":0.04133109003305435}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":341560,"Value":0.04133109003305435}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":341560,"Value":0.1426696926355362}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":341560,"Value":0.13642114400863647}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":341560,"Value":0.04379311949014664}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":341560,"Value":0.04379311949014664}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":341560,"Value":0.1440274864435196}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":341560,"Value":0.14092232286930084}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":410074,"Value":0.04711751267313957}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":410074,"Value":0.041751034557819366}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":410074,"Value":0.041751034557819366}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":410074,"Value":0.14212773740291595}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":410074,"Value":0.041601136326789856}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":410074,"Value":0.13674309849739075}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":410074,"Value":0.0412617102265358}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":410074,"Value":0.0412617102265358}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":410074,"Value":0.1414892077445984}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":410074,"Value":0.13638165593147278}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":410074,"Value":0.04520729184150696}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":410074,"Value":0.04520729184150696}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":410074,"Value":0.1432613730430603}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":410074,"Value":0.1427251249551773}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":492291,"Value":0.039396364241838455}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":492291,"Value":0.041653454303741455}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":492291,"Value":0.041653454303741455}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":492291,"Value":0.14283640682697296}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":492291,"Value":0.04057120159268379}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":492291,"Value":0.13531818985939026}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":492291,"Value":0.04188283905386925}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":492291,"Value":0.04188283905386925}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":492291,"Value":0.13871030509471893}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":492291,"Value":0.1377369910478592}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":492291,"Value":0.04553573951125145}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":492291,"Value":0.04553573951125145}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":492291,"Value":0.1396888643503189}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":492291,"Value":0.14404098689556122}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":590951,"Value":0.03992323577404022}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":590951,"Value":0.04194105789065361}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":590951,"Value":0.04194105789065361}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":590951,"Value":0.13997051119804382}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":590951,"Value":0.04187161102890968}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":590951,"Value":0.13759289681911469}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":590951,"Value":0.04180068522691727}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":590951,"Value":0.04180068522691727}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":590951,"Value":0.14018012583255768}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":590951,"Value":0.13715925812721252}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":590951,"Value":0.044237833470106125}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":590951,"Value":0.044237833470106125}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":590951,"Value":0.14718715846538544}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":590951,"Value":0.1408369541168213}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":709343,"Value":0.04192569479346275}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":709343,"Value":0.04159633442759514}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":709343,"Value":0.04159633442759514}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":709343,"Value":0.1411091834306717}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":709343,"Value":0.04181204363703728}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":709343,"Value":0.13749243319034576}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":709343,"Value":0.04194426164031029}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":709343,"Value":0.04194426164031029}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":709343,"Value":0.13696405291557312}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":709343,"Value":0.13761542737483978}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":709343,"Value":0.04445933550596237}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":709343,"Value":0.04445933550596237}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":709343,"Value":0.1442328244447708}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":709343,"Value":0.14116722345352173}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":851413,"Value":0.03219500929117203}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":851413,"Value":0.04142025485634804}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":851413,"Value":0.04142025485634804}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":851413,"Value":0.14510634541511536}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":851413,"Value":0.041262444108724594}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":851413,"Value":0.1359836608171463}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":851413,"Value":0.0418703518807888}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":851413,"Value":0.0418703518807888}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":851413,"Value":0.13947466015815735}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":851413,"Value":0.1372322142124176}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":851413,"Value":0.04584600776433945}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":851413,"Value":0.04584600776433945}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":851413,"Value":0.14260756969451904}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":851413,"Value":0.14371955394744873}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":1021897,"Value":0.04450249671936035}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":1021897,"Value":0.04160931333899498}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":1021897,"Value":0.04160931333899498}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":1021897,"Value":0.1367630511522293}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":1021897,"Value":0.04251496493816376}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":1021897,"Value":0.1389215886592865}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":1021897,"Value":0.04191551357507706}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":1021897,"Value":0.04191551357507706}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":1021897,"Value":0.13708989322185516}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":1021897,"Value":0.13767750561237335}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":1021897,"Value":0.04635053500533104}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":1021897,"Value":0.04635053500533104}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":1021897,"Value":0.1395495980978012}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":1021897,"Value":0.14475974440574646}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":1226478,"Value":0.04329785704612732}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":1226478,"Value":0.04143531993031502}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":1226478,"Value":0.04143531993031502}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":1226478,"Value":0.1425222009420395}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":1226478,"Value":0.04092001914978027}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":1226478,"Value":0.1357174813747406}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":1226478,"Value":0.04154931753873825}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":1226478,"Value":0.04154931753873825}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":1226478,"Value":0.13719172775745392}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":1226478,"Value":0.13693867623806}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":1226478,"Value":0.046109266579151154}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":1226478,"Value":0.046109266579151154}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":1226478,"Value":0.14010672271251678}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":1226478,"Value":0.1445816457271576}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":1471975,"Value":0.03938402980566025}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":1471975,"Value":0.041659291833639145}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":1471975,"Value":0.041659291833639145}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":1471975,"Value":0.14203891158103943}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":1471975,"Value":0.040750838816165924}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":1471975,"Value":0.13540557026863098}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":1471975,"Value":0.04127470776438713}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":1471975,"Value":0.04127470776438713}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":1471975,"Value":0.1378922164440155}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":1471975,"Value":0.1365828514099121}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":1471975,"Value":0.04645898565649986}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":1471975,"Value":0.04645898565649986}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":1471975,"Value":0.14221352338790894}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":1471975,"Value":0.14496934413909912}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":1766571,"Value":0.0368780642747879}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":1766571,"Value":0.04136335477232933}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":1766571,"Value":0.04136335477232933}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":1766571,"Value":0.14130674302577972}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":1766571,"Value":0.04097461700439453}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":1766571,"Value":0.135739266872406}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":1766571,"Value":0.041224852204322815}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":1766571,"Value":0.041224852204322815}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":1766571,"Value":0.1382751762866974}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":1766571,"Value":0.13652145862579346}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":1766571,"Value":0.046169985085725784}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":1766571,"Value":0.046169985085725784}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":1766571,"Value":0.14504152536392212}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":1766571,"Value":0.14380846917629242}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":2120086,"Value":0.04283950850367546}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":2120086,"Value":0.04142975062131882}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":2120086,"Value":0.04142975062131882}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":2120086,"Value":0.1386176198720932}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":2120086,"Value":0.04171896353363991}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":2120086,"Value":0.13667571544647217}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":2120086,"Value":0.04143649712204933}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":2120086,"Value":0.04143649712204933}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":2120086,"Value":0.13826066255569458}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":2120086,"Value":0.1367289125919342}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":2120086,"Value":0.04510364681482315}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":2120086,"Value":0.04510364681482315}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":2120086,"Value":0.14274300634860992}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":2120086,"Value":0.14268629252910614}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":2544304,"Value":0.038906387984752655}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":2544304,"Value":0.04160567745566368}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":2544304,"Value":0.04160567745566368}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":2544304,"Value":0.13817287981510162}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":2544304,"Value":0.04184769466519356}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":2544304,"Value":0.13715241849422455}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":2544304,"Value":0.04118882119655609}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":2544304,"Value":0.04118882119655609}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":2544304,"Value":0.13846595585346222}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":2544304,"Value":0.13626264035701752}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":2544304,"Value":0.04616270586848259}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":2544304,"Value":0.04616270586848259}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":2544304,"Value":0.14109161496162415}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":2544304,"Value":0.1444137841463089}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":3053366,"Value":0.041482988744974136}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":3053366,"Value":0.041188377887010574}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":3053366,"Value":0.041188377887010574}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":3053366,"Value":0.13728749752044678}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":3053366,"Value":0.04118167608976364}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":3053366,"Value":0.13638241589069366}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":3053366,"Value":0.04149826988577843}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":3053366,"Value":0.04149826988577843}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":3053366,"Value":0.13828296959400177}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":3053366,"Value":0.1368512213230133}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":3053366,"Value":0.047512758523225784}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":3053366,"Value":0.047512758523225784}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":3053366,"Value":0.1388159543275833}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":3053366,"Value":0.14684543013572693}
+{"MetricName":"Train: Batch Loss+Regularization","Short":"T/loss+","MetricType":"loss","Step":3664240,"Value":0.03969468176364899}
+{"MetricName":"Train: Moving Average Loss+Regularization","Short":"T/~loss+","MetricType":"loss","Step":3664240,"Value":0.04128105193376541}
+{"MetricName":"Train: Moving Average Loss","Short":"T/~loss","MetricType":"loss","Step":3664240,"Value":0.04128105193376541}
+{"MetricName":"Train: Moving Images Loss","Short":"T/~img_loss","MetricType":"img_loss","Step":3664240,"Value":0.14300639927387238}
+{"MetricName":"Train: Moving (faster) Noise Loss","Short":"T/~fast_loss","MetricType":"loss","Step":3664240,"Value":0.04047789424657822}
+{"MetricName":"Train: Moving MAE Loss","Short":"T/~mae","MetricType":"loss","Step":3664240,"Value":0.1343698352575302}
+{"MetricName":"Mean Loss+Regularization on train","Short":"#loss+()","MetricType":"loss","Step":3664240,"Value":0.041218023747205734}
+{"MetricName":"Mean Loss on train","Short":"#loss()","MetricType":"loss","Step":3664240,"Value":0.041218023747205734}
+{"MetricName":"Images Loss on train","Short":"img_loss()","MetricType":"img_loss","Step":3664240,"Value":0.13889583945274353}
+{"MetricName":"MAE Loss on train","Short":"#mae()","MetricType":"loss","Step":3664240,"Value":0.13618405163288116}
+{"MetricName":"Mean Loss+Regularization on validation","Short":"#loss+()","MetricType":"loss","Step":3664240,"Value":0.0462474450469017}
+{"MetricName":"Mean Loss on validation","Short":"#loss()","MetricType":"loss","Step":3664240,"Value":0.0462474450469017}
+{"MetricName":"Images Loss on validation","Short":"img_loss()","MetricType":"img_loss","Step":3664240,"Value":0.13894769549369812}
+{"MetricName":"MAE Loss on validation","Short":"#mae()","MetricType":"loss","Step":3664240,"Value":0.14487223327159882}
