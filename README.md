@@ -27,10 +27,9 @@ with a growing list of model support).
 It provides all the tools to make that work easy: from a complete set of differentiable operators, 
 all the way to UI tools to plot metrics while training in a notebook.
 
-It runs almost everywhere Go runs, using a pure Go backend. 
-It runs even in the browser with WASM ([see demo created with GoMLX](https://janpfeifer.github.io/hiveGo/www/hive/)). 
+It defines a common "backend" API to run models. It includes a pure Go backend that is portable and also runs in WASM (in a browser), [see demo created with GoMLX](https://janpfeifer.github.io/hiveGo/www/hive/). 
 
-It supports a very optimized backend engine based on [OpenXLA](https://github.com/openxla/xla) 
+The _"xla"_ backend is an optimized engine based on [OpenXLA](https://github.com/openxla/xla) 
 that uses just-in-time compilation to CPU, GPUs (Nvidia, and likely AMD ROCm, Intel, Macs) and Google's TPUs.
 It also supports modern distributed execution (**new, still being actively improved**) for multi-TPU or multi-GPU
 using XLA Shardy, an evolution of the [GSPMD distribution](https://arxiv.org/abs/2105.04663)).
@@ -38,6 +37,7 @@ It's the same engine that powers Google's [Jax](https://github.com/google/jax),
 [TensorFlow](https://tensorflow.org/) and [Pytorch/XLA](https://docs.pytorch.org/xla/master/learn/xla-overview.html),
 and it has the same speed in many cases (*). 
 
+More recently, it added the _"onnx"_ backend, which uses [ONNX Runtime](https://onnxruntime.ai/) to run GoMLX computations. It can also save models to `.onnx` file format.
 
 > [!Tip]
 > * **Documentation at [gomlx.github.io](https://gomlx.github.io/)**.
@@ -45,7 +45,7 @@ and it has the same speed in many cases (*).
 > * A [guided example for Kaggle Dogs Vs Cats](https://gomlx.github.io/gomlx/notebooks/dogsvscats.html).
 
 <div>
-<p>It was developed to be a full-featured ML platform for Go, productionizable and easily to experiment with ML ideas
+<p>It was developed to be a full-featured ML platform for Go, productionizable and easy to experiment with ML ideas
 —see Long-Term Goals below.</p>
 
 It strives to be **simple to read and reason about**, leading the user to a correct and transparent mental model 
@@ -58,41 +58,6 @@ optimizer ideas, complex regularizers, funky multitasking, etc.
 Documentation is kept up to date (if it is not well-documented, it is as if the code is not there), 
 and error messages are useful (always with a stack-trace) and try to make it easy to solve issues.
 </div>
-
-## 🚀 v0.28.0 Release 🚀
-
-<img align="right" src="docs/gomlx_gopher_hiking.jpeg" alt="GoMLX Gopher" width="220px"/>
-
-**Large API and package re-organization:**
-
-- `backends` moved to `github.com/gomlx/compute` repository!
-  - Packages `backends`, `dtypes`, `shapes` and `distributed` moved to `github.com/gomlx/compute`.
-  - The _"go"_ backend is now implemented in `github.com/gomlx/compute/gobackend` (it's been greatly improved as well).
-  - The _"xla"_ backend is now implemented in `github.com/gomlx/go-xla/compute/xla`.
-- Removed `pkg/` prefix from the the top level packages (no need with `internal/` special handling).
-- The `context.Context` variable container redesigned (and simplified) into `model.Store` (the container)
-  the `model.Scope` (a pointer to a `Store` with the current scope).
-- The `train.Dataset` (package `ml/train`) interface was modernized (and simplified) to use Go's standard iterators. Also now with clearer ownership rules.
-- The `train.NewTrainer` now uses a generic `modelFn` type, with a friendlier more flexible signature, using generics and the `ModelFnCompatible` constraint.
-
-**New GoMLX Documentation: [gomlx.github.io](https://gomlx.github.io/)**
-
-**New features:**
-
-* Dynamic shapes support for GoMLX: **alpha**/**experimental**, only for the Go backend (XLA only supports static shapes).
-  But it will allow more efficient and padding-free (sometimes) models with Go. It also opens up better support
-  for ONNXRuntime backend (a goal for after the v0.28 release).  
-* Improvements and some SIMD support for the Go backend (now in repo `github.com/gomlx/compute/gobackend`).
-* Gradient checkpointing.
-* DyT normalizer.
-* New `SchedulingBarrier` and `OptimizationBarrier` primitives.
-* Proper KV-Cache implementation.
-* Package `transformer` improvements, supporting newer models (Gemma4, etc.)
-* Updates to `FusedScaledDotProductAttention`, including adding support to the corresponding VJP: enabling the **flash attention** in XLA+CUDA.
-
-> [!Tip]
-> See more details in the our [CHANGELOG](docs/CHANGELOG.md), including how to use `cmd/convert_v0.28`, 
-> a tool that facilitates the changes needed to move to the new API.
 
 ## 🗺️ Overview
 
@@ -122,18 +87,18 @@ from the bottom to the top of the stack. But it is still only a slice of what a 
 
   * **🚀 NEW 🚀** [SAM2: Segment Anything Model (Facebook)](https://github.com/gomlx/go-huggingface/blob/main/models/sam2/README.md): model to segment images (videos version not ported yet).
   * **🚀 NEW 🚀** [Gemma4-4B-it library and demo](https://github.com/gomlx/go-huggingface/tree/main/examples/gemma4-e4bit): 
-    Google's new free generative LLM, instrunction tuned. See also [HuggingFace's "google/gemma-4-E4B-it" model page](https://huggingface.co/google/gemma-4-E4B-it).
+    Google's new free generative LLM, instruction tuned. See also [HuggingFace's "google/gemma-4-E4B-it" model page](https://huggingface.co/google/gemma-4-E4B-it).
   * [KaLM-Gema3 12B parameters](https://github.com/gomlx/go-huggingface/tree/main/examples/kalmgemma3): 
-    Tecent's top-ranked sentence encoder for RAGs, using [go-huggingface](https://github.com/gomlx/go-huggingface/) to 
+    Tencent's top-ranked sentence encoder for RAGs, using [go-huggingface](https://github.com/gomlx/go-huggingface/) to 
     load the model and tokenizer, and **GoMLX** to execute it. 
   * [Gemma 3 270M](https://github.com/gomlx/gomlx/tree/main/examples/gemma3): Demonstrates ONNX-converted
     text generation (LLM) using the [onnx-community/gemma-3-270m-it-ONNX](https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX) 
     model with GoMLX. 
-    It uses the [`gomlx/onnx-gomlx`](https://github.com/gomlx/onnx-gomlx) package to convert the model, and [`gomlx/go-huggingface`](https://github.com/gomlx/go-huggingface) to download the model and run the   * **🚀 NEW 🚀** [GPT-2](https://github.com/gomlx/gomlx/tree/main/examples/gpt2): Demonstrates text generation using the
+    It uses the [`gomlx/onnx-gomlx`](https://github.com/gomlx/onnx-gomlx) package to convert the model, and [`gomlx/go-huggingface`](https://github.com/gomlx/go-huggingface) to download the model and run the tokenizer.
+  * **🚀 NEW 🚀** [GPT-2](https://github.com/gomlx/gomlx/tree/main/examples/gpt2): Demonstrates text generation using
     the new (experimental) transformer and generator packages.
-tokenizer.
   * [BERT-base-NER](https://github.com/gomlx/gomlx/tree/main/examples/BERT-base-NER): A BERT-base model fine-tuned
-    for Named Entity Recognition. It's also a ONNX-converted model from [dslim/bert-base-NER model](https://huggingface.co/dslim/bert-base-NER) from HuggingFace.
+    for Named Entity Recognition. It's also an ONNX-converted model from [dslim/bert-base-NER model](https://huggingface.co/dslim/bert-base-NER) from HuggingFace.
   * [MixedBread Reranker v1](https://github.com/gomlx/gomlx/tree/main/examples/mxbai-rerank): A cross-encoder reranking 
     example, see [HuggingFace MixedBread Reranker v1 page](https://huggingface.co/mixedbread-ai/mxbai-rerank-base-v1).
     It uses the [`gomlx/onnx-gomlx`](https://github.com/gomlx/onnx-gomlx) package to convert the model, and [`gomlx/go-huggingface`](https://github.com/gomlx/go-huggingface) to download the model and run the tokenizer.
@@ -147,25 +112,22 @@ on different backends to compile and execute the computation on very different
 hardware.
 
 The supporting backend package must always be included in a GoMLX program, and the
-default backends (`xla` and `go`) are included if you import:
+default backends (`xla`, `go` and optionally `onnx`, see below) are included if you import:
 
 ```
 import _ "github.com/gomlx/gomlx/backends/default"
 ```
 
-`GOMLX_BACKEND` environment variable (e.g. `export GOMLX_BACKEND=xla:cuda` or
-`export GOMLX_BACKEND=xla:cpu` In runtime, it will pick the faster available to
-you, but you can specify which backend to use by setting or `export
-GOMLX_BACKEND=go`).
+At runtime, it will pick the fastest backend available to you, but you can specify which backend to use by setting the `GOMLX_BACKEND` environment variable (e.g. `export GOMLX_BACKEND=xla:cuda`, `export GOMLX_BACKEND=xla:cpu`, or `export GOMLX_BACKEND=go`).
 
 There is a common `compute.Backend` interface defined in
 [`github.com/gomlx/compute`](https://github.com/gomlx/compute). And there are 3
-different implementations (more planed in the future):
+different implementations (more planned in the future):
 
    1. **`xla`**: [OpenXLA](https://github.com/openxla/xla) backend for CPUs, GPUs, and TPUs. State-of-the-art as these things go, but only static-shape.
       For linux/amd64, linux/arm64 (CPU) and darwin/arm64 (CPU) for now. The Go API is defined under the [go-xla](https://github.com/gomlx/go-xla) project,
       in `github.com/gomlx/go-xla/compute/xla`. It is included by default.
-   2. **`go`**: a pure Go backend (no C/C++ dependencies), implemented in `github.com/gomlx/gomlx/compute/gobackend`, but included by default.
+   2. **`go`**: a pure Go backend (no C/C++ dependencies), implemented in `github.com/gomlx/compute/gobackend`, but included by default.
       It is slower than XLA but very portable (compiles to WASM/Windows/etc.).
       * Some SIMD support: for AVX-2/AVX-512 for MatMul (not other operations yet). 
         See [SIMD for Go](https://github.com/golang/go/issues/73787) and [go-highway](https://github.com/ajroetker/go-highway)(under development); 
@@ -173,13 +135,14 @@ different implementations (more planed in the future):
         in some cases.
       * See also [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
       * Dynamic shape support planned (maybe mid-2026).
-   3. **🚀 NEW, Alpha 🚀** **[go-darwinml](https://github.com/gomlx/go-darwinml)**: Go bindings to Apple's CoreML supporting Metal acceleration, MLX, and any backend DarwinOS related. 
+   3. **🚀 NEW 🚀** **[onnx](https://github.com/gomlx/compute-onnx)**: A backend that uses ONNX Runtime to execute GoMLX graphs: for Linux/Windows AMD64. Build with tag `--tags=onnx` to get it imported by `github.com/gomlx/gomlx/backends/default`, or import it directly from `github.com/gomlx/compute-onnx`.
 
 ### Highlights
 
 Some selected highlights:
 
 * **🚀 NEW 🚀**: **Gradient checkpointing**: trade-off memory usage for recomputation when training large models, with a very simple API.
+* **🚀 NEW 🚀**: Save models to a `.onnx` file, that can be used with ONNX Runtime. See example in [UCI-Adult demo](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/save_onnx.go).
 
 * HuggingFace Go compatibility with [go-huggingface](https://github.com/gomlx/go-huggingface):
   - Download files from models/datasets sharing the same cache framework as the python version.
@@ -210,16 +173,47 @@ Some selected highlights:
   See [`cmd/gomlx_checkpoints/README.md`](cmd/gomlx_checkpoints/README.md) for usage details.
   It also allows plotting different models together, to compare their evolution, and `-loop` gives you a
   live, auto-refreshing view while a model is still training.
-  <!-- TODO: the linked example notebook (gomlx_checkpoints_plot_example.html) predates the Plotly->Vizb
-  switch and should be regenerated to show the current UI. -->
 * Various optimizers: SGD, Adam (AdamW and Adamax).
 * Various losses and metrics.
 * Read Numpy arrays into GoMLX tensors -- see package `github.com/gomlx/gomlx/core/tensors/numpy`.
-* **Distributed Execution** (**experimental) across multiple GPUs or TPUs with little hints from the user.
+* **Distributed Execution** (**experimental**) across multiple GPUs or TPUs with little hints from the user.
   One only needs to configure a distributed dataset, and the trainer picks up from there.
   See code change in [UCI-Adult demo](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/main.go#L222). **Experimental**, 
-  pls report any issues and help us improve it.
+  please report any issues and help us improve it.
 
+## 🚀 v0.28.0 Release 🚀
+
+<img align="right" src="docs/gomlx_gopher_hiking.jpeg" alt="GoMLX Gopher" width="220px"/>
+
+**Large API and package re-organization:**
+
+- `backends` moved to `github.com/gomlx/compute` repository!
+  - Packages `backends`, `dtypes`, `shapes` and `distributed` moved to `github.com/gomlx/compute`.
+  - The _"go"_ backend is now implemented in `github.com/gomlx/compute/gobackend` (it's been greatly improved as well).
+  - The _"xla"_ backend is now implemented in `github.com/gomlx/go-xla/compute/xla`.
+- Removed `pkg/` prefix from the top-level packages (no need with `internal/` special handling).
+- The `context.Context` variable container was redesigned (and simplified) into `model.Store` (the container) and `model.Scope` (a pointer to a `Store` with the current scope).
+- The `train.Dataset` (package `ml/train`) interface was modernized (and simplified) to use Go's standard iterators. Also now with clearer ownership rules.
+- The `train.NewTrainer` now uses a generic `modelFn` type, with a friendlier more flexible signature, using generics and the `ModelFnCompatible` constraint.
+
+**New GoMLX Documentation: [gomlx.github.io](https://gomlx.github.io/)**
+
+**New features:**
+
+* Dynamic shapes support for GoMLX: **alpha**/**experimental**, only for the Go backend (XLA only supports static shapes).
+  But it will allow more efficient and padding-free (sometimes) models with Go. It also opens up better support
+  for ONNXRuntime backend (a goal for after the v0.28 release).  
+* Improvements and some SIMD support for the Go backend (now in repo `github.com/gomlx/compute/gobackend`).
+* Gradient checkpointing.
+* DyT normalizer.
+* New `SchedulingBarrier` and `OptimizationBarrier` primitives.
+* Proper KV-Cache implementation.
+* Package `transformer` improvements, supporting newer models (Gemma4, etc.)
+* Updates to `FusedScaledDotProductAttention`, including adding support to the corresponding VJP: enabling the **flash attention** in XLA+CUDA.
+
+> [!Tip]
+> See more details in our [CHANGELOG](docs/CHANGELOG.md), including how to use `cmd/convert_v0.28`, 
+> a tool that facilitates the changes needed to move to the new API.
 
 ## 👥 Support
 
@@ -252,7 +246,7 @@ that includes **GoMLX** + [JupyterLab](https://jupyterlab.readthedocs.io/) + [Go
 Nvidia's CUDA runtime (for optional support of GPU) pre-installed -- it is ~5Gb to download.
 
 From a directory you want to make visible in Jupyter, do:
-> For GPU support add the flag `--gpus all` to the `docker run` command bellow.
+> For GPU support add the flag `--gpus all` to the `docker run` command below.
 
 ```bash
 docker pull janpfeifer/gomlx_jupyterlab:latest
@@ -279,7 +273,7 @@ not too hard to read.
 _Godoc_ is available in [pkg.go.dev](https://pkg.go.dev/github.com/gomlx/gomlx).
 
 Finally, feel free to ask questions: time allowing (when not at work), I'm always happy to help: 
-I'm offten connected to [Slack channel #gomlx](https://app.slack.com/client/T029RQSE6/C08TX33BX6U);
+I'm often connected to [Slack channel #gomlx](https://app.slack.com/client/T029RQSE6/C08TX33BX6U);
 alternatively the [groups.google.com/g/gomlx-discuss](https://groups.google.com/g/gomlx-discuss).
 
 ### Inference & Productionization
@@ -288,8 +282,8 @@ Inference or serving a model is done currently by using the Go code used to crea
 with the trained weights and hyperparameters used to train the model. 
 In other words, it uses the same tools used for training.
 
-It's straight forward for instance, to create a Docker with a pretrained model and serve it from there.
-Or include it in you own application.
+It's straightforward for instance, to create a Docker with a pretrained model and serve it from there.
+Or include it in your own application.
 
 For a simple example of how to do this and export a model inference as a library, see 
 [`.../examples/cifar/classifer`](https://github.com/gomlx/gomlx/blob/main/examples/cifar/classifier/classifier.go), 
@@ -319,7 +313,7 @@ without linking GoMLX -- it will save a little executable size.
    - Support modern accelerator hardware like TPUs and GPUs.
    - Multiple backends beyond XLA, e.g:  llamacpp, WebNN (with Wasm), pure Go version, etc.
    - Import pre-trained models from [Hugging Face Hub](https://huggingface.co/models) and allow fine-tuning.
-     Already working for many models, including ONNX suppot in [onnx-gomlx](https://github.com/gomlx/onnx-gomlx).  
+     Already working for many models, including ONNX support in [onnx-gomlx](https://github.com/gomlx/onnx-gomlx).  
    - Compile models to binary as in C-libraries and/or WebAssembly, to be linked and consumed (inference) anywhere
      (any language).
 
@@ -333,10 +327,10 @@ without linking GoMLX -- it will save a little executable size.
     - `GOMLX_BACKEND="xla:help"`: It will print out documentation on all options for the `"xla"` backend, and return
       an error.
     - `GOMLX_BACKEND="xla:cpu"`: Use XLA (the faster backend, only runs on Linux now) for CPU
-    - `GOMLX_BACKEND="xla:cuda"`: Use XLA for for Nvidia CUDA; Or set it to `xla:cuda,preallocate=false` to prevent it
+    - `GOMLX_BACKEND="xla:cuda"`: Use XLA for Nvidia CUDA; Or set it to `xla:cuda,preallocate=false` to prevent it
       from preallocating 75% of the GPU memory.
     - `GOMLX_BACKEND="xla:/path/to/my/pjrt_plugin.so"`: Use XLA with an arbitrary PJRT. PJRT is a plugin system for XLA to support different hardware.
-      One can install PJRTs build for NVIDIA GPUs (there is an installation script for that), there is also one for ROCm (not tested by the author),
+      One can install PJRTs built for NVIDIA GPUs (there is an installation script for that), there is also one for ROCm (not tested by the author),
       for TPU (Google Cloud) and reports of PJRTs being built to even new accelerators (e.g.: [TensTorrent XLA](https://github.com/tenstorrent/tt-xla))
   - For the native Go backend:
     - `GOMLX_SIMD_AVX512`: set to `0` or `false` to disable AVX512 SIMD implementation in the native Go backend. The default is enabled if AVX512 is present.
@@ -361,7 +355,7 @@ without linking GoMLX -- it will save a little executable size.
 
 ## 🤝 Collaborating
 
-The project is looking forward to contributions for anyone interested. 
+The project is looking forward to contributions from anyone interested. 
 Many parts are not yet set in stone, so there is plenty of space for improvements and re-designs for those interested
 and with good experience in Go, Machine Learning, and APIs in general. See the [TODO file](docs/TODO.md)
 for inspiration.
