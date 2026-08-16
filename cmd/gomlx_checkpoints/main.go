@@ -87,7 +87,7 @@ func main() {
 	// Constructed once, regardless of -loop: PlotBuilder's session state (output path, whether
 	// the browser tab has been opened yet, last-render time) needs to survive across every
 	// Reports call below, not just be created fresh on each one.
-	plotBuilder := NewPlotBuilder(*flagBrowser, *flagPlotOutput, *flagLoop)
+	plotBuilder := NewPlotBuilder(*flagBrowser, *flagPlotOutput, *flagLoop, *flagPlotTitle)
 
 	if *flagLoop > 0 {
 		for {

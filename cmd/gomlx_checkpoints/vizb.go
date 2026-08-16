@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -87,10 +88,13 @@ func writeLinesAsCSV(w io.Writer, lines []*plotLineInfo) error {
 	return nil
 }
 
-// runVizbLine shapes one metric type's lines into a CSV, invokes
-// `vizb line ... --select ...`, and returns the path to the resulting
-// DataSet JSON file (written inside tmpDir).
-func runVizbLine(tmpDir, metricType string, lines []*plotLineInfo) (jsonPath string, err error) {
+// runVizbLine shapes one metric type's lines into a CSV, invokes `vizb line`, and returns the
+// path to the resulting DataSet JSON file (written inside tmpDir).
+//
+// Uses vizb's "group" mode (-g/-p put step on the X axis, --col-axis y puts column names on Y) so
+// every line for a metric type overlays on one chart with a shared, clickable legend -- vizb's
+// "solo" mode (repeated --select step,colN{label} flags) instead renders one chart per series.
+func runVizbLine(tmpDir, metricType string, lines []*plotLineInfo, lineColors []string) (jsonPath string, err error) {
 	csvPath := filepath.Join(tmpDir, metricType+".csv")
 	f, err := os.Create(csvPath)
 	if err != nil {
@@ -106,9 +110,18 @@ func runVizbLine(tmpDir, metricType string, lines []*plotLineInfo) (jsonPath str
 	}
 
 	jsonPath = filepath.Join(tmpDir, metricType+".json")
-	args := []string{"line", csvPath, "-o", jsonPath, "-n", metricType}
+	selectCols := make([]string, len(lines))
 	for i, line := range lines {
-		args = append(args, "--select", fmt.Sprintf("step,col%d{%s}", i, line.short))
+		selectCols[i] = fmt.Sprintf("col%d{%s}", i, line.short)
+	}
+	args := []string{
+		"line", csvPath, "-o", jsonPath, "-n", metricType,
+		"-g", "step", "-p", "x", "--col-axis", "y",
+		"--select", strings.Join(selectCols, ","),
+		"--smooth", // curve-smoothed lines rather than piecewise-linear segments between points.
+	}
+	if len(lineColors) > 0 {
+		args = append(args, "--theme", strings.Join(lineColors, ","))
 	}
 
 	cmd := exec.Command("vizb", args...)
