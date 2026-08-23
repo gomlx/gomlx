@@ -82,14 +82,14 @@ func GetOfficialBackend(name string) compute.Backend {
 func TestOfficialBackends(t *testing.T, testFn func(t *testing.T, backend compute.Backend), excludeBackends ...string) {
 	BuildTestBackend()
 	for backendName, backend := range OfficialTestBackends {
-		if slices.Contains(excludeBackends, backendName) {
-			continue
-		}
-		if backend == nil {
-			// This happens if the backend already failed to initialize, no need to report it more than once.
-			continue
-		}
 		t.Run(backendName, func(t *testing.T) {
+			if slices.Contains(excludeBackends, backendName) {
+				t.Skipf("Backend %q is excluded for this test", backendName)
+			}
+			if backend == nil {
+				// This happens if the backend already failed to initialize, no need to report it more than once.
+				t.Skipf("Backend %q failed to initialize", backendName)
+			}
 			testFn(t, backend)
 		})
 	}

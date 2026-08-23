@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/gomlx/compute"
@@ -27,49 +28,65 @@ import (
 )
 
 func TestFFT(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "FFT and InverseFFT", func(g *Graph) (inputs, outputs []*Node) {
-		const numPoints = 1000
-		const numPeriods = 10
-		x := Iota(g, shapes.Make(dtypes.Float32, numPoints), -1)
-		x = MulScalar(x, 2*math.Pi*numPeriods/numPoints)
-		y := Sin(x)
-		y.AssertDims(numPoints)
-		inputs = []*Node{y}
-		yC := ConvertDType(y, dtypes.Complex128)
-		yC.AssertDims(numPoints)
-		fft := FFT(yC)
-		yHat := InverseFFT(fft)
-		diff := ReduceAllSum(Abs(Sub(yC, yHat)))
-		outputs = []*Node{diff}
-		return
-	}, []any{
-		0.0,
-	}, 1.0)
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		if !backend.Capabilities().Operations[compute.OpTypeFFT] {
+			t.Skipf("Backend %q does not support FFT", backend.Name())
+			return
+		}
 
-	graphtest.RunTestGraphFn(t, "RealFFT and InverseRealFFT", func(g *Graph) (inputs, outputs []*Node) {
-		const batchDim = 2
-		const numPoints = 1000
-		x := Iota(g, shapes.Make(dtypes.Float32, batchDim, numPoints), -1)
-		const numPeriods = 10
-		y := Sin(MulScalar(x, 2*math.Pi*numPeriods/numPoints))
-		y.AssertDims(batchDim, numPoints)
-		inputs = []*Node{y}
-		fft := RealFFT(y)
-		fft.AssertDims(batchDim, numPoints/2+1)
-		yHat := InverseRealFFT(fft)
-		yHat.AssertDims(batchDim, numPoints)
-		diff := ReduceAllSum(Abs(Sub(y, yHat)))
-		outputs = []*Node{diff}
-		return
-	}, []any{
-		float32(0.0),
-	}, 1.0)
+		graphtest.RunTestGraphFnWithBackend(t, "FFT and InverseFFT", backend, func(g *Graph) (inputs, outputs []*Node) {
+			const numPoints = 1000
+			const numPeriods = 10
+			x := Iota(g, shapes.Make(dtypes.Float32, numPoints), -1)
+			x = MulScalar(x, 2*math.Pi*numPeriods/numPoints)
+			y := Sin(x)
+			y.AssertDims(numPoints)
+			inputs = []*Node{y}
+			yC := ConvertDType(y, dtypes.Complex128)
+			yC.AssertDims(numPoints)
+			fft := FFT(yC)
+			yHat := InverseFFT(fft)
+			diff := ReduceAllSum(Abs(Sub(yC, yHat)))
+			outputs = []*Node{diff}
+			return
+		}, []any{
+			0.0,
+		}, 1.0)
+
+		graphtest.RunTestGraphFnWithBackend(t, "RealFFT and InverseRealFFT", backend, func(g *Graph) (inputs, outputs []*Node) {
+			const batchDim = 2
+			const numPoints = 1000
+			x := Iota(g, shapes.Make(dtypes.Float32, batchDim, numPoints), -1)
+			const numPeriods = 10
+			y := Sin(MulScalar(x, 2*math.Pi*numPeriods/numPoints))
+			y.AssertDims(batchDim, numPoints)
+			inputs = []*Node{y}
+			fft := RealFFT(y)
+			fft.AssertDims(batchDim, numPoints/2+1)
+			yHat := InverseRealFFT(fft)
+			yHat.AssertDims(batchDim, numPoints)
+			diff := ReduceAllSum(Abs(Sub(y, yHat)))
+			outputs = []*Node{diff}
+			return
+		}, []any{
+			float32(0.0),
+		}, 1.0)
+	})
 }
 
 func TestGradientFFT(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		if !backend.Capabilities().Operations[compute.OpTypeFFT] {
+			t.Skipf("Backend %q does not support FFT", backend.Name())
+			return
+		}
 		if runtime.GOOS == "darwin" {
 			t.Skip("TestGradientFFT does not work in Darwin -- numerical differences.")
+			return
+		}
+		desc := strings.ToLower(backend.Description())
+		if strings.Contains(desc, "cuda") || strings.Contains(desc, "gpu") {
+			t.Skipf("TestGradientFFT does not work with CUDA/GPU backend (%s) -- numerical differences.", backend.Description())
 			return
 		}
 
@@ -133,7 +150,7 @@ func TestGradientFFT(t *testing.T) {
 			// TensorFlow (notice that if using complex64 the numbers differ).
 			[]complex128{(-1 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i), (0 + 0i)},
 		}, 1e-3)
-	}, "go", "xla:cuda") // Backends to exclude from test: "go" doesn't implement FFT and "xla:cuda" results in numerical differences.
+	}, "xla:cuda") // Exclude "xla:cuda" (in case it is named explicitly); CUDA is also dynamically skipped above.
 }
 
 // realFftExample returns (x, y) where: x is a sinusoidal curve with numPoints points,
