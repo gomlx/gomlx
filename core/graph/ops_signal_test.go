@@ -174,6 +174,9 @@ func realFftExample(backend compute.Backend, realDType dtypes.DType, numPoints i
 // See plots of this in `examples/fft/fft.ipynb`.
 func TestGradientRealFFT(t *testing.T) {
 	backend := testutil.BuildTestBackend()
+	if !backend.Capabilities().Operations[compute.OpTypeFFT] {
+		t.Skipf("Backend %q does not support FFT", backend.Name())
+	}
 	// trueX is real, and trueY is the fft, a complex tensor.
 	trueX, trueY := realFftExample(backend, dtypes.Float32, 100, 2)
 	store := model.NewStore()
@@ -214,6 +217,9 @@ func TestGradientRealFFT(t *testing.T) {
 // we are trying to learn the FFT value that generates the sinusoidal curve.
 func TestGradientInverseRealFFT(t *testing.T) {
 	backend := testutil.BuildTestBackend()
+	if !backend.Capabilities().Operations[compute.OpTypeFFT] {
+		t.Skipf("Backend %q does not support FFT", backend.Name())
+	}
 	// We revert the x/y of realFftExample: trueX is the fft, a complex tensor, and trueY is the real sinusoidal curve.
 	trueY, trueX := realFftExample(backend, dtypes.Float64, 10, 2)
 	store := model.NewStore()

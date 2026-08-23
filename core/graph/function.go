@@ -251,7 +251,7 @@ func NewClosure(g *Graph, funcDef func(g *Graph) []*Node) *Function {
 func NewClosureWithSharding(g *Graph, funcDef func(g *Graph) ([]*Node, []*distributed.ShardingSpec)) *Function {
 	g.AssertBuilding()
 	if !g.backend.Capabilities().Functions {
-		exceptions.Panicf("backend %q does not support functions (needed for closures)", g.backend.Name())
+		panic(errors.Wrapf(compute.ErrNotImplemented, "backend %q does not support functions (needed for closures)", g.backend.Name()))
 	}
 
 	// Create the function.

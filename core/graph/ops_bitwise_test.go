@@ -95,6 +95,9 @@ func TestBitcastSubByteDTypes(t *testing.T) {
 	genericUint4Converted := []uint8{2, 1}
 
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		if !backend.Capabilities().Operations[compute.OpTypeBitcast] {
+			t.Skipf("Backend %q does not support Bitcast", backend.Name())
+		}
 		t.Run("Int2-AsInputParam", func(t *testing.T) {
 			output := MustExecOnce(backend, func(packed *Node) *Node {
 				return ConvertDType(Bitcast(packed, dtypes.Int2), dtypes.Int8)

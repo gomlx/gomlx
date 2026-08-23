@@ -46,8 +46,14 @@ func testFuncOneInputDefaultBackend(t *testing.T, testName string, graphFn graph
 		err := exceptions.TryCatch[error](func() {
 			inputNode, outputNode = graphFn(g)
 		})
+		if compute.IsNotImplemented(err) {
+			t.Skipf("Backend %q does not implement op: %v", backend.Name(), err)
+		}
 		require.NoError(t, err)
 		err = g.Compile(inputNode, outputNode)
+		if compute.IsNotImplemented(err) {
+			t.Skipf("Backend %q does not implement op: %v", backend.Name(), err)
+		}
 		require.NoError(t, err)
 		results := g.Run()
 		input, got := results[0], results[1]
@@ -68,8 +74,14 @@ func testFuncOneInput(t *testing.T, backend compute.Backend, testName string, gr
 		err := exceptions.TryCatch[error](func() {
 			inputNode, outputNode = graphFn(g)
 		})
+		if compute.IsNotImplemented(err) {
+			t.Skipf("Backend %q does not implement op: %v", backend.Name(), err)
+		}
 		require.NoError(t, err)
 		err = g.Compile(inputNode, outputNode)
+		if compute.IsNotImplemented(err) {
+			t.Skipf("Backend %q does not implement op: %v", backend.Name(), err)
+		}
 		require.NoError(t, err)
 		var results []*tensors.Tensor
 		err = exceptions.TryCatch[error](func() {
@@ -274,7 +286,14 @@ func TestBinaryOps(t *testing.T) {
 				g := NewGraph(backend, "TwoArgsOps [2, 2] Graph")
 				x := Const(g, xSlices)
 				y := Const(g, yValue)
-				n := test.fnGraph(x, y)
+				var n *Node
+				err := exceptions.TryCatch[error](func() {
+					n = test.fnGraph(x, y)
+				})
+				if compute.IsNotImplemented(err) {
+					t.Skipf("Backend %q does not implement op: %v", backend.Name(), err)
+				}
+				require.NoError(t, err)
 				wantShape := shapes.Make(dtypes.Float32, 2, 2)
 				if !n.Shape().Equal(wantShape) {
 					t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)
@@ -385,7 +404,14 @@ func TestOneArgOps(t *testing.T) {
 		for _, test := range casesFloat64 {
 			g := NewGraph(backend, "[2, 2] graph for one-arg operation")
 			x := Const(g, xSlices)
-			n := test.fnGraph(x)
+			var n *Node
+			err := exceptions.TryCatch[error](func() {
+				n = test.fnGraph(x)
+			})
+			if compute.IsNotImplemented(err) {
+				continue
+			}
+			require.NoError(t, err)
 			wantShape := shapes.Make(dtypes.Float64, 2, 2)
 			if !n.Shape().Equal(wantShape) {
 				t.Fatalf("Add invalid outputShapes %s, wanted %s", n.Shape(), wantShape)

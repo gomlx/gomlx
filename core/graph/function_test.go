@@ -96,6 +96,9 @@ func TestFunction(t *testing.T) {
 
 	t.Run("Call", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
+		if !backend.Capabilities().Functions {
+			t.Skipf("Backend %q does not support functions", backend.Name())
+		}
 		g := graph.NewGraph(backend, "Call")
 
 		// Define a simple function: f(a, b) = a + b
@@ -118,6 +121,9 @@ func TestFunction(t *testing.T) {
 
 	t.Run("InvalidCall", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
+		if !backend.Capabilities().Functions {
+			t.Skipf("Backend %q does not support functions", backend.Name())
+		}
 		g := graph.NewGraph(backend, "Call")
 
 		// Define a simple function: f(a, b) = a + b
@@ -142,6 +148,9 @@ func TestFunction(t *testing.T) {
 
 	t.Run("Closure", func(t *testing.T) {
 		backend := testutil.BuildTestBackend()
+		if !backend.Capabilities().Functions {
+			t.Skipf("Backend %q does not support functions", backend.Name())
+		}
 		g := graph.NewGraph(backend, "Closure")
 
 		// Create a closure: f(x) = x + y, where y is captured from parent
