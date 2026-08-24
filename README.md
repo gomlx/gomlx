@@ -5,7 +5,7 @@
 [![GoDev](https://img.shields.io/badge/go.dev-reference-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/gomlx/gomlx?tab=doc)
 [![DockerHub](https://img.shields.io/docker/pulls/janpfeifer/gomlx_jupyterlab?logo=docker&label=Docker)](https://hub.docker.com/r/janpfeifer/gomlx_jupyterlab)
 [![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/gomlx/gomlx/blob/main/LICENSE)
-[![Slack](https://img.shields.io/badge/Slack-GoMLX-purple.svg?logo=slack)](https://app.slack.com/client/T029RQSE6/C08TX33BX6U)
+[![Slack](https://img.shields.io/badge/Slack-GoMLX-purple.svg?logo=slack)](https://gophers.slack.com/archives/gomlx)
 [![Mentioned in Awesome Go](https://awesome.re/badge.svg)](https://github.com/avelino/awesome-go#machine-learning)
 [![Sponsor GoMLX](https://img.shields.io/badge/Sponsor-GoMLX-pink?logo=github&style=round-square)](https://github.com/gomlx/gomlx/blob/main/README.md#-support-the-project)
 <br/>
@@ -217,7 +217,7 @@ Some selected highlights:
 
 ## 👥 Support
 
-* Discussion in the [Slack channel #gomlx](https://app.slack.com/client/T029RQSE6/C08TX33BX6U) (you can [join the slack server here](https://invite.slack.golangbridge.org/)).
+* Discussion in the [Slack channel #gomlx](https://gophers.slack.com/archives/CHANNEL_ID) (you can [join the slack server here](https://invite.slack.golangbridge.org/)).
 * [Q&A and discussions](https://github.com/gomlx/gomlx/discussions/categories/q-a)
 * [Issues](https://github.com/gomlx/gomlx/issues)
 * Random brainstorming on projects: just start a Q&A, and I'm happy to meet in discord somewhere or VC.
