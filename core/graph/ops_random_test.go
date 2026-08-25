@@ -38,6 +38,9 @@ func testRandomUniform[T interface {
 				shapeSize *= 2
 				r = Concatenate([]*Node{Real(r), Imag(r)}, -1)
 			}
+			if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {
+				r = ConvertDType(r, dtypes.Float32)
+			}
 			counts := make([]*Node, 12)
 			for ii := range counts {
 				from := 0.1*float64(ii) - 0.1
