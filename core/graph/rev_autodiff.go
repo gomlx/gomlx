@@ -467,17 +467,19 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeConvGeneral:          vjpForSingleOutput(convGeneralVJP),
 	NodeTypeReduceWindow:         vjpForSingleOutput(reduceWindowVJP),
 	NodeTypeTranspose:            vjpForSingleOutput(transposeVJP),
-	NodeTypeBroadcastInDim:       vjpForSingleOutput(broadcastInDimVJP),
-	NodeTypeFFT:                  vjpForSingleOutput(fftVJP),
-	NodeTypeDynamicSlice:         vjpForSingleOutput(dynamicSliceVJP),
-	NodeTypeDynamicUpdateSlice:   vjpForSingleOutput(dynamicUpdateSliceVJP),
-	NodeTypeDynamicDimensionSize: vjpForSingleOutput(zeroVJP),
-	NodeTypeDynamicShape:         vjpForSingleOutput(zeroVJP),
-	NodeTypeCumSum:               vjpForSingleOutput(cumSumVJP),
-	NodeTypePad:                  vjpForSingleOutput(padVJP),
-	NodeTypeReverse:              vjpForSingleOutput(reverseVJP),
-	NodeTypeOptimizationBarrier:  vjpOptimizationBarrier,
-	NodeTypeSchedulingBarrier:    vjpForSingleOutput(vjpSchedulingBarrier),
+	NodeTypeBroadcastInDim:        vjpForSingleOutput(broadcastInDimVJP),
+	NodeTypeDynamicBroadcastInDim: vjpForSingleOutput(dynamicBroadcastInDimVJP),
+	NodeTypeFFT:                   vjpForSingleOutput(fftVJP),
+	NodeTypeDynamicSlice:          vjpForSingleOutput(dynamicSliceVJP),
+	NodeTypeDynamicUpdateSlice:    vjpForSingleOutput(dynamicUpdateSliceVJP),
+	NodeTypeDynamicDimensionSize:  vjpForSingleOutput(zeroVJP),
+	NodeTypeDynamicReshape:        vjpForSingleOutput(dynamicReshapeVJP),
+	NodeTypeDynamicShape:          vjpForSingleOutput(zeroVJP),
+	NodeTypeCumSum:                vjpForSingleOutput(cumSumVJP),
+	NodeTypePad:                   vjpForSingleOutput(padVJP),
+	NodeTypeReverse:               vjpForSingleOutput(reverseVJP),
+	NodeTypeOptimizationBarrier:   vjpOptimizationBarrier,
+	NodeTypeSchedulingBarrier:     vjpForSingleOutput(vjpSchedulingBarrier),
 }
 
 // nilVJP returns no gradient, for functions without any inputNodes.
@@ -1011,7 +1013,7 @@ func transposeVJP(node, v *Node, _ shapes.Shape) []*Node {
 // One just needs to reduce the broadcast dimensions.
 func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
 	params := node.inputs.(*nodeInputsBroadcastInDim)
-	x := params.x
+	x := params.operand
 	shape := params.outputShape
 
 	if x.Rank() != len(params.broadcastAxes) {
@@ -1087,3 +1089,56 @@ func vjpSchedulingBarrier(node, v *Node, _ shapes.Shape) []*Node {
 	vjps[0] = v
 	return vjps
 }
+
+// dynamicBroadcastInDimVJP generates the "vector dot jacobian" w.r.t. the input of DynamicBroadcastInDim.
+func dynamicBroadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
+	params := node.inputs.(*nodeInputsDynamicBroadcastInDim)
+	operand := params.operand
+	outShape := node.Shape()
+
+	if operand.Rank() != len(params.broadcastAxes) {
+		Panicf("there must be a broadcastAxes for each axis in operand, instead got operand.Shape()=%s and broadcastAxes=%v",
+			operand.Shape(), params.broadcastAxes)
+	}
+
+	axesPreserved := make([]bool, outShape.Rank())
+	for inputAxis, outputAxis := range params.broadcastAxes {
+		inDim := operand.Shape().Dimensions[inputAxis]
+		outDim := outShape.Dimensions[outputAxis]
+		if inDim == outDim {
+			if inDim == shapes.DynamicDim {
+				if operand.Shape().AxisName(inputAxis) == outShape.AxisName(outputAxis) {
+					axesPreserved[outputAxis] = true
+				}
+			} else {
+				axesPreserved[outputAxis] = true
+			}
+		}
+	}
+	axesToReduce := make([]int, 0, outShape.Rank())
+	for axis, preserved := range axesPreserved {
+		if !preserved {
+			axesToReduce = append(axesToReduce, axis)
+		}
+	}
+	gradWrtOperand := v
+	if len(axesToReduce) > 0 {
+		gradWrtOperand = ReduceSum(v, axesToReduce...)
+	}
+	if !gradWrtOperand.Shape().Equal(operand.Shape()) {
+		gradWrtOperand = DynamicReshapeLike(gradWrtOperand, operand)
+	}
+	vjps := make([]*Node, len(node.inputNodes))
+	vjps[0] = gradWrtOperand
+	return vjps
+}
+
+// dynamicReshapeVJP generates the "vector dot jacobian" w.r.t. the input of DynamicReshape.
+func dynamicReshapeVJP(node, v *Node, _ shapes.Shape) []*Node {
+	operand := node.inputNodes[0]
+	vjp := DynamicReshapeLike(v, operand)
+	vjps := make([]*Node, len(node.inputNodes))
+	vjps[0] = vjp
+	return vjps
+}
+

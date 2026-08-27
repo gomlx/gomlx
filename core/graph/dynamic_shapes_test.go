@@ -160,5 +160,127 @@ func TestDynamicShapes(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, [][][]float32{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}, out[0].Value())
 		})
+
+		t.Run("DynamicBroadcastInDim", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x, bias *Node) *Node {
+				// x has dynamic shape [batch, seq]
+				// bias has shape [seq]
+				batchDim := DynamicDimensionSize(x, 0)
+				seqDim := DynamicDimensionSize(x, 1)
+				bBroadcast := DynamicBroadcastInDim(bias, []int{1},
+					NamedDynamicDim("batch", batchDim),
+					NamedDynamicDim("seq", seqDim),
+				)
+				return Add(x, bBroadcast)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes(
+				[]string{"batch", "seq"},
+				[]string{"seq"},
+			)
+
+			xInput := [][]float32{{1, 2, 3}, {4, 5, 6}}
+			biasInput := []float32{10, 20, 30}
+			out, err := exec.Call(xInput, biasInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][]float32{{11, 22, 33}, {14, 25, 36}}, out[0].Value())
+		})
+
+		t.Run("DynamicBroadcastLike", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x, ref *Node) *Node {
+				// x is [features], ref is [batch, features]
+				return DynamicBroadcastLike(x, ref)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes(
+				[]string{""},
+				[]string{"batch", ""},
+			)
+
+			xInput := []float32{10, 20}
+			refInput := [][]float32{{0, 0}, {0, 0}, {0, 0}} // batch=3, features=2
+			out, err := exec.Call(xInput, refInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][]float32{{10, 20}, {10, 20}, {10, 20}}, out[0].Value())
+		})
+
+		t.Run("DynamicBroadcastToDims", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				// x is [1, features=2], broadcast to dynamic [batch, features=2]
+				batchDim := Const(x.Graph(), int32(2))
+				return DynamicBroadcastToDims(x, NamedDynamicDim("batch", batchDim), StaticDim(2))
+			})
+			require.NoError(t, err)
+
+			xInput := [][]float32{{7, 8}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][]float32{{7, 8}, {7, 8}}, out[0].Value())
+		})
+
+		t.Run("DynamicBroadcastGradient", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x, bias *Node) *Node {
+				bBroadcast := DynamicBroadcastLike(bias, x)
+				loss := ReduceAllSum(Mul(x, bBroadcast))
+				grads := Gradient(loss, bias)
+				return grads[0]
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes(
+				[]string{"batch", ""},
+				[]string{""},
+			)
+
+			xInput := [][]float32{{1, 2}, {3, 4}} // batch=2, features=2
+			biasInput := []float32{10, 20}
+			out, err := exec.Call(xInput, biasInput)
+			require.NoError(t, err)
+			// grad wrt bias is sum_batch(x) = [1+3, 2+4] = [4, 6]
+			assert.Equal(t, []float32{4, 6}, out[0].Value())
+		})
+
+		t.Run("DynamicBroadcastToShape", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				targetShape := shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim, 3}, []string{"batch", ""})
+				return DynamicBroadcastToShape(x, targetShape)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", ""})
+
+			xInput := [][]float32{{1}, {2}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][]float32{{1, 1, 1}, {2, 2, 2}}, out[0].Value())
+		})
+
+		t.Run("BroadcastToShape_DynamicDelegation", func(t *testing.T) {
+			// Calling BroadcastToShape on a node with dynamic shape delegates to DynamicBroadcastToShape.
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				targetShape := shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim, 2}, []string{"batch", ""})
+				return BroadcastToShape(x, targetShape)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", ""})
+
+			xInput := [][]float32{{5}, {6}, {7}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][]float32{{5, 5}, {6, 6}, {7, 7}}, out[0].Value())
+		})
+
+		t.Run("DynamicBroadcastToShape_StaticFallback", func(t *testing.T) {
+			// Calling DynamicBroadcastToShape with static shape falls back to BroadcastToShape.
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				targetShape := shapes.Make(dtypes.Float32, 2, 3)
+				return DynamicBroadcastToShape(x, targetShape)
+			})
+			require.NoError(t, err)
+
+			xInput := [][]float32{{1}, {2}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][]float32{{1, 1, 1}, {2, 2, 2}}, out[0].Value())
+		})
 	})
 }
+

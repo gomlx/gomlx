@@ -103,7 +103,7 @@ func denseDecomposed(x, weight, bias *Node, weightLayout compute.DenseLayout, ac
 		y = y2d
 	} else {
 		// Build output shape: x batch dimensions + weight output dimensions
-		outAxisSpecs := make([]ReshapeDimensionSpec, len(outDims))
+		outAxisSpecs := make([]DimensionSpec, len(outDims))
 		for i := range xRank - 1 {
 			dim := xShape.Dimensions[i]
 			name := xShape.AxisName(i)

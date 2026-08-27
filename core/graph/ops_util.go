@@ -332,8 +332,8 @@ func ReduceAndKeep(operand *Node, reduceFn func(operand *Node, reduceAxes ...int
 
 // dynamicReshapeSpecsForRecoveredDims creates the specs to dynamically reshape a value to the given shape.
 // Notice this works for static shapes as well, in which case this will eventually use the normal Reshape.
-func dynamicReshapeSpecsForRecoveredDims(operand *Node, s shapes.Shape) []ReshapeDimensionSpec {
-	specs := make([]ReshapeDimensionSpec, s.Rank())
+func dynamicReshapeSpecsForRecoveredDims(operand *Node, s shapes.Shape) []DimensionSpec {
+	specs := make([]DimensionSpec, s.Rank())
 	for axis, dim := range s.Dimensions {
 		name := s.AxisName(axis)
 		if dim != shapes.DynamicDim {

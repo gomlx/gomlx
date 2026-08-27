@@ -54,6 +54,7 @@ const (
 	NodeTypeCumSum
 	NodeTypeDiv
 	NodeTypeDotGeneral
+	NodeTypeDynamicBroadcastInDim
 	NodeTypeDynamicDimensionSize
 	NodeTypeDynamicReshape
 	NodeTypeDynamicShape
@@ -982,7 +983,7 @@ func BitwiseXor(lhs *Node, rhs *Node) (
 
 // nodeInputsBroadcastInDim holds the inputs used for the call to compute.BroadcastInDim.
 type nodeInputsBroadcastInDim struct {
-	x             *Node
+	operand       *Node
 	outputShape   shapes.Shape
 	broadcastAxes []int
 }
@@ -994,9 +995,9 @@ func (ni *nodeInputsBroadcastInDim) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsBroadcastInDim) String() string {
-	return fmt.Sprintf("%s(x=[#%d], outputShape=%v, broadcastAxes=%v)",
+	return fmt.Sprintf("%s(operand=[#%d], outputShape=%v, broadcastAxes=%v)",
 		ni.Type(),
-		ni.x.Id(),
+		ni.operand.Id(),
 		ni.outputShape,
 		ni.broadcastAxes,
 	)
@@ -1006,22 +1007,22 @@ func (ni *nodeInputsBroadcastInDim) String() string {
 func (ni *nodeInputsBroadcastInDim) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
 	// Reconstruct inputs from newInputs
 	idx := 0
-	new_x := newInputs[idx]
+	new_operand := newInputs[idx]
 	idx++
-	return backendBroadcastInDim(new_x, ni.outputShape, ni.broadcastAxes)
+	return backendBroadcastInDim(new_operand, ni.outputShape, ni.broadcastAxes)
 }
 
 // backendBroadcastInDim is a Graph wrapper for the backend.Builder.BroadcastInDim method.
-func backendBroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []int) (
+func backendBroadcastInDim(operand *Node, outputShape shapes.Shape, broadcastAxes []int) (
 	node *Node) {
-	inputNodes := []*Node{x}
+	inputNodes := []*Node{operand}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsBroadcastInDim{
-		x:             x,
+		operand:       operand,
 		outputShape:   outputShape,
 		broadcastAxes: slices.Clone(broadcastAxes),
 	}
-	result, err := g.currentFunc.backendFunc.BroadcastInDim(x.outputOps[0], inputs.outputShape, inputs.broadcastAxes)
+	result, err := g.currentFunc.backendFunc.BroadcastInDim(operand.outputOps[0], inputs.outputShape, inputs.broadcastAxes)
 	if err != nil {
 		panic(err)
 	}
@@ -1709,6 +1710,62 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 		config:             config,
 	}
 	result, err := g.currentFunc.backendFunc.DotGeneral(lhs.outputOps[0], inputs.lhsContractingAxes, inputs.lhsBatchAxes, rhs.outputOps[0], inputs.rhsContractingAxes, inputs.rhsBatchAxes, inputs.config)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsDynamicBroadcastInDim holds the inputs used for the call to compute.DynamicBroadcastInDim.
+type nodeInputsDynamicBroadcastInDim struct {
+	operand       *Node
+	broadcastAxes []int
+	dimensions    []compute.DynamicDimensionSpec
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsDynamicBroadcastInDim) Type() NodeType {
+	return NodeTypeDynamicBroadcastInDim
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsDynamicBroadcastInDim) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], broadcastAxes=%v, dimensions=%+v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.broadcastAxes,
+		ni.dimensions,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsDynamicBroadcastInDim) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	return backendDynamicBroadcastInDim(new_operand, ni.broadcastAxes, ni.dimensions...)
+}
+
+// backendDynamicBroadcastInDim is a Graph wrapper for the backend.Builder.DynamicBroadcastInDim method.
+func backendDynamicBroadcastInDim(operand *Node, broadcastAxes []int, dimensions ...compute.DynamicDimensionSpec) (
+	node *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsDynamicBroadcastInDim{
+		operand:       operand,
+		broadcastAxes: slices.Clone(broadcastAxes),
+		dimensions:    slices.Clone(dimensions),
+	}
+	result, err := g.currentFunc.backendFunc.DynamicBroadcastInDim(operand.outputOps[0], inputs.broadcastAxes, inputs.dimensions...)
 	if err != nil {
 		panic(err)
 	}

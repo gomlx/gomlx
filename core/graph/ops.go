@@ -590,6 +590,9 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 //
 // This is equivalent to BroadcastToDims(x, shape.Dimensions...).
 func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
+	if x.Shape().IsDynamic() || shape.IsDynamic() {
+		return DynamicBroadcastToShape(x, shape)
+	}
 	_ = validateBuildingGraphFromInputs(x)
 	xShape := x.Shape()
 	if xShape.Rank() > shape.Rank() {

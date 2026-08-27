@@ -58,6 +58,7 @@ var (
 
 		// Dynamic shape methods (see ops_dynamic.go):
 		"DynamicReshape",
+		"DynamicBroadcastInDim",
 	)
 
 	// methodsNotGenerated get a NodeType but no auto-generated wrapper
