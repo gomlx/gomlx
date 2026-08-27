@@ -477,6 +477,9 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeDynamicShape:          vjpForSingleOutput(zeroVJP),
 	NodeTypeCumSum:                vjpForSingleOutput(cumSumVJP),
 	NodeTypePad:                   vjpForSingleOutput(padVJP),
+	NodeTypeDynamicPad:            vjpForSingleOutput(dynamicPadVJP),
+	NodeTypeIota:                  vjpForSingleOutput(zeroVJP),
+	NodeTypeDynamicIota:           vjpForSingleOutput(zeroVJP),
 	NodeTypeReverse:               vjpForSingleOutput(reverseVJP),
 	NodeTypeOptimizationBarrier:   vjpOptimizationBarrier,
 	NodeTypeSchedulingBarrier:     vjpForSingleOutput(vjpSchedulingBarrier),
@@ -795,6 +798,39 @@ func padVJP(node, v *Node, _ shapes.Shape) []*Node {
 	gradX := backendSlice(v, starts, limits, strides)
 	gradFill := ZerosLike(fillValue)
 	return []*Node{gradX, gradFill}
+}
+
+func dynamicPadVJP(node, v *Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsDynamicPad)
+	x := inputs.x
+	fillValue := inputs.fillValue
+	starts := make([]*Node, x.Rank())
+	sizes := make([]int, x.Rank())
+	valIdx := 2
+	for i, padAxis := range inputs.axesConfig {
+		if padAxis.InteriorValue != nil || padAxis.Interior != 0 {
+			Panicf("dynamicPadVJP: gradient for interior padding not supported")
+		}
+		if padAxis.StartValue != nil {
+			starts[i] = node.inputNodes[valIdx]
+			valIdx++
+		} else {
+			starts[i] = Const(node.Graph(), int32(padAxis.Start))
+		}
+		if padAxis.EndValue != nil {
+			valIdx++
+		}
+		sizes[i] = x.Shape().Dim(i)
+	}
+	gradX := DynamicSlice(v, starts, sizes)
+	gradFill := ZerosLike(fillValue)
+	vjps := make([]*Node, len(node.inputNodes))
+	vjps[0] = gradX
+	vjps[1] = gradFill
+	for j := 2; j < len(node.inputNodes); j++ {
+		vjps[j] = ZerosLike(node.inputNodes[j])
+	}
+	return vjps
 }
 
 func reverseVJP(node, v *Node, _ shapes.Shape) []*Node {

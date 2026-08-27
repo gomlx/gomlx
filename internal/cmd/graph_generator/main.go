@@ -59,6 +59,8 @@ var (
 		// Dynamic shape methods (see ops_dynamic.go):
 		"DynamicReshape",
 		"DynamicBroadcastInDim",
+		"DynamicIota",
+		"DynamicPad",
 	)
 
 	// methodsNotGenerated get a NodeType but no auto-generated wrapper
@@ -208,6 +210,15 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.BackendType = "compute." + pi.BackendType
 				pi.Format = "%+v"
 			case "...DynamicDimensionSpec":
+				pi.BackendType = "...compute." + pi.BackendType[3:]
+				pi.NodeInputType = "[]" + pi.BackendType[3:]
+				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
+				pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
+				pi.Format = "%+v"
+			case "DynamicPadAxis":
+				pi.BackendType = "compute." + pi.BackendType
+				pi.Format = "%+v"
+			case "...DynamicPadAxis":
 				pi.BackendType = "...compute." + pi.BackendType[3:]
 				pi.NodeInputType = "[]" + pi.BackendType[3:]
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)

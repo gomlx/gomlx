@@ -2,6 +2,7 @@ package graph
 
 import (
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/exceptions"
 )
@@ -323,5 +324,144 @@ func DynamicBroadcastToDims(operand *Node, axisSpecs ...DimensionSpec) *Node {
 		broadcastAxes[i] = i
 	}
 	return DynamicBroadcastInDim(operand, broadcastAxes, axisSpecs...)
+}
+
+// DynamicIota creates a tensor with the given dynamic dimensions and dtype, filled with
+// increasing numbers (starting from 0) along the specified iotaAxis.
+//
+// If all dimension specs are static, it delegates to static Iota.
+func DynamicIota(g *Graph, dtype dtypes.DType, iotaAxis int, axisSpecs ...DimensionSpec) *Node {
+	g.AssertBuilding()
+	if len(axisSpecs) == 0 {
+		exceptions.Panicf("DynamicIota requires at least one dimension spec")
+	}
+
+	inputsToValidate := make([]*Node, 0, len(axisSpecs))
+	allStatic := true
+	staticDims := make([]int, len(axisSpecs))
+	for i, spec := range axisSpecs {
+		if spec.dynamic != nil {
+			allStatic = false
+			inputsToValidate = append(inputsToValidate, spec.dynamic)
+		} else if spec.axisName != "" {
+			allStatic = false
+		} else {
+			staticDims[i] = spec.static
+		}
+	}
+
+	if len(inputsToValidate) > 0 {
+		_ = validateBuildingGraphFromInputs(inputsToValidate...)
+	}
+
+	if allStatic {
+		return Iota(g, shapes.Make(dtype, staticDims...), iotaAxis)
+	}
+
+	dimensions := make([]compute.DynamicDimensionSpec, len(axisSpecs))
+	for i, spec := range axisSpecs {
+		var name string
+		var static int
+		var value compute.Value
+
+		if spec.dynamic != nil {
+			name = spec.axisName
+			value = spec.dynamic.outputOps[0]
+		} else if spec.axisName != "" {
+			name = spec.axisName
+		} else {
+			static = spec.static
+		}
+
+		dimensions[i] = compute.DynamicDimensionSpec{
+			Static: static,
+			Name:   name,
+			Value:  value,
+		}
+	}
+
+	return backendDynamicIota(g, dtype, iotaAxis, dimensions...)
+}
+
+// DynamicPadAxisSpec specifies the padding configuration for an axis in DynamicPad.
+// It can specify static integer padding amounts and/or dynamic scalar *Node amounts.
+type DynamicPadAxisSpec struct {
+	Start, End, Interior int
+	StartNode, EndNode, InteriorNode *Node
+	TargetAxisName string
+}
+
+// DynamicPadAxis creates a DynamicPadAxisSpec with static padding amounts.
+func DynamicPadAxis(start, end, interior int) DynamicPadAxisSpec {
+	return DynamicPadAxisSpec{
+		Start:    start,
+		End:      end,
+		Interior: interior,
+	}
+}
+
+// DynamicPad injects padding on the start, end, or interior of the given operand using static
+// and/or dynamic scalar padding amounts.
+//
+// If all padding specifications and operand shape are static, it delegates to static Pad.
+func DynamicPad(x, fillValue *Node, axesConfig ...DynamicPadAxisSpec) *Node {
+	inputNodes := []*Node{x, fillValue}
+	for _, cfg := range axesConfig {
+		if cfg.StartNode != nil {
+			inputNodes = append(inputNodes, cfg.StartNode)
+		}
+		if cfg.EndNode != nil {
+			inputNodes = append(inputNodes, cfg.EndNode)
+		}
+		if cfg.InteriorNode != nil {
+			inputNodes = append(inputNodes, cfg.InteriorNode)
+		}
+	}
+	_ = validateBuildingGraphFromInputs(inputNodes...)
+
+	isAllStatic := !x.Shape().IsDynamic()
+	for _, cfg := range axesConfig {
+		if cfg.StartNode != nil || cfg.EndNode != nil || cfg.InteriorNode != nil || cfg.TargetAxisName != "" {
+			isAllStatic = false
+			break
+		}
+	}
+
+	if isAllStatic {
+		staticConfigs := make([]compute.PadAxis, len(axesConfig))
+		for i, cfg := range axesConfig {
+			staticConfigs[i] = compute.PadAxis{
+				Start:    cfg.Start,
+				End:      cfg.End,
+				Interior: cfg.Interior,
+			}
+		}
+		return Pad(x, fillValue, staticConfigs...)
+	}
+
+	dynConfigs := make([]compute.DynamicPadAxis, len(axesConfig))
+	for i, cfg := range axesConfig {
+		var startVal, endVal, interiorVal compute.Value
+		if cfg.StartNode != nil {
+			startVal = cfg.StartNode.outputOps[0]
+		}
+		if cfg.EndNode != nil {
+			endVal = cfg.EndNode.outputOps[0]
+		}
+		if cfg.InteriorNode != nil {
+			interiorVal = cfg.InteriorNode.outputOps[0]
+		}
+		dynConfigs[i] = compute.DynamicPadAxis{
+			Start:          cfg.Start,
+			End:            cfg.End,
+			Interior:       cfg.Interior,
+			StartValue:     startVal,
+			EndValue:       endVal,
+			InteriorValue:  interiorVal,
+			TargetAxisName: cfg.TargetAxisName,
+		}
+	}
+
+	return backendDynamicPad(x, fillValue, dynConfigs...)
 }
 

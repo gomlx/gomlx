@@ -3,6 +3,10 @@
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
 - 2026-08-27:
+  - Added backend `DynamicIota` and `DynamicPad` operations (in `compute` package) and corresponding `graph` operations:
+    - `graph.DynamicIota`: creates dynamic dimension tensors with increasing values along `iotaAxis`.
+    - `graph.DynamicPad`: pads tensors with static or dynamic padding amounts along specified axes.
+    - Added reverse-mode autodiff VJP for `NodeTypeDynamicPad` and `NodeTypeDynamicIota`.
   - Added backend `DynamicBroadcastInDim` operation (in `compute` package) and corresponding `graph` operations:
     - `graph.DynamicBroadcastInDim`: low-level dynamic broadcast specifying broadcast axes and target `DimensionSpec`s.
     - `graph.DynamicBroadcastLike`: broadcasts to the dynamic or static shape of a reference node.

@@ -281,6 +281,47 @@ func TestDynamicShapes(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, [][]float32{{1, 1, 1}, {2, 2, 2}}, out[0].Value())
 		})
+
+		t.Run("DynamicIota", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				batchSize := DynamicDimensionSize(x, 0)
+				return DynamicIota(x.Graph(), dtypes.Int32, 1,
+					NamedDynamicDim("batch", batchSize),
+					StaticDim(3),
+				)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", ""})
+
+			xInput := [][]float32{{10, 20}, {30, 40}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][]int32{{0, 1, 2}, {0, 1, 2}}, out[0].Value())
+		})
+
+		t.Run("DynamicPad", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x *Node, padStart *Node) *Node {
+				fillVal := ScalarZero(x.Graph(), dtypes.Float32)
+				return DynamicPad(x, fillVal,
+					DynamicPadAxisSpec{StartNode: padStart, End: 1},
+					DynamicPadAxis(1, 0, 0),
+				)
+			})
+			require.NoError(t, err)
+
+			xInput := [][]float32{{1, 2}, {3, 4}}
+			padStart := int32(1)
+			out, err := exec.Call(xInput, padStart)
+			require.NoError(t, err)
+			expected := [][]float32{
+				{0, 0, 0},
+				{0, 1, 2},
+				{0, 3, 4},
+				{0, 0, 0},
+			}
+			assert.Equal(t, expected, out[0].Value())
+		})
 	})
 }
+
 
