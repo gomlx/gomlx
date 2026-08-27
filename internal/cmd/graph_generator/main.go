@@ -33,7 +33,7 @@ var (
 	methodsNotExported = sets.MakeWith(
 		"AllReduce", "ArgMinMax", "Broadcast", "BroadcastInDim",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
-		"Ceil", "Concatenate", "ConvertDType", "ConvGeneral", "DotGeneral",
+		"Ceil", "Concatenate", "ConvertDType", "ConvGeneral", "CumSum", "DotGeneral",
 		"FFT", "Floor", "Gather", "Iota", "OptimizationBarrier",
 		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum", "ReduceWindow",
 
@@ -192,6 +192,9 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.BackendType = "compute." + pi.BackendType
 				pi.Format = "%s"
 			case "DotGeneralConfig":
+				pi.BackendType = "compute." + pi.BackendType
+				pi.Format = "%+v"
+			case "CumSumOptions":
 				pi.BackendType = "compute." + pi.BackendType
 				pi.Format = "%+v"
 			case "*Quantization":

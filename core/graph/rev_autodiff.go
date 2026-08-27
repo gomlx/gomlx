@@ -473,6 +473,9 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeDynamicUpdateSlice:   vjpForSingleOutput(dynamicUpdateSliceVJP),
 	NodeTypeDynamicDimensionSize: vjpForSingleOutput(zeroVJP),
 	NodeTypeDynamicShape:         vjpForSingleOutput(zeroVJP),
+	NodeTypeCumSum:               vjpForSingleOutput(cumSumVJP),
+	NodeTypePad:                  vjpForSingleOutput(padVJP),
+	NodeTypeReverse:              vjpForSingleOutput(reverseVJP),
 	NodeTypeOptimizationBarrier:  vjpOptimizationBarrier,
 	NodeTypeSchedulingBarrier:    vjpForSingleOutput(vjpSchedulingBarrier),
 }
@@ -765,6 +768,36 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Now all we need it to broadcast the v on the reduced dimensions.
 	vjp := BroadcastToShape(expandedV, x.Shape())
 	return []*Node{vjp}
+}
+
+func cumSumVJP(node, v *Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsCumSum)
+	return []*Node{CumSum(v, inputs.axis, &CumSumOptions{
+		Exclusive: inputs.options.Exclusive,
+		Reverse:   !inputs.options.Reverse,
+	})}
+}
+
+func padVJP(node, v *Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsPad)
+	x := inputs.x
+	fillValue := inputs.fillValue
+	starts := make([]int, x.Rank())
+	limits := make([]int, x.Rank())
+	strides := make([]int, x.Rank())
+	for i, padAxis := range inputs.axesConfig {
+		starts[i] = padAxis.Start
+		limits[i] = padAxis.Start + (x.Shape().Dimensions[i]-1)*(1+padAxis.Interior) + 1
+		strides[i] = 1 + padAxis.Interior
+	}
+	gradX := backendSlice(v, starts, limits, strides)
+	gradFill := ZerosLike(fillValue)
+	return []*Node{gradX, gradFill}
+}
+
+func reverseVJP(node, v *Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsReverse)
+	return []*Node{Reverse(v, inputs.axes...)}
 }
 
 func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {

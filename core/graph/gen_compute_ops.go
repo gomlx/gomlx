@@ -51,6 +51,7 @@ const (
 	NodeTypeConvGeneral
 	NodeTypeConvertDType
 	NodeTypeCos
+	NodeTypeCumSum
 	NodeTypeDiv
 	NodeTypeDotGeneral
 	NodeTypeDynamicDimensionSize
@@ -1526,6 +1527,62 @@ func Cos(x *Node) (
 		x: x,
 	}
 	result, err := g.currentFunc.backendFunc.Cos(x.outputOps[0])
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsCumSum holds the inputs used for the call to compute.CumSum.
+type nodeInputsCumSum struct {
+	operand *Node
+	axis    int
+	options compute.CumSumOptions
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsCumSum) Type() NodeType {
+	return NodeTypeCumSum
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsCumSum) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], axis=%v, options=%+v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.axis,
+		ni.options,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsCumSum) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	return backendCumSum(new_operand, ni.axis, ni.options)
+}
+
+// backendCumSum is a Graph wrapper for the backend.Builder.CumSum method.
+func backendCumSum(operand *Node, axis int, options compute.CumSumOptions) (
+	node *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsCumSum{
+		operand: operand,
+		axis:    axis,
+		options: options,
+	}
+	result, err := g.currentFunc.backendFunc.CumSum(operand.outputOps[0], inputs.axis, inputs.options)
 	if err != nil {
 		panic(err)
 	}

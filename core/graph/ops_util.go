@@ -3,6 +3,7 @@
 package graph
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/gomlx/compute/shapes"
@@ -915,19 +916,72 @@ func growImpl(x *Node, axis int, dir ShiftDirection, n int, fillValue float64) *
 	return x
 }
 
+// CumSumOptions are options for the CumSum operation.
+type CumSumOptions = compute.CumSumOptions
+
 // CumSum returns the cumulative sum along the given axis.
 //
-// Example:
+// Examples:
 //
 //	CumSum([[1, 2, 3], [4, 5, 6]], -1) = [[1, 3, 6], [4, 9, 15]]
 //	CumSum([[1, 2, 3], [4, 5, 6]], 0) = [[1, 2, 3], [5, 7, 9]]
-func CumSum(x *Node, axis int) *Node {
+//	CumSum([1, 2, 3], 0, &CumSumOptions{Exclusive: true}) = [0, 1, 3]
+//	CumSum([1, 2, 3], 0, &CumSumOptions{Reverse: true}) = [6, 5, 3]
+//	CumSum([1, 2, 3], 0, &CumSumOptions{Exclusive: true, Reverse: true}) = [5, 3, 0]
+func CumSum(x *Node, axis int, options ...*CumSumOptions) *Node {
+	if len(options) > 1 {
+		exceptions.Panicf("CumSum takes at most one CumSumOptions, but %d were provided", len(options))
+	}
+	var opt CumSumOptions
+	if len(options) == 1 && options[0] != nil {
+		opt = *options[0]
+	}
 	adjustedAxis := MustAdjustAxis(axis, x)
-	windowSizes := xslices.SliceWithValue(x.Rank(), 1)
-	windowSizes[adjustedAxis] = x.Shape().Dimensions[adjustedAxis]
-	paddings := make([][2]int, x.Rank())
-	paddings[adjustedAxis][0] = windowSizes[adjustedAxis] - 1 // On the cumsum axis, pad to length-1.
-	return SumPool(x).FullShape().WindowPerAxis(windowSizes...).PaddingPerDim(paddings).Strides(1).Done()
+
+	var node *Node
+	err := exceptions.TryCatch[error](func() {
+		node = backendCumSum(x, adjustedAxis, opt)
+	})
+	if err == nil {
+		return node
+	}
+	if !compute.IsNotImplemented(err) {
+		panic(err)
+	}
+
+	// Fallback to decomposed implementation (using SumPool).
+	return cumSumDecomposed(x, adjustedAxis, opt)
+}
+
+func cumSumDecomposed(x *Node, axis int, options CumSumOptions) *Node {
+	g := x.Graph()
+	cur := x
+	if options.Reverse {
+		cur = Reverse(cur, axis)
+	}
+
+	dim := cur.Shape().Dimensions[axis]
+	if dim == 0 {
+		return cur
+	}
+	windowSizes := xslices.SliceWithValue(cur.Rank(), 1)
+	windowSizes[axis] = dim
+	paddings := make([][2]int, cur.Rank())
+	paddings[axis][0] = windowSizes[axis] - 1
+	inclusive := SumPool(cur).FullShape().WindowPerAxis(windowSizes...).PaddingPerDim(paddings).Strides(1).Done()
+
+	res := inclusive
+	if options.Exclusive {
+		padAxes := make([]compute.PadAxis, cur.Rank())
+		padAxes[axis] = compute.PadAxis{Start: 1}
+		zero := ScalarZero(g, cur.DType())
+		padded := Pad(inclusive, zero, padAxes...)
+		res = SliceAxis(padded, axis, AxisRange(0, dim))
+	}
+	if options.Reverse {
+		res = Reverse(res, axis)
+	}
+	return res
 }
 
 var consecutiveDifferenceKernel = tensors.FromValue([]int32{-1, 1})
