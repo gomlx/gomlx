@@ -2,6 +2,9 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-08-27:
+  - Added backend `CumSum` operator (with decomposed fallback) supporting `Exclusive` and `Reverse` options.
+
 - 2026-08-16:
   - Updated `gomlx_checkpoints -plot` to use VizB (https://github.com/goptics/vizb) to plot metrics. With the removal
     of Go dependencies, now it is no longer in its own sub-module (removed the corresponding `go.mod` file).
