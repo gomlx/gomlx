@@ -50,13 +50,13 @@ var (
 		"Slice",
 		"Transpose", "Where",
 
-		// Fused ops: exported wrappers with "Internal:" comments are hand-written in fused_ops.go.
+		// Fused ops: exported wrappers with "Internal:" comments are hand-written in ops_fused.go.
 		"FusedDense", "FusedGelu", "FusedLayerNorm", "FusedSoftmax",
 		"FusedScaledDotProductAttention", "FusedScaledDotProductAttentionVJP",
 		"FusedAttentionQKVProjection",
 		"FusedQuantizedDense", "QuantizedEmbeddingLookup",
 
-		// Dynamic shape methods:
+		// Dynamic shape methods (see ops_dynamic.go):
 		"DynamicReshape",
 	)
 
