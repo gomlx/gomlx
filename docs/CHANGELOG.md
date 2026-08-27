@@ -3,6 +3,13 @@
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
 - 2026-08-27:
+  - Added backend `DynamicBroadcastInDim` operation (in `compute` package) and corresponding `graph` operations:
+    - `graph.DynamicBroadcastInDim`: low-level dynamic broadcast specifying broadcast axes and target `DimensionSpec`s.
+    - `graph.DynamicBroadcastLike`: broadcasts to the dynamic or static shape of a reference node.
+    - `graph.DynamicBroadcastToShape`: broadcasts to a target static or dynamic `Shape` (interchangeable with `graph.BroadcastToShape`).
+    - `graph.DynamicBroadcastToDims`: broadcasts using prefix axis alignment to target `DimensionSpec`s.
+    - Added reverse-mode autodiff VJP for `NodeTypeDynamicBroadcastInDim` and `NodeTypeDynamicReshape`.
+    - Integrated automatic dynamic delegation and static fallback between `BroadcastToShape` and `DynamicBroadcastToShape`.
   - Added backend `CumSum` operator (with decomposed fallback) supporting `Exclusive` and `Reverse` options.
 
 - 2026-08-16:
