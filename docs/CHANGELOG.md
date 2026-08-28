@@ -3,9 +3,11 @@
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
 - 2026-08-28:
+  - Added `DimensionSize(x, axis)` in `graph` to retrieve dimension sizes as `*Node` (returning a constant scalar if static, or extracting the dynamic dimension from the backend if dynamic).
   - Added `DimensionSpecFor(x, axis)` and `DimensionSpecsFor(x)` in `graph` for tensor-relative dimension abstraction.
   - Added query methods and accessors to `DimensionSpec`: `IsStatic()`, `IsDynamic()`, `IsInferred()`, `Static()`, `Dynamic()`, `AxisName()`, `WithName()`, `Clone()`, and `String()`.
   - Added `graph.IotaLike` and `graph.ReshapeLike` helpers.
+  - Updated RoPE positional encoding (`ml/layers/attention/pos`) to work transparently with dynamic shapes using `BroadcastLike` and `DynamicReshape`.
   - Unified structural ops (`ExpandAxes`, `InsertAxes`, `ExpandLeftToRank`, `Squeeze`, `BroadcastPrefix`, `ExpandAndBroadcast`, `TopK`, `TopKMask`) to seamlessly work with both static and dynamic shapes.
 
 - 2026-08-27:

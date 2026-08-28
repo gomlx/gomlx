@@ -295,8 +295,8 @@ func applyWithCosSin(x, cos, sin *Node, seqAxis int, interleaved bool) *Node {
 		sin = ExpandAxes(sin, -2)
 	}
 
-	cos = BroadcastToShape(cos, x1Shape)
-	sin = BroadcastToShape(sin, x1Shape)
+	cos = BroadcastLike(cos, x1)
+	sin = BroadcastLike(sin, x1)
 
 	// Apply rotation: rotated_x1 = x1*cos - x2*sin, rotated_x2 = x1*sin + x2*cos
 	rotatedX1 := Sub(Mul(x1, cos), Mul(x2, sin))
@@ -308,12 +308,9 @@ func applyWithCosSin(x, cos, sin *Node, seqAxis int, interleaved bool) *Node {
 		// Interleave real and imag back together
 		// Stack along new axis then reshape to interleave
 		stacked := Stack([]*Node{rotatedX1, rotatedX2}, -1)
-		stackedDims := stacked.Shape().Dimensions
-		// Reshape: merge last two dims to get back rotaryDim
-		newDims := make([]int, len(stackedDims)-1)
-		copy(newDims, stackedDims[:len(stackedDims)-2])
-		newDims[len(newDims)-1] = rotaryDim
-		xRotated = Reshape(stacked, newDims...)
+		specs := DimensionSpecsFor(stacked)
+		newSpecs := append(specs[:len(specs)-2], StaticDim(rotaryDim))
+		xRotated = DynamicReshape(stacked, newSpecs...)
 	} else {
 		// Non-interleaved: concatenate
 		xRotated = Concatenate([]*Node{rotatedX1, rotatedX2}, -1)
@@ -360,7 +357,8 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, seqAxis int, in
 
 	// Validate position indices shape - last dimension must match seqLen
 	posRank := positions.Rank()
-	if posRank == 0 || positions.Shape().Dimensions[posRank-1] != seqLen {
+	posSeqLen := positions.Shape().Dimensions[posRank-1]
+	if posRank == 0 || (seqLen != shapes.DynamicDim && posSeqLen != shapes.DynamicDim && posSeqLen != seqLen) {
 		Panicf("RoPE positionIndices last dimension must match seq_len=%d, got shape %s", seqLen, positions.Shape())
 	}
 
