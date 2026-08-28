@@ -437,11 +437,13 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	var projectedQuery, projectedKey, projectedValue *Node
 
 	if b.preProjected {
-		seqLenQ := flatQuery.Shape().Dimensions[1]
-		seqLenKV := flatKey.Shape().Dimensions[1]
-		projectedQuery = Reshape(flatQuery, batchSize, seqLenQ, b.numHeads, b.keyQueryDim)
-		projectedKey = Reshape(flatKey, batchSize, seqLenKV, kvHeads, b.keyQueryDim)
-		projectedValue = Reshape(flatValue, batchSize, seqLenKV, kvHeads, b.valueDim)
+		batchSpecQ := DimensionSpecFor(flatQuery, 0)
+		seqSpecQ := DimensionSpecFor(flatQuery, 1)
+		batchSpecKV := DimensionSpecFor(flatKey, 0)
+		seqSpecKV := DimensionSpecFor(flatKey, 1)
+		projectedQuery = DynamicReshape(flatQuery, batchSpecQ, seqSpecQ, StaticDim(b.numHeads), StaticDim(b.keyQueryDim))
+		projectedKey = DynamicReshape(flatKey, batchSpecKV, seqSpecKV, StaticDim(kvHeads), StaticDim(b.keyQueryDim))
+		projectedValue = DynamicReshape(flatValue, batchSpecKV, seqSpecKV, StaticDim(kvHeads), StaticDim(b.valueDim))
 	} else {
 		if b.useQKVProjection {
 			projectedQuery, projectedKey, projectedValue = b.qkvProject(flatQuery)
@@ -513,9 +515,12 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	// Merge [numHeads, valueDim] into one axis and unflatten query inner dims if needed.
 	// attentionOutput: [batch, q_flat, heads, value_dim] -> [batch, <query_elements>, numHeads*valueDim]
 	// This is a no-op reshape when there are no extra inner axes to unflatten.
-	dims := slices.Clone(b.query.Shape().Dimensions)
-	dims[len(dims)-1] = -1
-	attentionOutput = Reshape(attentionOutput, dims...)
+	specs := make([]DimensionSpec, b.query.Rank())
+	for i := 0; i < b.query.Rank()-1; i++ {
+		specs[i] = DimensionSpecFor(b.query, i)
+	}
+	specs[b.query.Rank()-1] = StaticDim(b.numHeads * b.valueDim)
+	attentionOutput = DynamicReshape(attentionOutput, specs...)
 
 	// Unflatten coefficients back to original inner axis structure when needed.
 	if wantCoefficients && needsUnflatten {
@@ -572,12 +577,11 @@ func (b *MultiHeadAttentionBuilder) qkvProject(x *Node) (projectedQuery, project
 	q, k, v := QKVProjection(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
 
 	// Reshape from [batch, seq, numHeads*headDim] to [batch, seq, numHeads, headDim].
-	xDims := x.Shape().Dimensions
-	batch := xDims[0]
-	seqLen := xDims[1]
-	projectedQuery = Reshape(q, batch, seqLen, b.numHeads, b.keyQueryDim)
-	projectedKey = Reshape(k, batch, seqLen, b.numHeads, b.keyQueryDim)
-	projectedValue = Reshape(v, batch, seqLen, b.numHeads, b.valueDim)
+	batchSpec := DimensionSpecFor(x, 0)
+	seqSpec := DimensionSpecFor(x, 1)
+	projectedQuery = DynamicReshape(q, batchSpec, seqSpec, StaticDim(b.numHeads), StaticDim(b.keyQueryDim))
+	projectedKey = DynamicReshape(k, batchSpec, seqSpec, StaticDim(b.numHeads), StaticDim(b.keyQueryDim))
+	projectedValue = DynamicReshape(v, batchSpec, seqSpec, StaticDim(b.numHeads), StaticDim(b.valueDim))
 	return
 }
 
@@ -602,7 +606,28 @@ func (b *MultiHeadAttentionBuilder) buildAttentionShape() {
 		copy(finalDims[pos+1:], b.key.Shape().Dimensions[2:1+b.innerKeyAxes])
 	}
 
-	b.attentionShape = shapes.Make(b.key.DType(), finalDims...)
+	isDynamic := false
+	for _, d := range finalDims {
+		if d == shapes.DynamicDim {
+			isDynamic = true
+			break
+		}
+	}
+	if isDynamic {
+		axisNames := make([]string, len(finalDims))
+		axisNames[0] = b.key.Shape().AxisName(0)
+		for i := range b.innerQueryAxes {
+			axisNames[1+i] = b.query.Shape().AxisName(1 + i)
+		}
+		// heads axis is static / anonymous ("")
+		axisNames[1+b.innerQueryAxes+1] = b.key.Shape().AxisName(1)
+		for i := 2; i < 1+b.innerKeyAxes; i++ {
+			axisNames[1+b.innerQueryAxes+i] = b.key.Shape().AxisName(i)
+		}
+		b.attentionShape = shapes.MakeDynamic(b.key.DType(), finalDims, axisNames)
+	} else {
+		b.attentionShape = shapes.Make(b.key.DType(), finalDims...)
+	}
 }
 
 // SelfAttention is a convenience wrapper for MultiHeadAttention where query, key, and value

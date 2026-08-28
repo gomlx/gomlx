@@ -105,15 +105,7 @@ func denseDecomposed(x, weight, bias *Node, weightLayout compute.DenseLayout, ac
 		// Build output shape: x batch dimensions + weight output dimensions
 		outAxisSpecs := make([]DimensionSpec, len(outDims))
 		for i := range xRank - 1 {
-			dim := xShape.Dimensions[i]
-			name := xShape.AxisName(i)
-			if dim >= 0 {
-				outAxisSpecs[i] = StaticDim(dim)
-			} else if name != "" {
-				outAxisSpecs[i] = NamedDynamicDim(name, DynamicDimensionSize(x, i))
-			} else {
-				outAxisSpecs[i] = DynamicDim(DynamicDimensionSize(x, i))
-			}
+			outAxisSpecs[i] = DimensionSpecFor(x, i)
 		}
 		offset := xRank - 1
 		for j := range wRank - 1 {
@@ -121,15 +113,7 @@ func denseDecomposed(x, weight, bias *Node, weightLayout compute.DenseLayout, ac
 			if weightLayout == compute.DenseLayoutOutputsInput {
 				wAxis = j
 			}
-			dim := wShape.Dimensions[wAxis]
-			name := wShape.AxisName(wAxis)
-			if dim >= 0 {
-				outAxisSpecs[offset+j] = StaticDim(dim)
-			} else if name != "" {
-				outAxisSpecs[offset+j] = NamedDynamicDim(name, DynamicDimensionSize(weight, wAxis))
-			} else {
-				outAxisSpecs[offset+j] = DynamicDim(DynamicDimensionSize(weight, wAxis))
-			}
+			outAxisSpecs[offset+j] = DimensionSpecFor(weight, wAxis)
 		}
 		y = DynamicReshape(y2d, outAxisSpecs...)
 	}
