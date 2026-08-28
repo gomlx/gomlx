@@ -370,6 +370,176 @@ func TestDynamicShapes(t *testing.T) {
 				_ = DynamicBroadcastToShape(x, targetShape)
 			})
 		})
+
+		t.Run("ExpandAxes_Dynamic", func(t *testing.T) {
+			var nodeShape shapes.Shape
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				// x is [batch, 3] -> expand at axis 1 -> [batch, 1, 3]
+				out := ExpandAxes(x, 1)
+				nodeShape = out.Shape()
+				return out
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", ""})
+
+			xInput := [][]float32{{1, 2, 3}, {4, 5, 6}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim, 1, 3}, []string{"batch", "", ""}), nodeShape)
+			assert.Equal(t, [][][]float32{{{1, 2, 3}}, {{4, 5, 6}}}, out[0].Value())
+		})
+
+		t.Run("InsertAxes_Dynamic", func(t *testing.T) {
+			var nodeShape shapes.Shape
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				// x is [batch, 3] -> insert axis before axis 0 -> [1, batch, 3]
+				out := InsertAxes(x, 0)
+				nodeShape = out.Shape()
+				return out
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", ""})
+
+			xInput := [][]float32{{1, 2, 3}, {4, 5, 6}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, shapes.MakeDynamic(dtypes.Float32, []int{1, shapes.DynamicDim, 3}, []string{"", "batch", ""}), nodeShape)
+			assert.Equal(t, [][][]float32{{{1, 2, 3}, {4, 5, 6}}}, out[0].Value())
+		})
+
+		t.Run("Squeeze_Dynamic", func(t *testing.T) {
+			var nodeShape shapes.Shape
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				// x is [batch, 1, 3] -> squeeze axis 1 -> [batch, 3]
+				out := Squeeze(x, 1)
+				nodeShape = out.Shape()
+				return out
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", "", ""})
+
+			xInput := [][][]float32{{{1, 2, 3}}, {{4, 5, 6}}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim, 3}, []string{"batch", ""}), nodeShape)
+			assert.Equal(t, [][]float32{{1, 2, 3}, {4, 5, 6}}, out[0].Value())
+		})
+
+		t.Run("BroadcastPrefix_Dynamic", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				// x is [batch, 2] -> prepend prefix 2 -> [2, batch, 2]
+				return BroadcastPrefix(x, 2)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", ""})
+
+			xInput := [][]float32{{1, 2}, {3, 4}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][][]float32{{{1, 2}, {3, 4}}, {{1, 2}, {3, 4}}}, out[0].Value())
+		})
+
+		t.Run("IotaLike_Dynamic", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				// x is [batch, 3] -> iota along axis 1 -> [batch, 3]
+				return IotaLike(x, 1)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", ""})
+
+			xInput := [][]float32{{0, 0, 0}, {0, 0, 0}} // batch=2
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][]float32{{0, 1, 2}, {0, 1, 2}}, out[0].Value())
+		})
+
+		t.Run("ReshapeLike_Dynamic", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x, ref *Node) *Node {
+				// x is [batch, 4], ref is [batch, 2, 2]
+				return ReshapeLike(x, ref)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes(
+				[]string{"batch", ""},
+				[]string{"batch", "", ""},
+			)
+
+			xInput := [][]float32{{1, 2, 3, 4}, {5, 6, 7, 8}}
+			refInput := [][][]float32{{{0, 0}, {0, 0}}, {{0, 0}, {0, 0}}}
+			out, err := exec.Call(xInput, refInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][][]float32{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}, out[0].Value())
+		})
+
+		t.Run("TopK_Dynamic", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x *Node) (*Node, *Node) {
+				// x is [batch, 4] -> TopK(2, axis=1) -> [batch, 2]
+				return TopK(x, 2, 1)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", ""})
+
+			xInput := [][]float32{{10, 40, 20, 30}, {80, 50, 70, 60}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][]float32{{40, 30}, {80, 70}}, out[0].Value())
+			assert.Equal(t, [][]int32{{1, 3}, {0, 2}}, out[1].Value())
+		})
+
+		t.Run("TopKMask_Dynamic", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				// x is [batch, 4] -> TopKMask(2, axis=1) -> [batch, 4]
+				return TopKMask(x, 2, 1)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", ""})
+
+			xInput := [][]float32{{10, 40, 20, 30}, {80, 50, 70, 60}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][]bool{{false, true, false, true}, {true, false, true, false}}, out[0].Value())
+		})
+
+		t.Run("DimensionSpec_AccessorsAndMethods", func(t *testing.T) {
+			sStatic := StaticDim(128)
+			assert.True(t, sStatic.IsStatic())
+			assert.False(t, sStatic.IsDynamic())
+			assert.False(t, sStatic.IsInferred())
+			assert.Equal(t, 128, sStatic.Static())
+			assert.Nil(t, sStatic.Dynamic())
+			assert.Equal(t, "", sStatic.AxisName())
+			assert.Equal(t, "StaticDim(128)", sStatic.String())
+
+			sNamedStatic := sStatic.WithName("channels")
+			assert.Equal(t, "channels", sNamedStatic.AxisName())
+			assert.Equal(t, "StaticDim(\"channels\", 128)", sNamedStatic.String())
+
+			sInferred := InferredDim()
+			assert.False(t, sInferred.IsStatic())
+			assert.False(t, sInferred.IsDynamic())
+			assert.True(t, sInferred.IsInferred())
+			assert.Equal(t, shapes.DynamicDim, sInferred.Static())
+			assert.Equal(t, "InferredDim()", sInferred.String())
+
+			sNamedInferred := NamedInferredDim("features")
+			assert.True(t, sNamedInferred.IsInferred())
+			assert.Equal(t, "features", sNamedInferred.AxisName())
+			assert.Equal(t, "InferredDim(\"features\")", sNamedInferred.String())
+
+			g := NewGraph(backend, "test_spec")
+			dummyNode := Const(g, int32(42))
+			sDynamic := DynamicDim(dummyNode)
+			assert.False(t, sDynamic.IsStatic())
+			assert.True(t, sDynamic.IsDynamic())
+			assert.False(t, sDynamic.IsInferred())
+			assert.Equal(t, dummyNode, sDynamic.Dynamic())
+			assert.Equal(t, shapes.DynamicDim, sDynamic.Static())
+
+			sNamedDynamic := NamedDynamicDim("batch", dummyNode)
+			assert.True(t, sNamedDynamic.IsDynamic())
+			assert.Equal(t, "batch", sNamedDynamic.AxisName())
+			assert.Contains(t, sNamedDynamic.String(), "DynamicDim(\"batch\"")
+		})
 	})
 }
 

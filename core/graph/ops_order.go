@@ -269,15 +269,13 @@ func topKImpl(x *Node, k int, axis int, ascending bool) (values, indices *Node) 
 	if k <= 0 {
 		exceptions.Panicf("TopK/BottomK: k must be positive, got %d", k)
 	}
-	if k > axisSize {
+	if axisSize != shapes.DynamicDim && k > axisSize {
 		exceptions.Panicf("TopK/BottomK: k=%d exceeds axis size %d", k, axisSize)
 	}
 
-	// Create indices tensor using Iota along the sort axis
+	// Create indices tensor using IotaLike along the sort axis
 	// Indices will have Int32 dtype
-	indicesShape := shape.Clone()
-	indicesShape.DType = dtypes.Int32
-	indicesInput := Iota(g, indicesShape, axis)
+	indicesInput := ConvertDType(IotaLike(x, axis), dtypes.Int32)
 
 	// Create comparator that compares based on values
 	// StableHLO sort expects parameters in order: (lhs_0, rhs_0, lhs_1, rhs_1, ...)
@@ -344,15 +342,13 @@ func TopKMask(x *Node, k int, axis int) *Node {
 	if k <= 0 {
 		exceptions.Panicf("TopKMask: k must be positive, got %d", k)
 	}
-	if k > axisSize {
+	if axisSize != shapes.DynamicDim && k > axisSize {
 		exceptions.Panicf("TopKMask: k=%d exceeds axis size %d", k, axisSize)
 	}
 
 	// If k equals the axis size, all elements are in the top-k
-	if k == axisSize {
-		boolShape := shape.Clone()
-		boolShape.DType = dtypes.Bool
-		return Ones(g, boolShape)
+	if axisSize != shapes.DynamicDim && k == axisSize {
+		return OnesLike(ConvertDType(x, dtypes.Bool))
 	}
 
 	// Get the indices of the top-k elements
@@ -360,14 +356,12 @@ func TopKMask(x *Node, k int, axis int) *Node {
 	_, topIndices := TopK(x, k, axis)
 
 	// Create position indices for comparison
-	indicesShape := shape.Clone()
-	indicesShape.DType = dtypes.Int32
-	positionIndices := Iota(g, indicesShape, axis)
+	positionIndices := ConvertDType(IotaLike(x, axis), dtypes.Int32)
 
 	// Create a mask by checking if each position index is in topIndices
 	// We'll expand both tensors to enable broadcasting comparison
-	expandedPos := ExpandDims(positionIndices, axis+1)
-	expandedTop := ExpandDims(topIndices, axis)
+	expandedPos := ExpandAxes(positionIndices, axis+1)
+	expandedTop := ExpandAxes(topIndices, axis)
 	matches := Equal(expandedPos, expandedTop)
 	mask := ReduceLogicalOr(matches, axis+1)
 
