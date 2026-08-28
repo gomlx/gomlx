@@ -124,14 +124,14 @@ func NamedInferredDim(name string) DimensionSpec {
 
 // DimensionSpecFor returns the DimensionSpec corresponding to the given axis of x.
 // If the axis has a static dimension, it returns StaticDim(dim).
-// If the axis has a dynamic dimension, it extracts DynamicDimensionSize(x, axis) and returns NamedDynamicDim(name, sizeNode).
+// If the axis has a dynamic dimension, it extracts DimensionSize(x, axis) and returns NamedDynamicDim(name, sizeNode).
 func DimensionSpecFor(x *Node, axis int) DimensionSpec {
 	_ = validateBuildingGraphFromInputs(x)
 	axis = MustAdjustAxis(axis, x)
 	dim := x.Shape().Dimensions[axis]
 	name := x.Shape().AxisName(axis)
 	if dim == shapes.DynamicDim {
-		return NamedDynamicDim(name, DynamicDimensionSize(x, axis))
+		return NamedDynamicDim(name, DimensionSize(x, axis))
 	}
 	return StaticDim(dim)
 }
@@ -145,6 +145,19 @@ func DimensionSpecsFor(x *Node) []DimensionSpec {
 		specs[axis] = DimensionSpecFor(x, axis)
 	}
 	return specs
+}
+
+// DimensionSize returns a scalar Int32 *Node representing the dimension size of the given axis.
+// If the dimension is static, it returns a constant Scalar node.
+// If the dimension is dynamic, it queries the backend for the dynamic dimension size.
+func DimensionSize(x *Node, axis int) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	axis = MustAdjustAxis(axis, x)
+	dim := x.Shape().Dimensions[axis]
+	if dim == shapes.DynamicDim {
+		return backendDynamicDimensionSize(x, axis)
+	}
+	return Scalar(x.Graph(), dtypes.Int32, dim)
 }
 
 // DynamicReshape reshapes the operand according to dimension specifications for each axis.
@@ -375,7 +388,7 @@ func DynamicBroadcastToShape(x *Node, shape shapes.Shape) *Node {
 				if err != nil {
 					exceptions.Panicf("DynamicBroadcastToShape: incompatible dynamic axis names at axis %d: %v", i, err)
 				}
-				dimVal := DynamicDimensionSize(x, i)
+				dimVal := DimensionSize(x, i)
 				specs[i] = NamedDynamicDim(unifiedName, dimVal)
 			} else if i >= xShape.Rank() || xShape.Dimensions[i] == 1 {
 				// Rule 2: Cannot broadcast dimension 1 to dynamic without reference node.

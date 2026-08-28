@@ -2,6 +2,12 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-08-28:
+  - Added `DimensionSpecFor(x, axis)` and `DimensionSpecsFor(x)` in `graph` for tensor-relative dimension abstraction.
+  - Added query methods and accessors to `DimensionSpec`: `IsStatic()`, `IsDynamic()`, `IsInferred()`, `Static()`, `Dynamic()`, `AxisName()`, `WithName()`, `Clone()`, and `String()`.
+  - Added `graph.IotaLike` and `graph.ReshapeLike` helpers.
+  - Unified structural ops (`ExpandAxes`, `InsertAxes`, `ExpandLeftToRank`, `Squeeze`, `BroadcastPrefix`, `ExpandAndBroadcast`, `TopK`, `TopKMask`) to seamlessly work with both static and dynamic shapes.
+
 - 2026-08-27:
   - Added backend `DynamicIota` and `DynamicPad` operations (in `compute` package) and corresponding `graph` operations:
     - `graph.DynamicIota`: creates dynamic dimension tensors with increasing values along `iotaAxis`.

@@ -1808,12 +1808,11 @@ func (ni *nodeInputsDynamicDimensionSize) CloneWithInputs(originalNode *Node, ne
 	idx := 0
 	new_operand := newInputs[idx]
 	idx++
-	return DynamicDimensionSize(new_operand, ni.axis)
+	return backendDynamicDimensionSize(new_operand, ni.axis)
 }
 
-// DynamicDimensionSize returns the dimension of the given axis of the operand as a dynamic scalar value.
-// This is only supported by backends that support dynamic shapes (see Capabilities.DynamicAxes).
-func DynamicDimensionSize(operand *Node, axis int) (
+// backendDynamicDimensionSize is a Graph wrapper for the backend.Builder.DynamicDimensionSize method.
+func backendDynamicDimensionSize(operand *Node, axis int) (
 	node *Node) {
 	inputNodes := []*Node{operand}
 	g := validateBuildingGraphFromInputs(inputNodes...)

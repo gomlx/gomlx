@@ -57,6 +57,7 @@ var (
 		"FusedQuantizedDense", "QuantizedEmbeddingLookup",
 
 		// Dynamic shape methods (see ops_dynamic.go):
+		"DynamicDimensionSize",
 		"DynamicReshape",
 		"DynamicBroadcastInDim",
 		"DynamicIota",

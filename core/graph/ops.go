@@ -594,7 +594,7 @@ func BroadcastLike(operand, reference *Node, broadcastAxes ...int) *Node {
 //
 // Dynamic shape rules for target axes:
 //  1. Preserved dynamic axis: If operand x at axis i is already dynamic (shapes.DynamicDim),
-//     the dynamic size is taken directly from x (DynamicDimensionSize(x, i)). The target dynamic axis must have a compatible name (or empty).
+//     the dynamic size is taken directly from x (DimensionSize(x, i)). The target dynamic axis must have a compatible name (or empty).
 //  2. Broadcast 1 -> Dynamic: Broadcasting dimension 1 to a dynamic dimension is not supported by BroadcastToShape,
 //     because no reference tensor is available to provide the runtime dynamic size. Use BroadcastLike or DynamicBroadcastLike
 //     with a reference node instead, or DynamicBroadcastInDim with explicit DimensionSpec(*Node) values.
@@ -781,7 +781,7 @@ func Reshape(x *Node, dimensions ...int) *Node {
 		for i, d := range xShape.Dimensions {
 			if d == shapes.DynamicDim {
 				dynamicNames = append(dynamicNames, xShape.AxisName(i))
-				dynamicValues = append(dynamicValues, DynamicDimensionSize(x, i))
+				dynamicValues = append(dynamicValues, DimensionSize(x, i))
 			}
 		}
 
@@ -903,7 +903,7 @@ func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 				var dimVal *Node
 				for j := range x.Rank() {
 					if x.Shape().Dimensions[j] == shapes.DynamicDim && x.Shape().AxisName(j) == name && name != "" {
-						dimVal = DynamicDimensionSize(x, j)
+						dimVal = DimensionSize(x, j)
 						break
 					}
 				}
@@ -1225,7 +1225,7 @@ func ReduceMean(x *Node, reduceAxes ...int) *Node {
 			}
 		}
 		for _, axis := range adjustedAxes {
-			dimSize := DynamicDimensionSize(x, axis)
+			dimSize := DimensionSize(x, axis)
 			if count == nil {
 				count = dimSize
 			} else {

@@ -343,7 +343,7 @@ func dynamicReshapeSpecsForRecoveredDims(operand *Node, s shapes.Shape) []Dimens
 		if dim != shapes.DynamicDim {
 			specs[axis] = StaticDim(dim)
 		} else {
-			specs[axis] = NamedDynamicDim(name, DynamicDimensionSize(operand, axis))
+			specs[axis] = NamedDynamicDim(name, DimensionSize(operand, axis))
 		}
 	}
 	return specs

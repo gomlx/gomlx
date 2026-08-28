@@ -77,9 +77,9 @@ func TestDynamicShapes(t *testing.T) {
 			assert.Equal(t, [][][]float32{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}, out[0].Value())
 		})
 
-		t.Run("DynamicDimensionSizeAndShape", func(t *testing.T) {
+		t.Run("DimensionSizeAndDynamicShape", func(t *testing.T) {
 			exec, err := NewExec(backend, func(x *Node) []*Node {
-				dimSize := DynamicDimensionSize(x, 0)
+				dimSize := DimensionSize(x, 0)
 				shapeNode := DynamicShape(x)
 				return []*Node{dimSize, shapeNode}
 			})
@@ -114,7 +114,7 @@ func TestDynamicShapes(t *testing.T) {
 				// x has shape [batch, 4].
 				// We reshape it to [batch, 2, 2].
 				// Get the dynamic batch size.
-				batchSize := DynamicDimensionSize(x, 0)
+				batchSize := DimensionSize(x, 0)
 				batchSpec := NamedDynamicDim("batch", batchSize)
 				return DynamicReshape(x, batchSpec, StaticDim(2), NamedInferredDim("inferred_dim"))
 			})
@@ -165,8 +165,8 @@ func TestDynamicShapes(t *testing.T) {
 			exec, err := NewExec(backend, func(x, bias *Node) *Node {
 				// x has dynamic shape [batch, seq]
 				// bias has shape [seq]
-				batchDim := DynamicDimensionSize(x, 0)
-				seqDim := DynamicDimensionSize(x, 1)
+				batchDim := DimensionSize(x, 0)
+				seqDim := DimensionSize(x, 1)
 				bBroadcast := DynamicBroadcastInDim(bias, []int{1},
 					NamedDynamicDim("batch", batchDim),
 					NamedDynamicDim("seq", seqDim),
@@ -179,6 +179,7 @@ func TestDynamicShapes(t *testing.T) {
 				[]string{"seq"},
 			)
 
+			// Run with batch = 2, seq = 3
 			xInput := [][]float32{{1, 2, 3}, {4, 5, 6}}
 			biasInput := []float32{10, 20, 30}
 			out, err := exec.Call(xInput, biasInput)
@@ -188,20 +189,20 @@ func TestDynamicShapes(t *testing.T) {
 
 		t.Run("DynamicBroadcastLike", func(t *testing.T) {
 			exec, err := NewExec(backend, func(x, ref *Node) *Node {
-				// x is [features], ref is [batch, features]
+				// x has dynamic shape [batch, 1], ref has dynamic shape [batch, 3]
 				return DynamicBroadcastLike(x, ref)
 			})
 			require.NoError(t, err)
 			exec.WithDynamicAxes(
-				[]string{""},
+				[]string{"batch", ""},
 				[]string{"batch", ""},
 			)
 
-			xInput := []float32{10, 20}
-			refInput := [][]float32{{0, 0}, {0, 0}, {0, 0}} // batch=3, features=2
+			xInput := [][]float32{{1}, {2}}
+			refInput := [][]float32{{0, 0, 0}, {0, 0, 0}}
 			out, err := exec.Call(xInput, refInput)
 			require.NoError(t, err)
-			assert.Equal(t, [][]float32{{10, 20}, {10, 20}, {10, 20}}, out[0].Value())
+			assert.Equal(t, [][]float32{{1, 1, 1}, {2, 2, 2}}, out[0].Value())
 		})
 
 		t.Run("DynamicBroadcastToDims", func(t *testing.T) {
@@ -284,7 +285,7 @@ func TestDynamicShapes(t *testing.T) {
 
 		t.Run("DynamicIota", func(t *testing.T) {
 			exec, err := NewExec(backend, func(x *Node) *Node {
-				batchSize := DynamicDimensionSize(x, 0)
+				batchSize := DimensionSize(x, 0)
 				return DynamicIota(x.Graph(), dtypes.Int32, 1,
 					NamedDynamicDim("batch", batchSize),
 					StaticDim(3),
