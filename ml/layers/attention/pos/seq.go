@@ -41,19 +41,13 @@ func SequentialPositions(g *Graph, startPos *Node, seqLen int) *Node {
 		if posNode.Rank() > 0 {
 			posNode = Squeeze(posNode)
 		}
-		posNode = BroadcastToShape(posNode, offsets.Shape())
+		posNode = BroadcastLike(posNode, offsets)
 		return Add(offsets, posNode)
 	}
 
 	// Batched case: startPos has shape [batchSize]
 	// Result should be [batchSize, seqLen]
-	batchSize := posNode.Shape().Dimensions[0]
-
 	offsets = ExpandDims(offsets, 0)
-	offsets = BroadcastToShape(offsets, shapes.Make(dtypes.Int32, batchSize, seqLen))
-
 	posNode = ExpandDims(posNode, -1)
-	posNode = BroadcastToShape(posNode, shapes.Make(dtypes.Int32, batchSize, seqLen))
-
 	return Add(offsets, posNode)
 }
