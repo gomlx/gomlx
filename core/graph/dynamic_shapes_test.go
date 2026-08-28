@@ -321,6 +321,55 @@ func TestDynamicShapes(t *testing.T) {
 			}
 			assert.Equal(t, expected, out[0].Value())
 		})
+
+		t.Run("BroadcastLike_Dynamic", func(t *testing.T) {
+			exec, err := NewExec(backend, func(bias, x *Node) *Node {
+				return BroadcastLike(bias, x)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes(
+				[]string{""},
+				[]string{"batch", ""},
+			)
+
+			biasInput := []float32{10, 20}
+			xInput := [][]float32{{1, 2}, {3, 4}, {5, 6}} // batch=3
+			out, err := exec.Call(biasInput, xInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][]float32{{10, 20}, {10, 20}, {10, 20}}, out[0].Value())
+		})
+
+		t.Run("BroadcastToDims_PreserveDynamicAxis", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				// x is [batch, 1], broadcast to [batch, 3]
+				return BroadcastToDims(x, shapes.DynamicDim, 3)
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", ""})
+
+			xInput := [][]float32{{1}, {2}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			assert.Equal(t, [][]float32{{1, 1, 1}, {2, 2, 2}}, out[0].Value())
+		})
+
+		t.Run("BroadcastToDims_CannotIntroduceDynamicAxis", func(t *testing.T) {
+			assert.Panics(t, func() {
+				g := NewGraph(backend, "test_broadcast_to_dims_invalid")
+				x := Iota(g, shapes.Make(dtypes.Float32, 1, 3), 1)
+				// Cannot specify -1 for a static axis 0
+				_ = BroadcastToDims(x, shapes.DynamicDim, 3)
+			})
+		})
+
+		t.Run("DynamicBroadcastToShape_CannotBroadcast1ToDynamicWithoutReference", func(t *testing.T) {
+			assert.Panics(t, func() {
+				g := NewGraph(backend, "test_dynamic_broadcast_1_to_dynamic")
+				x := Iota(g, shapes.Make(dtypes.Float32, 1, 3), 1)
+				targetShape := shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim, 3}, []string{"batch", ""})
+				_ = DynamicBroadcastToShape(x, targetShape)
+			})
+		})
 	})
 }
 

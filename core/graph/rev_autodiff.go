@@ -681,7 +681,7 @@ func mulVJP(node, v *Node, _ shapes.Shape) []*Node {
 	for ii := range 2 {
 		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
-			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
+			broadcastInputs[ii] = BroadcastLike(broadcastInputs[ii], node)
 		}
 	}
 	for ii := range 2 {
@@ -699,7 +699,7 @@ func divVJP(node, v *Node, _ shapes.Shape) []*Node {
 	for ii := range 2 {
 		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
-			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
+			broadcastInputs[ii] = BroadcastLike(broadcastInputs[ii], node)
 		}
 	}
 	a := broadcastInputs[0]
@@ -720,7 +720,7 @@ func powVJP(node, v *Node, _ shapes.Shape) []*Node {
 	for ii := range 2 {
 		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
-			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
+			broadcastInputs[ii] = BroadcastLike(broadcastInputs[ii], node)
 		}
 	}
 	a, b := broadcastInputs[0], broadcastInputs[1]
@@ -771,7 +771,7 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	expandedV := ReshapeWithShape(v, newShape)
 
 	// Now all we need it to broadcast the v on the reduced dimensions.
-	vjp := BroadcastToShape(expandedV, x.Shape())
+	vjp := BroadcastLike(expandedV, x)
 	return []*Node{vjp}
 }
 
@@ -861,7 +861,7 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1 and then broadcasting.
 	expandedV := ReshapeWithShape(v, newShape)
-	expandedV = BroadcastToShape(expandedV, x.Shape())
+	expandedV = BroadcastLike(expandedV, x)
 
 	// vjp is only propagated to the elements at the max value.
 	vjp := Mul(expandedV, maxIndicatorAtInput)
@@ -891,7 +891,7 @@ func reduceMinVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1 and then broadcasting.
 	expandedV := ReshapeWithShape(v, newShape)
-	expandedV = BroadcastToShape(expandedV, x.Shape())
+	expandedV = BroadcastLike(expandedV, x)
 
 	// vjp is only propagated to the elements at the min value.
 	vjp := Mul(expandedV, minIndicatorAtInput)

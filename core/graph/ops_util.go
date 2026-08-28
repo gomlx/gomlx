@@ -127,7 +127,11 @@ func highestForDType(g *Graph, dtype dtypes.DType) *Node {
 // OnesLike returns a tensor with the same shape of x, filled with 1's.
 func OnesLike(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
-	return Ones(g, x.Shape())
+	scalar := ScalarOne(g, x.DType())
+	if scalar == nil {
+		return nil
+	}
+	return BroadcastLike(scalar, x)
 }
 
 // Ones creates a computation with the same shape as the input, but with the value 1.
@@ -146,7 +150,7 @@ func Ones(g *Graph, shape shapes.Shape) *Node {
 // ZerosLike returns a tensor with the same shape of x, filled with 0's.
 func ZerosLike(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
-	return Zeros(g, x.Shape())
+	return BroadcastLike(ScalarZero(g, x.DType()), x)
 }
 
 // Zeros creates a computation with the same shape as the input, but with the value 0.
@@ -688,7 +692,7 @@ func TakeLowerTriangular(x *Node, k int) *Node {
 	}
 	lowerTriangularMask := ShapedLowerTriangular(g, x.Shape().Dim(-2), x.Shape().Dim(-1), k)
 	lowerTriangularMask = ExpandLeftToRank(lowerTriangularMask, x.Rank())
-	lowerTriangularMask = BroadcastToShape(lowerTriangularMask, x.Shape())
+	lowerTriangularMask = BroadcastLike(lowerTriangularMask, x)
 	return Where(lowerTriangularMask, x, ScalarZero(g, x.DType()))
 }
 
@@ -722,7 +726,7 @@ func TakeUpperTriangular(x *Node, k int) *Node {
 	upperTriangularMask := ShapedLowerTriangular(g, x.Shape().Dim(-2), x.Shape().Dim(-1), k-1)
 	upperTriangularMask = LogicalNot(upperTriangularMask)
 	upperTriangularMask = ExpandLeftToRank(upperTriangularMask, x.Rank())
-	upperTriangularMask = BroadcastToShape(upperTriangularMask, x.Shape())
+	upperTriangularMask = BroadcastLike(upperTriangularMask, x)
 	return Where(upperTriangularMask, x, ScalarZero(g, x.DType()))
 }
 
@@ -1110,8 +1114,8 @@ func CosineSimilarity(lhs *Node, rhs *Node, axis int) *Node {
 	rhsAxisZeroMask := ReduceAndKeep(IsZero(rhs), ReduceLogicalAnd, axis)
 
 	// Recover original shape, by broadcasting the mask where we just reduced.
-	lhsMask := BroadcastToShape(ConvertDType(lhsAxisZeroMask, dtypes.Bool), lhs.Shape())
-	rhsMask := BroadcastToShape(ConvertDType(rhsAxisZeroMask, dtypes.Bool), rhs.Shape())
+	lhsMask := BroadcastLike(ConvertDType(lhsAxisZeroMask, dtypes.Bool), lhs)
+	rhsMask := BroadcastLike(ConvertDType(rhsAxisZeroMask, dtypes.Bool), rhs)
 
 	// Replace rows with all zeroes (lhsMask/rhsMask) with 1.
 	// Any positive numerical safe number would work, since the final computation for
@@ -1171,8 +1175,8 @@ func CrossCosineSimilarity(lhs *Node, rhs *Node, constractingAxis, crossAxis int
 	rhsAxisZeroMask := ReduceAndKeep(IsZero(rhs), ReduceLogicalAnd, constractingAxis)
 
 	// Recover original shape, by broadcasting the mask where we just reduced.
-	lhsMask := BroadcastToShape(ConvertDType(lhsAxisZeroMask, dtypes.Bool), lhs.Shape())
-	rhsMask := BroadcastToShape(ConvertDType(rhsAxisZeroMask, dtypes.Bool), rhs.Shape())
+	lhsMask := BroadcastLike(ConvertDType(lhsAxisZeroMask, dtypes.Bool), lhs)
+	rhsMask := BroadcastLike(ConvertDType(rhsAxisZeroMask, dtypes.Bool), rhs)
 
 	// Replace rows with all zeroes (lhsMask/rhsMask) with 1.
 	// Any positive numerical safe number would work, since the final computation for
