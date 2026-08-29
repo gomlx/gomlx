@@ -9,23 +9,23 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/compute v0.1.5
-	github.com/gomlx/go-huggingface v0.4.2-0.20260730080013-798d056f4fd0
-	github.com/gomlx/gomlx v0.28.5-0.20260829102059-39e51fe7522a
-	github.com/gomlx/onnx-gomlx v0.5.2
-	github.com/janpfeifer/gonb v0.11.3
+	github.com/gomlx/go-huggingface v0.4.2-0.20260829105730-58672c392310
+	github.com/gomlx/gomlx v0.28.5-0.20260829103403-c34e0f9893c0
+	github.com/gomlx/onnx-gomlx v0.5.3-0.20260829105919-72b6e9551932
+	github.com/janpfeifer/gonb v0.11.5
 	github.com/janpfeifer/must v0.2.0
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/pkg/errors v0.9.1
 	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
+	golang.org/x/exp v0.0.0-20260824195058-e88cd73687aa
 	k8s.io/klog/v2 v2.140.0
 )
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
-	github.com/charmbracelet/x/ansi v0.11.6 // indirect
+	github.com/charmbracelet/x/ansi v0.11.7 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
@@ -34,7 +34,7 @@ require (
 	github.com/edsrzf/mmap-go v1.2.0 // indirect
 	github.com/eliben/go-sentencepiece v0.7.0 // indirect
 	github.com/erkkah/margaid v0.3.0 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/gomlx/bsplines v0.2.0 // indirect
@@ -43,9 +43,9 @@ require (
 	github.com/gomlx/go-xla v0.4.4 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.21 // indirect
+	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
+	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -53,9 +53,9 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/image v0.43.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.40.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

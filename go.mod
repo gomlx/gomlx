@@ -12,7 +12,7 @@ require (
 	github.com/gomlx/go-xla v0.4.4
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
-	github.com/janpfeifer/gonb v0.11.3
+	github.com/janpfeifer/gonb v0.11.5
 	github.com/muesli/termenv v0.16.0
 	github.com/pkg/errors v0.9.1
 	github.com/schollz/progressbar/v3 v3.19.0
