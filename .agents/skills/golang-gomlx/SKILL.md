@@ -48,27 +48,26 @@ go get -u github.com/gomlx/compute
 
 ## Core Concepts
 
-- Shapes and Data Types (DTypes) (`github.com/gomlx/gomlx/compute/dtypes` and `github.com/gomlx/compute/shapes`):
+- Shapes and Data Types (DTypes) (`github.com/gomlx/compute/dtypes` and `github.com/gomlx/compute/shapes`):
   - `dtypes` define the underlying type of the data (e.g. `dtypes.Float32`, `dtypes.Int64`, `dtypes.Bool`).
   - `shapes.Shape` represents the multi-dimensional structure of a tensor, including its `DType` and its `Dimensions` (a
-    slice of integers). Shapes are strictly checked during graph building. It also has experimental support for "dynamic
-    shapes" (dependend on the input shape), where axis may be set as indeterminate (`shapes.DynamicDim` == -1), and
-    named (`DynamicDim` axes must be named). But only the Go backend partially supports dynamic shapes, XLA doesn't.
+    slice of integers). Shapes are strictly checked during graph building. GoMLX supports **dynamic shapes** (input-shape
+    conditioned dimensions), where variable axes are set as indeterminate (`shapes.DynamicDim` == -1) and optionally named
+    (`shapes.MakeDynamic(...)`).
 - Computation Graph (`github.com/gomlx/gomlx/core/graph`): The `Graph` object is the container for computation nodes.
   - Computations are built (by a Go function) using `*Node` objects. Each node represents an operation or a value, and
-    it always contain a reference to the graph it belongs to (`Node.Graph()`)
+    it always contains a reference to the graph it belongs to (`Node.Graph()`).
   - The graph building phase is separate from the execution phase. You build the graph first, and then execute it (there
-    is a JIT-compilation that happens in between automatically, if handled by the `graph.Exec` object).
+    is a JIT-compilation that happens in between automatically, handled by the `graph.Exec` / `model.Exec` object).
   - Executor: (`graph.Exec` or `model.Exec`) takes a graph-building function, JIT-compiles it, and provides methods to
     execute it.
 - `compute.Backend` (github.com/gomlx/compute): It abstracts backend engines to execute computations on devices
   (accelerators or the CPU itself). One doesn't need to interact with it directly except if implementing one. One just
   needs to pass around the `compute.Backend` object in use. Usually, one imports (`import _
   "github.com/gomlx/gomlx/backends/default"`) to include support for the default backends. And the end user can set the
-  environment variable `GOMLX_BACKEND` to specify in runtime a different backend, if they want. The default backend uses
-  XLA for GPU/TPU is available, typical values would be: "go" (for the portable Go backend), "xla:cpu" for the XLA CPU
-  backend, "xla:cuda" for the XLA NVIDIA GPU backend, and "xla:tpu" for the XLA TPU backend.
-  Only the Go backend partially supports dynamic shapes, XLA doesn't.
+  environment variable `GOMLX_BACKEND` to specify at runtime a different backend. Typical values: "go" (portable Go backend),
+  "onnx" / "onnx:cuda" (ONNX Runtime backend), "xla:cpu", "xla:cuda", "xla:tpu".
+  Check `backend.Capabilities().DynamicShapes` (or `backend.Capabilities().HasDynamicShapes()`) to verify dynamic shapes support.
 - Tensors: (`github.com/gomlx/gomlx/core/tensors`): These represent actual values, that can have local storage or
   "on-device" (accelerator) storage. Usually, they are only used as inputs and outputs of computations, or to save, load
   or print values. Most methods are about conversion or access to the underlying data (e.g., `tensor.Value()` returns a
@@ -126,6 +125,57 @@ func EuclideanDistance(a, b *Node) *Node {
 - The Exec object will automatically recompile the graph, calling again the graph building function, if the shape of the
   inputs changes. It has a limited cache size for different shapes, and compiling a graph is orders of magnitude slower
   than executing it, so it's better to reuse the same input shapes where possible, using padding to fixed sizes.
+
+### Dynamic Shapes (Input-Conditioned Shapes)
+
+GoMLX supports input-conditioned dynamic shapes where dimensions can vary at runtime without rebuilding the graph.
+
+#### 1. Backend Capabilities
+- `backend.Capabilities().DynamicShapes` (`compute.DynamicShapesSupport`):
+  - `compute.DynamicShapesNone`: Backend requires static shapes (e.g., `xla`). GoMLX will recompile per unique concrete shape.
+  - `compute.DynamicShapesNative`: Backend compiles dynamic graphs once; zero runtime recompilation overhead across variable dimensions (e.g., `go`, `onnx`).
+  - `compute.DynamicShapesRecompiling`: Backend accepts dynamic graphs and shares constants/weights, but manages JIT kernel specialization internally.
+- Helper: `backend.Capabilities().HasDynamicShapes()` returns `true` if dynamic shapes are supported.
+
+#### 2. Configuring `Exec` for Dynamic Shapes
+Declare which axes of the inputs are dynamic using `WithDynamicAxes` (or `WithDynamicAxesSpecs`):
+
+```go
+// For an Exec taking (tokens, seqLen), where tokens is [batch, seq] and seqLen is [batch]:
+exec.WithDynamicAxes(
+    []string{"batch", "seq"}, // tokens dynamic axes
+    []string{"batch"},        // seqLen dynamic axes
+)
+```
+
+#### 3. Operations Supporting Dynamic Shapes
+- **Dimension Abstraction**:
+  - `DimensionSpecFor(x, axis)`: Returns a `DimensionSpec` representing the dimension (static or dynamic with name).
+  - `DimensionSpecsFor(x)`: Returns a slice of `DimensionSpec`s for all axes of `x`.
+  - `DimensionSize(x, axis)`: Returns a scalar `Int32` `*Node` with the dimension size (constant scalar if static, dynamic extraction if dynamic).
+- **Reshaping**:
+  - `DynamicReshape(operand, specs...)`: Reshapes according to `DimensionSpec`s (`StaticDim`, `DynamicDim`, `NamedDynamicDim`, `InferredDim`, `NamedInferredDim`). Automatically falls back to static `Reshape` if operand and all specs are static.
+  - `DynamicReshapeLike(operand, refNode)` / `ReshapeLike(operand, refNode)`: Reshapes operand to match the shape of `refNode`.
+  - `Reshape(operand, dims...)` / `ReshapeWithShape(operand, shape)`: Automatically delegates to dynamic reshape if operand has dynamic dimensions.
+- **Broadcasting**:
+  - `DynamicBroadcastInDim(operand, broadcastAxes, specs...)`: Low-level broadcast to target `DimensionSpec`s.
+  - `DynamicBroadcastLike(operand, refNode)` / `BroadcastLike(operand, refNode)`: Broadcasts to match `refNode` (static or dynamic).
+  - `BroadcastToShape(operand, shape)` / `DynamicBroadcastToShape(operand, shape)`: Broadcasts to target shape (static or dynamic).
+  - `BroadcastPrefix(operand, targetRank)`: Adds leading singleton axes and broadcasts to target rank.
+- **Iota & Generation**:
+  - `DynamicIota(g, dtype, iotaAxis, specs...)`: Creates a sequence tensor with dynamic target dimensions.
+  - `IotaLike(refNode, iotaAxis)`: Creates an `iota` matching `refNode`'s shape.
+- **Padding**:
+  - `DynamicPad(operand, fillVal, padSpecs...)`: Pads with dynamic or static padding amounts.
+- **Polymorphic Structural Ops**:
+  - `ExpandAxes`, `InsertAxes`, `ExpandLeftToRank`, `Squeeze`, `Slice`, `Gather`, `Concatenate`, `Dot`, `Where`, `TopK`, `TopKMask` transparently handle both static and dynamic shapes.
+
+#### 4. Writing Polymorphic Layers
+Write layers using `DimensionSpecFor`, `DimensionSize`, `DynamicReshape`, `BroadcastLike`, and `IotaLike`. These run with **zero overhead** on static graphs (falling back directly to static operations) while transparently supporting dynamic shapes when enabled.
+If specialized logic is required for dynamic vs static tensors, inspect `x.Shape().IsDynamic()` or `x.Shape().Dimensions[axis] == shapes.DynamicDim`.
+
+#### 5. Strategy When Dynamic Shapes Are Not Supported
+When running on backends without dynamic shapes (`xla`), fluctuating input shapes cause JIT recompilation explosion. Use **bucketing and padding** to round shapes to a small discrete set of buckets (e.g. powers of 2 or multiples of 32/64). For tokenized text sequences, use `github.com/gomlx/go-huggingface/tokenizers/bucket`.
 
 
 ### Tensors -- package `github.com/gomlx/gomlx/core/tensors`

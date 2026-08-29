@@ -84,3 +84,16 @@ This table maps common functions from the `core/graph` package to their PyTorch 
 | **Autograd / Differentiation** | | |
 | `Gradient(output, gradientNodes...)` | Computes the gradients of `output` with respect to the given `gradientNodes`. | `torch.autograd.grad(output, gradientNodes)` |
 | `StopGradient(x)` | Prevents gradients from flowing through `x` during backpropagation. | `x.detach()` |
+| **Dynamic Shapes Operations** | | |
+| `DimensionSize(x, axis)` | Returns scalar `Int32` node with the dimension size (constant scalar if static, dynamic if dynamic). | `x.size(dim)` (as tensor/symbol) |
+| `DimensionSpecFor(x, axis)` | Extracts `DimensionSpec` for the specified axis (static or dynamic with name). | N/A |
+| `DimensionSpecsFor(x)` | Extracts `DimensionSpec`s for all axes of `x`. | N/A |
+| `DynamicReshape(x, specs...)` | Reshapes according to `DimensionSpec`s (falls back to `Reshape` if all static). | `torch.reshape(x, dims)` |
+| `DynamicReshapeLike(x, ref)` / `ReshapeLike(x, ref)` | Reshapes `x` to match `ref` shape (static or dynamic). | `x.reshape_as(ref)` |
+| `DynamicBroadcastInDim(x, axes, specs...)` | Broadcasts `x` to target `DimensionSpec`s with axis alignment. | N/A |
+| `DynamicBroadcastLike(x, ref)` / `BroadcastLike(x, ref)` | Broadcasts `x` to match `ref` shape (static or dynamic). | `x.expand_as(ref)` |
+| `DynamicBroadcastToShape(x, shape)` | Broadcasts `x` to target static or dynamic `Shape`. | `x.expand(shape)` |
+| `DynamicBroadcastToDims(x, specs...)` | Broadcasts `x` to target `DimensionSpec`s with prefix alignment. | `x.expand(...)` |
+| `DynamicIota(g, dtype, axis, specs...)` | Generates a sequence tensor with dynamic target dimensions. | `torch.arange(...)` |
+| `IotaLike(ref, axis)` | Generates a sequence tensor matching `ref` shape. | N/A |
+| `DynamicPad(x, fillVal, padSpecs...)` | Dynamic padding with runtime padding amounts. | `torch.nn.functional.pad(x, ...)` |
