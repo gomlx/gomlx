@@ -77,8 +77,7 @@ func (l *Learned) PreEncode(x, positionIndices *Node, seqAxis int) *Node {
 	// If posEmbed is missing batch dimensions (e.g., posEmbed is [seqLen, embedDim] while x is [batchSize, seqLen, embedDim]),
 	// we explicitly broadcast it to match x's shape, similar to what is done with BroadcastPrefix.
 	if posEmbed.Rank() < x.Rank() {
-		batchSize := x.Shape().Dimensions[0]
-		posEmbed = BroadcastPrefix(posEmbed, batchSize)
+		posEmbed = BroadcastLike(posEmbed, x)
 	}
 
 	// Add the embeddings to the current value of x.

@@ -9,7 +9,7 @@
 //
 // It defines `Try` and `TryCatch[E any]`.
 //
-// This is an internal copy of github.com/gomlx/exceptions, to avoid the extra dependency.
+// This is a copy of github.com/gomlx/exceptions, to avoid the external dependency.
 //
 // Mostly it is used in the graph building functions.
 package exceptions

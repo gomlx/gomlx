@@ -243,6 +243,9 @@ func TestDot(t *testing.T) {
 		})
 
 		t.Run("LLM_2_bfloat16", func(t *testing.T) {
+			if !backend.Capabilities().DTypes[dtypes.BFloat16] {
+				t.Skipf("Backend %q does not support BFloat16", backend.Name())
+			}
 			lhs, err := tensors.Load("dotgeneral_test_lhs_2.bin")
 			require.NoError(t, err)
 			rhs, err := tensors.Load("dotgeneral_test_rhs_2.bin")

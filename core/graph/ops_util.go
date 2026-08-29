@@ -3,6 +3,7 @@
 package graph
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/gomlx/compute/shapes"
@@ -126,7 +127,11 @@ func highestForDType(g *Graph, dtype dtypes.DType) *Node {
 // OnesLike returns a tensor with the same shape of x, filled with 1's.
 func OnesLike(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
-	return Ones(g, x.Shape())
+	scalar := ScalarOne(g, x.DType())
+	if scalar == nil {
+		return nil
+	}
+	return BroadcastLike(scalar, x)
 }
 
 // Ones creates a computation with the same shape as the input, but with the value 1.
@@ -145,7 +150,7 @@ func Ones(g *Graph, shape shapes.Shape) *Node {
 // ZerosLike returns a tensor with the same shape of x, filled with 0's.
 func ZerosLike(x *Node) *Node {
 	g := validateBuildingGraphFromInputs(x)
-	return Zeros(g, x.Shape())
+	return BroadcastLike(ScalarZero(g, x.DType()), x)
 }
 
 // Zeros creates a computation with the same shape as the input, but with the value 0.
@@ -331,14 +336,14 @@ func ReduceAndKeep(operand *Node, reduceFn func(operand *Node, reduceAxes ...int
 
 // dynamicReshapeSpecsForRecoveredDims creates the specs to dynamically reshape a value to the given shape.
 // Notice this works for static shapes as well, in which case this will eventually use the normal Reshape.
-func dynamicReshapeSpecsForRecoveredDims(operand *Node, s shapes.Shape) []ReshapeDimensionSpec {
-	specs := make([]ReshapeDimensionSpec, s.Rank())
+func dynamicReshapeSpecsForRecoveredDims(operand *Node, s shapes.Shape) []DimensionSpec {
+	specs := make([]DimensionSpec, s.Rank())
 	for axis, dim := range s.Dimensions {
 		name := s.AxisName(axis)
 		if dim != shapes.DynamicDim {
 			specs[axis] = StaticDim(dim)
 		} else {
-			specs[axis] = NamedDynamicDim(name, DynamicDimensionSize(operand, axis))
+			specs[axis] = NamedDynamicDim(name, DimensionSize(operand, axis))
 		}
 	}
 	return specs
@@ -687,7 +692,7 @@ func TakeLowerTriangular(x *Node, k int) *Node {
 	}
 	lowerTriangularMask := ShapedLowerTriangular(g, x.Shape().Dim(-2), x.Shape().Dim(-1), k)
 	lowerTriangularMask = ExpandLeftToRank(lowerTriangularMask, x.Rank())
-	lowerTriangularMask = BroadcastToShape(lowerTriangularMask, x.Shape())
+	lowerTriangularMask = BroadcastLike(lowerTriangularMask, x)
 	return Where(lowerTriangularMask, x, ScalarZero(g, x.DType()))
 }
 
@@ -721,7 +726,7 @@ func TakeUpperTriangular(x *Node, k int) *Node {
 	upperTriangularMask := ShapedLowerTriangular(g, x.Shape().Dim(-2), x.Shape().Dim(-1), k-1)
 	upperTriangularMask = LogicalNot(upperTriangularMask)
 	upperTriangularMask = ExpandLeftToRank(upperTriangularMask, x.Rank())
-	upperTriangularMask = BroadcastToShape(upperTriangularMask, x.Shape())
+	upperTriangularMask = BroadcastLike(upperTriangularMask, x)
 	return Where(upperTriangularMask, x, ScalarZero(g, x.DType()))
 }
 
@@ -915,19 +920,72 @@ func growImpl(x *Node, axis int, dir ShiftDirection, n int, fillValue float64) *
 	return x
 }
 
+// CumSumOptions are options for the CumSum operation.
+type CumSumOptions = compute.CumSumOptions
+
 // CumSum returns the cumulative sum along the given axis.
 //
-// Example:
+// Examples:
 //
 //	CumSum([[1, 2, 3], [4, 5, 6]], -1) = [[1, 3, 6], [4, 9, 15]]
 //	CumSum([[1, 2, 3], [4, 5, 6]], 0) = [[1, 2, 3], [5, 7, 9]]
-func CumSum(x *Node, axis int) *Node {
+//	CumSum([1, 2, 3], 0, &CumSumOptions{Exclusive: true}) = [0, 1, 3]
+//	CumSum([1, 2, 3], 0, &CumSumOptions{Reverse: true}) = [6, 5, 3]
+//	CumSum([1, 2, 3], 0, &CumSumOptions{Exclusive: true, Reverse: true}) = [5, 3, 0]
+func CumSum(x *Node, axis int, options ...*CumSumOptions) *Node {
+	if len(options) > 1 {
+		exceptions.Panicf("CumSum takes at most one CumSumOptions, but %d were provided", len(options))
+	}
+	var opt CumSumOptions
+	if len(options) == 1 && options[0] != nil {
+		opt = *options[0]
+	}
 	adjustedAxis := MustAdjustAxis(axis, x)
-	windowSizes := xslices.SliceWithValue(x.Rank(), 1)
-	windowSizes[adjustedAxis] = x.Shape().Dimensions[adjustedAxis]
-	paddings := make([][2]int, x.Rank())
-	paddings[adjustedAxis][0] = windowSizes[adjustedAxis] - 1 // On the cumsum axis, pad to length-1.
-	return SumPool(x).FullShape().WindowPerAxis(windowSizes...).PaddingPerDim(paddings).Strides(1).Done()
+
+	var node *Node
+	err := exceptions.TryCatch[error](func() {
+		node = backendCumSum(x, adjustedAxis, opt)
+	})
+	if err == nil {
+		return node
+	}
+	if !compute.IsNotImplemented(err) {
+		panic(err)
+	}
+
+	// Fallback to decomposed implementation (using SumPool).
+	return cumSumDecomposed(x, adjustedAxis, opt)
+}
+
+func cumSumDecomposed(x *Node, axis int, options CumSumOptions) *Node {
+	g := x.Graph()
+	cur := x
+	if options.Reverse {
+		cur = Reverse(cur, axis)
+	}
+
+	dim := cur.Shape().Dimensions[axis]
+	if dim == 0 {
+		return cur
+	}
+	windowSizes := xslices.SliceWithValue(cur.Rank(), 1)
+	windowSizes[axis] = dim
+	paddings := make([][2]int, cur.Rank())
+	paddings[axis][0] = windowSizes[axis] - 1
+	inclusive := SumPool(cur).FullShape().WindowPerAxis(windowSizes...).PaddingPerDim(paddings).Strides(1).Done()
+
+	res := inclusive
+	if options.Exclusive {
+		padAxes := make([]compute.PadAxis, cur.Rank())
+		padAxes[axis] = compute.PadAxis{Start: 1}
+		zero := ScalarZero(g, cur.DType())
+		padded := Pad(inclusive, zero, padAxes...)
+		res = SliceAxis(padded, axis, AxisRange(0, dim))
+	}
+	if options.Reverse {
+		res = Reverse(res, axis)
+	}
+	return res
 }
 
 var consecutiveDifferenceKernel = tensors.FromValue([]int32{-1, 1})
@@ -1056,8 +1114,8 @@ func CosineSimilarity(lhs *Node, rhs *Node, axis int) *Node {
 	rhsAxisZeroMask := ReduceAndKeep(IsZero(rhs), ReduceLogicalAnd, axis)
 
 	// Recover original shape, by broadcasting the mask where we just reduced.
-	lhsMask := BroadcastToShape(ConvertDType(lhsAxisZeroMask, dtypes.Bool), lhs.Shape())
-	rhsMask := BroadcastToShape(ConvertDType(rhsAxisZeroMask, dtypes.Bool), rhs.Shape())
+	lhsMask := BroadcastLike(ConvertDType(lhsAxisZeroMask, dtypes.Bool), lhs)
+	rhsMask := BroadcastLike(ConvertDType(rhsAxisZeroMask, dtypes.Bool), rhs)
 
 	// Replace rows with all zeroes (lhsMask/rhsMask) with 1.
 	// Any positive numerical safe number would work, since the final computation for
@@ -1117,8 +1175,8 @@ func CrossCosineSimilarity(lhs *Node, rhs *Node, constractingAxis, crossAxis int
 	rhsAxisZeroMask := ReduceAndKeep(IsZero(rhs), ReduceLogicalAnd, constractingAxis)
 
 	// Recover original shape, by broadcasting the mask where we just reduced.
-	lhsMask := BroadcastToShape(ConvertDType(lhsAxisZeroMask, dtypes.Bool), lhs.Shape())
-	rhsMask := BroadcastToShape(ConvertDType(rhsAxisZeroMask, dtypes.Bool), rhs.Shape())
+	lhsMask := BroadcastLike(ConvertDType(lhsAxisZeroMask, dtypes.Bool), lhs)
+	rhsMask := BroadcastLike(ConvertDType(rhsAxisZeroMask, dtypes.Bool), rhs)
 
 	// Replace rows with all zeroes (lhsMask/rhsMask) with 1.
 	// Any positive numerical safe number would work, since the final computation for

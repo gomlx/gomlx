@@ -46,7 +46,6 @@ func (ni *nodeInputsParameter) CloneWithInputs(originalNode *Node, newInputs ...
 	return originalNode
 }
 
-
 // mustNoError converts an error to a panic.
 func mustNoError[T any](v T, err error) T {
 	if err != nil {
@@ -148,7 +147,6 @@ func (ni *nodeInputsSplitNode) CloneWithInputs(originalNode *Node, newInputs ...
 	return node
 }
 
-
 // splitNode splits a Node that has multiple outputs into multiple nodes with one output only.
 // Internal only: users should only need to handle nodes with one output, so any method that returns many outputs
 // must call splitNode before returning to the user.
@@ -214,7 +212,6 @@ func (ni *nodeInputsConstant) String() string {
 func (ni *nodeInputsConstant) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
 	return originalNode
 }
-
 
 // ConstTensor returns a newly created constant node for the tensor t.
 //
@@ -385,6 +382,16 @@ func IotaFull(g *Graph, shape shapes.Shape) *Node {
 	return ReshapeWithShape(Iota(g, shapes.Make(shape.DType, shape.Size()), 0), shape)
 }
 
+// IotaLike creates a tensor with the same shape as reference, filled with increasing numbers
+// (starting from 0) along iotaAxis.
+//
+// It works seamlessly with both static and dynamic shapes (extracting dynamic sizes automatically).
+func IotaLike(reference *Node, iotaAxis int) *Node {
+	_ = validateBuildingGraphFromInputs(reference)
+	specs := DimensionSpecsFor(reference)
+	return DynamicIota(reference.Graph(), reference.DType(), iotaAxis, specs...)
+}
+
 // validateBuildingGraphFromInputs checks that all inputNodes are of the same Graph and that
 // the Graph is valid for building.
 // It panics with a corresponding error message in case of issues.
@@ -470,27 +477,29 @@ func Ceil(x *Node) *Node {
 //
 // The new dimensions id into copies of the operand, i.e.
 //
+// BroadcastPrefix creates a new tensor by prepending prefixDims to x, and broadcasting x to the new shape.
+//
+// Formally:
+//
 //	output[i0, ..., iN, j0, ..., jM] = operand[j0, ..., jM]
+//
+// It works seamlessly with both static and dynamic shapes.
 func BroadcastPrefix(x *Node, prefixDims ...int) *Node {
-	shape := x.Shape()
-	newDims := make([]int, shape.Rank()+len(prefixDims))
-	copy(newDims, prefixDims)
-	copy(newDims[len(prefixDims):], shape.Dimensions)
-	broadcastAxes := make([]int, shape.Rank())
-	for i := range shape.Rank() {
-		broadcastAxes[i] = i + len(prefixDims)
+	_ = validateBuildingGraphFromInputs(x)
+	prefixRank := len(prefixDims)
+	totalRank := x.Rank() + prefixRank
+	specs := make([]DimensionSpec, totalRank)
+	for i, dim := range prefixDims {
+		specs[i] = StaticDim(dim)
 	}
-	axisNames := make([]string, len(newDims))
-	for i, dim := range newDims {
-		if i >= len(prefixDims) {
-			axisNames[i] = shape.AxisName(i - len(prefixDims))
-		}
-		if dim == shapes.DynamicDim && axisNames[i] == "" {
-			axisNames[i] = "dynamic_prefix"
-		}
+	for axis := range x.Rank() {
+		specs[prefixRank+axis] = DimensionSpecFor(x, axis)
 	}
-	outputShape := shapes.MakeDynamic(x.DType(), newDims, axisNames)
-	return backendBroadcastInDim(x, outputShape, broadcastAxes)
+	broadcastAxes := make([]int, x.Rank())
+	for i := range x.Rank() {
+		broadcastAxes[i] = prefixRank + i
+	}
+	return DynamicBroadcastInDim(x, broadcastAxes, specs...)
 }
 
 // ExpandAndBroadcast combines ExpandAxes and broadcast of axes of `x`, the returned shape will be newDimensions.
@@ -501,6 +510,8 @@ func BroadcastPrefix(x *Node, prefixDims ...int) *Node {
 //
 //   - expandedAxes refer to the axes in newDimensions that are expanded and going to be broadcast. The reminder
 //     dimensions in newDimensions much match the corresponding in x.
+//
+// It works seamlessly with both static and dynamic shapes.
 //
 // Example:
 //
@@ -543,46 +554,51 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 		expandedSet.Insert(axis)
 	}
 
-	var preservedAxes []int
-	if !x.Shape().IsScalar() {
-		preservedAxes = make([]int, 0, x.Rank())
-		axisInX := 0
-		for axis, dim := range newDimensions {
-			if !expandedSet.Has(axis) {
-				preservedAxes = append(preservedAxes, axis)
-				if x.Shape().Dimensions[axisInX] != dim && x.Shape().Dimensions[axisInX] != 1 {
-					exceptions.Panicf("the values of newDimensions (%v) that are not expanded (not in expandedAxes) "+
-						"must match the corresponding value in x shape (%s) or be 1 (if broadcasting), "+
-						"but the value of newDimensions[%d]=%d does not match the value in x.Shape().Dimensions[%d]=%d",
-						newDimensions, x.Shape(), axis, dim, axisInX, x.Shape().Dimensions[axisInX])
-				}
-				axisInX++
-			}
-		}
-	}
-
-	axisNames := make([]string, len(newDimensions))
-	if !x.Shape().IsScalar() {
-		axisInX := 0
-		for axis := range newDimensions {
-			if !expandedSet.Has(axis) {
-				axisNames[axis] = x.Shape().AxisName(axisInX)
-				axisInX++
-			}
-		}
-	}
+	specs := make([]DimensionSpec, len(newDimensions))
+	preservedAxes := make([]int, 0, x.Rank())
+	axisInX := 0
 	for axis, dim := range newDimensions {
-		if dim == shapes.DynamicDim && axisNames[axis] == "" {
-			axisNames[axis] = "dynamic_expanded"
+		if expandedSet.Has(axis) {
+			specs[axis] = StaticDim(dim)
+		} else {
+			preservedAxes = append(preservedAxes, axis)
+			xDim := x.Shape().Dimensions[axisInX]
+			if xDim != dim && xDim != 1 && xDim != shapes.DynamicDim {
+				exceptions.Panicf("the values of newDimensions (%v) that are not expanded (not in expandedAxes) "+
+					"must match the corresponding value in x shape (%s) or be 1 (if broadcasting), "+
+					"but the value of newDimensions[%d]=%d does not match the value in x.Shape().Dimensions[%d]=%d",
+					newDimensions, x.Shape(), axis, dim, axisInX, x.Shape().Dimensions[axisInX])
+			}
+			if xDim == shapes.DynamicDim {
+				specs[axis] = DimensionSpecFor(x, axisInX)
+			} else {
+				specs[axis] = StaticDim(dim)
+			}
+			axisInX++
 		}
 	}
-	outputShape := shapes.MakeDynamic(x.DType(), newDimensions, axisNames)
-	return backendBroadcastInDim(x, outputShape, preservedAxes)
+	return DynamicBroadcastInDim(x, preservedAxes, specs...)
 }
 
-// BroadcastToShape broadcasts x to the given shape.
+// BroadcastLike broadcasts the operand to the shape of the reference node along the specified broadcastAxes.
+// If broadcastAxes is omitted, it defaults to trailing (NumPy-style) axes.
+//
+// It works seamlessly with both static and dynamic shapes (delegating to DynamicBroadcastLike).
+func BroadcastLike(operand, reference *Node, broadcastAxes ...int) *Node {
+	return DynamicBroadcastLike(operand, reference, broadcastAxes...)
+}
+
+// BroadcastToShape broadcasts x to the given shape (which can be static or dynamic).
 // x must have an equal or lower rank than shape, and if shape has higher rank, x will be expanded at the end (so new axes will be appended to x).
 // Dimensions of x must either match the corresponding dimension in shape, or they must be 1, in which case they are broadcast.
+//
+// Dynamic shape rules for target axes:
+//  1. Preserved dynamic axis: If operand x at axis i is already dynamic (shapes.DynamicDim),
+//     the dynamic size is taken directly from x (DimensionSize(x, i)). The target dynamic axis must have a compatible name (or empty).
+//  2. Broadcast 1 -> Dynamic: Broadcasting dimension 1 to a dynamic dimension is not supported by BroadcastToShape,
+//     because no reference tensor is available to provide the runtime dynamic size. Use BroadcastLike or DynamicBroadcastLike
+//     with a reference node instead, or DynamicBroadcastInDim with explicit DimensionSpec(*Node) values.
+//  3. Static dimension > 1 to Dynamic: An exception is raised.
 //
 // It works as expected if x is a scalar.
 //
@@ -590,6 +606,9 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 //
 // This is equivalent to BroadcastToDims(x, shape.Dimensions...).
 func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
+	if x.Shape().IsDynamic() || shape.IsDynamic() {
+		return DynamicBroadcastToShape(x, shape)
+	}
 	_ = validateBuildingGraphFromInputs(x)
 	xShape := x.Shape()
 	if xShape.Rank() > shape.Rank() {
@@ -640,7 +659,12 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 // Dimensions of x must either match the corresponding value in dimensions, or they must be 1, in which case they
 // are broadcast.
 //
-// It works as expected if x is a scalar.
+// Dynamic shape rules:
+// If dimensions contains shapes.DynamicDim (-1), it is only allowed at an axis i where x is already
+// dynamic (x.Shape().Dimensions[i] == shapes.DynamicDim), preserving x's dynamic axis name and size.
+// Specifying -1 for an axis where x has static dimension (including 1) or for an appended new axis
+// is not allowed because BroadcastToDims does not carry axis names or reference nodes to infer the size.
+// In such cases, use BroadcastLike, DynamicBroadcastLike, or DynamicBroadcastToDims instead.
 //
 // See also the equivalent BroadcastToShape.
 func BroadcastToDims(x *Node, dimensions ...int) *Node {
@@ -654,30 +678,22 @@ func BroadcastToDims(x *Node, dimensions ...int) *Node {
 	}
 	if isDynamic {
 		axisNames := make([]string, len(dimensions))
-		for i := range dimensions {
-			if i < x.Rank() {
+		for i, dim := range dimensions {
+			if dim == shapes.DynamicDim {
+				if i < x.Rank() && x.Shape().Dimensions[i] == shapes.DynamicDim {
+					axisNames[i] = x.Shape().AxisName(i)
+				} else {
+					exceptions.Panicf("BroadcastToDims: cannot broadcast axis %d to a dynamic dimension (-1) without an axis name or reference node (use BroadcastLike, DynamicBroadcastLike, or DynamicBroadcastToDims instead)", i)
+				}
+			} else if i < x.Rank() {
 				axisNames[i] = x.Shape().AxisName(i)
-			}
-			if dimensions[i] == shapes.DynamicDim && axisNames[i] == "" {
-				axisNames[i] = "dynamic_broadcast"
 			}
 		}
 		shape = shapes.MakeDynamic(x.DType(), dimensions, axisNames)
 	} else {
 		shape = shapes.Make(x.DType(), dimensions...)
 	}
-	if x.Shape().IsScalar() && shape.IsScalar() {
-		// Assume nothing to do.
-		return x
-	}
-	if x.Shape().IsScalar() {
-		return backendBroadcastInDim(x, shape, nil)
-	}
-	broadcastDims := make([]int, x.Rank())
-	for ii := range x.Rank() {
-		broadcastDims[ii] = ii
-	}
-	return backendBroadcastInDim(x, shape, broadcastDims)
+	return BroadcastToShape(x, shape)
 }
 
 // ConvertType is an alias to ConvertDType.
@@ -744,7 +760,7 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 			// Broadcast condition.
 			extraAxes := outputShape.Rank() - condition.Rank()
 			condition = InsertAxes(condition, xslices.SliceWithValue(extraAxes, -1)...)
-			condition = BroadcastToDims(condition, outputShape.Dimensions...)
+			condition = BroadcastToShape(condition, outputShape)
 		}
 	}
 
@@ -754,8 +770,45 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 
 // Reshape x to the given dimensions. Total size cannot change. One dimension can be left as -1,
 // in which case it will be set to match the size, if possible.
+//
+// If x or target is dynamic, it delegates to DynamicReshape.
 func Reshape(x *Node, dimensions ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
+	if x.Shape().IsDynamic() {
+		xShape := x.Shape()
+		var dynamicNames []string
+		var dynamicValues []*Node
+		for i, d := range xShape.Dimensions {
+			if d == shapes.DynamicDim {
+				dynamicNames = append(dynamicNames, xShape.AxisName(i))
+				dynamicValues = append(dynamicValues, DimensionSize(x, i))
+			}
+		}
+
+		numTargetDynamic := 0
+		for _, d := range dimensions {
+			if d == shapes.DynamicDim {
+				numTargetDynamic++
+			}
+		}
+
+		if len(dynamicNames) != numTargetDynamic {
+			exceptions.Panicf("Reshape() requires the number of dynamic dimensions in the input (%d) to match the target dims (%d); got input=%s target dims=%v (use DynamicReshape for custom dynamic dimension specs)",
+				len(dynamicNames), numTargetDynamic, xShape, dimensions)
+		}
+
+		specs := make([]DimensionSpec, len(dimensions))
+		dynIdx := 0
+		for i, d := range dimensions {
+			if d == shapes.DynamicDim {
+				specs[i] = NamedDynamicDim(dynamicNames[dynIdx], dynamicValues[dynIdx])
+				dynIdx++
+			} else {
+				specs[i] = StaticDim(d)
+			}
+		}
+		return DynamicReshape(x, specs...)
+	}
 	totalSize := x.Shape().Size()
 	newSize := 1
 	missingIdx := -1
@@ -841,9 +894,40 @@ func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 			shape,
 		)
 	}
-	node := backendReshape(x, shape.Dimensions...)
-	node.outputShapes[0] = shape.Clone()
-	return node
+	if shape.IsDynamic() || x.Shape().IsDynamic() {
+		specs := make([]DimensionSpec, shape.Rank())
+		for i := range shape.Rank() {
+			d := shape.Dimensions[i]
+			name := shape.AxisName(i)
+			if d == shapes.DynamicDim {
+				var dimVal *Node
+				for j := range x.Rank() {
+					if x.Shape().Dimensions[j] == shapes.DynamicDim && x.Shape().AxisName(j) == name && name != "" {
+						dimVal = DimensionSize(x, j)
+						break
+					}
+				}
+				if dimVal != nil {
+					specs[i] = NamedDynamicDim(name, dimVal)
+				} else if name != "" {
+					specs[i] = NamedInferredDim(name)
+				} else {
+					specs[i] = InferredDim()
+				}
+			} else {
+				specs[i] = StaticDim(d)
+			}
+		}
+		return DynamicReshape(x, specs...)
+	}
+	return backendReshape(x, shape.Dimensions...)
+}
+
+// ReshapeLike reshapes operand to have the same shape as reference.
+//
+// It works seamlessly with both static and dynamic shapes (delegating to DynamicReshapeLike).
+func ReshapeLike(operand, reference *Node) *Node {
+	return DynamicReshapeLike(operand, reference)
 }
 
 // InsertAxes expands x creating new axes just before the axes given -- beforeAxes points to positions on the original
@@ -854,6 +938,8 @@ func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 // The new axes will be of dimension 1 (so the total size of and contents of the tensor remains the same),
 // and the rank is increased by `len(axes)`.
 //
+// It works seamlessly with both static and dynamic shapes.
+//
 // See also ExpandAxes, where the new axes are given as positions in the target shape.
 func InsertAxes(x *Node, beforeAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
@@ -862,7 +948,6 @@ func InsertAxes(x *Node, beforeAxes ...int) *Node {
 		return x
 	}
 
-	// Ranks.
 	fromRank := x.Rank()
 	toRank := fromRank + len(beforeAxes)
 
@@ -877,32 +962,18 @@ func InsertAxes(x *Node, beforeAxes ...int) *Node {
 	}
 	slices.Sort(beforeAxes)
 
-	// Create new target shape.
-	toShape := shapes.Shape{
-		DType:      x.DType(),
-		Dimensions: make([]int, toRank),
-	}
-	hasNames := x.Shape().AxisNames != nil || x.Shape().IsDynamic()
-	if hasNames {
-		toShape.AxisNames = make([]string, toRank)
-	}
+	specs := make([]DimensionSpec, toRank)
 	iiOriginal, iiNewAxes := 0, 0
-	for ii := range toShape.Dimensions {
+	for ii := range toRank {
 		if iiNewAxes < len(beforeAxes) && beforeAxes[iiNewAxes] <= iiOriginal || iiOriginal == fromRank {
-			toShape.Dimensions[ii] = 1
-			if hasNames {
-				toShape.AxisNames[ii] = ""
-			}
-			iiNewAxes += 1
+			specs[ii] = StaticDim(1)
+			iiNewAxes++
 		} else {
-			toShape.Dimensions[ii] = x.Shape().Dimensions[iiOriginal]
-			if hasNames {
-				toShape.AxisNames[ii] = x.Shape().AxisName(iiOriginal)
-			}
-			iiOriginal += 1
+			specs[ii] = DimensionSpecFor(x, iiOriginal)
+			iiOriginal++
 		}
 	}
-	return ReshapeWithShape(x, toShape)
+	return DynamicReshape(x, specs...)
 }
 
 // ExpandDims is an alias to InsertAxes.
@@ -918,6 +989,8 @@ func ExpandDims(x *Node, beforeAxes ...int) *Node {
 // If newAxes[ii] < 0, then they are counted from the end of the new shape — -1 represents the last axis in the new shape.
 //
 // There should be no repeated values in newAxes -- since they represent the positions in the returned shape, it wouldn't make sense.
+//
+// It works seamlessly with both static and dynamic shapes.
 //
 // See also InsertAxes, where the new axes are given as positions in the target shape.
 func ExpandAxes(x *Node, newAxes ...int) *Node {
@@ -951,35 +1024,23 @@ func ExpandAxes(x *Node, newAxes ...int) *Node {
 		}
 	}
 
-	// Create new target shape.
-	toShape := shapes.Shape{
-		DType:      x.DType(),
-		Dimensions: make([]int, toRank),
-	}
-	hasNames := x.Shape().AxisNames != nil || x.Shape().IsDynamic()
-	if hasNames {
-		toShape.AxisNames = make([]string, toRank)
-	}
+	specs := make([]DimensionSpec, toRank)
 	iiOriginal, iiNewAxes := 0, 0
-	for axis := range toShape.Dimensions {
+	for axis := range toRank {
 		if iiNewAxes < len(adjustedNewAxes) && adjustedNewAxes[iiNewAxes] == axis {
-			toShape.Dimensions[axis] = 1
-			if hasNames {
-				toShape.AxisNames[axis] = ""
-			}
-			iiNewAxes += 1
+			specs[axis] = StaticDim(1)
+			iiNewAxes++
 		} else {
-			toShape.Dimensions[axis] = x.Shape().Dimensions[iiOriginal]
-			if hasNames {
-				toShape.AxisNames[axis] = x.Shape().AxisName(iiOriginal)
-			}
-			iiOriginal += 1
+			specs[axis] = DimensionSpecFor(x, iiOriginal)
+			iiOriginal++
 		}
 	}
-	return ReshapeWithShape(x, toShape)
+	return DynamicReshape(x, specs...)
 }
 
 // ExpandLeftToRank prepend axes of dimension 1 to x, until it reaches rank `newRank`.
+//
+// It works seamlessly with both static and dynamic shapes.
 func ExpandLeftToRank(x *Node, newRank int) (output *Node) {
 	_ = validateBuildingGraphFromInputs(x)
 	if newRank < x.Rank() {
@@ -990,13 +1051,14 @@ func ExpandLeftToRank(x *Node, newRank int) (output *Node) {
 		output = x
 		return
 	}
-	newDims := make([]int, 0, newRank)
+	specs := make([]DimensionSpec, 0, newRank)
 	for ii := 0; ii < newRank-x.Rank(); ii++ {
-		newDims = append(newDims, 1)
+		specs = append(specs, StaticDim(1))
 	}
-	newDims = append(newDims, x.Shape().Dimensions...)
-	output = Reshape(x, newDims...)
-	return
+	for axis := range x.Rank() {
+		specs = append(specs, DimensionSpecFor(x, axis))
+	}
+	return DynamicReshape(x, specs...)
 }
 
 // Squeeze removes `axes` of dimension 1. If `axes` is not set, all axes of dimension 1 are removed.
@@ -1004,39 +1066,43 @@ func ExpandLeftToRank(x *Node, newRank int) (output *Node) {
 // an error is raised in the Graph and an invalid node is returned.
 //
 // If all dimensions are reduced, it returns a scalar.
+//
+// It works seamlessly with both static and dynamic shapes.
 func Squeeze(x *Node, axes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 
-	newDims := make([]int, x.Rank())
-	copy(newDims, x.Shape().Dimensions)
+	dims := x.Shape().Dimensions
+	axesToSqueeze := sets.Make[int]()
 	if len(axes) == 0 {
-		for ii, dim := range newDims {
+		for ii, dim := range dims {
 			if dim == 1 {
-				newDims[ii] = 0
+				axesToSqueeze.Insert(ii)
 			}
 		}
 	} else {
 		for axisIdx, axis := range axes {
 			axis = MustAdjustAxis(axis, x)
-			if newDims[axis] == 0 {
-				exceptions.Panicf("Squeeze() for x.shape=%s, axis %d was selected twice!?", x.Shape(), axes[axisIdx])
+			if axesToSqueeze.Has(axis) {
+				exceptions.Panicf("Squeeze(%s, axes=%v) has repeated axes", x.Shape(), axes)
 			}
-			if newDims[axis] != 1 {
+			dim := dims[axis]
+			if dim == 0 {
+				exceptions.Panicf("Squeeze() for x.shape=%s, axis %d has a zero dimension that cannot be squeezed -- only axis with dimensions 1 can be squeezed", x.Shape(), axes[axisIdx])
+			}
+			if dim != 1 {
 				exceptions.Panicf("Squeeze() for x.shape=%s, axis %d does not have dimension 1", x.Shape(), axes[axisIdx])
 			}
-			newDims[axis] = 0
+			axesToSqueeze.Insert(axis)
 		}
 	}
 
-	tgtAxisIdx := 0
-	for _, dim := range newDims {
-		if dim > 0 {
-			newDims[tgtAxisIdx] = dim
-			tgtAxisIdx++
+	specs := make([]DimensionSpec, 0, x.Rank()-len(axesToSqueeze))
+	for axis := range x.Rank() {
+		if !axesToSqueeze.Has(axis) {
+			specs = append(specs, DimensionSpecFor(x, axis))
 		}
 	}
-	newDims = newDims[:tgtAxisIdx] // May reduce to a scalar.
-	return Reshape(x, newDims...)
+	return DynamicReshape(x, specs...)
 }
 
 // ArgMax returns the index of the largest element across the given axis.
@@ -1159,7 +1225,7 @@ func ReduceMean(x *Node, reduceAxes ...int) *Node {
 			}
 		}
 		for _, axis := range adjustedAxes {
-			dimSize := DynamicDimensionSize(x, axis)
+			dimSize := DimensionSize(x, axis)
 			if count == nil {
 				count = dimSize
 			} else {
@@ -1191,7 +1257,7 @@ func MaskedReduceMean(x, mask *Node, reduceAxes ...int) *Node {
 
 	if mask.Rank() < x.Rank() {
 		// Mask must have a prefix rank to X, in which case we need to expand it to get the count of masked elements right.
-		mask = BroadcastToDims(mask, x.Shape().Dimensions...)
+		mask = BroadcastLike(mask, x, xslices.Iota(0, mask.Rank())...)
 	}
 	zeros := ZerosLike(x)
 	maskedX := Where(mask, x, zeros)
@@ -1253,7 +1319,7 @@ func MaskedReduceMax(x, mask *Node, reduceAxes ...int) *Node {
 	}
 	g := x.Graph()
 	lowest := lowestForDType(g, x.DType())
-	broadcastLowest := BroadcastToDims(lowest, x.Shape().Dimensions...)
+	broadcastLowest := BroadcastLike(lowest, x)
 	maskedX := Where(mask, x, broadcastLowest)
 	return ReduceMax(maskedX, reduceAxes...)
 }
@@ -1294,7 +1360,7 @@ func MaskedReduceMin(x, mask *Node, reduceAxes ...int) *Node {
 	}
 	g := x.Graph()
 	lowest := highestForDType(g, x.DType())
-	broadcastHighest := BroadcastToDims(lowest, x.Shape().Dimensions...)
+	broadcastHighest := BroadcastLike(lowest, x)
 	maskedX := Where(mask, x, broadcastHighest)
 	return ReduceMin(maskedX, reduceAxes...)
 }
@@ -1822,4 +1888,3 @@ func OptimizationBarriers(operands ...*Node) []*Node {
 	}
 	return backendOptimizationBarrier(operands...)
 }
-

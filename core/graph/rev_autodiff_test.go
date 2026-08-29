@@ -161,6 +161,9 @@ func testGradientsInDelta(t *testing.T, name string, backend compute.Backend, te
 		exec, err := NewExec(backend, fn)
 		require.NoError(t, err)
 		results, err := exec.Call()
+		if compute.IsNotImplemented(err) {
+			t.Skipf("Backend %q does not implement op: %v", backend.Name(), err)
+		}
 		require.NoError(t, err)
 		fmt.Printf("\toutput=%v\n", results[0].GoStr())
 		gradients := results[1:]
@@ -194,8 +197,13 @@ func testGradientsExact(t *testing.T, name string, testFn gradTestFunc, wantForG
 		grads := Gradient(ReduceAllSum(output), nodesForGrad...)
 		return append([]*Node{output}, grads...)
 	}
-	exec := MustNewExec(backend, fn)
-	results := exec.MustCall()
+	exec, err := NewExec(backend, fn)
+	require.NoError(t, err)
+	results, err := exec.Call()
+	if compute.IsNotImplemented(err) {
+		t.Skipf("Backend %q does not implement op: %v", backend.Name(), err)
+	}
+	require.NoError(t, err)
 	fmt.Printf("\tgradient=%v\n", results[0].GoStr())
 	gradients := results[1:]
 	for ii, gradient := range gradients {

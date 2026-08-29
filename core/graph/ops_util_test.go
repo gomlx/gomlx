@@ -13,6 +13,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/support/testutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestScalar(t *testing.T) {
@@ -378,18 +379,89 @@ func TestCumSum(t *testing.T) {
 			outputs = []*Node{
 				CumSum(inputs[0], -1),
 				CumSum(inputs[0], 0),
+				CumSum(inputs[0], -1, &CumSumOptions{Exclusive: true}),
+				CumSum(inputs[0], 0, &CumSumOptions{Exclusive: true}),
+				CumSum(inputs[0], -1, &CumSumOptions{Reverse: true}),
+				CumSum(inputs[0], 0, &CumSumOptions{Reverse: true}),
+				CumSum(inputs[0], -1, &CumSumOptions{Exclusive: true, Reverse: true}),
+				CumSum(inputs[0], 0, &CumSumOptions{Exclusive: true, Reverse: true}),
 			}
 			return
 		}, []any{
+			// -1, default
 			[][]int32{
 				{1, 3, 6},
 				{4, 9, 15},
 			},
+			// 0, default
 			[][]int32{
 				{1, 2, 3},
 				{5, 7, 9},
 			},
+			// -1, exclusive
+			[][]int32{
+				{0, 1, 3},
+				{0, 4, 9},
+			},
+			// 0, exclusive
+			[][]int32{
+				{0, 0, 0},
+				{1, 2, 3},
+			},
+			// -1, reverse
+			[][]int32{
+				{6, 5, 3},
+				{15, 11, 6},
+			},
+			// 0, reverse
+			[][]int32{
+				{5, 7, 9},
+				{4, 5, 6},
+			},
+			// -1, exclusive+reverse
+			[][]int32{
+				{5, 3, 0},
+				{11, 6, 0},
+			},
+			// 0, exclusive+reverse
+			[][]int32{
+				{4, 5, 6},
+				{0, 0, 0},
+			},
 		}, xslices.Epsilon)
+
+	// Test gradients (autodiff)
+	graphtest.RunTestGraphFn(t, "TestCumSumGradients",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := IotaFull(g, shapes.Make(dtypes.Float64, 3))
+			inputs = []*Node{x}
+
+			// Forward
+			yDefault := CumSum(x, 0)
+			yExclusive := CumSum(x, 0, &CumSumOptions{Exclusive: true})
+			yReverse := CumSum(x, 0, &CumSumOptions{Reverse: true})
+			yExclRev := CumSum(x, 0, &CumSumOptions{Exclusive: true, Reverse: true})
+
+			gradDefault := Gradient(ReduceAllSum(yDefault), x)[0]
+			gradExclusive := Gradient(ReduceAllSum(yExclusive), x)[0]
+			gradReverse := Gradient(ReduceAllSum(yReverse), x)[0]
+			gradExclRev := Gradient(ReduceAllSum(yExclRev), x)[0]
+
+			outputs = []*Node{gradDefault, gradExclusive, gradReverse, gradExclRev}
+			return
+		}, []any{
+			[]float64{3, 2, 1},
+			[]float64{2, 1, 0},
+			[]float64{1, 2, 3},
+			[]float64{0, 1, 2},
+		}, xslices.Epsilon)
+
+	// Test panic when more than one option is passed.
+	require.Panics(t, func() {
+		g := NewGraph(compute.MustNew(), "test_multiple_options")
+		x := IotaFull(g, shapes.Make(dtypes.Float32, 3))
+		CumSum(x, 0, &CumSumOptions{}, &CumSumOptions{})
+	})
 }
 
 func TestConsecutiveDifference(t *testing.T) {

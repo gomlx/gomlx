@@ -395,6 +395,7 @@ And we are happy to prioritize features for donations.
 * [Jax](https://github.com/jax-ml/jax)
 * [PyTorch](https://pytorch.org/)
 * [ONNX](https://onnx.ai/)
+* [ONNX Runtime](https://onnxruntime.ai/)
 * [HuggingFace](https://huggingface.co/)
 
 ## ⚖️ License 

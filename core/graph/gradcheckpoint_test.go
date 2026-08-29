@@ -40,6 +40,10 @@ func TestCloneWithInputs(t *testing.T) {
 	})
 
 	t.Run("if", func(t *testing.T) {
+		backend := testutil.BuildTestBackend()
+		if !backend.Capabilities().Functions {
+			t.Skipf("Backend %q does not support functions", backend.Name())
+		}
 		g := NewGraph(backend, "test_clone_if")
 
 		x := Const(g, float32(10.0))
@@ -75,6 +79,10 @@ func TestCloneWithInputs(t *testing.T) {
 	})
 
 	t.Run("while", func(t *testing.T) {
+		backend := testutil.BuildTestBackend()
+		if !backend.Capabilities().Functions {
+			t.Skipf("Backend %q does not support functions", backend.Name())
+		}
 		g := NewGraph(backend, "test_clone_while")
 
 		// We count from 0 to 5 (original), and we clone to count from 0 to 3.

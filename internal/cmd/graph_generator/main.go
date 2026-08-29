@@ -33,7 +33,7 @@ var (
 	methodsNotExported = sets.MakeWith(
 		"AllReduce", "ArgMinMax", "Broadcast", "BroadcastInDim",
 		"BatchNormForInference", "BatchNormForTraining", "BatchNormGradient",
-		"Ceil", "Concatenate", "ConvertDType", "ConvGeneral", "DotGeneral",
+		"Ceil", "Concatenate", "ConvertDType", "ConvGeneral", "CumSum", "DotGeneral",
 		"FFT", "Floor", "Gather", "Iota", "OptimizationBarrier",
 		"ReduceMax", "ReduceMin", "ReduceProduct", "ReduceSum", "ReduceWindow",
 
@@ -50,14 +50,18 @@ var (
 		"Slice",
 		"Transpose", "Where",
 
-		// Fused ops: exported wrappers with "Internal:" comments are hand-written in fused_ops.go.
+		// Fused ops: exported wrappers with "Internal:" comments are hand-written in ops_fused.go.
 		"FusedDense", "FusedGelu", "FusedLayerNorm", "FusedSoftmax",
 		"FusedScaledDotProductAttention", "FusedScaledDotProductAttentionVJP",
 		"FusedAttentionQKVProjection",
 		"FusedQuantizedDense", "QuantizedEmbeddingLookup",
 
-		// Dynamic shape methods:
+		// Dynamic shape methods (see ops_dynamic.go):
+		"DynamicDimensionSize",
 		"DynamicReshape",
+		"DynamicBroadcastInDim",
+		"DynamicIota",
+		"DynamicPad",
 	)
 
 	// methodsNotGenerated get a NodeType but no auto-generated wrapper
@@ -194,6 +198,9 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			case "DotGeneralConfig":
 				pi.BackendType = "compute." + pi.BackendType
 				pi.Format = "%+v"
+			case "CumSumOptions":
+				pi.BackendType = "compute." + pi.BackendType
+				pi.Format = "%+v"
 			case "*Quantization":
 				pi.BackendType = "*compute.Quantization"
 				pi.Format = "%+v"
@@ -204,6 +211,15 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.BackendType = "compute." + pi.BackendType
 				pi.Format = "%+v"
 			case "...DynamicDimensionSpec":
+				pi.BackendType = "...compute." + pi.BackendType[3:]
+				pi.NodeInputType = "[]" + pi.BackendType[3:]
+				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
+				pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
+				pi.Format = "%+v"
+			case "DynamicPadAxis":
+				pi.BackendType = "compute." + pi.BackendType
+				pi.Format = "%+v"
+			case "...DynamicPadAxis":
 				pi.BackendType = "...compute." + pi.BackendType[3:]
 				pi.NodeInputType = "[]" + pi.BackendType[3:]
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)

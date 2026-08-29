@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	. "github.com/gomlx/gomlx/support/exceptions"
@@ -179,23 +178,23 @@ func (b *MultiHeadAttentionBuilder) buildAttentionMask() (mask *Node) {
 func (b *MultiHeadAttentionBuilder) buildAttentionMaskFromSplitMasks() (mask *Node) {
 	var keyMask *Node
 	if b.keyMask == nil {
-		// keyMask nil, create a skeleton (to be broadcast) keyMask filled with `true`.
-		keyMask = Ones(b.g, shapes.Make(dtypes.Bool, b.attentionShape.Dimensions...))
+		// keyMask nil, create a scalar true to be broadcast.
+		keyMask = Const(b.g, true)
 	} else {
 		// Expand dims after the batch axis.
 		// attentionShape=`[batch, <query_elements>, num_heads, <key_elements>]`
 		// b.keyMask.shape=`[batch, <key_elements>]`
 		keyMask = InsertAxes(b.keyMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.keyMask.Rank(), 1)...)
-		keyMask = BroadcastToDims(keyMask, b.attentionShape.Dimensions...)
+		keyMask = BroadcastToShape(keyMask, b.attentionShape)
 	}
 	var queryMask *Node
 	if b.queryMask == nil {
-		// queryMask nil, create a skeleton (to be broadcast) queryMask filled with `true`.
-		queryMask = Ones(b.g, shapes.Make(dtypes.Bool, b.attentionShape.Dimensions...))
+		// queryMask nil, create a scalar true to be broadcast.
+		queryMask = Const(b.g, true)
 	} else {
 		// Expand dims at the end.
 		queryMask = InsertAxes(b.queryMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.queryMask.Rank(), -1)...)
-		queryMask = BroadcastToDims(queryMask, b.attentionShape.Dimensions...)
+		queryMask = BroadcastToShape(queryMask, b.attentionShape)
 	}
 	return LogicalAnd(queryMask, keyMask)
 }
@@ -207,21 +206,20 @@ func (b *MultiHeadAttentionBuilder) buildAttentionMaskFromSplitMasks() (mask *No
 // Nil seqlen means all positions in that axis are valid.
 func buildSeqLenPaddingMask(query, key *Node, querySeqLen, keyValueSeqLen *Node) *Node {
 	g := query.Graph()
-	// BSHD layout: seq is axis 1.
-	sqLen := query.Shape().Dimensions[1]
-	skvLen := key.Shape().Dimensions[1]
 
 	var kvMask, qMask *Node
 	if keyValueSeqLen != nil {
 		// kv positions: Iota [1, 1, 1, Skv], compare < kvLen[b] reshaped to [B, 1, 1, 1]
-		kvIota := Reshape(Iota(g, shapes.Make(dtypes.Int32, skvLen), 0), 1, 1, 1, skvLen)
-		kvLenBC := Reshape(ConvertDType(keyValueSeqLen, dtypes.Int32), keyValueSeqLen.Shape().Dimensions[0], 1, 1, 1)
+		kvIota := DynamicIota(g, dtypes.Int32, 0, DimensionSpecFor(key, 1))
+		kvIota = ExpandAxes(kvIota, 0, 1, 2)
+		kvLenBC := ExpandDims(ConvertDType(keyValueSeqLen, dtypes.Int32), 1, 2, 3)
 		kvMask = LessThan(kvIota, kvLenBC) // [B, 1, 1, Skv]
 	}
 	if querySeqLen != nil {
 		// q positions: Iota [1, Sq, 1, 1], compare < qLen[b] reshaped to [B, 1, 1, 1]
-		qIota := Reshape(Iota(g, shapes.Make(dtypes.Int32, sqLen), 0), 1, sqLen, 1, 1)
-		qLenBC := Reshape(ConvertDType(querySeqLen, dtypes.Int32), querySeqLen.Shape().Dimensions[0], 1, 1, 1)
+		qIota := DynamicIota(g, dtypes.Int32, 0, DimensionSpecFor(query, 1))
+		qIota = ExpandAxes(qIota, 0, 2, 3)
+		qLenBC := ExpandDims(ConvertDType(querySeqLen, dtypes.Int32), 1, 2, 3)
 		qMask = LessThan(qIota, qLenBC) // [B, Sq, 1, 1]
 	}
 
@@ -238,9 +236,7 @@ func buildSeqLenPaddingMask(query, key *Node, querySeqLen, keyValueSeqLen *Node)
 // buildCausalAttentionMask creates a mask where queries can only attend to keys with "smaller index" than itself.
 func (b *MultiHeadAttentionBuilder) buildCausalAttentionMask() (mask *Node) {
 	queryShape := b.query.Shape()
-	queryLen := queryShape.Dimensions[1]
 	keyShape := b.key.Shape()
-	keyLen := keyShape.Dimensions[1]
 
 	if queryShape.Rank() != 3 || keyShape.Rank() != 3 {
 		Panicf("MultiHeadAttention's WithCausalMask requires key and query to be rank-3,"+
@@ -252,22 +248,18 @@ func (b *MultiHeadAttentionBuilder) buildCausalAttentionMask() (mask *Node) {
 	}
 
 	// queryIndices: [0, 1, 2, ..., queryLen-1] -> shaped [queryLen, 1]
-	queryIndices := Iota(b.g, shapes.Make(dtypes.Int32, queryLen), 0)
+	queryIndices := DynamicIota(b.g, dtypes.Int32, 0, DimensionSpecFor(b.query, 1))
 	queryIndices = ExpandDims(queryIndices, -1) // [queryLen, 1]
 
 	// keyIndices: [0, 1, 2, ..., keyLen-1] -> shaped [1, keyLen]
-	keyIndices := Iota(b.g, shapes.Make(dtypes.Int32, keyLen), 0)
+	keyIndices := DynamicIota(b.g, dtypes.Int32, 0, DimensionSpecFor(b.key, 1))
 	keyIndices = ExpandDims(keyIndices, 0) // [1, keyLen]
 
 	mask = GreaterOrEqual(queryIndices, keyIndices) // [queryLen, keyLen]
 
 	// If using a sliding window, add distance mask: (q - k) < slidingWindow
 	if b.slidingWindow > 0 {
-		qIndices := Iota(b.g, shapes.Make(dtypes.Int32, queryLen), 0)
-		qIndices = ExpandDims(qIndices, -1) // [queryLen, 1]
-		kIndices := Iota(b.g, shapes.Make(dtypes.Int32, keyLen), 0)
-		kIndices = ExpandDims(kIndices, 0)  // [1, keyLen]
-		qMinusK := Sub(qIndices, kIndices)
+		qMinusK := Sub(queryIndices, keyIndices)
 		slidingMask := LessThan(qMinusK, Const(b.g, int32(b.slidingWindow)))
 		mask = LogicalAnd(mask, slidingMask)
 	}
@@ -277,7 +269,7 @@ func (b *MultiHeadAttentionBuilder) buildCausalAttentionMask() (mask *Node) {
 	// InsertAxes at beginning for batch dimension
 	mask = ExpandDims(mask, 0) // [1, queryLen, keyLen]
 	// Add dimension for numHeads at position 2 (after batch and query)
-	mask = ExpandDims(mask, 2)                                   // [1, queryLen, 1, keyLen]
-	mask = BroadcastToDims(mask, b.attentionShape.Dimensions...) // Broadcast to target dimensions
+	mask = ExpandDims(mask, 2)                                  // [1, queryLen, 1, keyLen]
+	mask = BroadcastToShape(mask, b.attentionShape)              // Broadcast to target dimensions
 	return mask
 }

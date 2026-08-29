@@ -467,14 +467,22 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeConvGeneral:          vjpForSingleOutput(convGeneralVJP),
 	NodeTypeReduceWindow:         vjpForSingleOutput(reduceWindowVJP),
 	NodeTypeTranspose:            vjpForSingleOutput(transposeVJP),
-	NodeTypeBroadcastInDim:       vjpForSingleOutput(broadcastInDimVJP),
-	NodeTypeFFT:                  vjpForSingleOutput(fftVJP),
-	NodeTypeDynamicSlice:         vjpForSingleOutput(dynamicSliceVJP),
-	NodeTypeDynamicUpdateSlice:   vjpForSingleOutput(dynamicUpdateSliceVJP),
-	NodeTypeDynamicDimensionSize: vjpForSingleOutput(zeroVJP),
-	NodeTypeDynamicShape:         vjpForSingleOutput(zeroVJP),
-	NodeTypeOptimizationBarrier:  vjpOptimizationBarrier,
-	NodeTypeSchedulingBarrier:    vjpForSingleOutput(vjpSchedulingBarrier),
+	NodeTypeBroadcastInDim:        vjpForSingleOutput(broadcastInDimVJP),
+	NodeTypeDynamicBroadcastInDim: vjpForSingleOutput(dynamicBroadcastInDimVJP),
+	NodeTypeFFT:                   vjpForSingleOutput(fftVJP),
+	NodeTypeDynamicSlice:          vjpForSingleOutput(dynamicSliceVJP),
+	NodeTypeDynamicUpdateSlice:    vjpForSingleOutput(dynamicUpdateSliceVJP),
+	NodeTypeDynamicDimensionSize:  vjpForSingleOutput(zeroVJP),
+	NodeTypeDynamicReshape:        vjpForSingleOutput(dynamicReshapeVJP),
+	NodeTypeDynamicShape:          vjpForSingleOutput(zeroVJP),
+	NodeTypeCumSum:                vjpForSingleOutput(cumSumVJP),
+	NodeTypePad:                   vjpForSingleOutput(padVJP),
+	NodeTypeDynamicPad:            vjpForSingleOutput(dynamicPadVJP),
+	NodeTypeIota:                  vjpForSingleOutput(zeroVJP),
+	NodeTypeDynamicIota:           vjpForSingleOutput(zeroVJP),
+	NodeTypeReverse:               vjpForSingleOutput(reverseVJP),
+	NodeTypeOptimizationBarrier:   vjpOptimizationBarrier,
+	NodeTypeSchedulingBarrier:     vjpForSingleOutput(vjpSchedulingBarrier),
 }
 
 // nilVJP returns no gradient, for functions without any inputNodes.
@@ -673,7 +681,7 @@ func mulVJP(node, v *Node, _ shapes.Shape) []*Node {
 	for ii := range 2 {
 		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
-			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
+			broadcastInputs[ii] = BroadcastLike(broadcastInputs[ii], node)
 		}
 	}
 	for ii := range 2 {
@@ -691,7 +699,7 @@ func divVJP(node, v *Node, _ shapes.Shape) []*Node {
 	for ii := range 2 {
 		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
-			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
+			broadcastInputs[ii] = BroadcastLike(broadcastInputs[ii], node)
 		}
 	}
 	a := broadcastInputs[0]
@@ -712,7 +720,7 @@ func powVJP(node, v *Node, _ shapes.Shape) []*Node {
 	for ii := range 2 {
 		broadcastInputs[ii] = node.inputNodes[ii]
 		if !broadcastInputs[ii].Shape().Equal(node.Shape()) {
-			broadcastInputs[ii] = BroadcastToShape(broadcastInputs[ii], node.Shape())
+			broadcastInputs[ii] = BroadcastLike(broadcastInputs[ii], node)
 		}
 	}
 	a, b := broadcastInputs[0], broadcastInputs[1]
@@ -763,8 +771,71 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	expandedV := ReshapeWithShape(v, newShape)
 
 	// Now all we need it to broadcast the v on the reduced dimensions.
-	vjp := BroadcastToShape(expandedV, x.Shape())
+	vjp := BroadcastLike(expandedV, x)
 	return []*Node{vjp}
+}
+
+func cumSumVJP(node, v *Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsCumSum)
+	return []*Node{CumSum(v, inputs.axis, &CumSumOptions{
+		Exclusive: inputs.options.Exclusive,
+		Reverse:   !inputs.options.Reverse,
+	})}
+}
+
+func padVJP(node, v *Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsPad)
+	x := inputs.x
+	fillValue := inputs.fillValue
+	starts := make([]int, x.Rank())
+	limits := make([]int, x.Rank())
+	strides := make([]int, x.Rank())
+	for i, padAxis := range inputs.axesConfig {
+		starts[i] = padAxis.Start
+		limits[i] = padAxis.Start + (x.Shape().Dimensions[i]-1)*(1+padAxis.Interior) + 1
+		strides[i] = 1 + padAxis.Interior
+	}
+	gradX := backendSlice(v, starts, limits, strides)
+	gradFill := ZerosLike(fillValue)
+	return []*Node{gradX, gradFill}
+}
+
+func dynamicPadVJP(node, v *Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsDynamicPad)
+	x := inputs.x
+	fillValue := inputs.fillValue
+	starts := make([]*Node, x.Rank())
+	sizes := make([]int, x.Rank())
+	valIdx := 2
+	for i, padAxis := range inputs.axesConfig {
+		if padAxis.InteriorValue != nil || padAxis.Interior != 0 {
+			Panicf("dynamicPadVJP: gradient for interior padding not supported")
+		}
+		if padAxis.StartValue != nil {
+			starts[i] = node.inputNodes[valIdx]
+			valIdx++
+		} else {
+			starts[i] = Const(node.Graph(), int32(padAxis.Start))
+		}
+		if padAxis.EndValue != nil {
+			valIdx++
+		}
+		sizes[i] = x.Shape().Dim(i)
+	}
+	gradX := DynamicSlice(v, starts, sizes)
+	gradFill := ZerosLike(fillValue)
+	vjps := make([]*Node, len(node.inputNodes))
+	vjps[0] = gradX
+	vjps[1] = gradFill
+	for j := 2; j < len(node.inputNodes); j++ {
+		vjps[j] = ZerosLike(node.inputNodes[j])
+	}
+	return vjps
+}
+
+func reverseVJP(node, v *Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsReverse)
+	return []*Node{Reverse(v, inputs.axes...)}
 }
 
 func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
@@ -790,7 +861,7 @@ func reduceMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1 and then broadcasting.
 	expandedV := ReshapeWithShape(v, newShape)
-	expandedV = BroadcastToShape(expandedV, x.Shape())
+	expandedV = BroadcastLike(expandedV, x)
 
 	// vjp is only propagated to the elements at the max value.
 	vjp := Mul(expandedV, maxIndicatorAtInput)
@@ -820,7 +891,7 @@ func reduceMinVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Expand rank of v to match the input, by re-creating
 	// the reduced dimensions with size 1 and then broadcasting.
 	expandedV := ReshapeWithShape(v, newShape)
-	expandedV = BroadcastToShape(expandedV, x.Shape())
+	expandedV = BroadcastLike(expandedV, x)
 
 	// vjp is only propagated to the elements at the min value.
 	vjp := Mul(expandedV, minIndicatorAtInput)
@@ -978,7 +1049,7 @@ func transposeVJP(node, v *Node, _ shapes.Shape) []*Node {
 // One just needs to reduce the broadcast dimensions.
 func broadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
 	params := node.inputs.(*nodeInputsBroadcastInDim)
-	x := params.x
+	x := params.operand
 	shape := params.outputShape
 
 	if x.Rank() != len(params.broadcastAxes) {
@@ -1054,3 +1125,56 @@ func vjpSchedulingBarrier(node, v *Node, _ shapes.Shape) []*Node {
 	vjps[0] = v
 	return vjps
 }
+
+// dynamicBroadcastInDimVJP generates the "vector dot jacobian" w.r.t. the input of DynamicBroadcastInDim.
+func dynamicBroadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
+	params := node.inputs.(*nodeInputsDynamicBroadcastInDim)
+	operand := params.operand
+	outShape := node.Shape()
+
+	if operand.Rank() != len(params.broadcastAxes) {
+		Panicf("there must be a broadcastAxes for each axis in operand, instead got operand.Shape()=%s and broadcastAxes=%v",
+			operand.Shape(), params.broadcastAxes)
+	}
+
+	axesPreserved := make([]bool, outShape.Rank())
+	for inputAxis, outputAxis := range params.broadcastAxes {
+		inDim := operand.Shape().Dimensions[inputAxis]
+		outDim := outShape.Dimensions[outputAxis]
+		if inDim == outDim {
+			if inDim == shapes.DynamicDim {
+				if operand.Shape().AxisName(inputAxis) == outShape.AxisName(outputAxis) {
+					axesPreserved[outputAxis] = true
+				}
+			} else {
+				axesPreserved[outputAxis] = true
+			}
+		}
+	}
+	axesToReduce := make([]int, 0, outShape.Rank())
+	for axis, preserved := range axesPreserved {
+		if !preserved {
+			axesToReduce = append(axesToReduce, axis)
+		}
+	}
+	gradWrtOperand := v
+	if len(axesToReduce) > 0 {
+		gradWrtOperand = ReduceSum(v, axesToReduce...)
+	}
+	if !gradWrtOperand.Shape().Equal(operand.Shape()) {
+		gradWrtOperand = DynamicReshapeLike(gradWrtOperand, operand)
+	}
+	vjps := make([]*Node, len(node.inputNodes))
+	vjps[0] = gradWrtOperand
+	return vjps
+}
+
+// dynamicReshapeVJP generates the "vector dot jacobian" w.r.t. the input of DynamicReshape.
+func dynamicReshapeVJP(node, v *Node, _ shapes.Shape) []*Node {
+	operand := node.inputNodes[0]
+	vjp := DynamicReshapeLike(v, operand)
+	vjps := make([]*Node, len(node.inputNodes))
+	vjps[0] = vjp
+	return vjps
+}
+

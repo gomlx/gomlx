@@ -2,6 +2,28 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-08-28:
+  - Added `DimensionSize(x, axis)` in `graph` to retrieve dimension sizes as `*Node` (returning a constant scalar if static, or extracting the dynamic dimension from the backend if dynamic).
+  - Added `DimensionSpecFor(x, axis)` and `DimensionSpecsFor(x)` in `graph` for tensor-relative dimension abstraction.
+  - Added query methods and accessors to `DimensionSpec`: `IsStatic()`, `IsDynamic()`, `IsInferred()`, `Static()`, `Dynamic()`, `AxisName()`, `WithName()`, `Clone()`, and `String()`.
+  - Added `graph.IotaLike` and `graph.ReshapeLike` helpers.
+  - Updated RoPE positional encoding (`ml/layers/attention/pos`) to work transparently with dynamic shapes using `BroadcastLike` and `DynamicReshape`.
+  - Unified structural ops (`ExpandAxes`, `InsertAxes`, `ExpandLeftToRank`, `Squeeze`, `BroadcastPrefix`, `ExpandAndBroadcast`, `TopK`, `TopKMask`) to seamlessly work with both static and dynamic shapes.
+
+- 2026-08-27:
+  - Added backend `DynamicIota` and `DynamicPad` operations (in `compute` package) and corresponding `graph` operations:
+    - `graph.DynamicIota`: creates dynamic dimension tensors with increasing values along `iotaAxis`.
+    - `graph.DynamicPad`: pads tensors with static or dynamic padding amounts along specified axes.
+    - Added reverse-mode autodiff VJP for `NodeTypeDynamicPad` and `NodeTypeDynamicIota`.
+  - Added backend `DynamicBroadcastInDim` operation (in `compute` package) and corresponding `graph` operations:
+    - `graph.DynamicBroadcastInDim`: low-level dynamic broadcast specifying broadcast axes and target `DimensionSpec`s.
+    - `graph.DynamicBroadcastLike`: broadcasts to the dynamic or static shape of a reference node.
+    - `graph.DynamicBroadcastToShape`: broadcasts to a target static or dynamic `Shape` (interchangeable with `graph.BroadcastToShape`).
+    - `graph.DynamicBroadcastToDims`: broadcasts using prefix axis alignment to target `DimensionSpec`s.
+    - Added reverse-mode autodiff VJP for `NodeTypeDynamicBroadcastInDim` and `NodeTypeDynamicReshape`.
+    - Integrated automatic dynamic delegation and static fallback between `BroadcastToShape` and `DynamicBroadcastToShape`.
+  - Added backend `CumSum` operator (with decomposed fallback) supporting `Exclusive` and `Reverse` options.
+
 - 2026-08-16:
   - Updated `gomlx_checkpoints -plot` to use VizB (https://github.com/goptics/vizb) to plot metrics. With the removal
     of Go dependencies, now it is no longer in its own sub-module (removed the corresponding `go.mod` file).

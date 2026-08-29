@@ -51,9 +51,13 @@ const (
 	NodeTypeConvGeneral
 	NodeTypeConvertDType
 	NodeTypeCos
+	NodeTypeCumSum
 	NodeTypeDiv
 	NodeTypeDotGeneral
+	NodeTypeDynamicBroadcastInDim
 	NodeTypeDynamicDimensionSize
+	NodeTypeDynamicIota
+	NodeTypeDynamicPad
 	NodeTypeDynamicReshape
 	NodeTypeDynamicShape
 	NodeTypeDynamicSlice
@@ -981,7 +985,7 @@ func BitwiseXor(lhs *Node, rhs *Node) (
 
 // nodeInputsBroadcastInDim holds the inputs used for the call to compute.BroadcastInDim.
 type nodeInputsBroadcastInDim struct {
-	x             *Node
+	operand       *Node
 	outputShape   shapes.Shape
 	broadcastAxes []int
 }
@@ -993,9 +997,9 @@ func (ni *nodeInputsBroadcastInDim) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsBroadcastInDim) String() string {
-	return fmt.Sprintf("%s(x=[#%d], outputShape=%v, broadcastAxes=%v)",
+	return fmt.Sprintf("%s(operand=[#%d], outputShape=%v, broadcastAxes=%v)",
 		ni.Type(),
-		ni.x.Id(),
+		ni.operand.Id(),
 		ni.outputShape,
 		ni.broadcastAxes,
 	)
@@ -1005,22 +1009,22 @@ func (ni *nodeInputsBroadcastInDim) String() string {
 func (ni *nodeInputsBroadcastInDim) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
 	// Reconstruct inputs from newInputs
 	idx := 0
-	new_x := newInputs[idx]
+	new_operand := newInputs[idx]
 	idx++
-	return backendBroadcastInDim(new_x, ni.outputShape, ni.broadcastAxes)
+	return backendBroadcastInDim(new_operand, ni.outputShape, ni.broadcastAxes)
 }
 
 // backendBroadcastInDim is a Graph wrapper for the backend.Builder.BroadcastInDim method.
-func backendBroadcastInDim(x *Node, outputShape shapes.Shape, broadcastAxes []int) (
+func backendBroadcastInDim(operand *Node, outputShape shapes.Shape, broadcastAxes []int) (
 	node *Node) {
-	inputNodes := []*Node{x}
+	inputNodes := []*Node{operand}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsBroadcastInDim{
-		x:             x,
+		operand:       operand,
 		outputShape:   outputShape,
 		broadcastAxes: slices.Clone(broadcastAxes),
 	}
-	result, err := g.currentFunc.backendFunc.BroadcastInDim(x.outputOps[0], inputs.outputShape, inputs.broadcastAxes)
+	result, err := g.currentFunc.backendFunc.BroadcastInDim(operand.outputOps[0], inputs.outputShape, inputs.broadcastAxes)
 	if err != nil {
 		panic(err)
 	}
@@ -1540,6 +1544,62 @@ func Cos(x *Node) (
 	return
 }
 
+// nodeInputsCumSum holds the inputs used for the call to compute.CumSum.
+type nodeInputsCumSum struct {
+	operand *Node
+	axis    int
+	options compute.CumSumOptions
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsCumSum) Type() NodeType {
+	return NodeTypeCumSum
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsCumSum) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], axis=%v, options=%+v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.axis,
+		ni.options,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsCumSum) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	return backendCumSum(new_operand, ni.axis, ni.options)
+}
+
+// backendCumSum is a Graph wrapper for the backend.Builder.CumSum method.
+func backendCumSum(operand *Node, axis int, options compute.CumSumOptions) (
+	node *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsCumSum{
+		operand: operand,
+		axis:    axis,
+		options: options,
+	}
+	result, err := g.currentFunc.backendFunc.CumSum(operand.outputOps[0], inputs.axis, inputs.options)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsDiv holds the inputs used for the call to compute.Div.
 type nodeInputsDiv struct {
 	lhs *Node
@@ -1666,6 +1726,62 @@ func backendDotGeneral(lhs *Node, lhsContractingAxes []int, lhsBatchAxes []int, 
 	return
 }
 
+// nodeInputsDynamicBroadcastInDim holds the inputs used for the call to compute.DynamicBroadcastInDim.
+type nodeInputsDynamicBroadcastInDim struct {
+	operand       *Node
+	broadcastAxes []int
+	dimensions    []compute.DynamicDimensionSpec
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsDynamicBroadcastInDim) Type() NodeType {
+	return NodeTypeDynamicBroadcastInDim
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsDynamicBroadcastInDim) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], broadcastAxes=%v, dimensions=%+v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.broadcastAxes,
+		ni.dimensions,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsDynamicBroadcastInDim) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	return backendDynamicBroadcastInDim(new_operand, ni.broadcastAxes, ni.dimensions...)
+}
+
+// backendDynamicBroadcastInDim is a Graph wrapper for the backend.Builder.DynamicBroadcastInDim method.
+func backendDynamicBroadcastInDim(operand *Node, broadcastAxes []int, dimensions ...compute.DynamicDimensionSpec) (
+	node *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsDynamicBroadcastInDim{
+		operand:       operand,
+		broadcastAxes: slices.Clone(broadcastAxes),
+		dimensions:    slices.Clone(dimensions),
+	}
+	result, err := g.currentFunc.backendFunc.DynamicBroadcastInDim(operand.outputOps[0], inputs.broadcastAxes, inputs.dimensions...)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsDynamicDimensionSize holds the inputs used for the call to compute.DynamicDimensionSize.
 type nodeInputsDynamicDimensionSize struct {
 	operand *Node
@@ -1692,12 +1808,11 @@ func (ni *nodeInputsDynamicDimensionSize) CloneWithInputs(originalNode *Node, ne
 	idx := 0
 	new_operand := newInputs[idx]
 	idx++
-	return DynamicDimensionSize(new_operand, ni.axis)
+	return backendDynamicDimensionSize(new_operand, ni.axis)
 }
 
-// DynamicDimensionSize returns the dimension of the given axis of the operand as a dynamic scalar value.
-// This is only supported by backends that support dynamic shapes (see Capabilities.DynamicAxes).
-func DynamicDimensionSize(operand *Node, axis int) (
+// backendDynamicDimensionSize is a Graph wrapper for the backend.Builder.DynamicDimensionSize method.
+func backendDynamicDimensionSize(operand *Node, axis int) (
 	node *Node) {
 	inputNodes := []*Node{operand}
 	g := validateBuildingGraphFromInputs(inputNodes...)
@@ -1706,6 +1821,114 @@ func DynamicDimensionSize(operand *Node, axis int) (
 		axis:    axis,
 	}
 	result, err := g.currentFunc.backendFunc.DynamicDimensionSize(operand.outputOps[0], inputs.axis)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsDynamicIota holds the inputs used for the call to compute.DynamicIota.
+type nodeInputsDynamicIota struct {
+	dtype      dtypes.DType
+	iotaAxis   int
+	dimensions []compute.DynamicDimensionSpec
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsDynamicIota) Type() NodeType {
+	return NodeTypeDynamicIota
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsDynamicIota) String() string {
+	return fmt.Sprintf("%s(dtype=%v, iotaAxis=%v, dimensions=%+v)",
+		ni.Type(),
+		ni.dtype,
+		ni.iotaAxis,
+		ni.dimensions,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsDynamicIota) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	return backendDynamicIota(originalNode.Graph(), ni.dtype, ni.iotaAxis, ni.dimensions...)
+}
+
+// backendDynamicIota is a Graph wrapper for the backend.Builder.DynamicIota method.
+func backendDynamicIota(g *Graph, dtype dtypes.DType, iotaAxis int, dimensions ...compute.DynamicDimensionSpec) (
+	node *Node) {
+	g.AssertBuilding()
+	inputs := &nodeInputsDynamicIota{
+		dtype:      dtype,
+		iotaAxis:   iotaAxis,
+		dimensions: slices.Clone(dimensions),
+	}
+	result, err := g.currentFunc.backendFunc.DynamicIota(inputs.dtype, inputs.iotaAxis, inputs.dimensions...)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsDynamicPad holds the inputs used for the call to compute.DynamicPad.
+type nodeInputsDynamicPad struct {
+	x          *Node
+	fillValue  *Node
+	axesConfig []compute.DynamicPadAxis
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsDynamicPad) Type() NodeType {
+	return NodeTypeDynamicPad
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsDynamicPad) String() string {
+	return fmt.Sprintf("%s(x=[#%d], fillValue=[#%d], axesConfig=%+v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.fillValue.Id(),
+		ni.axesConfig,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsDynamicPad) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	new_fillValue := newInputs[idx]
+	idx++
+	return backendDynamicPad(new_x, new_fillValue, ni.axesConfig...)
+}
+
+// backendDynamicPad is a Graph wrapper for the backend.Builder.DynamicPad method.
+func backendDynamicPad(x *Node, fillValue *Node, axesConfig ...compute.DynamicPadAxis) (
+	node *Node) {
+	inputNodes := []*Node{x, fillValue}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsDynamicPad{
+		x:          x,
+		fillValue:  fillValue,
+		axesConfig: slices.Clone(axesConfig),
+	}
+	result, err := g.currentFunc.backendFunc.DynamicPad(x.outputOps[0], fillValue.outputOps[0], inputs.axesConfig...)
 	if err != nil {
 		panic(err)
 	}

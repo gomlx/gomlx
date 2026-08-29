@@ -687,13 +687,10 @@ func (m *Model) AllLayers(tokens *Node, options CallOptions) (lastLayer *Node, a
 		tokens = ExpandAxes(tokens, 0)
 	}
 	g := tokens.Graph()
-	seqLen := tokens.Shape().Dimensions[1]
 
 	positionIds := options.PositionIds
 	if positionIds == nil {
-		posIdx := Iota(g, shapes.Make(dtypes.Int32, seqLen), 0)
-		positionIds = ExpandDims(posIdx, 0)
-		positionIds = BroadcastToDims(positionIds, tokens.Shape().Dimensions...)
+		positionIds = ConvertDType(IotaLike(tokens, 1), dtypes.Int32)
 	}
 
 	m.populateOrderedScopes()
@@ -741,13 +738,14 @@ func (m *Model) AllLayers(tokens *Node, options CallOptions) (lastLayer *Node, a
 		embeddedPLE := layers.Embedding(m.Scope.In("token_embed_per_layer"), tokens, m.DType, m.VocabSizePerLayerInput, m.NumLayers*m.HiddenSizePerLayerInput)
 		pleScale := Scalar(embeddedPLE.Graph(), m.DType, math.Sqrt(float64(m.HiddenSizePerLayerInput)))
 		embeddedPLE = Mul(embeddedPLE, pleScale)
-		batchSize := tokens.Shape().Dimensions[0]
-		embeddedPLE = Reshape(embeddedPLE, batchSize, seqLen, m.NumLayers, m.HiddenSizePerLayerInput)
+		batchSpec := DimensionSpecFor(tokens, 0)
+		seqSpec := DimensionSpecFor(tokens, 1)
+		embeddedPLE = DynamicReshape(embeddedPLE, batchSpec, seqSpec, StaticDim(m.NumLayers), StaticDim(m.HiddenSizePerLayerInput))
 
 		perLayerProjection := m.dense(m.Scope.In("per_layer_model_projection"), x, false, m.NumLayers*m.HiddenSizePerLayerInput)
 		perLayerProjectionScale := Scalar(perLayerProjection.Graph(), m.DType, m.PerLayerModelProjectionScale)
 		perLayerProjection = Mul(perLayerProjection, perLayerProjectionScale)
-		perLayerProjection = Reshape(perLayerProjection, batchSize, seqLen, m.NumLayers, m.HiddenSizePerLayerInput)
+		perLayerProjection = DynamicReshape(perLayerProjection, batchSpec, seqSpec, StaticDim(m.NumLayers), StaticDim(m.HiddenSizePerLayerInput))
 		perLayerProjection = m.normalize(m.Scope.In("per_layer_projection_norm"), perLayerProjection, layers.NormalizationRMSNorm)
 
 		perLayerInputs = Add(perLayerProjection, embeddedPLE)
@@ -942,8 +940,10 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x *N
 	if posEncoder != nil {
 		if qkEncoder, ok := posEncoder.(pos.QKEncoder); ok {
 			g := x.Graph()
-			seqLen := x.Shape().Dimensions[1]
-			posIndices := pos.SequentialPositions(g, position, seqLen)
+			posIndices := DynamicIota(g, dtypes.Int32, 0, DimensionSpecFor(x, 1))
+			if position != nil {
+				posIndices = Add(posIndices, ConvertDType(position, dtypes.Int32))
+			}
 			if isShared {
 				queryProjected, _ = qkEncoder.EncodeQK(queryProjected, queryProjected, posIndices, 1)
 			} else {
@@ -965,16 +965,16 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x *N
 			m.KVCache.Update(attnScope, cache, keyProjected, valueProjected, position)
 			fullKey, fullValue = m.KVCache.Get(cache, attnScope.Scope())
 		}
-		batchSize := x.Shape().Dimensions[0]
-		seqLen := x.Shape().Dimensions[1]
-		cacheSeqLen := fullKey.Shape().Dimensions[2]
-
 		fullKey = TransposeAllDims(fullKey, 0, 2, 1, 3)
 		fullValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
 
-		qReshaped := Reshape(queryProjected, batchSize, seqLen, m.NumHeads*headDim)
-		kReshaped := Reshape(fullKey, batchSize, cacheSeqLen, kvHeads*headDim)
-		vReshaped := Reshape(fullValue, batchSize, cacheSeqLen, kvHeads*headDim)
+		batchSpec := DimensionSpecFor(x, 0)
+		seqSpec := DimensionSpecFor(x, 1)
+		cacheSeqSpec := DimensionSpecFor(fullKey, 1)
+
+		qReshaped := DynamicReshape(queryProjected, batchSpec, seqSpec, StaticDim(m.NumHeads*headDim))
+		kReshaped := DynamicReshape(fullKey, batchSpec, cacheSeqSpec, StaticDim(kvHeads*headDim))
+		vReshaped := DynamicReshape(fullValue, batchSpec, cacheSeqSpec, StaticDim(kvHeads*headDim))
 
 		slidingWindow := 0
 		if layerType == LocalLayer {
@@ -984,7 +984,7 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x *N
 
 		if options.AttentionMask != nil {
 			expandedMask := ExpandDims(options.AttentionMask, 1)
-			expandedMask = BroadcastToDims(expandedMask, customMask.Shape().Dimensions...)
+			expandedMask = BroadcastLike(expandedMask, customMask)
 			customMask = LogicalAnd(customMask, expandedMask)
 		}
 
@@ -1006,11 +1006,11 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x *N
 		}
 		attn = attnBuilder.Done()
 	} else {
-		batchSize := x.Shape().Dimensions[0]
-		seqLen := x.Shape().Dimensions[1]
-		qReshaped := Reshape(queryProjected, batchSize, seqLen, m.NumHeads*headDim)
-		kReshaped := Reshape(keyProjected, batchSize, seqLen, kvHeads*headDim)
-		vReshaped := Reshape(valueProjected, batchSize, seqLen, kvHeads*headDim)
+		batchSpec := DimensionSpecFor(x, 0)
+		seqSpec := DimensionSpecFor(x, 1)
+		qReshaped := DynamicReshape(queryProjected, batchSpec, seqSpec, StaticDim(m.NumHeads*headDim))
+		kReshaped := DynamicReshape(keyProjected, batchSpec, seqSpec, StaticDim(kvHeads*headDim))
+		vReshaped := DynamicReshape(valueProjected, batchSpec, seqSpec, StaticDim(kvHeads*headDim))
 
 		attnBuilder := attention.MultiHeadAttention(attnScope, qReshaped, kReshaped, vReshaped, m.NumHeads, headDim).
 			UseTransposedWeights(m.TransposedProjections).
@@ -1170,8 +1170,10 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x *Node
 	if posEncoder != nil {
 		if qkEncoder, ok := posEncoder.(pos.QKEncoder); ok {
 			g := x.Graph()
-			seqLen := x.Shape().Dimensions[1]
-			posIndices := pos.SequentialPositions(g, position, seqLen)
+			posIndices := DynamicIota(g, dtypes.Int32, 0, DimensionSpecFor(x, 1))
+			if position != nil {
+				posIndices = Add(posIndices, ConvertDType(position, dtypes.Int32))
+			}
 			if isShared {
 				queryProjected, _ = qkEncoder.EncodeQK(queryProjected, queryProjected, posIndices, 1)
 			} else {
@@ -1198,13 +1200,13 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x *Node
 		fullKey = TransposeAllDims(fullKey, 0, 2, 1, 3)
 		fullValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
 
-		batchSize := x.Shape().Dimensions[0]
-		seqLen := x.Shape().Dimensions[1]
-		cacheSeqLen := fullKey.Shape().Dimensions[1]
+		batchSpec := DimensionSpecFor(x, 0)
+		seqSpec := DimensionSpecFor(x, 1)
+		cacheSeqSpec := DimensionSpecFor(fullKey, 1)
 
-		qReshaped := Reshape(queryProjected, batchSize, seqLen, m.NumHeads*headDim)
-		kReshaped := Reshape(fullKey, batchSize, cacheSeqLen, kvHeads*headDim)
-		vReshaped := Reshape(fullValue, batchSize, cacheSeqLen, kvHeads*headDim)
+		qReshaped := DynamicReshape(queryProjected, batchSpec, seqSpec, StaticDim(m.NumHeads*headDim))
+		kReshaped := DynamicReshape(fullKey, batchSpec, cacheSeqSpec, StaticDim(kvHeads*headDim))
+		vReshaped := DynamicReshape(fullValue, batchSpec, cacheSeqSpec, StaticDim(kvHeads*headDim))
 
 		slidingWindow := 0
 		if layerType == LocalLayer {
@@ -1214,7 +1216,7 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x *Node
 
 		if options.AttentionMask != nil {
 			expandedMask := ExpandDims(options.AttentionMask, 1)
-			expandedMask = BroadcastToDims(expandedMask, customMask.Shape().Dimensions...)
+			expandedMask = BroadcastLike(expandedMask, customMask)
 			customMask = LogicalAnd(expandedMask, customMask)
 		}
 
@@ -1236,11 +1238,11 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x *Node
 		}
 		attn = attnBuilder.Done()
 	} else {
-		batchSize := x.Shape().Dimensions[0]
-		seqLen := x.Shape().Dimensions[1]
-		qReshaped := Reshape(queryProjected, batchSize, seqLen, m.NumHeads*headDim)
-		kReshaped := Reshape(keyProjected, batchSize, seqLen, kvHeads*headDim)
-		vReshaped := Reshape(valueProjected, batchSize, seqLen, kvHeads*headDim)
+		batchSpec := DimensionSpecFor(x, 0)
+		seqSpec := DimensionSpecFor(x, 1)
+		qReshaped := DynamicReshape(queryProjected, batchSpec, seqSpec, StaticDim(m.NumHeads*headDim))
+		kReshaped := DynamicReshape(keyProjected, batchSpec, seqSpec, StaticDim(kvHeads*headDim))
+		vReshaped := DynamicReshape(valueProjected, batchSpec, seqSpec, StaticDim(kvHeads*headDim))
 
 		attnBuilder := attention.MultiHeadAttention(selfAttnScope, qReshaped, kReshaped, vReshaped, m.NumHeads, headDim).
 			UseTransposedWeights(m.TransposedProjections).
@@ -1333,7 +1335,7 @@ func broadcastPrefixToMatch(x, target *Node) *Node {
 	for x.Rank() < target.Rank() {
 		x = ExpandAxes(x, 0)
 	}
-	return BroadcastToShape(x, target.Shape())
+	return BroadcastLike(x, target)
 }
 
 // WithTokenTypeEmbedding an extra constant embedding based on the "token type".

@@ -71,6 +71,9 @@ func RunTestGraphFnWithBackend(t *testing.T, testName string, backend compute.Ba
 		}
 		exec := graph.MustNewExec(backend, wrapperFn)
 		inputsAndOutputs, err := exec.Call()
+		if compute.IsNotImplemented(err) {
+			t.Skipf("Backend %q does not implement op: %v", backend.Name(), err)
+		}
 		require.NoErrorf(t, err, "%s: failed to execute graph", testName)
 		require.NotPanicsf(t, func() { inputsAndOutputs = exec.MustCall() }, "%s: failed to execute graph", testName)
 		inputs := inputsAndOutputs[:numInputs]
