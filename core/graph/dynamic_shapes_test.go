@@ -15,8 +15,8 @@ import (
 
 func TestDynamicShapes(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
-		if !backend.Capabilities().DynamicAxes {
-			t.Skipf("Backend %q does not support DynamicAxes", backend.Name())
+		if !backend.Capabilities().HasDynamicShapes() {
+			t.Skipf("Backend %q does not support DynamicShapes of any kind", backend.Name())
 		}
 
 		t.Run("BasicExec", func(t *testing.T) {
@@ -543,5 +543,3 @@ func TestDynamicShapes(t *testing.T) {
 		})
 	})
 }
-
-

@@ -207,8 +207,8 @@ func TestDynamicShapesAndBucketing(t *testing.T) {
 	}
 
 	t.Run("DynamicShapesWithNoneStrategy", func(t *testing.T) {
-		if !backend.Capabilities().DynamicAxes {
-			t.Skipf("Backend %q does not support DynamicAxes", backend.Name())
+		if !backend.Capabilities().HasDynamicShapes() {
+			t.Skipf("Backend %q does not support dynamic shapes", backend.Name())
 		}
 
 		store := model.NewStore()
@@ -218,7 +218,7 @@ func TestDynamicShapesAndBucketing(t *testing.T) {
 			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
 			vocabIota = ExpandDims(vocabIota, 0)
 			vocabIota = ExpandDims(vocabIota, 0)
-			
+
 			targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
 			targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
 			targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
@@ -244,7 +244,7 @@ func TestDynamicShapesAndBucketing(t *testing.T) {
 			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
 			vocabIota = ExpandDims(vocabIota, 0)
 			vocabIota = ExpandDims(vocabIota, 0)
-			
+
 			targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
 			targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
 			targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)

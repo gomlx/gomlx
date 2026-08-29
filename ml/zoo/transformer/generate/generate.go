@@ -307,7 +307,7 @@ func (gen *Generator) getBucketingStrategy(backend compute.Backend) bucketing.St
 	if gen.BucketingStrategy != nil {
 		return gen.BucketingStrategy
 	}
-	if backend.Capabilities().DynamicAxes {
+	if backend.Capabilities().HasDynamicShapes() {
 		return bucketing.None()
 	}
 	return bucketing.Pow2()
@@ -566,7 +566,7 @@ func (gen *Generator) updateCurrentSeq(backend compute.Backend, scope *model.Sco
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to create updateCurrentSeqExec")
 		}
-		if backend.Capabilities().DynamicAxes {
+		if backend.Capabilities().HasDynamicShapes() {
 			gen.updateCurrentSeqExec.WithDynamicAxes([]string{"batch", "seq_len"}, []string{""}, []string{})
 		}
 	}
@@ -603,7 +603,7 @@ func (gen *Generator) growCurrentSeq(backend compute.Backend, scope *model.Scope
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to create growCurrentSeqExec")
 		}
-		if backend.Capabilities().DynamicAxes {
+		if backend.Capabilities().HasDynamicShapes() {
 			gen.growCurrentSeqExec.WithDynamicAxes([]string{"batch", "seq_len"})
 		}
 	}
@@ -629,7 +629,7 @@ func (gen *Generator) growCurrentSeqDynamic(backend compute.Backend, scope *mode
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to create growCurrentSeqDynamicExec")
 		}
-		if backend.Capabilities().DynamicAxes {
+		if backend.Capabilities().HasDynamicShapes() {
 			gen.growCurrentSeqDynamicExec.WithDynamicAxes([]string{"batch", "seq_len"}, []string{""})
 		}
 	}
@@ -737,7 +737,7 @@ func (gen *Generator) generateSamplingNaive(
 	// Checks whether to use dynamic shapes (if available) or bucketing.
 	strategy := gen.getBucketingStrategy(backend)
 	_, isNoneStrategy := strategy.(bucketing.NoneStrategy)
-	useDynamic := isNoneStrategy && backend.Capabilities().DynamicAxes
+	useDynamic := isNoneStrategy && backend.Capabilities().HasDynamicShapes()
 
 	// Initialize currentSeq on accelerator
 	var currentSeq *tensors.Tensor
@@ -781,7 +781,7 @@ func (gen *Generator) generateSamplingNaive(
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to create naiveExec")
 		}
-		if backend.Capabilities().DynamicAxes {
+		if backend.Capabilities().HasDynamicShapes() {
 			gen.naiveExec.WithDynamicAxes([]string{"batch", "seq_len"}, []string{""})
 		}
 	}

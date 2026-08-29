@@ -407,8 +407,8 @@ func TestExecWrappers(t *testing.T) {
 
 func TestExecDynamicShapes(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
-		if !backend.Capabilities().DynamicAxes {
-			t.Skipf("Backend %q does not support DynamicAxes", backend.Name())
+		if !backend.Capabilities().HasDynamicShapes() {
+			t.Skipf("Backend %q does not support DynamicShapes of any kind", backend.Name())
 		}
 
 		exec, err := NewExec(backend, EuclideanDistance)
