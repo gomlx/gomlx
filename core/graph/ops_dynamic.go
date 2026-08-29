@@ -6,7 +6,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/exceptions"
+	"github.com/gomlx/gomlx/support/exceptions"
 )
 
 // DimensionSpec specifies how the dimension of an axis is defined in dynamic shape operations
