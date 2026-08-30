@@ -541,9 +541,21 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		return nodes.paramNode, nil
 	}
 
-	if v.store != nil && v.store.variablesAsConst {
+	useConst := false
+	if v.store != nil {
+		if v.store.variablesAsConst {
+			useConst = true
+		} else if backend := g.Backend(); backend != nil && backend.Capabilities().PreferConstantsForVariables {
+			// If backend prefers constants for variables, only embed as constant if NOT in training mode and variable is non-trainable.
+			if !v.store.IsTraining(g) && !v.Trainable {
+				useConst = true
+			}
+		}
+	}
+
+	if useConst {
 		if !v.HasValue() {
-			return nil, errors.Errorf("variable %q has no value initialized when Store.WithVariableAsConst is set to true", v.Path())
+			return nil, errors.Errorf("variable %q has no value initialized when embedding as constant graph node", v.Path())
 		}
 		val, err := v.Value()
 		if err != nil {

@@ -571,12 +571,17 @@ const GraphParamIsTraining = "training"
 
 // IsTraining returns whether current Store (and thus this Scope) is being used for training.
 func (s *Store) IsTraining(g *Graph) bool {
-	return GetGraphParamOr(s.RootScope(), g, GraphParamIsTraining, false)
+	val, found := GetGraphParam(g, ScopeSeparator+GraphParamIsTraining)
+	if !found || val == nil {
+		return false
+	}
+	isTraining, _ := val.(bool)
+	return isTraining
 }
 
 // SetTraining marks the current Store (and thus this Scope) for the given graph as training.
 func (s *Store) SetTraining(g *Graph, value bool) {
-	s.RootScope().SetGraphParam(g, GraphParamIsTraining, value)
+	SetGraphParam(g, ScopeSeparator+GraphParamIsTraining, value)
 }
 
 // SetParams sets a collection of parameters in the current scope.
