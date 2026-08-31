@@ -4,4 +4,4 @@
 
 package _default
 
-import _ "github.com/gomlx/go-xla/compute/xla"
+import _ "github.com/gomlx/go-xla/compute/xla/autoinstall"

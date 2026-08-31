@@ -15,6 +15,7 @@ import (
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/go-xla/compute/xla"
+	_ "github.com/gomlx/go-xla/compute/xla/autoinstall"
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/klog/v2"
 )
