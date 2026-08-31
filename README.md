@@ -126,7 +126,7 @@ different implementations (more planned in the future):
 
    1. **`xla`**: [OpenXLA](https://github.com/openxla/xla) backend for CPUs, GPUs, and TPUs. State-of-the-art as these things go, but only static-shape.
       For linux/amd64, linux/arm64 (CPU) and darwin/arm64 (CPU) for now. The Go API is defined under the [go-xla](https://github.com/gomlx/go-xla) project,
-      in `github.com/gomlx/go-xla/compute/xla`. It is included by default.
+      in `github.com/gomlx/go-xla/compute/xla/autoinstall`. It is included by default.
    2. **`go`**: a pure Go backend (no C/C++ dependencies), implemented in `github.com/gomlx/compute/gobackend`, but included by default.
       It is slower than XLA but very portable (compiles to WASM/Windows/etc.).
       * Some SIMD support: for AVX-2/AVX-512 for MatMul (not other operations yet). 
@@ -190,7 +190,8 @@ Some selected highlights:
 - `backends` moved to `github.com/gomlx/compute` repository!
   - Packages `backends`, `dtypes`, `shapes` and `distributed` moved to `github.com/gomlx/compute`.
   - The _"go"_ backend is now implemented in `github.com/gomlx/compute/gobackend` (it's been greatly improved as well).
-  - The _"xla"_ backend is now implemented in `github.com/gomlx/go-xla/compute/xla`.
+  - The _"xla"_ backend is now implemented in `github.com/gomlx/go-xla/compute/xla` (or to include the auto-installation
+    feature, import `github.com/gomlx/go-xla/compute/xla/autoinstall`).
 - Removed `pkg/` prefix from the top-level packages (no need with `internal/` special handling).
 - The `context.Context` variable container was redesigned (and simplified) into `model.Store` (the container) and `model.Scope` (a pointer to a `Store` with the current scope).
 - The `train.Dataset` (package `ml/train`) interface was modernized (and simplified) to use Go's standard iterators. Also now with clearer ownership rules.
@@ -348,7 +349,7 @@ without linking GoMLX -- it will save a little executable size.
   - The recommendation is to use `import _ "github.com/gomlx/gomlx/backends/default"` which will import `xla` (or the alias `stablehlo`) and
     `go` backends. If you add `-tags=noxla` to the compiler it won't include the XLA backend.
   - `import _ "github.com/gomlx/compute/gobackend"` to include only `go` (no C++ dependencies)
-  - `import _ "github.com/gomlx/go-xla/compute/xla"` to import only XLA.
+  - `import _ "github.com/gomlx/go-xla/compute/xla/autoinstall"` to import only XLA (with the auto-installer).
 - **Where are AI context files for (Gemini, Claude, SKILLS.md, etc.)**
   - To prevent cluttering the root folder of the project, they are all moved to the `.agents/` directory and also included in the `.gitignore`. This way
     one can simply symbolic link whichever AI configuration file they use to the root directory of their local copy to use them.
