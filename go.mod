@@ -8,7 +8,7 @@ require (
 	github.com/erkkah/margaid v0.3.0
 	github.com/gomlx/bsplines v0.2.0
 	github.com/gomlx/compute v0.1.6
-	github.com/gomlx/compute-onnx v0.1.4
+	github.com/gomlx/compute-onnx v0.1.5
 	github.com/gomlx/go-xla v0.4.5
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
