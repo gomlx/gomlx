@@ -193,8 +193,9 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 			{
 				name:     "adult-#1",
 				lhsShape: []int{128, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
-				rhsShape: []int{4, 1}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{}},
-			dtypes: []dtypes.DType{dtypes.Float32},
+				rhsShape: []int{4, 1}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
+				dtypes: []dtypes.DType{dtypes.Float32},
+			},
 			{
 				name:     "adult-#2",
 				lhsShape: []int{128, 69}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
