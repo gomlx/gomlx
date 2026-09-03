@@ -1,6 +1,6 @@
 module github.com/gomlx/gomlx/examples
 
-go 1.26.5
+go 1.27
 
 require (
 	github.com/MetalBlueberry/go-plotly v0.7.0
@@ -8,9 +8,9 @@ require (
 	github.com/daniellowtw/matlab v0.0.0-20190528220746-1ed1d96a6637
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-gota/gota v0.12.0
-	github.com/gomlx/compute v0.1.6
+	github.com/gomlx/compute v0.1.7
 	github.com/gomlx/go-huggingface v0.4.3
-	github.com/gomlx/gomlx v0.28.8
+	github.com/gomlx/gomlx v0.28.9-0.20260903151151-facb0cdef7e4
 	github.com/gomlx/onnx-gomlx v0.5.5
 	github.com/janpfeifer/gonb v0.11.5
 	github.com/janpfeifer/must v0.2.0
