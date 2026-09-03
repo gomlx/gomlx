@@ -61,6 +61,7 @@ type dotGeneralBenchmarkParamsCase struct {
 	name                                       string
 	lhsShape, lhsContractingAxes, lhsBatchAxes []int
 	rhsShape, rhsContractingAxes, rhsBatchAxes []int
+	dtypes                                     []dtypes.DType
 }
 
 func dimsToStr(dims []int) string {
@@ -160,27 +161,32 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				name:     "KA-Batch-16-#1",
 				lhsShape: []int{16, 12, 13, 13}, lhsContractingAxes: []int{3}, lhsBatchAxes: []int{0, 1},
 				rhsShape: []int{16, 12, 13, 32}, rhsContractingAxes: []int{2}, rhsBatchAxes: []int{0, 1},
+				dtypes: []dtypes.DType{dtypes.Float32},
 			},
 			{
 				name:     "KA-Batch-16-#2",
 				lhsShape: []int{16, 12, 13, 32}, lhsContractingAxes: []int{3}, lhsBatchAxes: []int{0, 1},
 				rhsShape: []int{16, 12, 32, 13}, rhsContractingAxes: []int{2}, rhsBatchAxes: []int{0, 1},
+				dtypes: []dtypes.DType{dtypes.Float32},
 			},
 			{
 				name:     "KA-Batch-16-#3",
 				lhsShape: []int{16, 13, 1536}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
 				rhsShape: []int{1536, 384}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int(nil),
+				dtypes: []dtypes.DType{dtypes.Float32},
 			},
 			{
 				name:     "KA-Batch-16-#4",
 				lhsShape: []int{16, 13, 384}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
 				rhsShape: []int{384, 1536}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int(nil),
+				dtypes: []dtypes.DType{dtypes.Float32},
 			},
 			{
 				// This case happens 4x more often than the other parameters.
 				name:     "KA-Batch-16-#5",
 				lhsShape: []int{16, 13, 384}, lhsContractingAxes: []int{2}, lhsBatchAxes: []int(nil),
 				rhsShape: []int{384, 384}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int(nil),
+				dtypes: []dtypes.DType{dtypes.Float32},
 			},
 
 			// Shape values taken from training github.com/gomlx/gomlx/examples/adult/demo
@@ -188,35 +194,42 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				name:     "adult-#1",
 				lhsShape: []int{128, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
 				rhsShape: []int{4, 1}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{}},
+			dtypes: []dtypes.DType{dtypes.Float32},
 			{
 				name:     "adult-#2",
 				lhsShape: []int{128, 69}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
 				rhsShape: []int{69, 4}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
+				dtypes: []dtypes.DType{dtypes.Float32},
 			},
 			{
 				name:     "adult-#3",
 				lhsShape: []int{25, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
 				rhsShape: []int{4, 1}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
+				dtypes: []dtypes.DType{dtypes.Float32},
 			},
 			{
 				name:     "adult-#4",
 				lhsShape: []int{25, 69}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
 				rhsShape: []int{69, 4}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
+				dtypes: []dtypes.DType{dtypes.Float32},
 			},
 			{
 				name:     "adult-#5",
 				lhsShape: []int{49, 4}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
 				rhsShape: []int{4, 1}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
+				dtypes: []dtypes.DType{dtypes.Float32},
 			},
 			{
 				name:     "adult-#6",
 				lhsShape: []int{49, 69}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
 				rhsShape: []int{69, 4}, rhsContractingAxes: []int{0}, rhsBatchAxes: []int{},
+				dtypes: []dtypes.DType{dtypes.Float32},
 			},
 			{
 				name:     "adult-#6-Normalized",
 				lhsShape: []int{49, 69}, lhsContractingAxes: []int{1}, lhsBatchAxes: []int{},
 				rhsShape: []int{4, 69}, rhsContractingAxes: []int{1}, rhsBatchAxes: []int{},
+				dtypes: []dtypes.DType{dtypes.Float32},
 			},
 
 			// Add more test cases relevant to your models here
@@ -293,7 +306,11 @@ func TestDotGeneral_PerformanceTable(t *testing.T) {
 				// Only run if the layout matches the flag (or is not specified).
 				continue
 			}
-			for _, dtype := range dtypesToTest {
+			dts := dtypesToTest
+			if len(benchCase.dtypes) > 0 {
+				dts = benchCase.dtypes
+			}
+			for _, dtype := range dts {
 				if filterDTypes && !dtypesToRun.Has(dtype.String()) {
 					continue
 				}
