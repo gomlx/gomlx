@@ -11,111 +11,143 @@ GOMLX_BACKEND=go go test -tags=perf ./internal/perf/ \
 
 ## Results
 
-<<<<<<< HEAD
-=======
-### Backend: `go` with new `matmul` for AVX512 implementation / 2026/05/11 AMD 9950X3D, go 1.26.3, Ubuntu 26.04, PJRT Plugin 0.104
+### Backend: `go` / CPU AMD 9950X3D / 2026-09-03, go 1.27.1, Ubuntu 26.04
+
+```bash
+$ GOEXPERIMENT=simd GOMLX_BACKEND=go go1.27.1 test -tags=perf ./internal/perf -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1 -perf_duration=10s -markdown -timeout=2h
+```
 
 | Test Name | LHS Dims | RHS Dims | Layout | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `NoBatch-Tiny` | {128, 4} | {4, 1} | NonTransposed | Float32 | 1 | 4.4µs | 1_024 | 0.2 |
-| `NoBatch-Tiny` | {128, 4} | {4, 1} | NonTransposed | Float64 | 1 | 4.2µs | 1_024 | 0.2 |
-| `NoBatch-Tiny` | {128, 4} | {4, 1} | NonTransposed | BFloat16 | 1 | 6.1µs | 1_024 | 0.2 |
-| `NoBatch-Tiny` | {128, 4} | {4, 1} | NonTransposed | Float16 | 1 | 7.8µs | 1_024 | 0.1 |
-| `NoBatch-Tiny-Norm` | {128, 4} | {1, 4} | Transposed | Float32 | 1 | 4.9µs | 1_024 | 0.2 |
-| `NoBatch-Tiny-Norm` | {128, 4} | {1, 4} | Transposed | Float64 | 1 | 4.6µs | 1_024 | 0.2 |
-| `NoBatch-Tiny-Norm` | {128, 4} | {1, 4} | Transposed | BFloat16 | 1 | 7.9µs | 1_024 | 0.1 |
-| `NoBatch-Tiny-Norm` | {128, 4} | {1, 4} | Transposed | Float16 | 1 | 6.9µs | 1_024 | 0.1 |
-| `NoBatch-Small` | {16, 128} | {128, 32} | NonTransposed | Float32 | 1 | 8.2µs | 131_072 | 15.9 |
-| `NoBatch-Small` | {16, 128} | {128, 32} | NonTransposed | Float64 | 1 | 10.8µs | 131_072 | 12.1 |
-| `NoBatch-Small` | {16, 128} | {128, 32} | NonTransposed | BFloat16 | 1 | 51.1µs | 131_072 | 2.6 |
-| `NoBatch-Small` | {16, 128} | {128, 32} | NonTransposed | Float16 | 1 | 67.7µs | 131_072 | 1.9 |
-| `NoBatch-Medium` | {128, 128} | {128, 256} | NonTransposed | Float32 | 1 | 194.7µs | 8_388_608 | 43.1 |
-| `NoBatch-Medium` | {128, 128} | {128, 256} | NonTransposed | Float64 | 1 | 223.4µs | 8_388_608 | 37.6 |
-| `NoBatch-Medium` | {128, 128} | {128, 256} | NonTransposed | BFloat16 | 1 | 156µs | 8_388_608 | 53.8 |
-| `NoBatch-Medium` | {128, 128} | {128, 256} | NonTransposed | Float16 | 1 | 566.2µs | 8_388_608 | 14.8 |
-| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | NonTransposed | Float32 | 1 | 3.9ms | 6_039_797_760 | 1536.5 |
-| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | NonTransposed | Float64 | 1 | 7.7ms | 6_039_797_760 | 785.9 |
-| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | NonTransposed | BFloat16 | 1 | 5.5ms | 6_039_797_760 | 1092.2 |
-| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | NonTransposed | Float16 | 1 | 28.6ms | 6_039_797_760 | 211.5 |
-| `R-Unbalanced-Cross` | {128} | {128, 256} | NonTransposed | Float32 | 1 | 10.5µs | 65_536 | 6.2 |
-| `R-Unbalanced-Cross` | {128} | {128, 256} | NonTransposed | Float64 | 1 | 10.2µs | 65_536 | 6.5 |
-| `R-Unbalanced-Cross` | {128} | {128, 256} | NonTransposed | BFloat16 | 1 | 11.4µs | 65_536 | 5.8 |
-| `R-Unbalanced-Cross` | {128} | {128, 256} | NonTransposed | Float16 | 1 | 17.8µs | 65_536 | 3.7 |
-| `L-Unbalanced-Cross` | {4096, 32} | {32, 16} | NonTransposed | Float32 | 1 | 755.9µs | 4_194_304 | 5.5 |
-| `L-Unbalanced-Cross` | {4096, 32} | {32, 16} | NonTransposed | Float64 | 1 | 253.2µs | 4_194_304 | 16.6 |
-| `L-Unbalanced-Cross` | {4096, 32} | {32, 16} | NonTransposed | BFloat16 | 1 | 1.3ms | 4_194_304 | 3.2 |
-| `L-Unbalanced-Cross` | {4096, 32} | {32, 16} | NonTransposed | Float16 | 1 | 1.7ms | 4_194_304 | 2.5 |
-| `LargeBatch-Tiny` | {1024, 128, 4} | {1024, 4, 1} | NonTransposed | Float32 | 1024 | 181.4µs | 1_048_576 | 5.8 |
-| `LargeBatch-Tiny` | {1024, 128, 4} | {1024, 4, 1} | NonTransposed | Float64 | 1024 | 160µs | 1_048_576 | 6.6 |
-| `LargeBatch-Tiny` | {1024, 128, 4} | {1024, 4, 1} | NonTransposed | BFloat16 | 1024 | 242µs | 1_048_576 | 4.3 |
-| `LargeBatch-Tiny` | {1024, 128, 4} | {1024, 4, 1} | NonTransposed | Float16 | 1024 | 405.2µs | 1_048_576 | 2.6 |
-| `LargeBatch-Small` | {256, 8, 32} | {256, 32, 16} | NonTransposed | Float32 | 256 | 128.8µs | 2_097_152 | 16.3 |
-| `LargeBatch-Small` | {256, 8, 32} | {256, 32, 16} | NonTransposed | Float64 | 256 | 115.8µs | 2_097_152 | 18.1 |
-| `LargeBatch-Small` | {256, 8, 32} | {256, 32, 16} | NonTransposed | BFloat16 | 256 | 179.8µs | 2_097_152 | 11.7 |
-| `LargeBatch-Small` | {256, 8, 32} | {256, 32, 16} | NonTransposed | Float16 | 256 | 256.8µs | 2_097_152 | 8.2 |
-| `LargeBatch-Medium` | {64, 64, 128} | {64, 64, 128} | Transposed | Float32 | 64 | 211.1µs | 67_108_864 | 317.9 |
-| `LargeBatch-Medium` | {64, 64, 128} | {64, 64, 128} | Transposed | Float64 | 64 | 288.5µs | 67_108_864 | 232.6 |
-| `LargeBatch-Medium` | {64, 64, 128} | {64, 64, 128} | Transposed | BFloat16 | 64 | 292.6µs | 67_108_864 | 229.4 |
-| `LargeBatch-Medium` | {64, 64, 128} | {64, 64, 128} | Transposed | Float16 | 64 | 903.4µs | 67_108_864 | 74.3 |
-| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float32 | 16 | 52.2ms | 96_636_764_160 | 1852.3 |
-| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float64 | 16 | 108.1ms | 96_636_764_160 | 893.9 |
-| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | BFloat16 | 16 | 72.1ms | 96_636_764_160 | 1340.0 |
-| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float16 | 16 | 403.8ms | 96_636_764_160 | 239.3 |
-| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float32 | 16 | 53.2ms | 96_636_764_160 | 1817.7 |
-| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float64 | 16 | 112.4ms | 96_636_764_160 | 859.7 |
-| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | BFloat16 | 16 | 71.6ms | 96_636_764_160 | 1349.0 |
-| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float16 | 16 | 394.2ms | 96_636_764_160 | 245.1 |
-| `KA-Batch-16-#1` | {16, 12, 13, 13} | {16, 12, 13, 32} | NonTransposed | Float32 | 192 | 165.4µs | 2_076_672 | 12.6 |
-| `KA-Batch-16-#1` | {16, 12, 13, 13} | {16, 12, 13, 32} | NonTransposed | Float64 | 192 | 226.5µs | 2_076_672 | 9.2 |
-| `KA-Batch-16-#1` | {16, 12, 13, 13} | {16, 12, 13, 32} | NonTransposed | BFloat16 | 192 | 266.3µs | 2_076_672 | 7.8 |
-| `KA-Batch-16-#1` | {16, 12, 13, 13} | {16, 12, 13, 32} | NonTransposed | Float16 | 192 | 369µs | 2_076_672 | 5.6 |
-| `KA-Batch-16-#2` | {16, 12, 13, 32} | {16, 12, 32, 13} | NonTransposed | Float32 | 192 | 130.3µs | 2_076_672 | 15.9 |
-| `KA-Batch-16-#2` | {16, 12, 13, 32} | {16, 12, 32, 13} | NonTransposed | Float64 | 192 | 202.5µs | 2_076_672 | 10.3 |
-| `KA-Batch-16-#2` | {16, 12, 13, 32} | {16, 12, 32, 13} | NonTransposed | BFloat16 | 192 | 206.3µs | 2_076_672 | 10.1 |
-| `KA-Batch-16-#2` | {16, 12, 13, 32} | {16, 12, 32, 13} | NonTransposed | Float16 | 192 | 249.5µs | 2_076_672 | 8.3 |
-| `KA-Batch-16-#3` | {16, 13, 1536} | {1536, 384} | NonTransposed | Float32 | 1 | 1.7ms | 245_366_784 | 147.1 |
-| `KA-Batch-16-#3` | {16, 13, 1536} | {1536, 384} | NonTransposed | Float64 | 1 | 2.6ms | 245_366_784 | 96.2 |
-| `KA-Batch-16-#3` | {16, 13, 1536} | {1536, 384} | NonTransposed | BFloat16 | 1 | 2.4ms | 245_366_784 | 103.9 |
-| `KA-Batch-16-#3` | {16, 13, 1536} | {1536, 384} | NonTransposed | Float16 | 1 | 13.3ms | 245_366_784 | 18.5 |
-| `KA-Batch-16-#4` | {16, 13, 384} | {384, 1536} | NonTransposed | Float32 | 1 | 768.4µs | 245_366_784 | 319.3 |
-| `KA-Batch-16-#4` | {16, 13, 384} | {384, 1536} | NonTransposed | Float64 | 1 | 1.2ms | 245_366_784 | 211.7 |
-| `KA-Batch-16-#4` | {16, 13, 384} | {384, 1536} | NonTransposed | BFloat16 | 1 | 1.6ms | 245_366_784 | 151.6 |
-| `KA-Batch-16-#4` | {16, 13, 384} | {384, 1536} | NonTransposed | Float16 | 1 | 7.6ms | 245_366_784 | 32.2 |
-| `KA-Batch-16-#5` | {16, 13, 384} | {384, 384} | NonTransposed | Float32 | 1 | 477.6µs | 61_341_696 | 128.4 |
-| `KA-Batch-16-#5` | {16, 13, 384} | {384, 384} | NonTransposed | Float64 | 1 | 719µs | 61_341_696 | 85.3 |
-| `KA-Batch-16-#5` | {16, 13, 384} | {384, 384} | NonTransposed | BFloat16 | 1 | 627µs | 61_341_696 | 97.8 |
-| `KA-Batch-16-#5` | {16, 13, 384} | {384, 384} | NonTransposed | Float16 | 1 | 3.7ms | 61_341_696 | 16.4 |
-| `adult-#1` | {128, 4} | {4, 1} | NonTransposed | Float32 | 1 | 8.3µs | 1_024 | 0.1 |
-| `adult-#1` | {128, 4} | {4, 1} | NonTransposed | Float64 | 1 | 7.5µs | 1_024 | 0.1 |
-| `adult-#1` | {128, 4} | {4, 1} | NonTransposed | BFloat16 | 1 | 7.4µs | 1_024 | 0.1 |
-| `adult-#1` | {128, 4} | {4, 1} | NonTransposed | Float16 | 1 | 7.8µs | 1_024 | 0.1 |
-| `adult-#2` | {128, 69} | {69, 4} | NonTransposed | Float32 | 1 | 15µs | 70_656 | 4.7 |
-| `adult-#2` | {128, 69} | {69, 4} | NonTransposed | Float64 | 1 | 15.7µs | 70_656 | 4.5 |
-| `adult-#2` | {128, 69} | {69, 4} | NonTransposed | BFloat16 | 1 | 30µs | 70_656 | 2.4 |
-| `adult-#2` | {128, 69} | {69, 4} | NonTransposed | Float16 | 1 | 35.8µs | 70_656 | 2.0 |
-| `adult-#3` | {25, 4} | {4, 1} | NonTransposed | Float32 | 1 | 4.6µs | 200 | 0.0 |
-| `adult-#3` | {25, 4} | {4, 1} | NonTransposed | Float64 | 1 | 4.2µs | 200 | 0.0 |
-| `adult-#3` | {25, 4} | {4, 1} | NonTransposed | BFloat16 | 1 | 6.7µs | 200 | 0.0 |
-| `adult-#3` | {25, 4} | {4, 1} | NonTransposed | Float16 | 1 | 6.4µs | 200 | 0.0 |
-| `adult-#4` | {25, 69} | {69, 4} | NonTransposed | Float32 | 1 | 7.1µs | 13_800 | 1.9 |
-| `adult-#4` | {25, 69} | {69, 4} | NonTransposed | Float64 | 1 | 6.3µs | 13_800 | 2.2 |
-| `adult-#4` | {25, 69} | {69, 4} | NonTransposed | BFloat16 | 1 | 10.4µs | 13_800 | 1.3 |
-| `adult-#4` | {25, 69} | {69, 4} | NonTransposed | Float16 | 1 | 14.4µs | 13_800 | 1.0 |
-| `adult-#5` | {49, 4} | {4, 1} | NonTransposed | Float32 | 1 | 5.9µs | 392 | 0.1 |
-| `adult-#5` | {49, 4} | {4, 1} | NonTransposed | Float64 | 1 | 3.8µs | 392 | 0.1 |
-| `adult-#5` | {49, 4} | {4, 1} | NonTransposed | BFloat16 | 1 | 5.1µs | 392 | 0.1 |
-| `adult-#5` | {49, 4} | {4, 1} | NonTransposed | Float16 | 1 | 5.7µs | 392 | 0.1 |
-| `adult-#6` | {49, 69} | {69, 4} | NonTransposed | Float32 | 1 | 9.5µs | 27_048 | 2.8 |
-| `adult-#6` | {49, 69} | {69, 4} | NonTransposed | Float64 | 1 | 8.7µs | 27_048 | 3.1 |
-| `adult-#6` | {49, 69} | {69, 4} | NonTransposed | BFloat16 | 1 | 14.5µs | 27_048 | 1.9 |
-| `adult-#6` | {49, 69} | {69, 4} | NonTransposed | Float16 | 1 | 19.1µs | 27_048 | 1.4 |
-| `adult-#6-Normalized` | {49, 69} | {4, 69} | Transposed | Float32 | 1 | 8.9µs | 27_048 | 3.0 |
-| `adult-#6-Normalized` | {49, 69} | {4, 69} | Transposed | Float64 | 1 | 7.9µs | 27_048 | 3.4 |
-| `adult-#6-Normalized` | {49, 69} | {4, 69} | Transposed | BFloat16 | 1 | 10.4µs | 27_048 | 2.6 |
-| `adult-#6-Normalized` | {49, 69} | {4, 69} | Transposed | Float16 | 1 | 14.7µs | 27_048 | 1.8 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float32 | 16 | 51.4ms | 96_636_764_160 | 1881.7 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float64 | 16 | 110ms | 96_636_764_160 | 878.5 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | BFloat16 | 16 | 75.9ms | 96_636_764_160 | 1272.9 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float16 | 16 | 316.4ms | 96_636_764_160 | 305.5 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float32 | 16 | 51.6ms | 96_636_764_160 | 1872.4 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float64 | 16 | 118.1ms | 96_636_764_160 | 818.0 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | BFloat16 | 16 | 77.7ms | 96_636_764_160 | 1243.3 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float16 | 16 | 322.1ms | 96_636_764_160 | 300.1 |
 
->>>>>>> 8d31b28e67efcc6bb8f2f94664c90937259af7a4
-### Backend: `go` / CPU AMD 9950X3D / 2026-05-06, go 1.26.2, Ubuntu 26.04, PJRT Plugin 0.104
+#### Fixing go 1.27.1 to use the 32 ZMM registers (AVX512)
+
+After manually fixing the compiler (`simdregmask: w` in `cmd/compile/internal/ssa/_gen/AMD64Ops.go`, see https://github.com/golang/go/issues/78753#issuecomment-5527357896), and experimenting with microkernels with different parameters that require more accumulators:
+
+- **$8 \text{ rows} \times 32 \text{ cols}$**: 8 broadcasts + 2 vector loads per $k$-step (2 FMAs per broadcast). Performance is roughly identical to the baseline due to broadcast front-end overhead.
+- **$4 \text{ rows} \times 64 \text{ cols}$**: 4 broadcasts + 4 vector loads per $k$-step (4 FMAs per broadcast). Better vector streaming and broadcast reuse increases throughput by **+16.6%**, breaking **2.1 TeraOps/s** in Float32.
+
+##### Comparison for _Batched-Large-1_ Float32
+
+| Microkernel Tile | Accumulators | Inner Loop Work per $k$-step | Time/Run | Float32 GOps/Sec | Speedup |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Baseline ($4 \times 32$)** | 8 | 4 broadcasts, 2 vector loads (8 FMAs) | 52.7ms | 1834.6 | 1.00x |
+| **$8 \text{ rows} \times 32 \text{ cols}$** | 16 | 8 broadcasts, 2 vector loads (16 FMAs) | 53.1ms | 1819.3 | 0.99x |
+| **$4 \text{ rows} \times 64 \text{ cols}$** | 16 | 4 broadcasts, 4 vector loads (16 FMAs) | **45.6ms** | **2118.4** | **1.16x (+16%)** |
+
+##### Full Results for $4 \text{ rows} \times 64 \text{ cols}$ (Patched Go 1.27.1)
+
+| Test Name | LHS Dims | RHS Dims | Layout | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float32 | 16 | 45.6ms | 96_636_764_160 | 2118.4 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float64 | 16 | 110.9ms | 96_636_764_160 | 871.7 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | BFloat16 | 16 | 76.1ms | 96_636_764_160 | 1269.2 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float16 | 16 | 312.3ms | 96_636_764_160 | 309.5 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float32 | 16 | 45.6ms | 96_636_764_160 | 2117.5 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float64 | 16 | 120.2ms | 96_636_764_160 | 803.9 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | BFloat16 | 16 | 76.1ms | 96_636_764_160 | 1269.5 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float16 | 16 | 313.3ms | 96_636_764_160 | 308.5 |
+
+
+### Backend: `go` / CPU AMD 9950X3D / 2026-09-03, go 1.26.8, Ubuntu 26.04
+
+```bash
+$ GOEXPERIMENT=simd GOMLX_BACKEND=go go1.26.8 test -tags=perf ./internal/perf -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1 -perf_duration=10s -markdown -timeout=2h
+```
+
+| Test Name | LHS Dims | RHS Dims | Layout | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `NoBatch-Tiny` | {128, 4} | {4, 1} | NonTransposed | Float32 | 1 | 3.7µs | 1_024 | 0.3 |
+| `NoBatch-Tiny` | {128, 4} | {4, 1} | NonTransposed | Float64 | 1 | 3.8µs | 1_024 | 0.3 |
+| `NoBatch-Tiny` | {128, 4} | {4, 1} | NonTransposed | BFloat16 | 1 | 5.9µs | 1_024 | 0.2 |
+| `NoBatch-Tiny` | {128, 4} | {4, 1} | NonTransposed | Float16 | 1 | 7µs | 1_024 | 0.1 |
+| `NoBatch-Tiny-Norm` | {128, 4} | {1, 4} | Transposed | Float32 | 1 | 4.1µs | 1_024 | 0.2 |
+| `NoBatch-Tiny-Norm` | {128, 4} | {1, 4} | Transposed | Float64 | 1 | 4µs | 1_024 | 0.3 |
+| `NoBatch-Tiny-Norm` | {128, 4} | {1, 4} | Transposed | BFloat16 | 1 | 6.3µs | 1_024 | 0.2 |
+| `NoBatch-Tiny-Norm` | {128, 4} | {1, 4} | Transposed | Float16 | 1 | 6.7µs | 1_024 | 0.2 |
+| `NoBatch-Small` | {16, 128} | {128, 32} | NonTransposed | Float32 | 1 | 7.2µs | 131_072 | 18.3 |
+| `NoBatch-Small` | {16, 128} | {128, 32} | NonTransposed | Float64 | 1 | 9.5µs | 131_072 | 13.8 |
+| `NoBatch-Small` | {16, 128} | {128, 32} | NonTransposed | BFloat16 | 1 | 51.4µs | 131_072 | 2.6 |
+| `NoBatch-Small` | {16, 128} | {128, 32} | NonTransposed | Float16 | 1 | 59.1µs | 131_072 | 2.2 |
+| `NoBatch-Medium` | {128, 128} | {128, 256} | NonTransposed | Float32 | 1 | 108.8µs | 8_388_608 | 77.1 |
+| `NoBatch-Medium` | {128, 128} | {128, 256} | NonTransposed | Float64 | 1 | 188.2µs | 8_388_608 | 44.6 |
+| `NoBatch-Medium` | {128, 128} | {128, 256} | NonTransposed | BFloat16 | 1 | 140.3µs | 8_388_608 | 59.8 |
+| `NoBatch-Medium` | {128, 128} | {128, 256} | NonTransposed | Float16 | 1 | 539.8µs | 8_388_608 | 15.5 |
+| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | NonTransposed | Float32 | 1 | 3.9ms | 6_039_797_760 | 1555.5 |
+| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | NonTransposed | Float64 | 1 | 7.7ms | 6_039_797_760 | 787.3 |
+| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | NonTransposed | BFloat16 | 1 | 5.8ms | 6_039_797_760 | 1042.7 |
+| `NoBatch-Large` | {1536, 1920} | {1920, 1024} | NonTransposed | Float16 | 1 | 27.2ms | 6_039_797_760 | 221.7 |
+| `R-Unbalanced-Cross` | {128} | {128, 256} | NonTransposed | Float32 | 1 | 5.7µs | 65_536 | 11.5 |
+| `R-Unbalanced-Cross` | {128} | {128, 256} | NonTransposed | Float64 | 1 | 8µs | 65_536 | 8.1 |
+| `R-Unbalanced-Cross` | {128} | {128, 256} | NonTransposed | BFloat16 | 1 | 7.2µs | 65_536 | 9.1 |
+| `R-Unbalanced-Cross` | {128} | {128, 256} | NonTransposed | Float16 | 1 | 15.1µs | 65_536 | 4.3 |
+| `L-Unbalanced-Cross` | {4096, 32} | {32, 16} | NonTransposed | Float32 | 1 | 767µs | 4_194_304 | 5.5 |
+| `L-Unbalanced-Cross` | {4096, 32} | {32, 16} | NonTransposed | Float64 | 1 | 233.8µs | 4_194_304 | 17.9 |
+| `L-Unbalanced-Cross` | {4096, 32} | {32, 16} | NonTransposed | BFloat16 | 1 | 1.4ms | 4_194_304 | 3.1 |
+| `L-Unbalanced-Cross` | {4096, 32} | {32, 16} | NonTransposed | Float16 | 1 | 1.6ms | 4_194_304 | 2.6 |
+| `LargeBatch-Tiny` | {1024, 128, 4} | {1024, 4, 1} | NonTransposed | Float32 | 1024 | 113.9µs | 1_048_576 | 9.2 |
+| `LargeBatch-Tiny` | {1024, 128, 4} | {1024, 4, 1} | NonTransposed | Float64 | 1024 | 130.8µs | 1_048_576 | 8.0 |
+| `LargeBatch-Tiny` | {1024, 128, 4} | {1024, 4, 1} | NonTransposed | BFloat16 | 1024 | 279.8µs | 1_048_576 | 3.7 |
+| `LargeBatch-Tiny` | {1024, 128, 4} | {1024, 4, 1} | NonTransposed | Float16 | 1024 | 391.3µs | 1_048_576 | 2.7 |
+| `LargeBatch-Small` | {256, 8, 32} | {256, 32, 16} | NonTransposed | Float32 | 256 | 114.7µs | 2_097_152 | 18.3 |
+| `LargeBatch-Small` | {256, 8, 32} | {256, 32, 16} | NonTransposed | Float64 | 256 | 102.6µs | 2_097_152 | 20.4 |
+| `LargeBatch-Small` | {256, 8, 32} | {256, 32, 16} | NonTransposed | BFloat16 | 256 | 189.8µs | 2_097_152 | 11.1 |
+| `LargeBatch-Small` | {256, 8, 32} | {256, 32, 16} | NonTransposed | Float16 | 256 | 241.1µs | 2_097_152 | 8.7 |
+| `LargeBatch-Medium` | {64, 64, 128} | {64, 64, 128} | Transposed | Float32 | 64 | 190.5µs | 67_108_864 | 352.2 |
+| `LargeBatch-Medium` | {64, 64, 128} | {64, 64, 128} | Transposed | Float64 | 64 | 297.2µs | 67_108_864 | 225.8 |
+| `LargeBatch-Medium` | {64, 64, 128} | {64, 64, 128} | Transposed | BFloat16 | 64 | 354.8µs | 67_108_864 | 189.1 |
+| `LargeBatch-Medium` | {64, 64, 128} | {64, 64, 128} | Transposed | Float16 | 64 | 787.7µs | 67_108_864 | 85.2 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float32 | 16 | 53.1ms | 96_636_764_160 | 1819.9 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float64 | 16 | 114.7ms | 96_636_764_160 | 842.2 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | BFloat16 | 16 | 78.4ms | 96_636_764_160 | 1233.4 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float16 | 16 | 382.3ms | 96_636_764_160 | 252.8 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float32 | 16 | 55.4ms | 96_636_764_160 | 1743.7 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float64 | 16 | 125.7ms | 96_636_764_160 | 768.6 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | BFloat16 | 16 | 80.7ms | 96_636_764_160 | 1197.5 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float16 | 16 | 405.9ms | 96_636_764_160 | 238.1 |
+| `KA-Batch-16-#1` | {16, 12, 13, 13} | {16, 12, 13, 32} | NonTransposed | Float32 | 192 | 123.4µs | 2_076_672 | 16.8 |
+| `KA-Batch-16-#2` | {16, 12, 13, 32} | {16, 12, 32, 13} | NonTransposed | Float32 | 192 | 131µs | 2_076_672 | 15.9 |
+| `KA-Batch-16-#3` | {16, 13, 1536} | {1536, 384} | NonTransposed | Float32 | 1 | 1.8ms | 245_366_784 | 136.0 |
+| `KA-Batch-16-#4` | {16, 13, 384} | {384, 1536} | NonTransposed | Float32 | 1 | 778.1µs | 245_366_784 | 315.4 |
+| `KA-Batch-16-#5` | {16, 13, 384} | {384, 384} | NonTransposed | Float32 | 1 | 483.2µs | 61_341_696 | 126.9 |
+| `adult-#1` | {128, 4} | {4, 1} | NonTransposed | Float32 | 1 | 3.7µs | 1_024 | 0.3 |
+| `adult-#2` | {128, 69} | {69, 4} | NonTransposed | Float32 | 1 | 15.5µs | 70_656 | 4.5 |
+| `adult-#3` | {25, 4} | {4, 1} | NonTransposed | Float32 | 1 | 3.8µs | 200 | 0.1 |
+| `adult-#4` | {25, 69} | {69, 4} | NonTransposed | Float32 | 1 | 6.4µs | 13_800 | 2.2 |
+| `adult-#5` | {49, 4} | {4, 1} | NonTransposed | Float32 | 1 | 3.7µs | 392 | 0.1 |
+| `adult-#6` | {49, 69} | {69, 4} | NonTransposed | Float32 | 1 | 8.3µs | 27_048 | 3.3 |
+| `adult-#6-Normalized` | {49, 69} | {4, 69} | Transposed | Float32 | 1 | 6.7µs | 27_048 | 4.0 |
+
+### Backend: `xla:cpu`/ CPU AMD 9950X3D / 2026-09-03 / PJRT Plugin v0.114.0 (see [pjrt-cpu-binaries](https://github.com/gomlx/pjrt-cpu-binaries/))
+
+| Test Name | LHS Dims | RHS Dims | Layout | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float32 | 16 | 41.3ms | 96_636_764_160 | 2338.4 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float64 | 16 | 116.2ms | 96_636_764_160 | 831.7 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | BFloat16 | 16 | 69.5ms | 96_636_764_160 | 1391.1 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float16 | 16 | 70.5ms | 96_636_764_160 | 1371.0 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float32 | 16 | 36.9ms | 96_636_764_160 | 2616.7 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float64 | 16 | 102.5ms | 96_636_764_160 | 943.0 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | BFloat16 | 16 | 66.8ms | 96_636_764_160 | 1447.6 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float16 | 16 | 67.2ms | 96_636_764_160 | 1438.6 |
+
+```bash
+$ GOMLX_BACKEND=xla:cpu go1.26.8 test -tags=perf ./internal/perf -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1 -perf_duration=10s -markdown -timeout=2h
+```
+
+
+
+### Older Results
+
+#### Backend: `go` / CPU AMD 9950X3D / 2026-05-06, go 1.26.2, Ubuntu 26.04, PJRT Plugin 0.104
 
 ```bash
 GOMLX_BACKEND=go go test -tags=perf ./internal/perf/ \
@@ -225,9 +257,7 @@ GOMLX_BACKEND=go go test -tags=perf ./internal/perf/ \
 
 ---
 
-(Older results)
-
-### Backend: `go` / CPU AMD 9950X3D / 2026-01-17 (gotip -> just after go1.26rc2 made available)
+#### Backend: `go` / CPU AMD 9950X3D / 2026-01-17 (gotip -> just after go1.26rc2 made available)
 
 ```bash
 GOMLX_BACKEND=go go test -tags=perf ./backends/simplego/ \
@@ -343,7 +373,7 @@ With the experimental SIMD enabled for AVX-512 we get the following updates:
 | `KA-Batch-16-#1` | {16, 12, 13, 13} | {16, 12, 13, 32} | Float32 | 192 | 113.87µs | 2,076,672 | 18.2 |
 | `KA-Batch-16-#2` | {16, 12, 13, 32} | {16, 12, 32, 13} | Float32 | 192 | 138.35µs | 2,076,672 | 15.0 |
 
-### Backend: `xla:cpu`/ CPU AMD 9950X3D / 2026-01-07 / PJRT Plugin v0.83.4 (see [pjrt-cpu-binaries](https://github.com/gomlx/pjrt-cpu-binaries/))
+#### Backend: `xla:cpu`/ CPU AMD 9950X3D / 2026-01-07 / PJRT Plugin v0.83.4 (see [pjrt-cpu-binaries](https://github.com/gomlx/pjrt-cpu-binaries/))
 
 ```bash
 GOMLX_BACKEND=xla:cpu go test -tags=perf ./backends/simplego/ \
@@ -447,7 +477,7 @@ GOMLX_BACKEND=xla:cpu go test -tags=perf ./backends/simplego/ \
 | `adult-#6-Normalized` | {49, 69} | {4, 69} | Float16 | 1 | 6.09µs | 27,048 | 4.4 |
 
 
-### Backend: `xla:cuda`/ GPU RTX 5090 / 2026-01-07 / PJRT Plugin v0.81 (Jax-build)
+#### Backend: `xla:cuda`/ GPU RTX 5090 / 2026-01-07 / PJRT Plugin v0.81 (Jax-build)
 
 ```bash
 GOMLX_BACKEND=xla:cuda go test -tags=perf ./backends/simplego/ \
