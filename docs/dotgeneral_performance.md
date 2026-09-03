@@ -11,6 +11,52 @@ GOMLX_BACKEND=go go test -tags=perf ./internal/perf/ \
 
 ## Results
 
+### Backend: `go` / CPU AMD 9950X3D / 2026-09-03, go 1.27.1, Ubuntu 26.04
+
+```bash
+$ GOEXPERIMENT=simd GOMLX_BACKEND=go go1.27.1 test -tags=perf ./internal/perf -test.run=TestDotGeneral_PerformanceTable -test.v -test.count=1 -perf_duration=10s -markdown -timeout=2h
+```
+
+| Test Name | LHS Dims | RHS Dims | Layout | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float32 | 16 | 51.4ms | 96_636_764_160 | 1881.7 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float64 | 16 | 110ms | 96_636_764_160 | 878.5 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | BFloat16 | 16 | 75.9ms | 96_636_764_160 | 1272.9 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float16 | 16 | 316.4ms | 96_636_764_160 | 305.5 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float32 | 16 | 51.6ms | 96_636_764_160 | 1872.4 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float64 | 16 | 118.1ms | 96_636_764_160 | 818.0 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | BFloat16 | 16 | 77.7ms | 96_636_764_160 | 1243.3 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float16 | 16 | 322.1ms | 96_636_764_160 | 300.1 |
+
+#### Fixing go 1.27.1 to use the 32 ZMM registers (AVX512)
+
+After manually fixing the compiler (`simdregmask: w` in `cmd/compile/internal/ssa/_gen/AMD64Ops.go`, see https://github.com/golang/go/issues/78753#issuecomment-5527357896), and experimenting with microkernels with different parameters that require more accumulators:
+
+- **$8 \text{ rows} \times 32 \text{ cols}$**: 8 broadcasts + 2 vector loads per $k$-step (2 FMAs per broadcast). Performance is roughly identical to the baseline due to broadcast front-end overhead.
+- **$4 \text{ rows} \times 64 \text{ cols}$**: 4 broadcasts + 4 vector loads per $k$-step (4 FMAs per broadcast). Better vector streaming and broadcast reuse increases throughput by **+16.6%**, breaking **2.1 TeraOps/s** in Float32.
+
+##### Comparison for _Batched-Large-1_ Float32
+
+| Microkernel Tile | Accumulators | Inner Loop Work per $k$-step | Time/Run | Float32 GOps/Sec | Speedup |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Baseline ($4 \times 32$)** | 8 | 4 broadcasts, 2 vector loads (8 FMAs) | 52.7ms | 1834.6 | 1.00x |
+| **$8 \text{ rows} \times 32 \text{ cols}$** | 16 | 8 broadcasts, 2 vector loads (16 FMAs) | 53.1ms | 1819.3 | 0.99x |
+| **$4 \text{ rows} \times 64 \text{ cols}$** | 16 | 4 broadcasts, 4 vector loads (16 FMAs) | **45.6ms** | **2118.4** | **1.16x (+16%)** |
+
+##### Full Results for $4 \text{ rows} \times 64 \text{ cols}$ (Patched Go 1.27.1)
+
+| Test Name | LHS Dims | RHS Dims | Layout | DType | BatchSize | Time/Run | Num Ops | GOps/Sec |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float32 | 16 | 45.6ms | 96_636_764_160 | 2118.4 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float64 | 16 | 110.9ms | 96_636_764_160 | 871.7 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | BFloat16 | 16 | 76.1ms | 96_636_764_160 | 1269.2 |
+| `Batched-Large-1` | {16, 1536, 1920} | {16, 1920, 1024} | NonTransposed | Float16 | 16 | 312.3ms | 96_636_764_160 | 309.5 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float32 | 16 | 45.6ms | 96_636_764_160 | 2117.5 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float64 | 16 | 120.2ms | 96_636_764_160 | 803.9 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | BFloat16 | 16 | 76.1ms | 96_636_764_160 | 1269.5 |
+| `Batched-Large-2` | {16, 1024, 1920} | {16, 1920, 1536} | NonTransposed | Float16 | 16 | 313.3ms | 96_636_764_160 | 308.5 |
+
+
 ### Backend: `go` / CPU AMD 9950X3D / 2026-09-03, go 1.26.8, Ubuntu 26.04
 
 ```bash
