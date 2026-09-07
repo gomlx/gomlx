@@ -51,7 +51,8 @@ var (
 		"Transpose", "Where",
 
 		// Fused ops: exported wrappers with "Internal:" comments are hand-written in ops_fused.go.
-		"FusedDense", "FusedGelu", "FusedLayerNorm", "FusedSoftmax",
+		"FusedActivation", "FusedActivationVJP", "FusedDense", "FusedDenseVJP",
+		"FusedLayerNorm", "FusedSoftmax",
 		"FusedScaledDotProductAttention", "FusedScaledDotProductAttentionVJP",
 		"FusedAttentionQKVProjection",
 		"FusedQuantizedDense", "QuantizedEmbeddingLookup",
@@ -74,6 +75,7 @@ var (
 	nillableParams = sets.MakeWith(
 		"FusedLayerNorm.gamma", "FusedLayerNorm.beta",
 		"FusedDense.bias",
+		"FusedDenseVJP.bias",
 		"FusedAttentionQKVProjection.biasQ", "FusedAttentionQKVProjection.biasK", "FusedAttentionQKVProjection.biasV",
 	)
 

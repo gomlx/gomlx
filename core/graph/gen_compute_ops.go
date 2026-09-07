@@ -69,9 +69,11 @@ const (
 	NodeTypeExpm1
 	NodeTypeFFT
 	NodeTypeFloor
+	NodeTypeFusedActivation
+	NodeTypeFusedActivationVJP
 	NodeTypeFusedAttentionQKVProjection
 	NodeTypeFusedDense
-	NodeTypeFusedGelu
+	NodeTypeFusedDenseVJP
 	NodeTypeFusedLayerNorm
 	NodeTypeFusedQuantizedDense
 	NodeTypeFusedScaledDotProductAttention
@@ -2558,6 +2560,122 @@ func backendFloor(x *Node) (
 	return
 }
 
+// nodeInputsFusedActivation holds the inputs used for the call to compute.FusedActivation.
+type nodeInputsFusedActivation struct {
+	x   *Node
+	cfg ActivationConfig
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedActivation) Type() NodeType {
+	return NodeTypeFusedActivation
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedActivation) String() string {
+	return fmt.Sprintf("%s(x=[#%d], cfg=%v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.cfg,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedActivation) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_x := newInputs[idx]
+	idx++
+	return backendFusedActivation(new_x, ni.cfg)
+}
+
+// backendFusedActivation is a Graph wrapper for the backend.Builder.FusedActivation method.
+func backendFusedActivation(x *Node, cfg ActivationConfig) (
+	node *Node) {
+	inputNodes := []*Node{x}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedActivation{
+		x:   x,
+		cfg: cfg,
+	}
+	result, err := g.currentFunc.backendFunc.FusedActivation(x.outputOps[0], inputs.cfg)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsFusedActivationVJP holds the inputs used for the call to compute.FusedActivationVJP.
+type nodeInputsFusedActivationVJP struct {
+	y       *Node
+	x       *Node
+	dOutput *Node
+	cfg     ActivationConfig
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedActivationVJP) Type() NodeType {
+	return NodeTypeFusedActivationVJP
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedActivationVJP) String() string {
+	return fmt.Sprintf("%s(y=[#%d], x=[#%d], dOutput=[#%d], cfg=%v)",
+		ni.Type(),
+		ni.y.Id(),
+		ni.x.Id(),
+		ni.dOutput.Id(),
+		ni.cfg,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedActivationVJP) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_y := newInputs[idx]
+	idx++
+	new_x := newInputs[idx]
+	idx++
+	new_dOutput := newInputs[idx]
+	idx++
+	return backendFusedActivationVJP(new_y, new_x, new_dOutput, ni.cfg)
+}
+
+// backendFusedActivationVJP is a Graph wrapper for the backend.Builder.FusedActivationVJP method.
+func backendFusedActivationVJP(y *Node, x *Node, dOutput *Node, cfg ActivationConfig) (
+	node *Node) {
+	inputNodes := []*Node{y, x, dOutput}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedActivationVJP{
+		y:       y,
+		x:       x,
+		dOutput: dOutput,
+		cfg:     cfg,
+	}
+	result, err := g.currentFunc.backendFunc.FusedActivationVJP(y.outputOps[0], x.outputOps[0], dOutput.outputOps[0], inputs.cfg)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsFusedAttentionQKVProjection holds the inputs used for the call to compute.FusedAttentionQKVProjection.
 type nodeInputsFusedAttentionQKVProjection struct {
 	x           *Node
@@ -2740,56 +2858,89 @@ func backendFusedDense(x *Node, weight *Node, bias *Node, options compute.DenseC
 	return
 }
 
-// nodeInputsFusedGelu holds the inputs used for the call to compute.FusedGelu.
-type nodeInputsFusedGelu struct {
-	x     *Node
-	exact bool
+// nodeInputsFusedDenseVJP holds the inputs used for the call to compute.FusedDenseVJP.
+type nodeInputsFusedDenseVJP struct {
+	x       *Node
+	weight  *Node
+	bias    *Node
+	y       *Node
+	dOutput *Node
+	options compute.DenseConfig
 }
 
 // Type implements the interface NodeInputs.
-func (ni *nodeInputsFusedGelu) Type() NodeType {
-	return NodeTypeFusedGelu
+func (ni *nodeInputsFusedDenseVJP) Type() NodeType {
+	return NodeTypeFusedDenseVJP
 }
 
 // String implements the interface NodeInputs.
-func (ni *nodeInputsFusedGelu) String() string {
-	return fmt.Sprintf("%s(x=[#%d], exact=%v)",
+func (ni *nodeInputsFusedDenseVJP) String() string {
+	return fmt.Sprintf("%s(x=[#%d], weight=[#%d], bias=%s, y=[#%d], dOutput=[#%d], options=%+v)",
 		ni.Type(),
 		ni.x.Id(),
-		ni.exact,
+		ni.weight.Id(),
+		strNillableNode(ni.bias),
+		ni.y.Id(),
+		ni.dOutput.Id(),
+		ni.options,
 	)
 }
 
 // CloneWithInputs implements the interface NodeInputs.
-func (ni *nodeInputsFusedGelu) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+func (ni *nodeInputsFusedDenseVJP) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
 	// Reconstruct inputs from newInputs
 	idx := 0
 	new_x := newInputs[idx]
 	idx++
-	return backendFusedGelu(new_x, ni.exact)
+	new_weight := newInputs[idx]
+	idx++
+	var new_bias *Node
+	if ni.bias != nil {
+		new_bias = newInputs[idx]
+		idx++
+	}
+	new_y := newInputs[idx]
+	idx++
+	new_dOutput := newInputs[idx]
+	idx++
+	r0, _, _ := backendFusedDenseVJP(new_x, new_weight, new_bias, new_y, new_dOutput, ni.options)
+	return r0.inputNodes[0]
 }
 
-// backendFusedGelu is a Graph wrapper for the backend.Builder.FusedGelu method.
-func backendFusedGelu(x *Node, exact bool) (
-	node *Node) {
-	inputNodes := []*Node{x}
-	g := validateBuildingGraphFromInputs(inputNodes...)
-	inputs := &nodeInputsFusedGelu{
-		x:     x,
-		exact: exact,
+// backendFusedDenseVJP is a Graph wrapper for the backend.Builder.FusedDenseVJP method.
+func backendFusedDenseVJP(x *Node, weight *Node, bias *Node, y *Node, dOutput *Node, options compute.DenseConfig) (
+	dx, dWeight, dBias *Node) {
+	inputNodes := []*Node{x, weight, y, dOutput}
+	if bias != nil {
+		inputNodes = append(inputNodes, bias)
 	}
-	result, err := g.currentFunc.backendFunc.FusedGelu(x.outputOps[0], inputs.exact)
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedDenseVJP{
+		x:       x,
+		weight:  weight,
+		bias:    bias,
+		y:       y,
+		dOutput: dOutput,
+		options: options,
+	}
+	var biasVal compute.Value
+	if bias != nil {
+		biasVal = bias.outputOps[0]
+	}
+	v0, v1, v2, err := g.currentFunc.backendFunc.FusedDenseVJP(x.outputOps[0], weight.outputOps[0], biasVal, y.outputOps[0], dOutput.outputOps[0], inputs.options)
 	if err != nil {
 		panic(err)
 	}
-	node = &Node{
-		outputOps:    []compute.Value{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+	node := &Node{
+		outputOps:    []compute.Value{v0, v1, v2},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1)), mustNoError(g.builder.OpShape(v2))},
 		graph:        g,
 		inputs:       inputs,
 		inputNodes:   inputNodes,
 	}
 	g.registerNode(node)
+	splitNodes := splitNode(node)
+	dx, dWeight, dBias = splitNodes[0], splitNodes[1], splitNodes[2]
 	return
 }
 
