@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -773,4 +774,72 @@ func TestGradientBarriers(t *testing.T) {
 			[]float64{0, 0, 0}, // dependency has gradient zero (nil)
 		},
 	)
+}
+
+func TestGradientFusedActivation(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		if !backend.Capabilities().Operations[compute.OpTypeFusedActivation] ||
+			!backend.Capabilities().Operations[compute.OpTypeFusedActivationVJP] {
+			t.Skip("Backend does not support FusedActivation/FusedActivationVJP")
+		}
+		graphtest.RunTestGraphFnWithBackend(t, "FusedActivationRelu", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, []float32{-2.0, 3.0})
+				y := BackendFusedActivation(x, compute.ActivationConfig{Type: compute.ActivationRelu})
+				loss := ReduceAllSum(y)
+				grad := Gradient(loss, x)[0]
+				return []*Node{x}, []*Node{loss, grad}
+			}, []any{
+				float32(3.0),
+				[]float32{0.0, 1.0},
+			}, xslices.Epsilon)
+	})
+}
+
+func TestGradientFusedDense(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		if !backend.Capabilities().Operations[compute.OpTypeFusedDense] ||
+			!backend.Capabilities().Operations[compute.OpTypeFusedDenseVJP] {
+			t.Skip("Backend does not support FusedDense/FusedDenseVJP")
+		}
+		// Test with bias
+		graphtest.RunTestGraphFnWithBackend(t, "FusedDenseWithBias", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, [][]float32{{1, 2}})
+				w := Const(g, [][]float32{{1, 0}, {0, 1}})
+				bias := Const(g, []float32{3, 4})
+				cfg := compute.DenseConfig{
+					Activation:   compute.ActivationConfig{Type: compute.ActivationNone},
+					WeightLayout: compute.DenseLayoutInputOutputs,
+				}
+				y := BackendFusedDense(x, w, bias, cfg)
+				loss := ReduceAllSum(y)
+				grads := Gradient(loss, x, w, bias)
+				return []*Node{x, w, bias}, append([]*Node{loss}, grads...)
+			}, []any{
+				float32(10.0),
+				[][]float32{{1, 1}},
+				[][]float32{{1, 1}, {2, 2}},
+				[]float32{1, 1},
+			}, xslices.Epsilon)
+
+		// Test without bias
+		graphtest.RunTestGraphFnWithBackend(t, "FusedDenseNoBias", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, [][]float32{{1, 2}})
+				w := Const(g, [][]float32{{1, 0}, {0, 1}})
+				cfg := compute.DenseConfig{
+					Activation:   compute.ActivationConfig{Type: compute.ActivationNone},
+					WeightLayout: compute.DenseLayoutInputOutputs,
+				}
+				y := BackendFusedDense(x, w, nil, cfg)
+				loss := ReduceAllSum(y)
+				grads := Gradient(loss, x, w)
+				return []*Node{x, w}, append([]*Node{loss}, grads...)
+			}, []any{
+				float32(3.0),
+				[][]float32{{1, 1}},
+				[][]float32{{1, 1}, {2, 2}},
+			}, xslices.Epsilon)
+	})
 }

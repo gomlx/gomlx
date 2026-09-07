@@ -432,6 +432,8 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeSqrt:                           vjpForSingleOutput(sqrtVJP),
 	NodeTypeErf:                            vjpForSingleOutput(erfVJP),
 	NodeTypeBatchNormForTraining:           batchNormForTrainingVJP,
+	NodeTypeFusedDense:                     vjpForSingleOutput(fusedDenseVJP),
+	NodeTypeFusedActivation:                vjpForSingleOutput(fusedActivationVJP),
 	NodeTypeFusedScaledDotProductAttention: fusedScaledDotProductAttentionVJP,
 
 	// Bitwise/integer operations: we define a zero gradient to their inputs.

@@ -68,7 +68,7 @@ var (
 	// methodsNotGenerated get a NodeType but no auto-generated wrapper
 	// (hand-written implementations).
 	methodsNotGenerated = sets.MakeWith(
-		"Constant", "Parameter", "FusedQuantizedDense", "QuantizedEmbeddingLookup")
+		"Constant", "Parameter", "FusedQuantizedDense", "QuantizedEmbeddingLookup", "FusedDenseVJP")
 
 	// nillableParams lists Value parameters that can be nil (passed as *Node).
 	// Key format: "MethodName.paramName"
@@ -76,6 +76,7 @@ var (
 		"FusedLayerNorm.gamma", "FusedLayerNorm.beta",
 		"FusedDense.bias",
 		"FusedDenseVJP.bias",
+		"FusedActivationVJP.x",
 		"FusedAttentionQKVProjection.biasQ", "FusedAttentionQKVProjection.biasK", "FusedAttentionQKVProjection.biasV",
 	)
 
@@ -182,6 +183,9 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			case "ActivationType":
 				pi.BackendType = "compute." + pi.BackendType
 				pi.Format = "%s"
+			case "ActivationConfig":
+				pi.BackendType = "compute." + pi.BackendType
+				pi.Format = "%+v"
 			case "DenseConfig":
 				pi.BackendType = "compute." + pi.BackendType
 				pi.Format = "%+v"
