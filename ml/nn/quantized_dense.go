@@ -39,7 +39,7 @@ func QuantizedDense(x, weights *Node, quant *Quantization, bias *Node,
 		act = optionalActivation[0]
 	}
 
-	backendAct := act.ToBackend()
+	backendAct := act.ToBackend().Type
 
 	// GGML weights: types with a decomposed graph-level fallback (Q4_0, Q8_0, IQ4_NL)
 	// work on any backend (including XLA). K-quant types (Q4_K, Q6_K, etc.) require

@@ -11,6 +11,7 @@ import (
 	"math"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/support/envutil"
 
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
@@ -53,25 +54,62 @@ const (
 	TypeSwiGLU
 )
 
-// ToBackend converts an activations.Type to the corresponding compute.ActivationType.
+// ToBackend converts an activations.Type to the corresponding compute.ActivationConfig.
 // Unsupported activation types map to compute.ActivationNone.
-func (t Type) ToBackend() compute.ActivationType {
+func (t Type) ToBackend() compute.ActivationConfig {
 	switch t {
 	case TypeNone:
-		return compute.ActivationNone
-	case TypeGelu, TypeGeluApprox:
-		return compute.ActivationGelu
+		return compute.ActivationConfig{Type: compute.ActivationNone}
 	case TypeRelu:
-		return compute.ActivationRelu
+		return compute.ActivationConfig{Type: compute.ActivationRelu}
+	case TypeSigmoid:
+		return compute.ActivationConfig{Type: compute.ActivationSigmoid}
+	case TypeHardSigmoid:
+		return compute.ActivationConfig{Type: compute.ActivationHardSigmoid}
+	case TypeLeakyRelu:
+		return compute.ActivationConfig{Type: compute.ActivationLeakyRelu}
+	case TypeSelu:
+		return compute.ActivationConfig{Type: compute.ActivationSelu}
 	case TypeSwish, TypeSilu:
-		return compute.ActivationSilu
+		return compute.ActivationConfig{Type: compute.ActivationSilu}
 	case TypeHardSwish:
-		return compute.ActivationHardSwish
+		return compute.ActivationConfig{Type: compute.ActivationHardSwish}
 	case TypeTanh:
-		return compute.ActivationTanh
+		return compute.ActivationConfig{Type: compute.ActivationTanh}
+	case TypeGelu:
+		return compute.ActivationConfig{Type: compute.ActivationGelu}
+	case TypeGeluApprox:
+		return compute.ActivationConfig{Type: compute.ActivationGeluApproximate}
+	case TypeSwiGLU:
+		return compute.ActivationConfig{Type: compute.ActivationSwiGLU}
 	default:
-		return compute.ActivationNone
+		return compute.ActivationConfig{Type: compute.ActivationNone}
 	}
+}
+
+// applyActivation executes the activation function for act on x.
+// If the backend advertises FusedActivationVJP and fusion is enabled, it uses BackendFusedActivation directly
+// without constructing the decomposed fallback graph.
+// Otherwise, it attempts BackendFusedActivation via InternalFusedOpCaller with the decomposed fallback.
+func applyActivation(x *Node, act Type, decomposed func() *Node) *Node {
+	cfg := act.ToBackend()
+	if cfg.Type == compute.ActivationNone {
+		return decomposed()
+	}
+	if enabled, err := envutil.ReadBool(FusionEnv, true); err != nil {
+		panic(err)
+	} else if enabled {
+		backend := x.Graph().Backend()
+		if backend != nil && backend.Capabilities().Operations[compute.OpTypeFusedActivationVJP] {
+			return BackendFusedActivation(x, cfg)
+		}
+	}
+	res, _ := InternalFusedOpCaller(
+		func() *Node { return BackendFusedActivation(x, cfg) },
+		decomposed,
+		true,
+	)
+	return res
 }
 
 //go:generate go tool enumer -type Type -trimprefix=Type -output=gen_type_enumer.go activation.go
@@ -98,11 +136,11 @@ func Apply(activation Type, x *Node) *Node {
 	case TypeLeakyRelu:
 		return LeakyRelu(x)
 	case TypeSigmoid:
-		return Sigmoid(x)
+		return applyActivation(x, TypeSigmoid, func() *Node { return Sigmoid(x) })
 	case TypeHardSigmoid:
 		return HardSigmoid(x)
 	case TypeTanh:
-		return Tanh(x)
+		return applyActivation(x, TypeTanh, func() *Node { return Tanh(x) })
 	case TypeSwish, TypeSilu:
 		return Swish(x)
 	case TypeHardSwish:
@@ -159,7 +197,9 @@ func FromName(activationName string) Type {
 
 // Relu activation function. It returns Max(x, 0), and is commonly used as an activation function in neural networks.
 func Relu(x *Node) *Node {
-	return Max(x, ZerosLike(x))
+	return applyActivation(x, TypeRelu, func() *Node {
+		return Max(x, ZerosLike(x))
+	})
 }
 
 // LeakyRelu activation function. It allows a small gradient when the unit is not active (x < 0).
@@ -167,13 +207,22 @@ func Relu(x *Node) *Node {
 //
 // It returns `x if x >= 0; alpha*x if x < 0`.
 func LeakyRelu(x *Node) *Node {
-	return LeakyReluWith(x, 0.3)
+	return applyActivation(x, TypeLeakyRelu, func() *Node {
+		return leakyReluDecomposed(x, 0.3)
+	})
 }
 
 // LeakyReluWith activation function. It allows a small gradient when the unit is not active (x < 0).
 //
 // It returns `x if x >= 0; alpha*x if x < 0`.
 func LeakyReluWith(x *Node, alpha float64) *Node {
+	if alpha == 0.3 {
+		return LeakyRelu(x)
+	}
+	return leakyReluDecomposed(x, alpha)
+}
+
+func leakyReluDecomposed(x *Node, alpha float64) *Node {
 	g := x.Graph()
 	return Where(
 		GreaterOrEqual(x, ScalarZero(g, x.DType())),
@@ -193,20 +242,31 @@ func LeakyReluWith(x *Node, alpha float64) *Node {
 //
 // Here the beta parameter is fixed at 1.0.
 func Swish(x *Node) *Node {
-	return Mul(x, Sigmoid(x))
+	return applyActivation(x, TypeSwish, func() *Node {
+		return Mul(x, Sigmoid(x))
+	})
 }
 
 // HardSigmoid activation function.
 //
 // It returns max(0, min(1, alpha*x + beta)) with default alpha=0.2, beta=0.5.
 func HardSigmoid(x *Node) *Node {
-	return HardSigmoidWith(x, 0.2, 0.5)
+	return applyActivation(x, TypeHardSigmoid, func() *Node {
+		return hardSigmoidDecomposed(x, 0.2, 0.5)
+	})
 }
 
 // HardSigmoidWith activation function with configurable alpha and beta.
 //
 // It returns max(0, min(1, alpha*x + beta)).
 func HardSigmoidWith(x *Node, alpha, beta float64) *Node {
+	if alpha == 0.2 && beta == 0.5 {
+		return HardSigmoid(x)
+	}
+	return hardSigmoidDecomposed(x, alpha, beta)
+}
+
+func hardSigmoidDecomposed(x *Node, alpha, beta float64) *Node {
 	g := x.Graph()
 	result := AddScalar(MulScalar(x, alpha), beta)
 	return Min(Max(result, ScalarZero(g, x.DType())), ScalarOne(g, x.DType()))
@@ -220,10 +280,12 @@ func HardSigmoidWith(x *Node, alpha, beta float64) *Node {
 //
 // [1]: "Evaluating Model Performance with Hard-Swish Activation Function Adjustments", https://arxiv.org/abs/2410.06879
 func HardSwish(x *Node) *Node {
-	g := x.Graph()
-	scale := Scalar(g, x.DType(), 1.0/6.0)
-	bias := Scalar(g, x.DType(), 0.5)
-	return HardSwishWith(x, scale, bias)
+	return applyActivation(x, TypeHardSwish, func() *Node {
+		g := x.Graph()
+		scale := Scalar(g, x.DType(), 1.0/6.0)
+		bias := Scalar(g, x.DType(), 0.5)
+		return HardSwishWith(x, scale, bias)
+	})
 }
 
 // HardSwishWith activation function, it allows more flexibility in setting the HardSwish bias
@@ -255,11 +317,13 @@ const (
 // Ideally, it should be matched with a "LecunNormal initializer" and the dropout variant called "AlphaDropout"
 // -- TODO, neither are implemented yet.
 func Selu(x *Node) *Node {
-	x = Where(GreaterThan(x, ScalarZero(x.Graph(), x.DType())),
-		x,
-		MulScalar(MinusOne(Exp(x)), SeluAlpha),
-	)
-	return MulScalar(x, SeluScale)
+	return applyActivation(x, TypeSelu, func() *Node {
+		xWhere := Where(GreaterThan(x, ScalarZero(x.Graph(), x.DType())),
+			x,
+			MulScalar(MinusOne(Exp(x)), SeluAlpha),
+		)
+		return MulScalar(xWhere, SeluScale)
+	})
 }
 
 // Gelu activation function, the original Gelu function.
@@ -272,16 +336,11 @@ func Selu(x *Node) *Node {
 // The exact version is slower in TPUs due to the "Erf" function, but some argue it is more stable. See discussion in:
 // https://github.com/jax-ml/jax/issues/4428
 func Gelu(x *Node) *Node {
-	res, _ := InternalFusedOpCaller(
-		func() *Node { return BackendFusedGelu(x, true) },
-		func() *Node {
-			// Φ(x) = 0.5 * (1 + Erf(x / √2))
-			cdf := MulScalar(AddScalar(Erf(DivScalar(x, math.Sqrt2)), 1), 0.5)
-			return Mul(x, cdf)
-		},
-		true,
-	)
-	return res
+	return applyActivation(x, TypeGelu, func() *Node {
+		// Φ(x) = 0.5 * (1 + Erf(x / √2))
+		cdf := MulScalar(AddScalar(Erf(DivScalar(x, math.Sqrt2)), 1), 0.5)
+		return Mul(x, cdf)
+	})
 }
 
 // GeluApproximate is a close approximation to the original Gelu function.
@@ -294,11 +353,13 @@ func Gelu(x *Node) *Node {
 // The exact version is slower in TPUs, some argue it is more stable. See discussion in:
 // https://github.com/jax-ml/jax/issues/4428
 func GeluApproximate(x *Node) *Node {
-	cdfApprox := Add(x, MulScalar(PowScalar(x, 3), 0.044715))
-	sqrt2ByPi := math.Sqrt(2.0 / math.Pi)
-	cdfApprox = Tanh(MulScalar(cdfApprox, sqrt2ByPi))
-	cdfApprox = MulScalar(OnePlus(cdfApprox), 0.5)
-	return Mul(x, cdfApprox)
+	return applyActivation(x, TypeGeluApprox, func() *Node {
+		cdfApprox := Add(x, MulScalar(PowScalar(x, 3), 0.044715))
+		sqrt2ByPi := math.Sqrt(2.0 / math.Pi)
+		cdfApprox = Tanh(MulScalar(cdfApprox, sqrt2ByPi))
+		cdfApprox = MulScalar(OnePlus(cdfApprox), 0.5)
+		return Mul(x, cdfApprox)
+	})
 }
 
 // SwiGLU activation takes a pre-projected tensor of size [..., 2 * hiddenDim] and
@@ -316,10 +377,11 @@ func SwiGLU(x *Node) *Node {
 	if lastDim%2 != 0 {
 		Panicf("SwiGLU expects the last dimension to be divisible by 2, got shape %s", x.Shape())
 	}
-	halfDim := lastDim / 2
-
-	// Split into gate and value.
-	gate := SliceAxis(x, -1, AxisRangeFromStart(halfDim))
-	value := SliceAxis(x, -1, AxisRangeToEnd(halfDim))
-	return Mul(Swish(gate), value)
+	return applyActivation(x, TypeSwiGLU, func() *Node {
+		halfDim := lastDim / 2
+		// Split into gate and value.
+		gate := SliceAxis(x, -1, AxisRangeFromStart(halfDim))
+		value := SliceAxis(x, -1, AxisRangeToEnd(halfDim))
+		return Mul(Swish(gate), value)
+	})
 }

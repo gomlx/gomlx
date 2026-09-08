@@ -2,6 +2,10 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-09-08:
+  - Improved support for `FusedDense` and added `FusedActivation`, `FusedDenseVJP` and `FusedActivationVJP` to the Go backend.
+  - Incorporated major optimizations for the "go" backend.
+
 - 2026-08-28:
   - Added `DimensionSize(x, axis)` in `graph` to retrieve dimension sizes as `*Node` (returning a constant scalar if static, or extracting the dynamic dimension from the backend if dynamic).
   - Added `DimensionSpecFor(x, axis)` and `DimensionSpecsFor(x)` in `graph` for tensor-relative dimension abstraction.

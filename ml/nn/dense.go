@@ -4,6 +4,7 @@ package nn
 
 import (
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/support/envutil"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/layers/activation"
 	. "github.com/gomlx/gomlx/support/exceptions"
@@ -37,10 +38,32 @@ func Dense(x, weight, bias *Node, weightLayout compute.DenseLayout, optionalActi
 		return denseDecomposed(x, weight, bias, weightLayout, act)
 	}
 
+	actCfg := act.ToBackend()
 	denseCfg := compute.DenseConfig{
-		Activation:   act.ToBackend(),
+		Activation:   actCfg,
 		WeightLayout: weightLayout,
 	}
+
+	if enabled, err := envutil.ReadBool(FusionEnv, true); err != nil {
+		panic(err)
+	} else if !enabled {
+		return decomposed()
+	}
+
+	g := x.Graph()
+	backend := g.Backend()
+	hasFusedDenseVJP := backend != nil && backend.Capabilities().Operations[compute.OpTypeFusedDenseVJP]
+
+	if hasFusedDenseVJP {
+		if actCfg.Type.VJPRequiresInput() {
+			noActCfg := denseCfg
+			noActCfg.Activation = compute.ActivationConfig{Type: compute.ActivationNone}
+			denseOut := BackendFusedDense(x, weight, bias, noActCfg)
+			return BackendFusedActivation(denseOut, actCfg)
+		}
+		return BackendFusedDense(x, weight, bias, denseCfg)
+	}
+
 	res, _ := InternalFusedOpCaller(
 		func() *Node { return BackendFusedDense(x, weight, bias, denseCfg) },
 		decomposed,

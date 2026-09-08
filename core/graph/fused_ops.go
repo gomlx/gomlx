@@ -138,9 +138,17 @@ func (ni *nodeInputsFusedQuantizedDense) CloneWithInputs(originalNode *Node, new
 // Internal: prefer graph.Softmax which handles fallback and gradients.
 func BackendFusedSoftmax(x *Node, axis int) *Node { return backendFusedSoftmax(x, axis) }
 
-// BackendFusedGelu computes GELU activation (exact or approximate).
+// BackendFusedActivation applies the configured activation function.
 // Internal: prefer activations.Apply which handles fallback and gradients.
-func BackendFusedGelu(x *Node, exact bool) *Node { return backendFusedGelu(x, exact) }
+func BackendFusedActivation(x *Node, cfg compute.ActivationConfig) *Node {
+	return backendFusedActivation(x, cfg)
+}
+
+// BackendFusedActivationVJP computes the vector-jacobian product of the configured activation.
+// Internal: this is used for reverse-mode autodiff of FusedActivation.
+func BackendFusedActivationVJP(y, x, dOutput *Node, cfg compute.ActivationConfig) *Node {
+	return backendFusedActivationVJP(y, x, dOutput, cfg)
+}
 
 // BackendFusedLayerNorm applies layer normalization. gamma and beta are optional (nil to skip).
 // Internal: prefer nn.LayerNorm which handles fallback and gradients.
@@ -152,6 +160,139 @@ func BackendFusedLayerNorm(x *Node, axes []int, epsilon float64, gamma, beta *No
 // Internal: prefer nn.Dense which handles fallback and gradients.
 func BackendFusedDense(x, weight, bias *Node, options compute.DenseConfig) *Node {
 	return backendFusedDense(x, weight, bias, options)
+}
+
+// nodeInputsFusedDenseVJP holds the inputs used for the call to compute.FusedDenseVJP.
+type nodeInputsFusedDenseVJP struct {
+	x       *Node
+	weight  *Node
+	bias    *Node
+	y       *Node
+	dOutput *Node
+	options compute.DenseConfig
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedDenseVJP) Type() NodeType {
+	return NodeTypeFusedDenseVJP
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedDenseVJP) String() string {
+	return fmt.Sprintf("%s(x=[#%d], weight=[#%d], bias=%s, y=[#%d], dOutput=[#%d], options=%+v)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.weight.Id(),
+		strNillableNode(ni.bias),
+		ni.y.Id(),
+		ni.dOutput.Id(),
+		ni.options,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedDenseVJP) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// inputNodes ordering from BackendFusedDenseVJP: [x, weight, y, dOutput, bias?]
+	idx := 0
+	newX := newInputs[idx]
+	idx++
+	newWeight := newInputs[idx]
+	idx++
+	newY := newInputs[idx]
+	idx++
+	newDOutput := newInputs[idx]
+	idx++
+	var newBias *Node
+	if ni.bias != nil {
+		newBias = newInputs[idx]
+		idx++
+	}
+	r0, _, _ := BackendFusedDenseVJP(newX, newWeight, newBias, newY, newDOutput, ni.options)
+	return r0.inputNodes[0]
+}
+
+// BackendFusedDenseVJP computes the vector-jacobian product (gradients) of FusedDense with respect to
+// its inputs (x, weight, and bias).
+// Internal: this is used for reverse-mode autodiff of FusedDense.
+func BackendFusedDenseVJP(x, weight, bias, y, dOutput *Node, options compute.DenseConfig) (dx, dWeight, dBias *Node) {
+	inputNodes := []*Node{x, weight, y, dOutput}
+	if bias != nil {
+		inputNodes = append(inputNodes, bias)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedDenseVJP{
+		x:       x,
+		weight:  weight,
+		bias:    bias,
+		y:       y,
+		dOutput: dOutput,
+		options: options,
+	}
+	var biasVal compute.Value
+	if bias != nil {
+		biasVal = bias.outputOps[0]
+	}
+	v0, v1, v2, err := g.currentFunc.backendFunc.FusedDenseVJP(
+		x.outputOps[0], weight.outputOps[0], biasVal, y.outputOps[0], dOutput.outputOps[0], options)
+	if err != nil {
+		panic(err)
+	}
+
+	var outputOps []compute.Value
+	var outputShapes []shapes.Shape
+	if bias != nil {
+		outputOps = []compute.Value{v0, v1, v2}
+		outputShapes = []shapes.Shape{
+			mustNoError(g.builder.OpShape(v0)),
+			mustNoError(g.builder.OpShape(v1)),
+			mustNoError(g.builder.OpShape(v2)),
+		}
+	} else {
+		outputOps = []compute.Value{v0, v1}
+		outputShapes = []shapes.Shape{
+			mustNoError(g.builder.OpShape(v0)),
+			mustNoError(g.builder.OpShape(v1)),
+		}
+	}
+
+	node := &Node{
+		outputOps:    outputOps,
+		outputShapes: outputShapes,
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	splitNodes := splitNode(node)
+	dx, dWeight = splitNodes[0], splitNodes[1]
+	if bias != nil {
+		dBias = splitNodes[2]
+	}
+	return
+}
+
+// fusedDenseVJP is the registered VJP for NodeTypeFusedDense.
+func fusedDenseVJP(node *Node, vjp *Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsFusedDense)
+	dx, dWeight, dBias := BackendFusedDenseVJP(inputs.x, inputs.weight, inputs.bias, node, vjp, inputs.options)
+	if inputs.bias != nil {
+		return []*Node{
+			ConvertDType(dx, inputs.x.DType()),
+			ConvertDType(dWeight, inputs.weight.DType()),
+			ConvertDType(dBias, inputs.bias.DType()),
+		}
+	}
+	return []*Node{
+		ConvertDType(dx, inputs.x.DType()),
+		ConvertDType(dWeight, inputs.weight.DType()),
+	}
+}
+
+// fusedActivationVJP is the registered VJP for NodeTypeFusedActivation.
+func fusedActivationVJP(node *Node, vjp *Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsFusedActivation)
+	dx := BackendFusedActivationVJP(node, inputs.x, vjp, inputs.cfg)
+	return []*Node{ConvertDType(dx, inputs.x.DType())}
 }
 
 // BackendFusedScaledDotProductAttention computes multi-head scaled dot-product attention via the

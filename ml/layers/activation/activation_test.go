@@ -141,3 +141,46 @@ func TestSwiGLU(t *testing.T) {
 	})
 }
 
+func TestActivationGradients(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		// Test Relu gradient
+		graphtest.RunTestGraphFnWithBackend(t, "ReluGradient", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, []float32{-2.0, 3.0})
+				y := Relu(x)
+				loss := ReduceAllSum(y)
+				grad := Gradient(loss, x)[0]
+				return []*Node{x}, []*Node{loss, grad}
+			}, []any{
+				float32(3.0),
+				[]float32{0.0, 1.0},
+			}, xslices.Epsilon)
+
+		// Test Gelu gradient
+		graphtest.RunTestGraphFnWithBackend(t, "GeluGradient", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, []float32{0.0, 1.0})
+				y := Gelu(x)
+				loss := ReduceAllSum(y)
+				grad := Gradient(loss, x)[0]
+				return []*Node{x}, []*Node{loss, grad}
+			}, []any{
+				float32(0.8413447),
+				[]float32{0.5, 1.0833155},
+			}, 1e-4)
+
+		// Test Swish gradient
+		graphtest.RunTestGraphFnWithBackend(t, "SwishGradient", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, []float32{0.0})
+				y := Swish(x)
+				loss := ReduceAllSum(y)
+				grad := Gradient(loss, x)[0]
+				return []*Node{x}, []*Node{loss, grad}
+			}, []any{
+				float32(0.0),
+				[]float32{0.5},
+			}, xslices.Epsilon)
+	})
+}
+
