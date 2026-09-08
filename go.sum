@@ -64,10 +64,14 @@ github.com/gomlx/compute v0.1.9-0.20260908145542-c7f199af496a h1:c6KIf/NstgDa7/H
 github.com/gomlx/compute v0.1.9-0.20260908145542-c7f199af496a/go.mod h1:MAUPCNrI8F8rcesMKVyAJ0bkS9qwhbPkSVs0QkaFBbs=
 github.com/gomlx/compute-onnx v0.1.7 h1:OHGev4fjobT6oDGklQFC9jpj88krM8nGhKL/fbxpsV4=
 github.com/gomlx/compute-onnx v0.1.7/go.mod h1:QJUaDreCESA7/l+1NmksnIe0gqHHf38Nj9jZB3gK66g=
+github.com/gomlx/compute-onnx v0.1.8-0.20260908145949-39ecd37780d1 h1:S5KZpazsf0eo/fVEqXzLfdyePmj59sePBBTgM4VzBsg=
+github.com/gomlx/compute-onnx v0.1.8-0.20260908145949-39ecd37780d1/go.mod h1:Fte1d1941lAPzmxAu47JVMGqmj9A+Opa8avvUpCGMHo=
 github.com/gomlx/exceptions v0.0.3 h1:HKnTgEjj4jlmhr8zVFkTP9qmV1ey7ypYYosQ8GzXWuM=
 github.com/gomlx/exceptions v0.0.3/go.mod h1:uHL0TQwJ0xaV2/snJOJV6hSE4yRmhhfymuYgNredGxU=
 github.com/gomlx/go-xla v0.4.7 h1:G3kfZfZI51XVrIQ5mU4kXe8bLXRxKXZ+ngHE3xXGRG8=
 github.com/gomlx/go-xla v0.4.7/go.mod h1:hxF5g1dpjjVcrIBGv9BBk/r3jW1Bqfp/+2g1EsF7E7s=
+github.com/gomlx/go-xla v0.4.8-0.20260908150120-56fdfc40f786 h1:pfypSzNcPCQ2CUDnncexqBlnzLrr4lyaqezibxb7UEY=
+github.com/gomlx/go-xla v0.4.8-0.20260908150120-56fdfc40f786/go.mod h1:nSXunhF6471oLScX6QKzuJrFpaZshWXAdg+UTzb6iW8=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
