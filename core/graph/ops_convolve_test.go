@@ -7,10 +7,17 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/gobackend"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors/images"
+	"github.com/gomlx/gomlx/ml/dataset"
+	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/train"
+	"github.com/gomlx/gomlx/ml/train/loss"
+	"github.com/gomlx/gomlx/ml/train/optimizer"
 	"github.com/gomlx/gomlx/support/testutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConvolve(t *testing.T) {
@@ -357,4 +364,121 @@ func TestConvolveWithGrouping(t *testing.T) {
 				{{9., 9., 24., 24.}},
 			},
 		})
+}
+
+// TestGradientConvolveInputDilation exercises the reverse autodiff path used by
+// dilated temporal convolutions. Before input-dilation VJP support, Gradient
+// panicked while building this graph.
+func TestGradientConvolveInputDilation(t *testing.T) {
+	testGradientsWithBackend(t, "1D TCN-like input dilation", gobackend.GetBackend(),
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, [][][]float64{{{1}, {2}}})
+			kernel := Const(g, [][][]float64{{{1}}, {{2}}, {{3}}})
+			output = Convolve(input, kernel).
+				PaddingPerDim([][2]int{{2, 2}}).
+				InputDilationPerAxis(2).
+				Done()
+			return output, []*Node{input, kernel}
+		}, []any{
+			[][][]float64{{{6}, {6}}},
+			[][][]float64{{{3}}, {{3}}, {{3}}},
+		})
+}
+
+func TestGradientConvGeneralAllSpatialTransforms(t *testing.T) {
+	testGradientsWithBackend(t, "1D stride, input dilation, and kernel dilation", gobackend.GetBackend(),
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Ones(g, MakeShape(dtypes.Float64, 1, 7, 1))
+			kernel := Ones(g, MakeShape(dtypes.Float64, 2, 1, 1))
+			axes := ConvolveAxesConfig{
+				InputBatch: 0, InputSpatial: []int{1}, InputChannels: 2,
+				KernelSpatial: []int{0}, KernelInputChannels: 1, KernelOutputChannels: 2,
+				OutputBatch: 0, OutputSpatial: []int{1}, OutputChannels: 2,
+			}
+			output = ConvGeneral(input, kernel, axes, []int{2}, nil, []int{2}, []int{2}, 1, 1)
+			return output, []*Node{input, kernel}
+		}, []any{
+			[][][]float64{{{1}, {2}, {2}, {2}, {2}, {2}, {1}}},
+			[][][]float64{{{6}}, {{6}}},
+		})
+}
+
+func TestGradientConvGeneralGroupedSpatialTransforms(t *testing.T) {
+	axes := ConvolveAxesConfig{
+		InputBatch: 0, InputSpatial: []int{1}, InputChannels: 2,
+		KernelSpatial: []int{0}, KernelInputChannels: 1, KernelOutputChannels: 2,
+		OutputBatch: 0, OutputSpatial: []int{1}, OutputChannels: 2,
+	}
+	for _, test := range []struct {
+		name                       string
+		inputShape                 shapes.Shape
+		xGradient                  any
+		kGradient                  any
+		channelGroups, batchGroups int
+	}{
+		{
+			name:       "channel groups",
+			inputShape: MakeShape(dtypes.Float64, 1, 5, 2),
+			xGradient: [][][]float64{{
+				{10, 18}, {10, 18}, {10, 18}, {10, 18}, {9, 13},
+			}},
+			kGradient: [][][]float64{
+				{{12, 12, 16, 16}},
+				{{20, 20, 25, 25}},
+			},
+			channelGroups: 2,
+		},
+		{
+			name:       "batch groups",
+			inputShape: MakeShape(dtypes.Float64, 2, 5, 1),
+			xGradient: [][][]float64{
+				{{10}, {10}, {10}, {10}, {9}},
+				{{18}, {18}, {18}, {18}, {13}},
+			},
+			kGradient: [][][]float64{
+				{{6, 6, 26, 26}},
+				{{10, 10, 35, 35}},
+			},
+			batchGroups: 2,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			testGradientsWithBackend(t, "1D grouped input dilation, padding, and stride", gobackend.GetBackend(),
+				func(g *Graph) (output *Node, nodesForGrad []*Node) {
+					input := IotaFull(g, test.inputShape)
+					kernel := IotaFull(g, MakeShape(dtypes.Float64, 2, 1, 4))
+					output = ReduceAllSum(ConvGeneral(input, kernel, axes, []int{2}, [][2]int{{2, 1}}, []int{2}, []int{2},
+						test.channelGroups, test.batchGroups))
+					return output, []*Node{input, kernel}
+				}, []any{test.xGradient, test.kGradient})
+		})
+	}
+}
+
+func TestConvolveInputDilationTrainingStep(t *testing.T) {
+	backend := gobackend.GetBackend()
+	store := model.NewStore()
+	store.SetParam(optimizer.ParamLearningRate, 0.1)
+	modelFn := func(scope *model.Scope, _ any, inputs []*Node) []*Node {
+		kernel := scope.VariableWithValue("kernel", [][][]float32{{{0}}, {{0}}, {{0}}})
+		return []*Node{Convolve(inputs[0], kernel.NodeValue(inputs[0].Graph())).
+			PaddingPerDim([][2]int{{2, 2}}).
+			InputDilationPerAxis(2).
+			Done()}
+	}
+	ds, err := dataset.InMemoryFromData(backend, "tcn", []any{
+		[][][]float32{{{1}, {2}}},
+	}, []any{
+		[][][]float32{{{3}, {2}, {7}, {4}, {2}}},
+	})
+	require.NoError(t, err)
+	ds.BatchSize(1, false).Infinite(true)
+
+	trainer := train.NewTrainer(backend, store, modelFn, loss.MeanSquaredError,
+		optimizer.StochasticGradientDescent(), nil, nil)
+	_, err = train.NewLoop(trainer).RunSteps(ds, 1)
+	require.NoError(t, err)
+	kernel := store.GetVariable("/kernel")
+	require.NotNil(t, kernel)
+	require.NotEqual(t, [][][]float32{{{0}}, {{0}}, {{0}}}, kernel.MustValue().Value())
 }
