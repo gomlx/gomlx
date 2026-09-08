@@ -62,11 +62,14 @@ and error messages are useful (always with a stack-trace) and try to make it eas
 ## News
 
 - **🚀 NEW 🚀** New `onnx` backend, based on ONNX Runtime. It has support for "onnx:cpu", "onnx:cuda" (CUDA) and "onnx:rocm" versions support. For WebAssembly (WASM) it supports "onnx:wasm" (CPU), "webgpu" (GPU) and "webnn" (experimental).
+  - Includes saving a model to a `.onnx` file, that can be served with other inference systems that support ONNX (e.g. [KnightAnalytics Hugot](https://github.com/knights-analytics/hugot)).
 - **🚀 NEW 🚀** The "go" backend has been greatly optimized, **closely matching "xla:cpu" speeds for FNN models** (try out the [UCI-Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html)).
   - The main execution engine has been updated to minimize synchronization costs;
   - Improved buffer management;
   - Updated and greatly broadened SIMD suport -- where possible using go1.27 portable `simd` (so should work for any platforms).
   - Matrix multiplications are still very architecture dependent, hence only AVX2 and AVX512 were optimized so far. the microkernel was written in assembly due to some pending go `simd` issues ([#80829](https://github.com/golang/go/issues/80829) and [#78753](https://github.com/golang/go/issues/78753)). **[Consider donating for Apple hardware](https://github.com/gomlx/gomlx?tab=readme-ov-file#-support-the-project)**, I'd love to add support for Neon SIMD/assembly optimized kernels!
+- **🚀 NEW 🚀** Greatly improved DynamicShape support, with new ops to support it. This enabled creating ONNX models
+  with variable-sized inputs, from GoMLX trained (or fine-tuned) models.
 
 ## 🗺️ Overview
 
