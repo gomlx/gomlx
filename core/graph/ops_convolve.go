@@ -62,8 +62,7 @@ type ConvolutionBuilder struct {
 // Additional features:
 //   - Group operations: Use ConvolutionBuilder.ChannelGroupCount to split channels
 //     or BatchGroupCount to split batches into independent processing groups.
-//     When using either feature, the kernel's shape changes and back-propagation
-//     is not yet supported.
+//     When using either feature, the kernel's shape changes.
 func Convolve(x, kernel *Node) *ConvolutionBuilder {
 	conv := &ConvolutionBuilder{
 		graph:             validateBuildingGraphFromInputs(x, kernel),
@@ -331,10 +330,7 @@ func (conv *ConvolutionBuilder) DilationPerDim(dilations ...int) *ConvolutionBui
 	return conv.DilationPerAxis(dilations...)
 }
 
-// InputDilationPerAxis is used when generating the gradient of a convolution with strides.
-// It effectively inserts zeros in the input, making it effectively larger than it actually is.
-//
-// The gradient of Convolve with input dilation is not implemented yet, be careful.
+// InputDilationPerAxis virtually inserts zeros between input values, making the input effectively larger.
 func (conv *ConvolutionBuilder) InputDilationPerAxis(dilations ...int) *ConvolutionBuilder {
 	if len(dilations) == 0 {
 		conv.inputDilations = nil
@@ -468,38 +464,30 @@ func ConvGeneral(input, kernel *Node, axes ConvolveAxesConfig,
 var ConvGeneralDilated = ConvGeneral
 
 func convGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
-	// TODO: backward propagation is not working in this function
-
 	// Recover parameters from serialized node.
 	x := node.inputNodes[0]
 	kernel := node.inputNodes[1]
 	params := node.inputs.(*nodeInputsConvGeneral)
 	numSpatialDims := x.Rank() - 2
-	if len(params.inputDilations) > 0 {
-		Panicf("gradient of Convolve with input dilation not defined, " +
-			"usually it's only used to calculate the gradient of a convolution, so " +
-			"this may occur when trying to do the gradient of a gradient.")
-	}
-
 	// Notice one can't have batch and channel grouping at the same time.
 	var vjpX, vjpKernel *Node
 	if params.channelGroupCount > 1 {
 		vjpX, vjpKernel = convGeneralWithChannelGroupingVJP(node, x, kernel, v, numSpatialDims, params.axes,
-			params.strides, params.paddings, params.kernelDilations, params.channelGroupCount)
+			params.strides, params.paddings, params.inputDilations, params.kernelDilations, params.channelGroupCount)
 	} else if params.batchGroupCount > 1 {
 		vjpX, vjpKernel = convGeneralWithBatchGroupingVJP(node, x, kernel, v, numSpatialDims, params.axes,
-			params.strides, params.paddings, params.kernelDilations, params.batchGroupCount)
+			params.strides, params.paddings, params.inputDilations, params.kernelDilations, params.batchGroupCount)
 	} else {
 		vjpX = convVJPWrtX(node, x, kernel, v, numSpatialDims, params.axes,
-			params.strides, params.paddings, params.kernelDilations)
+			params.strides, params.paddings, params.inputDilations, params.kernelDilations)
 		vjpKernel = convVJPWrtKernel(node, x, kernel, v, numSpatialDims, params.axes,
-			params.strides, params.paddings, params.kernelDilations)
+			params.strides, params.paddings, params.inputDilations, params.kernelDilations)
 	}
 	return []*Node{vjpX, vjpKernel}
 }
 
 func convGeneralWithChannelGroupingVJP(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig,
-	strides []int, paddings [][2]int, kernelDilations []int, channelGroupCount int) (vjpX, vjpKernel *Node) {
+	strides []int, paddings [][2]int, inputDilations, kernelDilations []int, channelGroupCount int) (vjpX, vjpKernel *Node) {
 	// Split v, x and kernel into groups.
 	outputChannelsAxis := axes.OutputChannels
 	vSlices := Split(v, outputChannelsAxis, channelGroupCount)
@@ -511,7 +499,7 @@ func convGeneralWithChannelGroupingVJP(node, x, kernel, v *Node, numSpatialDims 
 	// Compute the gradients for each slice of the input (x).
 	var xGradSlices []*Node
 	for i := range channelGroupCount {
-		gradSlice := convVJPWrtX(node, xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, kernelDilations)
+		gradSlice := convVJPWrtX(node, xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, inputDilations, kernelDilations)
 		xGradSlices = append(xGradSlices, gradSlice)
 	}
 	vjpX = Concatenate(xGradSlices, inputChannelsAxis)
@@ -519,7 +507,7 @@ func convGeneralWithChannelGroupingVJP(node, x, kernel, v *Node, numSpatialDims 
 	// Compute the gradients for each slice of the kernel.
 	var kernelGradSlices []*Node
 	for i := range channelGroupCount {
-		gradSlice := convVJPWrtKernel(vSlices[i], xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, kernelDilations)
+		gradSlice := convVJPWrtKernel(vSlices[i], xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, inputDilations, kernelDilations)
 		kernelGradSlices = append(kernelGradSlices, gradSlice)
 	}
 	vjpKernel = Concatenate(kernelGradSlices, kernelOutputChannelsAxis)
@@ -528,7 +516,7 @@ func convGeneralWithChannelGroupingVJP(node, x, kernel, v *Node, numSpatialDims 
 
 // convGeneralWithBatchGroupingVJP handles the gradient calculation when using batch grouping.
 func convGeneralWithBatchGroupingVJP(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig,
-	strides []int, paddings [][2]int, kernelDilations []int, batchGroupCount int) (vjpX, vjpKernel *Node) {
+	strides []int, paddings [][2]int, inputDilations, kernelDilations []int, batchGroupCount int) (vjpX, vjpKernel *Node) {
 	// Split v, x and kernel into batch groups.
 	vSlices := Split(v, axes.OutputChannels, batchGroupCount)
 	xSlices := Split(x, axes.InputBatch, batchGroupCount)
@@ -537,7 +525,7 @@ func convGeneralWithBatchGroupingVJP(node, x, kernel, v *Node, numSpatialDims in
 	// Compute the gradients for each slice of the input (x).
 	var xGradSlices []*Node
 	for i := range batchGroupCount {
-		gradSlice := convVJPWrtX(node, xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, kernelDilations)
+		gradSlice := convVJPWrtX(node, xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, inputDilations, kernelDilations)
 		xGradSlices = append(xGradSlices, gradSlice)
 	}
 	vjpX = Concatenate(xGradSlices, axes.InputBatch)
@@ -545,7 +533,7 @@ func convGeneralWithBatchGroupingVJP(node, x, kernel, v *Node, numSpatialDims in
 	// Compute the gradients for each slice of the kernel.
 	var kernelGradSlices []*Node
 	for i := range batchGroupCount {
-		gradSlice := convVJPWrtKernel(vSlices[i], xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, kernelDilations)
+		gradSlice := convVJPWrtKernel(vSlices[i], xSlices[i], kernelSlices[i], vSlices[i], numSpatialDims, axes, strides, paddings, inputDilations, kernelDilations)
 		kernelGradSlices = append(kernelGradSlices, gradSlice)
 	}
 	vjpKernel = Concatenate(kernelGradSlices, axes.KernelOutputChannels)
@@ -554,7 +542,7 @@ func convGeneralWithBatchGroupingVJP(node, x, kernel, v *Node, numSpatialDims in
 
 // convVJPWrtX creates the Vector-Jacobian (for backpropagation) of the
 // output with respect to (==wrt) the input (x). See also convVJPWrtKernel.
-func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig, strides []int, paddings [][2]int, kernelDilations []int) *Node {
+func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig, strides []int, paddings [][2]int, inputDilations, kernelDilations []int) *Node {
 	// Get output and input spatial dimensions.
 	inputSpatialDims := gatherSlice(axes.InputSpatial, x.Shape().Dimensions)
 	outputSpatialDims := gatherSlice(axes.OutputSpatial, node.Shape().Dimensions)
@@ -583,6 +571,9 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 		}
 		kernelSize = (kernelSize-1)*dilation + 1
 		inputDimSize := inputSpatialDims[axis]
+		if len(inputDilations) > 0 {
+			inputDimSize = (inputDimSize-1)*inputDilations[axis] + 1
+		}
 		outputDimSize := outputSpatialDims[axis]
 		dimStride := 1
 		if len(strides) > 0 {
@@ -631,7 +622,13 @@ func convVJPWrtX(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxes
 	if len(strides) > 0 {
 		revConv.InputDilationPerAxis(strides...)
 	}
-	return revConv.Done()
+	output := revConv.Done()
+	for spatialIdx, inputAxis := range axes.InputSpatial {
+		if len(inputDilations) > 0 && inputDilations[spatialIdx] != 1 {
+			output = SliceAxis(output, inputAxis, AxisRange().Stride(inputDilations[spatialIdx]))
+		}
+	}
+	return output
 }
 
 func expectedOutputSize(inputSize, kernelSize, dilation, stride int, padding [2]int) int {
@@ -646,7 +643,7 @@ func expectedOutputSize(inputSize, kernelSize, dilation, stride int, padding [2]
 // output with respect to (==wrt) the kernel (aka kernel). See also convVJPWrtX.
 // It works for one group of convolution.
 func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes ConvolveAxesConfig,
-	strides []int, paddings [][2]int, kernelDilations []int) *Node {
+	strides []int, paddings [][2]int, inputDilations, kernelDilations []int) *Node {
 	// (1) For the Gradient of the output with respect to kernel, we need a reverse convolution of
 	// the original input using v (the term from VJP, shaped as the original output) as the
 	// "reverseKernel". Since we need to multiply it by most of the inputNodes to get the VJP wrt
@@ -690,6 +687,9 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 			dimFilterDilation = kernelDilations[axisIdx]
 		}
 		inputDimSize := inputSpatialDims[axisIdx]
+		if len(inputDilations) > 0 {
+			inputDimSize = (inputDimSize-1)*inputDilations[axisIdx] + 1
+		}
 		outputDimSize := outputSpatialDims[axisIdx]
 		dimStride := 1
 		if len(strides) > 0 {
@@ -726,20 +726,8 @@ func convVJPWrtKernel(node, x, kernel, v *Node, numSpatialDims int, axes Convolv
 		reversePaddings[axisIdx][1] += revDimExtraPadding // Adjustment made to the end.
 	}
 
-	// (3) Run the reverse convolution of the VJP.
-	revConv := Convolve(x, reverseKernel).
-		AxesConfig(reverseAxes)
-	if len(reversePaddings) > 0 {
-		revConv.PaddingPerDim(reversePaddings)
-	} else {
-		revConv.NoPadding()
-	}
-	if len(reverseStrides) > 0 {
-		revConv.StridePerAxis(reverseStrides...)
-	}
-	if len(reverseDilations) > 0 {
-		revConv.DilationPerAxis(reverseDilations...)
-	}
-	output := revConv.Done()
-	return output
+	// Use ConvGeneral directly: the reverse swaps forward strides and kernel
+	// dilations, which may set both even though ConvolutionBuilder forbids it.
+	return ConvGeneral(x, reverseKernel, reverseAxes, reverseStrides, reversePaddings,
+		inputDilations, reverseDilations, 1, 1)
 }
