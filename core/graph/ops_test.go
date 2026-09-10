@@ -238,25 +238,42 @@ func TestParameter(t *testing.T) {
 }
 
 func TestConvertDType(t *testing.T) {
-	backend := graphtest.BuildTestBackend()
-	if !backend.Capabilities().DTypes[dtypes.Complex64] || !backend.Capabilities().DTypes[dtypes.Complex128] {
-		t.Skipf("Backend %q does not support complex numbers", backend.Name())
-	}
-	// Test that number can be converted to complex types.
-	wantF32 := []float32{3.0, -5.0}
-	wantF64 := []float64{-7.0, 11.0}
-	graphtest.RunTestGraphFnWithBackend(t, "ConvertToComplex", backend, func(g *Graph) (inputs, outputs []*Node) {
-		inputs = []*Node{
-			Const(g, wantF32),
-			Const(g, wantF64),
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		wantF32 := []float32{3.0, -5.0}
+		wantF64 := []float64{-7.0, 11.0}
+		graphtest.RunTestGraphFnWithBackend(t, "Basic", backend, func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Const(g, wantF32),
+				Const(g, wantF64),
+			}
+			f64 := ConvertDType(inputs[0], dtypes.Float64)
+			assert.Equal(t, dtypes.Float64, f64.DType())
+			i32 := ConvertDType(inputs[0], dtypes.Int32)
+			assert.Equal(t, dtypes.Int32, i32.DType())
+			f32 := ConvertDType(inputs[1], dtypes.Float32)
+			assert.Equal(t, dtypes.Float32, f32.DType())
+			outputs = []*Node{f64, i32, f32}
+			return
+		}, []any{[]float64{3.0, -5.0}, []int32{3, -5}, []float32{-7.0, 11.0}}, -1)
+
+		if !backend.Capabilities().DTypes[dtypes.Complex64] || !backend.Capabilities().DTypes[dtypes.Complex128] {
+			t.Logf("Backend %q does not support complex numbers, skipping ConvertToComplex", backend.Name())
+			return
 		}
-		c64 := ConvertDType(inputs[0], dtypes.Complex64)
-		assert.Equal(t, dtypes.Complex64, c64.DType())
-		c128 := ConvertDType(inputs[1], dtypes.Complex128)
-		assert.Equal(t, dtypes.Complex128, c128.DType())
-		outputs = []*Node{Real(c64), Real(c128)}
-		return
-	}, []any{wantF32, wantF64}, -1)
+		// Test that number can be converted to complex types.
+		graphtest.RunTestGraphFnWithBackend(t, "ConvertToComplex", backend, func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Const(g, wantF32),
+				Const(g, wantF64),
+			}
+			c64 := ConvertDType(inputs[0], dtypes.Complex64)
+			assert.Equal(t, dtypes.Complex64, c64.DType())
+			c128 := ConvertDType(inputs[1], dtypes.Complex128)
+			assert.Equal(t, dtypes.Complex128, c128.DType())
+			outputs = []*Node{Real(c64), Real(c128)}
+			return
+		}, []any{wantF32, wantF64}, -1)
+	})
 }
 
 type BinaryOpsTestCase[T gotype.Supported] struct {
