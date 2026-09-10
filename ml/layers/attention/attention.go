@@ -116,6 +116,24 @@ func reshapeMaskForGQA(mask *Node, numQueryHeads, numKVHeads int, layout AxesLay
 	return InsertAxes(mask, headsAxis+1)
 }
 
+// expandMaskTo4D inserts axes of size 1 so mask has rank 4 matching standard attention score rank.
+// For a 2D mask [batch, kv_seq], axes 1 and 2 are expanded -> [batch, 1, 1, kv_seq].
+// For a 3D mask [batch, q_seq, kv_seq], the heads axis (1 for BHSD, 2 for BSHD) is expanded.
+// For a 1D mask [kv_seq], batch axis 0 is expanded first, then axes 1 and 2.
+func expandMaskTo4D(mask *Node, layout AxesLayout) *Node {
+	for mask.Rank() < 4 {
+		switch mask.Rank() {
+		case 1:
+			mask = ExpandAxes(mask, 0)
+		case 2:
+			mask = ExpandAxes(mask, 1, 2)
+		case 3:
+			mask = ExpandAxes(mask, layout.HeadsAxis())
+		}
+	}
+	return mask
+}
+
 // mergeOutputGQAHeads merges the split (numKVHeads, groupSize) axes back into a single
 // heads axis for the attention output tensor. The input is 5D and the output is 4D.
 // This correctly handles d_v != d_q since it operates on the node's own dimensions.
@@ -340,6 +358,9 @@ func Core(query, key, value *Node, layout AxesLayout, options CoreOptions) (outp
 		if decomposedBias != nil && layout == LayoutBSHD {
 			decomposedBias = TransposeAllAxes(decomposedBias, 0, 2, 1, 3)
 		}
+		if decomposedMask != nil && decomposedMask.Rank() < 4 {
+			decomposedMask = expandMaskTo4D(decomposedMask, layout)
+		}
 		if isGQA {
 			decomposedQuery = reshapeQueryForGQA(query, numQueryHeads, numKVHeads, layout)
 			if decomposedMask != nil {
@@ -369,10 +390,7 @@ func Core(query, key, value *Node, layout AxesLayout, options CoreOptions) (outp
 			scores = Add(scores, decomposedMask)
 			coefficients = Softmax(scores, -1)
 		} else {
-			// Boolean mask (or nil): MaskedSoftmax handles both.
-			if decomposedMask != nil {
-				decomposedMask = BroadcastToShape(decomposedMask, scores.Shape())
-			}
+			// Boolean mask (or nil): MaskedSoftmax handles both using Where with implicit broadcast.
 			coefficients = MaskedSoftmax(scores, decomposedMask, -1)
 		}
 		if dropoutActive {

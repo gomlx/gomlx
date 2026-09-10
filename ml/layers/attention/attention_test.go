@@ -422,3 +422,87 @@ func TestMultiHeadAttentionScoreSoftCapAndPreProjected(t *testing.T) {
 		assert.InDelta(t, 1.0-expectedCappedVal, coefCapped[0][0][0][1], 1e-4)
 	}, "go")
 }
+
+func TestCoreLowerRankMasks(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		t.Run("2D_Mask", func(t *testing.T) {
+			for _, layout := range []AxesLayout{LayoutBHSD, LayoutBSHD} {
+				store := model.NewStore()
+				exec := model.MustNewExec(backend, store, func(scope *model.Scope, q, k, v, mask *Node) *Node {
+					out, _ := Core(q, k, v, layout, CoreOptions{
+						AttentionMask: mask,
+						DisableFusion: true,
+					})
+					return out
+				})
+
+				// Values: pos0=[10], pos1=[20], pos2=[100].
+				// Mask: [true, true, false] -> pos2 masked out, softmax([0, 0]) = [0.5, 0.5] -> out = 15.
+				var qData, kData, vData any
+				if layout == LayoutBHSD {
+					// [batch=1, heads=2, seq=3, dim=1]
+					qData = [][][][]float32{{{{0}, {0}, {0}}, {{0}, {0}, {0}}}}
+					kData = [][][][]float32{{{{0}, {0}, {0}}, {{0}, {0}, {0}}}}
+					vData = [][][][]float32{{{{10}, {20}, {100}}, {{10}, {20}, {100}}}}
+				} else {
+					// LayoutBSHD: [batch=1, seq=3, heads=2, dim=1]
+					qData = [][][][]float32{{{{0}, {0}}, {{0}, {0}}, {{0}, {0}}}}
+					kData = [][][][]float32{{{{0}, {0}}, {{0}, {0}}, {{0}, {0}}}}
+					vData = [][][][]float32{{{{10}, {10}}, {{20}, {20}}, {{100}, {100}}}}
+				}
+				maskData := [][]bool{{true, true, false}} // 2D: [batch=1, kv_seq=3]
+
+				out := exec.MustCall(qData, kData, vData, maskData)[0]
+				outTensor := out.Value().([][][][]float32)
+				if layout == LayoutBHSD {
+					assert.InDelta(t, float32(15), outTensor[0][0][0][0], 1e-3)
+					assert.InDelta(t, float32(15), outTensor[0][1][0][0], 1e-3)
+				} else {
+					assert.InDelta(t, float32(15), outTensor[0][0][0][0], 1e-3)
+					assert.InDelta(t, float32(15), outTensor[0][0][1][0], 1e-3)
+				}
+			}
+		})
+
+		t.Run("3D_Mask", func(t *testing.T) {
+			for _, layout := range []AxesLayout{LayoutBHSD, LayoutBSHD} {
+				store := model.NewStore()
+				exec := model.MustNewExec(backend, store, func(scope *model.Scope, q, k, v, mask *Node) *Node {
+					out, _ := Core(q, k, v, layout, CoreOptions{
+						AttentionMask: mask,
+						DisableFusion: true,
+					})
+					return out
+				})
+
+				// 3D Mask: [batch=1, q_seq=2, kv_seq=2]
+				// q0 sees [true, false] -> attends only to v0 (10)
+				// q1 sees [true, true]  -> attends to v0, v1 (10, 20) -> average 15
+				var qData, kData, vData any
+				if layout == LayoutBHSD {
+					// [batch=1, heads=1, seq=2, dim=1]
+					qData = [][][][]float32{{{{0}, {0}}}}
+					kData = [][][][]float32{{{{0}, {0}}}}
+					vData = [][][][]float32{{{{10}, {20}}}}
+				} else {
+					// LayoutBSHD: [batch=1, seq=2, heads=1, dim=1]
+					qData = [][][][]float32{{{{0}}, {{0}}}}
+					kData = [][][][]float32{{{{0}}, {{0}}}}
+					vData = [][][][]float32{{{{10}}, {{20}}}}
+				}
+				maskData := [][][]bool{{{true, false}, {true, true}}}
+
+				out := exec.MustCall(qData, kData, vData, maskData)[0]
+				outTensor := out.Value().([][][][]float32)
+				if layout == LayoutBHSD {
+					assert.InDelta(t, float32(10), outTensor[0][0][0][0], 1e-3)
+					assert.InDelta(t, float32(15), outTensor[0][0][1][0], 1e-3)
+				} else {
+					assert.InDelta(t, float32(10), outTensor[0][0][0][0], 1e-3)
+					assert.InDelta(t, float32(15), outTensor[0][1][0][0], 1e-3)
+				}
+			}
+		})
+	})
+}
+
