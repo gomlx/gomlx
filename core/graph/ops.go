@@ -615,7 +615,11 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 		exceptions.Panicf("BroadcastToShape: rank mismatch: x shape %s has rank %d, target shape %s has rank %d",
 			xShape, xShape.Rank(), shape, shape.Rank())
 	}
+	if xShape.IsScalar() && shape.IsScalar() {
+		return x
+	}
 
+	// Resolve output axes names.
 	resultAxisNames := make([]string, shape.Rank())
 	for i := range shape.Rank() {
 		if i < xShape.Rank() {
@@ -635,9 +639,11 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 		}
 	}
 
-	outShape := shapes.MakeDynamic(x.DType(), shape.Dimensions, resultAxisNames)
-	if xShape.IsScalar() && outShape.IsScalar() {
-		return x
+	var outShape shapes.Shape
+	if slices.ContainsFunc(resultAxisNames, func(name string) bool { return name != "" }) {
+		outShape = shapes.MakeDynamic(x.DType(), shape.Dimensions, resultAxisNames)
+	} else {
+		outShape = shapes.Make(x.DType(), shape.Dimensions...)
 	}
 	var node *Node
 	if xShape.IsScalar() {
