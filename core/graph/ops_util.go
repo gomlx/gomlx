@@ -450,7 +450,7 @@ func MaskedSoftmax(logits, mask *Node, axes ...int) *Node {
 		axes = []int{-1}
 	}
 	normalizingMax := StopGradient(MaskedReduceAndKeep(logits, mask, MaskedReduceMax, axes...))
-	zeros := ZerosLike(logits)
+	zeros := ScalarZero(logits.Graph(), logits.DType())
 	normalizedLogits := Sub(logits, normalizingMax)
 	normalizedLogits = Where(mask, normalizedLogits, zeros)
 	numerator := Exp(normalizedLogits)

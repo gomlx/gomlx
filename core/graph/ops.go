@@ -714,63 +714,26 @@ func ConvertType(x *Node, dtype dtypes.DType) *Node {
 
 // Where takes element-wise values from onTrue or onFalse depending on the value of condition (expected to be boolean).
 //
-// Usual implicit broadcasting rules don't apply. But it will broadcast in the following cases:
-//
-//  1. If either onTrue or onFalse are a scalar, they are broadcast to the other (onFalse or onTrue respectively).
-//     If both are scalars, they will be broadcast to the shape of condition.
-//  2. If condition is a prefix to the shapes of onTrue/onFalse then condition is expanded to match.
-//     This is useful for masking of embeddings for instance.
+// It supports implicit broadcasting:
+//  1. Any operand can be a scalar, in which case it is implicitly broadcast to the output shape.
+//  2. Non-scalar operands must have matching ranks, and for each dimension they must either be equal
+//     or one of them must be 1 (in which case it is broadcast to the larger dimension).
+//  3. If condition has lower rank than onTrue/onFalse, trailing axes of size 1 are inserted so it has the same rank.
 func Where(condition, onTrue, onFalse *Node) *Node {
-	_ = validateBuildingGraphFromInputs(condition)
+	_ = validateBuildingGraphFromInputs(condition, onTrue, onFalse)
 	if condition.DType() != dtypes.Bool {
 		exceptions.Panicf("Where(condition, onTrue, onFalse) requires condition to be of dtype Bool, got %s instead",
 			condition.Shape())
 	}
 
-	// Find output shape:
-	outputShape := onTrue.Shape()
-	if outputShape.IsScalar() {
-		outputShape = onFalse.Shape()
-		if outputShape.IsScalar() {
-			outputShape = condition.Shape()
-		}
+	targetRank := max(condition.Rank(), onTrue.Rank(), onFalse.Rank())
+
+	// Broadcasting of condition when it has lower rank than targetRank:
+	if !condition.IsScalar() && condition.Rank() < targetRank {
+		extraAxes := targetRank - condition.Rank()
+		condition = InsertAxes(condition, xslices.SliceWithValue(extraAxes, -1)...)
 	}
 
-	// Broadcast onTrue and onFalse to the outputShape if needed.
-	if !onTrue.Shape().IsScalar() && !onFalse.Shape().IsScalar() && !onTrue.Shape().Equal(onFalse.Shape()) {
-		exceptions.Panicf("Where() requires onTrue (%s) and onFalse (%s) to either be the same shape or be a scalar",
-			onTrue.Shape(), onFalse.Shape())
-	}
-
-	// Broadcasting of condition when it's a prefix to one of the operands:
-	if !condition.IsScalar() {
-		if condition.Rank() > outputShape.Rank() {
-			exceptions.Panicf(
-				"Where() requires the condition shape (%s) to be a prefix (or equal) to the output shape (%s), onTrue is %s and onFalse is %s",
-				condition.Shape(),
-				outputShape,
-				onTrue.Shape(),
-				onFalse.Shape(),
-			)
-		}
-		for axis, dim := range condition.Shape().Dimensions {
-			if outputShape.Dimensions[axis] != dim {
-				exceptions.Panicf(
-					"Where() requires the condition shape to be a prefix (or equal) to the output shape, but condition is %s and output shape is %s",
-					condition.Shape(),
-					outputShape,
-				)
-			}
-		}
-		if condition.Rank() != outputShape.Rank() {
-			// Broadcast condition.
-			extraAxes := outputShape.Rank() - condition.Rank()
-			condition = InsertAxes(condition, xslices.SliceWithValue(extraAxes, -1)...)
-			condition = BroadcastToShape(condition, outputShape)
-		}
-	}
-
-	// Broadcasting of scalar onTrue or onFalse is done by the backend.
 	return backendWhere(condition, onTrue, onFalse)
 }
 
@@ -1202,7 +1165,8 @@ func MaskedReduceSum(x, mask *Node, reduceAxes ...int) *Node {
 	if mask == nil {
 		return ReduceSum(x, reduceAxes...)
 	}
-	maskedX := Where(mask, x, ZerosLike(x))
+	zeros := ScalarZero(x.Graph(), x.DType())
+	maskedX := Where(mask, x, zeros)
 	return ReduceSum(maskedX, reduceAxes...)
 }
 
@@ -1265,7 +1229,7 @@ func MaskedReduceMean(x, mask *Node, reduceAxes ...int) *Node {
 		// Mask must have a prefix rank to X, in which case we need to expand it to get the count of masked elements right.
 		mask = BroadcastLike(mask, x, xslices.Iota(0, mask.Rank())...)
 	}
-	zeros := ZerosLike(x)
+	zeros := ScalarZero(x.Graph(), x.DType())
 	maskedX := Where(mask, x, zeros)
 	sum := ReduceSum(maskedX, reduceAxes...)
 	denominator := ConvertDType(mask, x.DType())
@@ -1325,8 +1289,7 @@ func MaskedReduceMax(x, mask *Node, reduceAxes ...int) *Node {
 	}
 	g := x.Graph()
 	lowest := lowestForDType(g, x.DType())
-	broadcastLowest := BroadcastLike(lowest, x)
-	maskedX := Where(mask, x, broadcastLowest)
+	maskedX := Where(mask, x, lowest)
 	return ReduceMax(maskedX, reduceAxes...)
 }
 
@@ -1365,9 +1328,8 @@ func MaskedReduceMin(x, mask *Node, reduceAxes ...int) *Node {
 		return ReduceMin(x, reduceAxes...)
 	}
 	g := x.Graph()
-	lowest := highestForDType(g, x.DType())
-	broadcastHighest := BroadcastLike(lowest, x)
-	maskedX := Where(mask, x, broadcastHighest)
+	highest := highestForDType(g, x.DType())
+	maskedX := Where(mask, x, highest)
 	return ReduceMin(maskedX, reduceAxes...)
 }
 

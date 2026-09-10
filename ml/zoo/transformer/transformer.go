@@ -44,6 +44,7 @@ const (
 	ParamNormEpsilon           = "transformer_norm_epsilon"
 	ParamDyTAlpha              = "transformer_dyt_alpha"
 	ParamActivation            = "transformer_activation"
+	ParamGeluApproximate       = "transformer_gelu_approximate"
 	ParamNumKVHeads            = "transformer_num_kv_heads"
 	ParamGlobalHeadDim         = "transformer_global_head_dim"
 	ParamNumKVSharedLayers     = "transformer_num_kv_shared_layers"
@@ -156,6 +157,7 @@ type Model struct {
 	RMSNormOffset                float64 // Offset added to RMSNorm weights, default is 1.0 (Gemma 1/2/3). Set to 0.0 for Gemma 4.
 	GlobalHeadDim                int
 	QueryKeyScale                float64
+	ApproximateGelu              bool // If true, TypeGelu is mapped to TypeGeluApprox for faster execution
 }
 
 // New creates a default transformer configuration.
@@ -180,7 +182,8 @@ func New(scope *model.Scope) *Model {
 		Normalization:                layers.NormalizationLayerNorm,
 		NormEpsilon:                  1e-5,
 		DyTAlpha:                     0.5,
-		Activation:                   activation.TypeGelu,
+		Activation:                   activation.TypeGeluApprox,
+		ApproximateGelu:              true,
 		NumKVHeads:                   0,
 		posEncoder:                   nil,
 		KVCache:                      NewKVCache(),
@@ -221,7 +224,11 @@ func New(scope *model.Scope) *Model {
 		}
 		m.NormEpsilon = model.GetParamOr(scope, ParamNormEpsilon, m.NormEpsilon)
 		m.DyTAlpha = model.GetParamOr(scope, ParamDyTAlpha, m.DyTAlpha)
+		m.ApproximateGelu = model.GetParamOr(scope, ParamGeluApproximate, m.ApproximateGelu)
 		m.Activation = activation.FromName(model.GetParamOr(scope, ParamActivation, m.Activation.String()))
+		if m.ApproximateGelu && m.Activation == activation.TypeGelu {
+			m.Activation = activation.TypeGeluApprox
+		}
 		m.NumKVHeads = model.GetParamOr(scope, ParamNumKVHeads, m.NumKVHeads)
 		m.GlobalHeadDim = model.GetParamOr(scope, ParamGlobalHeadDim, m.GlobalHeadDim)
 		m.NumKVSharedLayers = model.GetParamOr(scope, ParamNumKVSharedLayers, m.NumKVSharedLayers)
@@ -495,8 +502,24 @@ func (m *Model) WithDyTAlpha(alpha float64) *Model {
 }
 
 // WithActivation sets the activation function type.
-func (m *Model) WithActivation(activation activation.Type) *Model {
-	m.Activation = activation
+// If approximate GELU is enabled (the default) and activation is [activation.TypeGelu], it is converted to [activation.TypeGeluApprox].
+func (m *Model) WithActivation(act activation.Type) *Model {
+	m.Activation = act
+	if m.ApproximateGelu && m.Activation == activation.TypeGelu {
+		m.Activation = activation.TypeGeluApprox
+	}
+	return m
+}
+
+// WithApproximateGelu configures whether to use the approximate version of GELU (default is true).
+// If enabled and the activation is [activation.TypeGelu], it is converted to [activation.TypeGeluApprox].
+func (m *Model) WithApproximateGelu(enable bool) *Model {
+	m.ApproximateGelu = enable
+	if enable && m.Activation == activation.TypeGelu {
+		m.Activation = activation.TypeGeluApprox
+	} else if !enable && m.Activation == activation.TypeGeluApprox {
+		m.Activation = activation.TypeGelu
+	}
 	return m
 }
 

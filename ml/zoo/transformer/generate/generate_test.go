@@ -61,12 +61,7 @@ func TestGeneratorSampling(t *testing.T) {
 			vocabSize := 10
 			g := tokens.Graph()
 			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
-			vocabIota = ExpandDims(vocabIota, 0)
-			vocabIota = ExpandDims(vocabIota, 0)
-			targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
-			targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
-			targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
-			logits := BroadcastToShape(vocabIota, targetShape)
+			logits := DynamicBroadcastInDim(vocabIota, []int{2}, append(DimensionSpecsFor(tokens), StaticDim(vocabSize))...)
 			indices := Iota(g, logits.Shape(), 2)
 			logits = Where(Equal(indices, ConstAs(indices, 5)), ConstAs(logits, 100.0), logits)
 			return logits
@@ -91,12 +86,7 @@ func TestGeneratorSampling(t *testing.T) {
 			vocabSize := 10
 			g := tokens.Graph()
 			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
-			vocabIota = ExpandDims(vocabIota, 0)
-			vocabIota = ExpandDims(vocabIota, 0)
-			targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
-			targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
-			targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
-			return BroadcastToShape(vocabIota, targetShape)
+			return DynamicBroadcastInDim(vocabIota, []int{2}, append(DimensionSpecsFor(tokens), StaticDim(vocabSize))...)
 		}
 		cfg := New(modelFn).WithStrategy(sample.StrategyTemperature).WithTemperature(1.5).WithMaxLength(10)
 		prompt := [][]int32{{1, 2, 3}}
@@ -118,12 +108,7 @@ func TestGeneratorSampling(t *testing.T) {
 			vocabSize := 10
 			g := tokens.Graph()
 			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
-			vocabIota = ExpandDims(vocabIota, 0)
-			vocabIota = ExpandDims(vocabIota, 0)
-			targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
-			targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
-			targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
-			return BroadcastToShape(vocabIota, targetShape)
+			return DynamicBroadcastInDim(vocabIota, []int{2}, append(DimensionSpecsFor(tokens), StaticDim(vocabSize))...)
 		}
 		cfg := New(modelFn).WithStrategy(sample.StrategyGreedy).WithMaxLength(10)
 		prompt := []int32{1, 2, 3}
@@ -154,12 +139,7 @@ func TestBeamSearch(t *testing.T) {
 		vocabSize := 10
 		g := tokens.Graph()
 		vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
-		vocabIota = ExpandDims(vocabIota, 0)
-		vocabIota = ExpandDims(vocabIota, 0)
-		targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
-		targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
-		targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
-		return BroadcastToShape(vocabIota, targetShape)
+		return DynamicBroadcastInDim(vocabIota, []int{2}, append(DimensionSpecsFor(tokens), StaticDim(vocabSize))...)
 	}
 	cfg := New(modelFn).WithStrategy(sample.StrategyBeamSearch).WithBeamSize(4).WithMaxLength(10)
 	prompt := [][]int32{{1, 2, 3}}
@@ -179,12 +159,7 @@ func TestStreaming(t *testing.T) {
 		vocabSize := 10
 		g := tokens.Graph()
 		vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
-		vocabIota = ExpandDims(vocabIota, 0)
-		vocabIota = ExpandDims(vocabIota, 0)
-		targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
-		targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
-		targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
-		return BroadcastToShape(vocabIota, targetShape)
+		return DynamicBroadcastInDim(vocabIota, []int{2}, append(DimensionSpecsFor(tokens), StaticDim(vocabSize))...)
 	}
 	cfg := New(modelFn).WithMaxLength(10)
 	prompt := []int32{1, 2, 3}
@@ -216,13 +191,7 @@ func TestDynamicShapesAndBucketing(t *testing.T) {
 			vocabSize := 10
 			g := tokens.Graph()
 			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
-			vocabIota = ExpandDims(vocabIota, 0)
-			vocabIota = ExpandDims(vocabIota, 0)
-
-			targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
-			targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
-			targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
-			logits := BroadcastToShape(vocabIota, targetShape)
+			logits := DynamicBroadcastInDim(vocabIota, []int{2}, append(DimensionSpecsFor(tokens), StaticDim(vocabSize))...)
 			return logits
 		}
 
@@ -242,13 +211,7 @@ func TestDynamicShapesAndBucketing(t *testing.T) {
 			vocabSize := 10
 			g := tokens.Graph()
 			vocabIota := Iota(g, shapes.Make(dtypes.Float32, vocabSize), 0)
-			vocabIota = ExpandDims(vocabIota, 0)
-			vocabIota = ExpandDims(vocabIota, 0)
-
-			targetDims := []int{tokens.Shape().Dimensions[0], tokens.Shape().Dimensions[1], vocabSize}
-			targetAxes := []string{tokens.Shape().AxisName(0), tokens.Shape().AxisName(1), ""}
-			targetShape := shapes.MakeDynamic(dtypes.Float32, targetDims, targetAxes)
-			logits := BroadcastToShape(vocabIota, targetShape)
+			logits := DynamicBroadcastInDim(vocabIota, []int{2}, append(DimensionSpecsFor(tokens), StaticDim(vocabSize))...)
 			return logits
 		}
 
