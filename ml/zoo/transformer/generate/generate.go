@@ -15,7 +15,6 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/gobackend"
-	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/bucketing"
@@ -567,7 +566,7 @@ func (gen *Generator) updateCurrentSeq(backend compute.Backend, scope *model.Sco
 			return nil, errors.WithMessagef(err, "failed to create updateCurrentSeqExec")
 		}
 		if backend.Capabilities().HasDynamicShapes() {
-			gen.updateCurrentSeqExec.WithDynamicAxes([]string{"batch", "seq_len"}, []string{""}, []string{})
+			gen.updateCurrentSeqExec.WithDynamicAxes([]string{"batch", "seq_len"}, []string{"batch"}, []string{})
 		}
 	}
 	res, err := gen.updateCurrentSeqExec.Call(currentSeq, nextToken, tensors.FromValue(position))
@@ -589,14 +588,13 @@ func (gen *Generator) growCurrentSeq(backend compute.Backend, scope *model.Scope
 			g := currentSeqNode.Graph()
 			backend := g.Backend()
 			strategy := gen.getBucketingStrategy(backend)
-			batchSize := currentSeqNode.Shape().Dimensions[0]
 			currentSeqLen := currentSeqNode.Shape().Dimensions[1]
 			targetLen := strategy.Bucket(currentSeqLen + 1)
 			paddingLen := targetLen - currentSeqLen
 
 			// Create padding filled with PadToken
 			scalarNode := Const(g, int32(gen.PadToken))
-			padding := BroadcastToShape(scalarNode, shapes.Make(dtypes.Int32, batchSize, paddingLen))
+			padding := DynamicBroadcastInDim(scalarNode, nil, DimensionSpecsFor(currentSeqNode)[0], StaticDim(paddingLen))
 
 			return Concatenate([]*Node{currentSeqNode, padding}, 1)
 		})
@@ -604,7 +602,7 @@ func (gen *Generator) growCurrentSeq(backend compute.Backend, scope *model.Scope
 			return nil, errors.WithMessagef(err, "failed to create growCurrentSeqExec")
 		}
 		if backend.Capabilities().HasDynamicShapes() {
-			gen.growCurrentSeqExec.WithDynamicAxes([]string{"batch", "seq_len"})
+			gen.growCurrentSeqExec.WithDynamicAxes([]string{"batch", ""})
 		}
 	}
 	res, err := gen.growCurrentSeqExec.Call(currentSeq)
@@ -630,7 +628,7 @@ func (gen *Generator) growCurrentSeqDynamic(backend compute.Backend, scope *mode
 			return nil, errors.WithMessagef(err, "failed to create growCurrentSeqDynamicExec")
 		}
 		if backend.Capabilities().HasDynamicShapes() {
-			gen.growCurrentSeqDynamicExec.WithDynamicAxes([]string{"batch", "seq_len"}, []string{""})
+			gen.growCurrentSeqDynamicExec.WithDynamicAxes([]string{"batch", "seq_len"}, []string{"batch"})
 		}
 	}
 	res, err := gen.growCurrentSeqDynamicExec.Call(currentSeq, nextToken)
