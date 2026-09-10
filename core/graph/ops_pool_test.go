@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors/images"
+	"github.com/gomlx/gomlx/support/testutil"
 )
 
 func TestMaxPool(t *testing.T) {
@@ -205,62 +207,64 @@ func TestSumPool(t *testing.T) {
 // TestGradientSumPool only tests that the correct gradient for the reduction is applied. More fine-grained testing
 // is done in TestGradientMeanPool, which we can verify the result with Tensorflow.
 func TestGradientSumPool(t *testing.T) {
-	testGradients(t, "1D Window(3).PadSame().Strides(1)",
-		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, MakeShape(dtypes.Float32, 1, 3, 1))
-			output = SumPool(input).Window(3).PadSame().Strides(1).Done()
-			return output, []*Node{input}
-		}, []any{
-			[][][]float32{{{2}, {3}, {2}}},
-		})
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		testGradientsWithBackend(t, "1D Window(3).PadSame().Strides(1)", backend,
+			func(g *Graph) (output *Node, nodesForGrad []*Node) {
+				input := IotaFull(g, MakeShape(dtypes.Float32, 1, 3, 1))
+				output = SumPool(input).Window(3).PadSame().Strides(1).Done()
+				return output, []*Node{input}
+			}, []any{
+				[][][]float32{{{2}, {3}, {2}}},
+			})
 
-	testGradients(t, "2D.NoPadding",
-		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, MakeShape(dtypes.Float32, 4, 4))
-			output = SumPool(input).FullShape().Window(2).NoPadding().Strides(2).Done()
-			output = MulScalar(output, 3)
-			output.SetLogged("output")
-			return output, []*Node{input}
-		}, []any{
-			[][]float32{{3, 3, 3, 3}, {3, 3, 3, 3}, {3, 3, 3, 3}, {3, 3, 3, 3}},
-		})
+		testGradientsWithBackend(t, "2D.NoPadding", backend,
+			func(g *Graph) (output *Node, nodesForGrad []*Node) {
+				input := IotaFull(g, MakeShape(dtypes.Float32, 4, 4))
+				output = SumPool(input).FullShape().Window(2).NoPadding().Strides(2).Done()
+				output = MulScalar(output, 3)
+				output.SetLogged("output")
+				return output, []*Node{input}
+			}, []any{
+				[][]float32{{3, 3, 3, 3}, {3, 3, 3, 3}, {3, 3, 3, 3}, {3, 3, 3, 3}},
+			})
 
-	testGradients(t, "1D Window(2)",
-		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 1))
-			output = SumPool(input).Window(2).Strides(3).
-				PaddingPerDim([][2]int{{0, 1}}).Done()
-			output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
-			return output, []*Node{input}
-		}, []any{
-			[][][]float64{{{1}, {1}, {0}, {2}, {2}}},
-		})
+		testGradientsWithBackend(t, "1D Window(2)", backend,
+			func(g *Graph) (output *Node, nodesForGrad []*Node) {
+				input := IotaFull(g, MakeShape(dtypes.Float64, 1, 5, 1))
+				output = SumPool(input).Window(2).Strides(3).
+					PaddingPerDim([][2]int{{0, 1}}).Done()
+				output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
+				return output, []*Node{input}
+			}, []any{
+				[][][]float64{{{1}, {1}, {0}, {2}, {2}}},
+			})
 
-	testGradients(t, "2D Window(2) Even Spatial Dimensions",
-		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := IotaFull(g, MakeShape(dtypes.Float64, 1, 4, 4, 1))
-			output = SumPool(input).Window(2).Done()
-			output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
-			return output, []*Node{input}
-		}, []any{
-			[][][][]float64{{
-				{{1}, {1}, {2}, {2}},
-				{{1}, {1}, {2}, {2}},
-				{{3}, {3}, {4}, {4}},
-				{{3}, {3}, {4}, {4}},
-			}},
-		})
+		testGradientsWithBackend(t, "2D Window(2) Even Spatial Dimensions", backend,
+			func(g *Graph) (output *Node, nodesForGrad []*Node) {
+				input := IotaFull(g, MakeShape(dtypes.Float64, 1, 4, 4, 1))
+				output = SumPool(input).Window(2).Done()
+				output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
+				return output, []*Node{input}
+			}, []any{
+				[][][][]float64{{
+					{{1}, {1}, {2}, {2}},
+					{{1}, {1}, {2}, {2}},
+					{{3}, {3}, {4}, {4}},
+					{{3}, {3}, {4}, {4}},
+				}},
+			})
 
-	testGradients(t, "1D scaled output",
-		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			input := Add(IotaFull(g, MakeShape(dtypes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
-			output = SumPool(input).NoPadding().Window(3).Strides(1).Done()
-			scale := OnePlus(IotaFull(g, output.Shape()))
-			output = Mul(output, scale)
-			return output, []*Node{input}
-		}, []any{
-			[][][]float32{{{1}, {3}, {6}, {9}, {7}, {4}}},
-		})
+		testGradientsWithBackend(t, "1D scaled output", backend,
+			func(g *Graph) (output *Node, nodesForGrad []*Node) {
+				input := Add(IotaFull(g, MakeShape(dtypes.Float32, 1, 6, 1)), Const(g, float32(1.0)))
+				output = SumPool(input).NoPadding().Window(3).Strides(1).Done()
+				scale := OnePlus(IotaFull(g, output.Shape()))
+				output = Mul(output, scale)
+				return output, []*Node{input}
+			}, []any{
+				[][][]float32{{{1}, {3}, {6}, {9}, {7}, {4}}},
+			})
+	})
 }
 
 // TestMeanPool only tests that the correct reduction and normalization are applied. Windows and strides are already

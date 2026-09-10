@@ -238,21 +238,42 @@ func TestParameter(t *testing.T) {
 }
 
 func TestConvertDType(t *testing.T) {
-	// Test that number can be converted to complex types.
-	wantF32 := []float32{3.0, -5.0}
-	wantF64 := []float64{-7.0, 11.0}
-	graphtest.RunTestGraphFn(t, "ConvertToComplex", func(g *Graph) (inputs, outputs []*Node) {
-		inputs = []*Node{
-			Const(g, wantF32),
-			Const(g, wantF64),
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		wantF32 := []float32{3.0, -5.0}
+		wantF64 := []float64{-7.0, 11.0}
+		graphtest.RunTestGraphFnWithBackend(t, "Basic", backend, func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Const(g, wantF32),
+				Const(g, wantF64),
+			}
+			f64 := ConvertDType(inputs[0], dtypes.Float64)
+			assert.Equal(t, dtypes.Float64, f64.DType())
+			i32 := ConvertDType(inputs[0], dtypes.Int32)
+			assert.Equal(t, dtypes.Int32, i32.DType())
+			f32 := ConvertDType(inputs[1], dtypes.Float32)
+			assert.Equal(t, dtypes.Float32, f32.DType())
+			outputs = []*Node{f64, i32, f32}
+			return
+		}, []any{[]float64{3.0, -5.0}, []int32{3, -5}, []float32{-7.0, 11.0}}, -1)
+
+		if !backend.Capabilities().DTypes[dtypes.Complex64] || !backend.Capabilities().DTypes[dtypes.Complex128] {
+			t.Logf("Backend %q does not support complex numbers, skipping ConvertToComplex", backend.Name())
+			return
 		}
-		c64 := ConvertDType(inputs[0], dtypes.Complex64)
-		assert.Equal(t, dtypes.Complex64, c64.DType())
-		c128 := ConvertDType(inputs[1], dtypes.Complex128)
-		assert.Equal(t, dtypes.Complex128, c128.DType())
-		outputs = []*Node{Real(c64), Real(c128)}
-		return
-	}, []any{wantF32, wantF64}, -1)
+		// Test that number can be converted to complex types.
+		graphtest.RunTestGraphFnWithBackend(t, "ConvertToComplex", backend, func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Const(g, wantF32),
+				Const(g, wantF64),
+			}
+			c64 := ConvertDType(inputs[0], dtypes.Complex64)
+			assert.Equal(t, dtypes.Complex64, c64.DType())
+			c128 := ConvertDType(inputs[1], dtypes.Complex128)
+			assert.Equal(t, dtypes.Complex128, c128.DType())
+			outputs = []*Node{Real(c64), Real(c128)}
+			return
+		}, []any{wantF32, wantF64}, -1)
+	})
 }
 
 type BinaryOpsTestCase[T gotype.Supported] struct {
@@ -432,15 +453,21 @@ func TestOneArgOps(t *testing.T) {
 		}
 
 		// Test imag/real for complex numbers.
-		graphtest.RunTestGraphFn(t, "RealImagConj()", func(g *Graph) (inputs, outputs []*Node) {
-			inputs = []*Node{Const(g, []complex64{1.0, 0.0 - 1.0i, -2.0 + 2.0i})}
-			outputs = []*Node{Real(inputs[0]), Imag(inputs[0]), Conj(inputs[0])}
-			return
-		}, []any{
-			[]float32{1.0, 0.0, -2.0},
-			[]float32{0.0, -1.0, 2.0},
-			[]complex64{1.0, 0.0 + 1.0i, -2.0 - 2.0i},
-		}, -1)
+		if !backend.Capabilities().DTypes[dtypes.Complex64] {
+			t.Run("RealImagConj()", func(t *testing.T) {
+				t.Skipf("Backend %q does not support complex numbers", backend.Name())
+			})
+		} else {
+			graphtest.RunTestGraphFnWithBackend(t, "RealImagConj()", backend, func(g *Graph) (inputs, outputs []*Node) {
+				inputs = []*Node{Const(g, []complex64{1.0, 0.0 - 1.0i, -2.0 + 2.0i})}
+				outputs = []*Node{Real(inputs[0]), Imag(inputs[0]), Conj(inputs[0])}
+				return
+			}, []any{
+				[]float32{1.0, 0.0, -2.0},
+				[]float32{0.0, -1.0, 2.0},
+				[]complex64{1.0, 0.0 + 1.0i, -2.0 - 2.0i},
+			}, -1)
+		}
 
 		// Test Not ops
 		graphtest.RunTestGraphFn(t, "LogicalNot", func(g *Graph) (inputs, outputs []*Node) {
@@ -940,6 +967,19 @@ func TestPad(t *testing.T) {
 					{7.5, 3.5, 4.5, 7.5},
 				},
 			}, Epsilon)
+
+		graphtest.RunTestGraphFnWithBackend(t, "Pad Tests with Negative Padding", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, []float32{10, 20, 30, 40, 50})
+				zero := ScalarZero(g, x.DType())
+				inputs = []*Node{x, zero}
+				outputs = []*Node{
+					Pad(x, zero, PadAxis{Start: -1, End: -1}),
+				}
+				return
+			}, []any{
+				[]float32{20, 30, 40},
+			}, Epsilon)
 	})
 }
 
@@ -1235,10 +1275,14 @@ func TestArgMinMax(t *testing.T) {
 }
 
 func TestComplex(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	if !backend.Capabilities().DTypes[dtypes.Complex64] || !backend.Capabilities().DTypes[dtypes.Complex128] {
+		t.Skipf("Backend %q does not support complex numbers", backend.Name())
+	}
 	re := []float32{1.0, -3.0}
 	im := []float32{-5.0, 7.0}
 	re64 := []float64{11, 17}
-	graphtest.RunTestGraphFn(t, "Complex", func(g *Graph) (inputs, outputs []*Node) {
+	graphtest.RunTestGraphFnWithBackend(t, "Complex", backend, func(g *Graph) (inputs, outputs []*Node) {
 		inputs = []*Node{
 			Const(g, re),
 			Const(g, im),

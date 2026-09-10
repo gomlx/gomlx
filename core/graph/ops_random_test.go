@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/dtypes/float16"
@@ -19,9 +20,16 @@ import (
 
 func testRandomUniform[T interface {
 	float32 | float64 | float16.Float16 | bfloat16.BFloat16 | complex64 | complex128
-}](t *testing.T) {
+}](t *testing.T, backend compute.Backend) {
 	dtype := dtypes.FromGenericsType[T]()
-	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomUniform(%s)", dtype),
+	testName := fmt.Sprintf("TestRandomUniform(%s)", dtype)
+	if !backend.Capabilities().DTypes[dtype] {
+		t.Run(testName, func(t *testing.T) {
+			t.Skipf("Backend %q does not support %s", backend.Name(), dtype)
+		})
+		return
+	}
+	graphtest.RunTestGraphFnWithBackend(t, testName, backend,
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
 			state := RNGStateFromSeedForGraph(g, 42)
 			shape := shapes.Make(dtype, 100, 5000) // 500k / 1 million numbers (for complex numbers).
@@ -67,24 +75,33 @@ func testRandomUniform[T interface {
 }
 
 func TestRandomUniform(t *testing.T) {
-	testRandomUniform[float32](t)
-	testRandomUniform[float64](t)
-	testRandomUniform[float16.Float16](t)
-	testRandomUniform[bfloat16.BFloat16](t)
-	testRandomUniform[complex64](t)
-	testRandomUniform[complex128](t)
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		testRandomUniform[float32](t, backend)
+		testRandomUniform[float64](t, backend)
+		testRandomUniform[float16.Float16](t, backend)
+		testRandomUniform[bfloat16.BFloat16](t, backend)
+		testRandomUniform[complex64](t, backend)
+		testRandomUniform[complex128](t, backend)
+	})
 }
 
 func testRandomNormal[T interface {
-	float32 | float64 | float16.Float16
-}](t *testing.T) {
+	float32 | float64 | float16.Float16 | bfloat16.BFloat16
+}](t *testing.T, backend compute.Backend) {
 	dtype := dtypes.FromGenericsType[T]()
-	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomNormal(%s)", dtype),
+	testName := fmt.Sprintf("TestRandomNormal(%s)", dtype)
+	if !backend.Capabilities().DTypes[dtype] {
+		t.Run(testName, func(t *testing.T) {
+			t.Skipf("Backend %q does not support %s", backend.Name(), dtype)
+		})
+		return
+	}
+	graphtest.RunTestGraphFnWithBackend(t, testName, backend,
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
 			state := Const(g, must1(RNGStateFromSeed(42)))
 			shape := shapes.Make(dtype, 100, 10000) // 1 million numbers.
 			_, r := RandomNormal(state, shape)
-			if dtype == dtypes.Float16 {
+			if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {
 				// 1M examples will overflow float16 resolution, so we convert to F32 to calculate the mean.
 				r = ConvertDType(r, dtypes.Float32)
 			}
@@ -104,16 +121,26 @@ func testRandomNormal[T interface {
 }
 
 func TestRandomNormal(t *testing.T) {
-	testRandomNormal[float32](t)
-	testRandomNormal[float64](t)
-	testRandomNormal[float16.Float16](t)
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		testRandomNormal[float32](t, backend)
+		testRandomNormal[float64](t, backend)
+		testRandomNormal[float16.Float16](t, backend)
+		testRandomNormal[bfloat16.BFloat16](t, backend)
+	})
 }
 
 func testRandomIntN[T interface {
 	uint8 | uint16 | uint32 | uint64 | int8 | int16 | int32 | int64
-}](t *testing.T, useStatic bool) {
+}](t *testing.T, backend compute.Backend, useStatic bool) {
 	dtype := dtypes.FromGenericsType[T]()
-	graphtest.RunTestGraphFn(t, fmt.Sprintf("TestRandomIntN(%s, useStatic=%v)", dtype, useStatic),
+	testName := fmt.Sprintf("TestRandomIntN(%s, useStatic=%v)", dtype, useStatic)
+	if !backend.Capabilities().DTypes[dtype] {
+		t.Run(testName, func(t *testing.T) {
+			t.Skipf("Backend %q does not support %s", backend.Name(), dtype)
+		})
+		return
+	}
+	graphtest.RunTestGraphFnWithBackend(t, testName, backend,
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
 			state := Const(g, must1(RNGStateFromSeed(42)))
 			shape := shapes.Make(dtype, 100, 10000) // 1 million numbers.
@@ -155,16 +182,18 @@ func testRandomIntN[T interface {
 }
 
 func TestRandomIntN(t *testing.T) {
-	for _, useStatic := range []bool{false, true} {
-		testRandomIntN[uint8](t, useStatic)
-		testRandomIntN[uint16](t, useStatic)
-		testRandomIntN[uint32](t, useStatic)
-		testRandomIntN[uint64](t, useStatic)
-		testRandomIntN[int8](t, useStatic)
-		testRandomIntN[int16](t, useStatic)
-		testRandomIntN[int32](t, useStatic)
-		testRandomIntN[int64](t, useStatic)
-	}
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		for _, useStatic := range []bool{false, true} {
+			testRandomIntN[uint8](t, backend, useStatic)
+			testRandomIntN[uint16](t, backend, useStatic)
+			testRandomIntN[uint32](t, backend, useStatic)
+			testRandomIntN[uint64](t, backend, useStatic)
+			testRandomIntN[int8](t, backend, useStatic)
+			testRandomIntN[int16](t, backend, useStatic)
+			testRandomIntN[int32](t, backend, useStatic)
+			testRandomIntN[int64](t, backend, useStatic)
+		}
+	})
 }
 
 // TestMultiOutputs covers issue #197, about the execution nodes with multi-outputs (random number generator) on
@@ -172,16 +201,17 @@ func TestRandomIntN(t *testing.T) {
 //
 // Kept here to eventually test new compute.
 func TestMultiOutputs(t *testing.T) {
-	backend := testutil.BuildTestBackend()
-	_, err := MustNewExec(backend, func(x *Node) *Node {
-		g := x.Graph()
-		rngState := Const(g, must1(RNGStateFromSeed(42)))
-		rngState, ws := RandomNormal(rngState, x.Shape())
-		fmt.Printf("Graph:\n%s\n", g)
-		return ws // Add(x, ws)
-	}).Call(0.0)
-	if err != nil {
-		fmt.Printf("Error: %+v\n", err)
-		t.Fail()
-	}
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		_, err := MustNewExec(backend, func(x *Node) *Node {
+			g := x.Graph()
+			rngState := Const(g, must1(RNGStateFromSeed(42)))
+			rngState, ws := RandomNormal(rngState, x.Shape())
+			fmt.Printf("Graph:\n%s\n", g)
+			return ws // Add(x, ws)
+		}).Call(0.0)
+		if err != nil {
+			fmt.Printf("Error: %+v\n", err)
+			t.Fail()
+		}
+	})
 }

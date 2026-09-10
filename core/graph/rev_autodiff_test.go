@@ -218,7 +218,8 @@ func testGradientsExact(t *testing.T, name string, testFn gradTestFunc, wantForG
 }
 
 func TestGradientConvertDType(t *testing.T) {
-	testGradients(t, "gradient_of_ConvertType",
+	backend := testutil.BuildTestBackend()
+	testGradientsWithBackend(t, "gradient_of_ConvertType", backend,
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float32{1e6, 1e-6, 0, -1e-8, -1e6})
 			values := ConvertDType(inputs, dtypes.Float64)
@@ -226,22 +227,29 @@ func TestGradientConvertDType(t *testing.T) {
 			return output, []*Node{inputs}
 		}, []any{[]float32{2, 1, 3, -4, 5}},
 	)
-	testGradients(t, "gradient_of_ConvertType",
-		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			inputs := Const(g, []float32{1e6, 1e-6, 0, -1e-8, -1e6})
-			values := ConvertDType(inputs, dtypes.Complex64)
-			scaled := Mul(Const(g, []complex64{2, 1, 3, -4, 5}), values)
-			output = ReduceAllSum(Add(Real(scaled), Imag(scaled)))
-			return output, []*Node{values, inputs}
-		}, []any{
-			[]complex64{2 + 2i, 1 + 1i, 3 + 3i, -4 - 4i, 5 + 5i},
-			[]float32{2, 1, 3, -4, 5},
-		},
-	)
+	if !backend.Capabilities().DTypes[dtypes.Complex64] {
+		t.Run("gradient_of_ConvertType_Complex", func(t *testing.T) {
+			t.Skipf("Backend %q does not support complex numbers", backend.Name())
+		})
+	} else {
+		testGradientsWithBackend(t, "gradient_of_ConvertType_Complex", backend,
+			func(g *Graph) (output *Node, nodesForGrad []*Node) {
+				inputs := Const(g, []float32{1e6, 1e-6, 0, -1e-8, -1e6})
+				values := ConvertDType(inputs, dtypes.Complex64)
+				scaled := Mul(Const(g, []complex64{2, 1, 3, -4, 5}), values)
+				output = ReduceAllSum(Add(Real(scaled), Imag(scaled)))
+				return output, []*Node{values, inputs}
+			}, []any{
+				[]complex64{2 + 2i, 1 + 1i, 3 + 3i, -4 - 4i, 5 + 5i},
+				[]float32{2, 1, 3, -4, 5},
+			},
+		)
+	}
 }
 
 func TestGradientAbs(t *testing.T) {
-	testGradients(t, "TestGradientAbs",
+	backend := testutil.BuildTestBackend()
+	testGradientsWithBackend(t, "TestGradientAbs", backend,
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []float64{1e6, 1e-6, 0, -1e-8, -1e6})
 			output = Mul(Const(g, []float64{2, 1, 3, 4, 5}), Abs(inputs))
@@ -249,20 +257,25 @@ func TestGradientAbs(t *testing.T) {
 		}, []any{[]float64{2, 1, 3, -4, -5}},
 	)
 
-	testGradients(t, "TestGradientAbs-Complex",
-		func(g *Graph) (output *Node, nodesForGrad []*Node) {
-			in0 := Const(g, []complex64{1 + 1i, 3 - 4i, -4 + 3i, -1 - 1i})
-			in1 := Const(g, []complex128{1 + 1i, 3 - 4i, -4 + 3i, -1 - 1i})
-			out0 := ReduceAllSum(Abs(in0))
-			out1 := ReduceAllSum(Abs(in1))
-			output = Add(ConvertDType(out0, dtypes.Float64), out1)
-			return output, []*Node{in0, in1}
-		}, []any{
-			[]complex64{0.70710677 + 0.70710677i, 0.6 - 0.8i, -0.8 + 0.6i, -0.70710677 - 0.70710677i},
-			[]complex128{0.7071067811865475 + 0.7071067811865475i, 0.6 - 0.8i, -0.8 + 0.6i, -0.7071067811865475 - 0.7071067811865475i},
-		},
-	)
-
+	if !backend.Capabilities().DTypes[dtypes.Complex64] || !backend.Capabilities().DTypes[dtypes.Complex128] {
+		t.Run("TestGradientAbs-Complex", func(t *testing.T) {
+			t.Skipf("Backend %q does not support complex numbers", backend.Name())
+		})
+	} else {
+		testGradientsWithBackend(t, "TestGradientAbs-Complex", backend,
+			func(g *Graph) (output *Node, nodesForGrad []*Node) {
+				in0 := Const(g, []complex64{1 + 1i, 3 - 4i, -4 + 3i, -1 - 1i})
+				in1 := Const(g, []complex128{1 + 1i, 3 - 4i, -4 + 3i, -1 - 1i})
+				out0 := ReduceAllSum(Abs(in0))
+				out1 := ReduceAllSum(Abs(in1))
+				output = Add(ConvertDType(out0, dtypes.Float64), out1)
+				return output, []*Node{in0, in1}
+			}, []any{
+				[]complex64{0.70710677 + 0.70710677i, 0.6 - 0.8i, -0.8 + 0.6i, -0.70710677 - 0.70710677i},
+				[]complex128{0.7071067811865475 + 0.7071067811865475i, 0.6 - 0.8i, -0.8 + 0.6i, -0.7071067811865475 - 0.7071067811865475i},
+			},
+		)
+	}
 }
 
 func TestGradientMinMax(t *testing.T) {
@@ -467,6 +480,10 @@ func TestGradientTranspose(t *testing.T) {
 }
 
 func TestGradientRealImagAndConj(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	if !backend.Capabilities().DTypes[dtypes.Complex128] {
+		t.Skipf("Backend %q does not support complex numbers", backend.Name())
+	}
 	testGradientsExact(t, "gradient_of_Real",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			inputs := Const(g, []complex128{1e6, 1e-6, 0, -1e-8, -1e6})
@@ -494,6 +511,10 @@ func TestGradientRealImagAndConj(t *testing.T) {
 }
 
 func TestGradientComplex(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	if !backend.Capabilities().DTypes[dtypes.Complex64] {
+		t.Skipf("Backend %q does not support complex numbers", backend.Name())
+	}
 	testGradients(t, "gradient_of_Real",
 		func(g *Graph) (output *Node, nodesForGrad []*Node) {
 			realPart := Const(g, []float32{1.0, 3.0})
