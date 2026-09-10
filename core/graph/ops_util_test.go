@@ -73,20 +73,35 @@ func TestScalar(t *testing.T) {
 }
 
 func TestIsZero(t *testing.T) {
-	graphtest.RunTestGraphFn(t, t.Name(),
+	backend := graphtest.BuildTestBackend()
+	graphtest.RunTestGraphFnWithBackend(t, "basic", backend,
 		func(g *Graph) (inputs, outputs []*Node) {
 			inputs = []*Node{
 				Const(g, []uint8{3, 5, 0, 2}),
 				Const(g, []float32{-2.2, 1e-10, 3.1, 0, -1e-10}),
-				Const(g, []complex64{1e-10, 0, -1e-10i}),
 			}
 			outputs = xslices.Map(inputs, func(x *Node) *Node { return IsZero(x) })
 			return
 		}, []any{
 			[]bool{false, false, true, false},
 			[]bool{false, false, false, true, false},
-			[]bool{false, true, false},
 		}, -1)
+
+	t.Run("complex64", func(t *testing.T) {
+		if !backend.Capabilities().DTypes[dtypes.Complex64] {
+			t.Skipf("Backend %q does not support complex numbers", backend.Name())
+		}
+		graphtest.RunTestGraphFnWithBackend(t, "complex64", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				inputs = []*Node{
+					Const(g, []complex64{1e-10, 0, -1e-10i}),
+				}
+				outputs = xslices.Map(inputs, func(x *Node) *Node { return IsZero(x) })
+				return
+			}, []any{
+				[]bool{false, true, false},
+			}, -1)
+	})
 }
 
 func TestLowerTriangular(t *testing.T) {
