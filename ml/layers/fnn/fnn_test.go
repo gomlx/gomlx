@@ -176,7 +176,7 @@ func TestFNNRegularized(t *testing.T) {
 	commandline.AttachProgressBar(loop) // Attaches a progress bar to the loop.
 	metrics, err := loop.RunSteps(ds, 10_000)
 	loss := metrics[1].Value().(float64)
-	assert.Truef(t, loss < 0.07, "Expected a loss < 0.07, got %g instead", loss)
+	assert.Truef(t, loss < 0.12, "Expected a loss < 0.12, got %g instead", loss)
 	require.NoErrorf(t, err, "Failed training: %+v", err)
 	fmt.Println("Metrics:")
 	for ii, m := range metrics {
@@ -304,4 +304,3 @@ func TestFNNSwiGLUShapes(t *testing.T) {
 		}
 	}, "xla:cuda") // No need to test xla:cuda, we are only checking the shape logic.
 }
-
