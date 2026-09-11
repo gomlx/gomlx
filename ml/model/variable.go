@@ -55,7 +55,6 @@ type Variable struct {
 	// shardingSpec defines how the variable is split in a distributed model.
 	// If nil, the variable is considered replicated (or local).
 	shardingSpec *distributed.ShardingSpec
-
 }
 
 // CloneToStore Variable.
@@ -546,8 +545,8 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		if v.store.variablesAsConst {
 			useConst = true
 		} else if backend := g.Backend(); backend != nil && backend.Capabilities().PreferConstantsForVariables {
-			// If backend prefers constants for variables, only embed as constant if NOT in training mode and variable is non-trainable.
-			if !v.store.IsTraining(g) && !v.Trainable {
+			// If backend prefers constants for variables, embed as constant if NOT in training mode.
+			if !v.store.IsTraining(g) {
 				useConst = true
 			}
 		}

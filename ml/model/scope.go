@@ -455,6 +455,11 @@ func (s *Scope) IsTraining(g *Graph) bool {
 	return s.Store().IsTraining(g)
 }
 
+// SetTraining marks the current Store (and thus this Scope) for the given graph as training.
+func (s *Scope) SetTraining(g *Graph, value bool) {
+	s.Store().SetTraining(g, value)
+}
+
 // BuildTrainableVariablesGradientsGraph returns the gradient of the loss with respect to each trainable variable
 // in the scope (and sub-scopes) that was used in the current graph.
 //

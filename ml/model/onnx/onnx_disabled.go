@@ -17,6 +17,11 @@ import (
 // ErrNotImplemented is returned when the package is built without the onnx build tag.
 var ErrNotImplemented = errors.Errorf("ONNX support disabled: build with -tags=onnx")
 
+// IsONNX checks if the given backend is an ONNX backend.
+func IsONNX(backend compute.Backend) bool {
+	return false
+}
+
 // Save returns ErrNotImplemented when -tags=onnx is not set.
 func Save(backend compute.Backend, exec *model.Exec, w io.Writer, inputShapes []shapes.Shape, inputNames, outputNames []string) error {
 	return ErrNotImplemented
