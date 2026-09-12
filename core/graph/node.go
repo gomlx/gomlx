@@ -247,6 +247,9 @@ func (n *Node) String() (str string) {
 	}
 
 	memory := xslices.Map(n.outputShapes, func(shape shapes.Shape) string {
+		if shape.IsDynamic() {
+			return "dynamic"
+		}
 		return humanize.Bytes(uint64(shape.ByteSize()))
 	})
 

@@ -545,8 +545,9 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		if v.store.variablesAsConst {
 			useConst = true
 		} else if backend := g.Backend(); backend != nil && backend.Capabilities().PreferConstantsForVariables {
-			// If backend prefers constants for variables, embed as constant if NOT in training mode.
-			if !v.store.IsTraining(g) {
+			// If backend prefers constants for variables, embed as constant if NOT in training mode
+			// and the variable already has a value initialized.
+			if !v.store.IsTraining(g) && v.HasValue() {
 				useConst = true
 			}
 		}
