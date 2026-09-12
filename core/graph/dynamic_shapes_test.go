@@ -90,8 +90,8 @@ func TestDynamicShapes(t *testing.T) {
 			input2 := [][]float32{{1, 2, 3}, {4, 5, 6}}
 			out2, err := exec.Call(input2)
 			require.NoError(t, err)
-			assert.Equal(t, int32(2), out2[0].Value())
-			assert.Equal(t, []int32{2, 3}, out2[1].Value())
+			assert.Equal(t, int64(2), out2[0].Value())
+			assert.Equal(t, []int64{2, 3}, out2[1].Value())
 		})
 
 		t.Run("RankMismatchPanic", func(t *testing.T) {

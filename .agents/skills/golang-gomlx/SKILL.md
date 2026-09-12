@@ -152,7 +152,7 @@ exec.WithDynamicAxes(
 - **Dimension Abstraction**:
   - `DimensionSpecFor(x, axis)`: Returns a `DimensionSpec` representing the dimension (static or dynamic with name).
   - `DimensionSpecsFor(x)`: Returns a slice of `DimensionSpec`s for all axes of `x`.
-  - `DimensionSize(x, axis)`: Returns a scalar `Int32` `*Node` with the dimension size (constant scalar if static, dynamic extraction if dynamic).
+  - `DimensionSize(x, axis)`: Returns a scalar `*Node` (typically `Int64`, or backend's `DynamicDimDType`) with the dimension size (constant scalar if static, dynamic extraction if dynamic).
 - **Reshaping**:
   - `DynamicReshape(operand, specs...)`: Reshapes according to `DimensionSpec`s (`StaticDim`, `DynamicDim`, `NamedDynamicDim`, `InferredDim`, `NamedInferredDim`). Automatically falls back to static `Reshape` if operand and all specs are static.
   - `DynamicReshapeLike(operand, refNode)` / `ReshapeLike(operand, refNode)`: Reshapes operand to match the shape of `refNode`.

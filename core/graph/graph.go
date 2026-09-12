@@ -286,6 +286,16 @@ func (g *Graph) setBuilding() {
 // Backend this Graph is using.
 func (g *Graph) Backend() compute.Backend { return g.backend }
 
+// DynamicDimDType returns the DType used by the backend for dynamic dimensions
+// (and returned by DimensionSize and DynamicShape).
+// Defaults to dtypes.Int64 if the backend is nil or the field is unset.
+func (g *Graph) DynamicDimDType() dtypes.DType {
+	if g == nil || g.backend == nil {
+		return dtypes.Int64
+	}
+	return g.backend.Capabilities().DynamicDimDTypeOrDefault()
+}
+
 // Executable returns the [compute.Executable] associated with this graph.
 //
 // It's a escape hatch to allow access to the backend implementation,

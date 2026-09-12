@@ -147,7 +147,8 @@ func DimensionSpecsFor(x *Node) []DimensionSpec {
 	return specs
 }
 
-// DimensionSize returns a scalar Int32 *Node representing the dimension size of the given axis.
+// DimensionSize returns a scalar *Node representing the dimension size of the given axis.
+// The returned node has DType graph.DynamicDimDType() (typically Int64, or backend-dependent).
 // If the dimension is static, it returns a constant Scalar node.
 // If the dimension is dynamic, it queries the backend for the dynamic dimension size.
 func DimensionSize(x *Node, axis int) *Node {
@@ -157,7 +158,7 @@ func DimensionSize(x *Node, axis int) *Node {
 	if dim == shapes.DynamicDim {
 		return backendDynamicDimensionSize(x, axis)
 	}
-	return Scalar(x.Graph(), dtypes.Int32, dim)
+	return Scalar(x.Graph(), x.Graph().DynamicDimDType(), dim)
 }
 
 // DynamicReshape reshapes the operand according to dimension specifications for each axis.

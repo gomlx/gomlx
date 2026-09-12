@@ -85,7 +85,7 @@ This table maps common functions from the `core/graph` package to their PyTorch 
 | `Gradient(output, gradientNodes...)` | Computes the gradients of `output` with respect to the given `gradientNodes`. | `torch.autograd.grad(output, gradientNodes)` |
 | `StopGradient(x)` | Prevents gradients from flowing through `x` during backpropagation. | `x.detach()` |
 | **Dynamic Shapes Operations** | | |
-| `DimensionSize(x, axis)` | Returns scalar `Int32` node with the dimension size (constant scalar if static, dynamic if dynamic). | `x.size(dim)` (as tensor/symbol) |
+| `DimensionSize(x, axis)` | Returns scalar node with the dimension size (typically `Int64`, or backend's `DynamicDimDType`). | `x.size(dim)` (as tensor/symbol) |
 | `DimensionSpecFor(x, axis)` | Extracts `DimensionSpec` for the specified axis (static or dynamic with name). | N/A |
 | `DimensionSpecsFor(x)` | Extracts `DimensionSpec`s for all axes of `x`. | N/A |
 | `DynamicReshape(x, specs...)` | Reshapes according to `DimensionSpec`s (falls back to `Reshape` if all static). | `torch.reshape(x, dims)` |
