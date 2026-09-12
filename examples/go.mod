@@ -8,7 +8,7 @@ require (
 	github.com/daniellowtw/matlab v0.0.0-20190528220746-1ed1d96a6637
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-gota/gota v0.12.0
-	github.com/gomlx/compute v0.1.11
+	github.com/gomlx/compute v0.1.12-0.20260912055521-f454e97d5a59
 	github.com/gomlx/go-huggingface v0.4.8
 	github.com/gomlx/gomlx v0.28.13
 	github.com/gomlx/onnx-gomlx v0.5.10
@@ -38,9 +38,9 @@ require (
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/gomlx/bsplines v0.2.0 // indirect
-	github.com/gomlx/compute-onnx v0.1.10 // indirect
+	github.com/gomlx/compute-onnx v0.1.11-0.20260912060546-e638884f0dc6 // indirect
 	github.com/gomlx/exceptions v0.0.3 // indirect
-	github.com/gomlx/go-xla v0.4.10 // indirect
+	github.com/gomlx/go-xla v0.4.11-0.20260912060559-00c39303529d // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
