@@ -2,6 +2,9 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-09-12:
+  - Updated `QKVProjectionDecomposed` in `ml/layers/attention` to support dynamic shapes using `graph.MatMul` and `SliceAxisSpec` without requiring fixed static batch/sequence dimensions.
+
 - 2026-09-08:
   - Improved support for `FusedDense` and added `FusedActivation`, `FusedDenseVJP` and `FusedActivationVJP` to the Go backend.
   - Incorporated major optimizations for the "go" backend.

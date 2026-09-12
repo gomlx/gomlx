@@ -47,33 +47,22 @@ func QKVProjection(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int
 func QKVProjectionDecomposed(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int) []*Node {
 	totalOut := queryDim + 2*keyValueDim
 
-	// Flatten x to 2D if needed for Dot.
-	xShape := x.Shape()
-	xRank := xShape.Rank()
-	inFeat := xShape.Dimensions[xRank-1]
-	xBatchSize := xShape.Size() / inFeat
-	x2d := x
-	if xRank > 2 {
-		x2d = Reshape(x, xBatchSize, inFeat)
-	}
-
-	// Single matmul: [batch, inFeatures] @ [inFeatures, queryDim+2*keyValueDim] → [batch, totalOut]
-	combined := DotProduct(x2d, wQKV)
+	// MatMul handles leading batch dimensions of any rank natively (including dynamic shapes).
+	combined := MatMul(x, wQKV)
 
 	// Slice the combined result into query, key, value along the last axis.
-	query := Slice(combined, AxisRange(), AxisRange(0, queryDim))
-	key := Slice(combined, AxisRange(), AxisRange(queryDim, queryDim+keyValueDim))
-	value := Slice(combined, AxisRange(), AxisRange(queryDim+keyValueDim, totalOut))
-
-	// Reshape back to [..., outDim] if needed.
-	if xRank > 2 {
-		batchDims := xShape.Dimensions[:xRank-1]
-		qDims := append(append([]int{}, batchDims...), queryDim)
-		kvDims := append(append([]int{}, batchDims...), keyValueDim)
-		query = Reshape(query, qDims...)
-		key = Reshape(key, kvDims...)
-		value = Reshape(value, kvDims...)
+	lastAxis := x.Rank() - 1
+	sliceFor := func(start, end int) *Node {
+		specs := make([]SliceAxisSpec, x.Rank())
+		for i := range lastAxis {
+			specs[i] = AxisRange()
+		}
+		specs[lastAxis] = AxisRange(start, end)
+		return Slice(combined, specs...)
 	}
+	query := sliceFor(0, queryDim)
+	key := sliceFor(queryDim, queryDim+keyValueDim)
+	value := sliceFor(queryDim+keyValueDim, totalOut)
 
 	if biasQ != nil {
 		query = Add(query, ExpandLeftToRank(biasQ, query.Rank()))
