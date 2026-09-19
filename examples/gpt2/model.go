@@ -465,9 +465,14 @@ func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *t
 			}
 		}
 
-		baseScope.At("query").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, hiddenSize, numHeads, headDim))
-		baseScope.At("key").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, hiddenSize, numHeads, headDim))
-		baseScope.At("value").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, hiddenSize, numHeads, headDim))
+		// layers.Dense stores a multi-axis output projection as a 2D matrix:
+		// [inputDim, product(outputDims)]. The forward path requests outputDims
+		// [numHeads, headDim], so the checkpoint data must be registered as
+		// [hiddenSize, numHeads*headDim], not as a rank-3 tensor.
+		flatOutputDim := numHeads * headDim
+		baseScope.At("query").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, hiddenSize, flatOutputDim))
+		baseScope.At("key").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, hiddenSize, flatOutputDim))
+		baseScope.At("value").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, hiddenSize, flatOutputDim))
 	} else if len(shape) == 1 {
 		// Bias vector: [3*hiddenSize]
 		totalSize := shape[0]
@@ -492,9 +497,12 @@ func splitAndSetQKV(scope *model.Scope, scopePath []string, varName string, t *t
 			}
 		}
 
-		baseScope.At("query").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, numHeads, headDim))
-		baseScope.At("key").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, numHeads, headDim))
-		baseScope.At("value").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, numHeads, headDim))
+		// Dense bias is one flat vector with length equal to the product of the
+		// output dimensions ([numHeads, headDim] -> [numHeads*headDim]).
+		flatOutputDim := numHeads * headDim
+		baseScope.At("query").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(qData, flatOutputDim))
+		baseScope.At("key").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(kData, flatOutputDim))
+		baseScope.At("value").At("dense").VariableWithValue(varName, tensors.FromFlatDataAndDimensions(vData, flatOutputDim))
 	} else {
 		return fmt.Errorf("unexpected shape for fused QKV: %v", shape)
 	}
