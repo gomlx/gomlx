@@ -1,177 +1,78 @@
 # Parameter-efficient fine-tuning (PEFT)
 
-Package [`ml/layers/peft`](../ml/layers/peft) adds native LoRA and NF4 QLoRA
-layers to GoMLX. It provides frozen base projections, trainable low-rank
-adapters, named adapter selection, and exact optimizer-variable sets.
-
-## Features
-
-- LoRA for existing GoMLX dense projections.
-- NF4 QLoRA with optional double quantization of block scales.
-- Exact or dot-separated-suffix target matching, such as `q_proj` matching
-  `layers.0.q_proj`.
-- Multiple named adapters per projection, sharing one frozen base.
-- Runtime adapter selection: one adapter, multiple additive adapters, or no
-  active adapter.
-- Adapter-only trainable-variable selection for GoMLX optimizers.
-- Adapter dropout active only in training graphs.
+Package [`ml/layers/peft`](../ml/layers/peft) provides native LoRA and NF4
+QLoRA projections for GoMLX. A PEFT projection is built directly in the model
+graph: its base, A, and B variables all belong to the supplied `model.Scope`
+and `model.Store`.
 
 ## LoRA
 
-LoRA adds a low-rank update to a frozen projection:
+LoRA adds a low-rank update to a frozen dense projection:
 
 ```text
 output = base(input) + (alpha / rank) × input × A × B
 ```
 
-`A` has shape `[input, rank]` and `B` has shape `[rank, output]`. The base
-weight is marked non-trainable; A and B are the trainable adapter variables.
-
-Create a layer around a projection:
-
-```go
-config := peft.Config{
-	Rank:          16,
-	Alpha:         32,
-	Dropout:       0.05,
-	TargetModules: []string{"q_proj", "v_proj"},
-	Bias:          peft.BiasNone,
-	WeightLayout:   compute.DenseLayoutOutputsInput,
-}
-
-layer, err := peft.NewLinear(
-	"layers.0.q_proj",
-	projectionScope,
-	projectionWeight,
-	projectionBias,
-	config,
-	rand.New(rand.NewSource(seed)),
-)
-if err != nil {
-	return err
-}
-
-output := layer.Apply(scope, hiddenStates)
-```
-
-`Config.WeightLayout` is `compute.DenseLayoutInputOutputs` by default for a
-base weight shaped `[input, output]`. Use
-`compute.DenseLayoutOutputsInput` for a base weight shaped `[output, input]`.
-
-## Injecting adapters into a model
-
-Architectures expose replaceable projections through `peft.Model`:
+Configure the projection scope before building the model graph. `peft_rank=0`
+is the default and leaves the original projection unchanged; a positive rank
+freezes this base weight and creates `lora/A` and `lora/B`. To fine-tune
+adapters only, the architecture must likewise mark its other base variables
+non-trainable.
 
 ```go
-type Model interface {
-	LinearModules() ([]peft.Module, error)
-	ReplaceLoRALinearModules([]peft.Replacement) error
-}
+modelScope := store.RootScope().In("model")
+modelScope.SetParams(map[string]any{
+	peft.ParamRank:    16,
+	peft.ParamAlpha:   float32(32),
+	peft.ParamDropout: float32(0.05),
+	peft.ParamBias:    peft.BiasNone,
+})
+
+// Inside the model graph function:
+projectionScope := scope.In("model").In("q_proj")
+weight := projectionScope.VariableWithShape("weight", shapes.Make(dtypes.Float32, inputDim, outputDim))
+bias := projectionScope.VariableWithShape("bias", shapes.Make(dtypes.Float32, outputDim))
+output := peft.New(projectionScope, input, weight, bias).Done()
 ```
 
-`LinearModules` returns named projections and their scopes. `Inject` matches
-the configured targets, creates each LoRA layer, freezes the base weights, and
-passes replacements to the architecture.
+`peft.New(scope, input, weight, bias).Done()` replaces the corresponding
+`nn.Dense(input, weight.NodeValue(input), bias.NodeValue(input), ...)` call for
+one projection. Use it only for the projections being fine-tuned, such as a
+transformer's query and value projections. `WithWeightLayout` supports an
+existing `[output, input]` base weight; `[input, output]` is the default.
 
-```go
-adapter, err := peft.Inject("support-v1", model, config, rng)
-if err != nil {
-	return err
-}
+`ParamAlpha` defaults to the rank and `ParamDropout` to zero. `BiasNone` is
+the default; `BiasAll` and `BiasLoRAOnly` both make the bias trainable for this
+directly constructed projection.
 
-trainable := adapter.TrainableVariables()
-```
+The adapter A initializer uses the model store RNG. Set `model.ParamInitialSeed`
+on the store for reproducible initialization. B starts at zero.
 
-Use `trainable` when constructing the training graph or optimizer so that only
-the adapter variables (and a configured bias, when applicable) are updated.
-
-## Named adapters
-
-A `Linear` can hold several adapters without copying the base weight. The
-first injection replaces the projection. For later injections, the host returns
-the installed layer in `Module.Layer`.
-
-```go
-support, err := peft.Inject("support", model, config, rng)
-if err != nil {
-	return err
-}
-billing, err := peft.Inject("billing", model, config, rng)
-if err != nil {
-	return err
-}
-
-layer.SetActiveAdapters("support")
-layer.SetActiveAdapters("billing")
-layer.SetActiveAdapters("support", "billing") // additive updates
-layer.SetActiveAdapters()                      // base projection only
-
-_ = support.TrainableVariables()
-_ = billing.TrainableVariables()
-```
-
-Each returned `Adapter` exposes only the variables belonging to that adapter.
+Invalid graph-building configuration or projection shapes raise GoMLX
+exceptions with a stack trace. NF4 quantization is preprocessing and therefore
+returns regular Go errors.
 
 ## NF4 QLoRA
 
-QLoRA uses a packed NF4 base projection and F32 LoRA A/B matrices. Quantize a
-base weight, create the QLoRA layer, then use `Apply` as the projection:
+Quantize a base matrix outside the graph, then construct the projection inside
+the graph with the same scope configuration:
 
 ```go
-base, err := peft.QuantizeNF4Double(
-	inputFeatures, outputFeatures,
-	64, 256, fullPrecisionWeights,
-)
+base, err := peft.QuantizeNF4Double(inputDim, outputDim, 64, 256, weights)
 if err != nil {
 	return err
 }
 
-config := peft.QLoRAConfig{
-	LoRA: peft.Config{
-		Rank:          16,
-		Alpha:         32,
-		Dropout:       0.05,
-		TargetModules: []string{"q_proj", "v_proj"},
-	},
-	BlockSize:      64,
-	DoubleQuant:    true,
-	ScaleBlockSize: 256,
-}
-
-layer, err := peft.NewNF4Linear(
-	"layers.0.q_proj", projectionScope, base, projectionBias, config, rng,
-)
-if err != nil {
-	return err
-}
-output := layer.Apply(scope, hiddenStates)
+// Inside the model graph function:
+output := peft.NewNF4(scope, input, base, bias).Done()
 ```
 
-`NF4Weight` uses `[input, output]` storage and an even output width. Use
-`InjectNF4` with an `NF4Model` to apply the same target-based replacement flow
-to an architecture with NF4 module definitions.
-
-`NF4Linear` supports named adapters exactly like `Linear`: return an existing
-layer in `NF4Module.Layer` for later injections, then select updates with
-`SetActiveAdapters`.
-
-## Bias modes
-
-`Config.Bias` controls selected module bias variables:
-
-| Value | Behavior |
-| --- | --- |
-| `peft.BiasNone` | Freeze the bias. |
-| `peft.BiasAll` | Train the bias with the adapter. |
-| `peft.BiasLoRAOnly` | Train the bias for selected PEFT projections. |
+`NewNF4` stores the packed NF4 weight and scale data as frozen variables under
+`scope/qlora`, while its F32 A/B matrices live under `scope/qlora/lora`.
+NF4 output widths must be even.
 
 ## Validation
-
-Run the focused package suite:
 
 ```bash
 go test ./ml/layers/peft
 ```
-
-It covers LoRA and QLoRA forward paths, adapter-only gradients, named adapter
-selection, target injection, and rollback on replacement failures.
