@@ -419,8 +419,8 @@ func (s *Store) Finalize() {
 // GetParam returns the value for the given param key, searching successively from
 // the given absolute path back to the root scope ("/").
 func (s *Store) GetParam(fullPath string) (value any, found bool) {
-	if !strings.HasPrefix(fullPath, "/") {
-		fullPath = "/" + fullPath
+	if !strings.HasPrefix(fullPath, ScopeSeparator) {
+		fullPath = ScopeSeparator + fullPath
 	}
 	scopePath, baseName := SplitPath(fullPath)
 	return s.params.Get(scopePath, baseName)
@@ -428,8 +428,8 @@ func (s *Store) GetParam(fullPath string) (value any, found bool) {
 
 // SetParam sets the given param in the given absolute path.
 func (s *Store) SetParam(fullPath string, value any) {
-	if !strings.HasPrefix(fullPath, "/") {
-		fullPath = "/" + fullPath
+	if !strings.HasPrefix(fullPath, ScopeSeparator) {
+		fullPath = ScopeSeparator + fullPath
 	}
 	scopePath, baseName := SplitPath(fullPath)
 	s.params.Set(scopePath, baseName, value)
@@ -440,6 +440,19 @@ func (s *Store) SetParam(fullPath string, value any) {
 func (s *Store) SetParams(keyValues map[string]any) {
 	for fullPath, value := range keyValues {
 		s.SetParam(fullPath, value)
+	}
+}
+
+// SetParamsInScope sets a collection of parameters in the given scope.
+// The keys are the parameter names to be set in the
+func (s *Store) SetParamsInScope(scope string, nameValues map[string]any) {
+	// The scope must start with "/" and not end in "/"
+	scope = strings.TrimRight(scope, ScopeSeparator)
+	if !strings.HasPrefix(scope, ScopeSeparator) {
+		scope = ScopeSeparator + scope
+	}
+	for name, value := range nameValues {
+		s.params.Set(scope, name, value)
 	}
 }
 
@@ -582,13 +595,6 @@ func (s *Store) IsTraining(g *Graph) bool {
 // SetTraining marks the current Store (and thus this Scope) for the given graph as training.
 func (s *Store) SetTraining(g *Graph, value bool) {
 	SetGraphParam(g, ScopeSeparator+GraphParamIsTraining, value)
-}
-
-// SetParams sets a collection of parameters in the current scope.
-func (s *Store) SetParamsInScope(pathValues map[string]any) {
-	for fullPath, value := range pathValues {
-		s.SetParam(fullPath, value)
-	}
 }
 
 // EscapeScopeName replaces ScopeSeparator in the string and replaces them by "_".
