@@ -6,7 +6,7 @@ LABEL maintainer="pfeifer@gmail.com"
 #######################################################################################################
 # Fix: https://github.com/hadolint/hadolint/wiki/DL4006
 # Fix: https://github.com/koalaman/shellcheck/wiki/SC3014
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+SHELL ["/bin/bash", "-e", "-o", "pipefail", "-c"]
 
 USER root
 
@@ -80,7 +80,7 @@ cd go-xla/cmd/pjrt_installer
 go install .
 EOF
 
-# Install cpu and cuda (13) PJRT plugins in /usr/local (requires root).
+# Install cpu and cuda (13) PJRT plugins.
 RUN <<EOF
 $(go env GOPATH)/bin/pjrt_installer -plugin linux -version latest -path ${HOME}/.local/lib/go-xla
 $(go env GOPATH)/bin/pjrt_installer -plugin cuda13 -version latest -path ${HOME}/.local/lib/go-xla
@@ -89,7 +89,6 @@ EOF
 # Test go-xla
 RUN <<EOF
 cd Projects/gomlx/go-xla
-go test
 go test ./...
 EOF
 
