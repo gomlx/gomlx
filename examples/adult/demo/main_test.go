@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/gomlx/ml/layers/peft"
 	"github.com/gomlx/gomlx/ui/commandline"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,3 +39,32 @@ func TestMainFunc(t *testing.T) {
 	err := mainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet)
 	require.NoError(t, err, "failed to train Adult model for 10 steps")
 }
+
+func TestPEFT(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping testing in short mode")
+		return
+	}
+	store := createModelStore()
+	store.SetParams(map[string]any{
+		"train_steps":     10,
+		peft.ParamAdapter: "adult_lora",
+		peft.ParamRank:    4,
+	})
+	paramsSet := must1(commandline.ParseSettings(store, *flagSettings))
+	err := mainWithStore(store, *flagDataDir, *flagCheckpoint, paramsSet)
+	require.NoError(t, err, "failed to train Adult model with PEFT for 10 steps")
+
+	// Verify that base weights are frozen and adapter variables exist:
+	wOutput := store.GetVariable("/model/fnn/fnn_output_layer/weights")
+	require.NotNil(t, wOutput)
+	assert.False(t, wOutput.Trainable)
+
+	aOutput := store.GetVariable("/model/fnn/fnn_output_layer/adult_lora/A")
+	bOutput := store.GetVariable("/model/fnn/fnn_output_layer/adult_lora/B")
+	require.NotNil(t, aOutput)
+	require.NotNil(t, bOutput)
+	assert.True(t, aOutput.Trainable)
+	assert.True(t, bOutput.Trainable)
+}
+
