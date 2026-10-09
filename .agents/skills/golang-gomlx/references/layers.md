@@ -28,6 +28,10 @@ This table maps common machine learning layers and functions from `ml/layers` an
 | **Other Advanced Layers** (`ml/layers/kan`, `ml/layers/attention`) | | |
 | `kan.New(scope, x, hiddenSizes...)` | Kolmogorov-Arnold Network block. Uses spline-based learned activation functions instead of fixed ones. | (No direct equivalent, custom implementation required) |
 | `attention.MultiHeadAttention(scope, query, key, value)` | Standard Multi-Head Attention layer. Builder pattern, finish with `Done()`. | `torch.nn.MultiheadAttention` |
+| **Parameter-Efficient Fine-Tuning** (`ml/layers/peft`) | | |
+| `import _ "github.com/gomlx/gomlx/ml/layers/peft"` | LoRA fine-tuning meta-layer via post-linear hooks. Configure via scope/store parameters (`peft_adapter`, `peft_rank`, `peft_target_modules`). Freezes base weights automatically. | HuggingFace PEFT / `peft.LoraConfig` |
+| `peft.New(scope, x, weight, bias)` | Low-level / manual construction of a LoRA projection around existing weights. Finish with `Done()`. | `peft.tuners.lora.Linear` |
+| `layers.RegisterPostLinearHook(priority, hook)` | Registers a lifecycle hook executed after linear projections in `fnn`, `layers.Dense`, and `attention`. | PyTorch forward hooks |
 | **Losses** (`ml/train/loss`) | | |
 | `loss.MeanSquaredError(labels, predictions)` | Computes the mean squared error loss. | `torch.nn.MSELoss()` |
 | `loss.MeanAbsoluteError(labels, predictions)` | Computes the mean absolute error (L1) loss. | `torch.nn.L1Loss()` |

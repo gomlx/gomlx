@@ -227,7 +227,16 @@ func DenseLayer(scope *model.Scope, x *Node, outputDim int) *Node {
 
 - The `layers` package provides standard higher-level building blocks for ML models.
 - Uses `*model.Scope` extensively to manage the weights/biases for each layer.
-- Sub-packages include `activation` (Relu, Swish, etc.), `fnn` (feed-forward neural networks), `kan` (Kolmogorov-Arnold Networks), `regularizer`, `norm`, etc.
+- Sub-packages include `activation` (Relu, Swish, etc.), `fnn` (feed-forward neural networks), `kan` (Kolmogorov-Arnold Networks), `peft` (Parameter-Efficient Fine-Tuning / LoRA via post-linear hooks), `regularizer`, `norm`, etc.
+- **Parameter-Efficient Fine-Tuning (PEFT / LoRA)**:
+  - Import: `import _ "github.com/gomlx/gomlx/ml/layers/peft"`.
+  - PEFT auto-registers a post-linear hook (`layers.RegisterPostLinearHook`) that intercepts linear projections in `layers.Dense`, `fnn.Done()`, and `attention.MultiHeadAttention`.
+  - Configure via `store.SetParams` or `-set`:
+    - `peft_adapter`: adapter sub-scope name (e.g. `"my_lora"`). Freezes base weights and creates trainable `A` and `B` variables under `<scope>/<adapter>/`. Setting `"off"` freezes base weights without adding adapters.
+    - `peft_rank`: LoRA rank $r$.
+    - `peft_alpha`: scaling factor ($\alpha / r$).
+    - `peft_target_modules`: comma-separated or slice of target module substrings (e.g. `"query,value"`). Unmatched modules are frozen without adapters.
+  - Multiple adapters can coexist in the same `model.Store`, and switching adapters only requires changing `peft_adapter`.
 - **See [`layers` package reference](./references/layers.md)** for a list of common layers and their PyTorch equivalents.
 
 ### Training loop -- package `github.com/gomlx/gomlx/ml/train`

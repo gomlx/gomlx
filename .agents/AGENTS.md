@@ -27,6 +27,8 @@ The XLA backend only support static shapes (known in "graph building time"). Cur
     It also defines `Scope`, a pointer to a `Store` setting a "current directory" (scope) for new variables.
     Finally, it defines an `Exec` object that calls a user graph functions and automatically handle passing 
     used variables as "side inputs" and changed variaables as "side outputs" of the execution.
+  - `ml/layers`: standard ML layers (Dense, Convolution, MultiHeadAttention, FNN, KAN, Norm, etc.) and post-linear lifecycle hooks (`PostLinearHook`).
+  - `ml/layers/peft`: Parameter-Efficient Fine-Tuning (LoRA) implemented as a meta-layer via post-linear hooks.
 - `support`: support libraries, including xsync, xerrors, etc.
 - `internal`: internal libraries and generators.
   - `internal/cmd`: command line tools: mostly generators used by `go generate ...`. They output `gen_*.go` files.
@@ -63,6 +65,16 @@ The compiled and execution of the graphs later is parallelized and can be execut
 Files that mostly define graph building functions, by convention, should dot-import the 
 `github.com/gomlx/gomlx/core/graph` package: having `graph.` repeated everywhere makes the math harder to read.
 This is commonly the case for libraries under `ml/layers`.
+
+### PEFT (Parameter-Efficient Fine-Tuning) and Layer Hooks
+
+GoMLX uses an inverted lifecycle hook architecture for fine-tuning rather than modifying model definitions:
+- `ml/layers` defines `PostLinearHook` (`func(scope *model.Scope, input, output *Node) *Node`), registered with `layers.RegisterPostLinearHook(priority, hook)` and invoked in `layers.DenseWithLayout`, `fnn.Done()`, and `attention.MultiHeadAttention`.
+- `ml/layers/peft` automatically registers its hook in `init()`.
+- Users activate LoRA simply by importing `_ "github.com/gomlx/gomlx/ml/layers/peft"` and setting hyperparameters on `model.Store` or via `-set`:
+  - `peft_adapter`: adapter name (e.g. `"my_lora"`, creating variables under `<scope>/<adapter_name>/A,B`). If `"off"`, base weights are frozen without adding adapters.
+  - `peft_rank`: low-rank dimension $r$.
+  - `peft_target_modules`: comma-separated or slice of module name substrings to target (e.g. `"query,value"`). Unmatched linear projections are frozen without adding adapters.
 
 ### Testing
 
@@ -141,3 +153,9 @@ Normal code files are prefixed with the following copyright line:
 ```
 
 Auto-generated files don't need a copyright, but should include a comment with the tool use to generate them.
+
+
+### Keep AI Agent Files Up-to-date
+
+For every new feature, refactoring or API change, update `.agents/AGENTS.md` and the files 
+under `.agents/skills/golang-gomlx/` accordingly.

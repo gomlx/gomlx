@@ -19,6 +19,7 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/fnn"
 	"github.com/gomlx/gomlx/ml/layers/kan"
+	"github.com/gomlx/gomlx/ml/layers/peft"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/checkpoint"
@@ -116,6 +117,13 @@ func createModelStore() *model.Store {
 		kan.ParamDiscreteSoftnessSchedule:     kan.SoftnessScheduleNone.String(),
 		kan.ParamDiscreteSplitPointsTrainable: true,
 		kan.ParamResidual:                     true,
+
+		// PEFT (LoRA) fine-tuning parameters:
+		peft.ParamAdapter:       "",
+		peft.ParamRank:          0,
+		peft.ParamAlpha:         float32(0),
+		peft.ParamDropout:       float32(0),
+		peft.ParamTargetModules: "",
 	})
 	return store
 }
