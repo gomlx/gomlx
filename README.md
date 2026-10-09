@@ -61,7 +61,7 @@ and error messages are useful (always with a stack-trace) and try to make it eas
 
 ## News
 
-- **🚀 NEW 🚀** Native parameter-efficient fine-tuning (PEFT): [`ml/layers/peft`](ml/layers/peft) supports LoRA and NF4 QLoRA for adapter-only training.
+- **🚀 NEW 🚀** Native parameter-efficient fine-tuning (PEFT) (🚧**Experimental**🚧): [`ml/layers/peft`](ml/layers/peft) supports LoRA and NF4 QLoRA for adapter-only training.
   - Target model projections can be injected safely, with frozen base weights and an exact adapter-only optimizer-variable set.
   - Multiple named adapters can share one base projection and be switched, composed, or disabled at runtime. See the [PEFT guide](docs/peft.md).
 - **🚀 NEW 🚀** New `onnx` backend, based on ONNX Runtime. It has support for "onnx:cpu", "onnx:cuda" (CUDA) and "onnx:rocm" versions support. For WebAssembly (WASM) it supports "onnx:wasm" (CPU), "webgpu" (GPU) and "webnn" (experimental).
