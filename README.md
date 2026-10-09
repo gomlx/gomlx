@@ -61,6 +61,9 @@ and error messages are useful (always with a stack-trace) and try to make it eas
 
 ## News
 
+- **🚀 NEW 🚀** Native parameter-efficient fine-tuning (PEFT): [`ml/layers/peft`](ml/layers/peft) supports LoRA and NF4 QLoRA for adapter-only training.
+  - Target model projections can be injected safely, with frozen base weights and an exact adapter-only optimizer-variable set.
+  - Multiple named adapters can share one base projection and be switched, composed, or disabled at runtime. See the [PEFT guide](docs/peft.md).
 - **🚀 NEW 🚀** New `onnx` backend, based on ONNX Runtime. It has support for "onnx:cpu", "onnx:cuda" (CUDA) and "onnx:rocm" versions support. For WebAssembly (WASM) it supports "onnx:wasm" (CPU), "webgpu" (GPU) and "webnn" (experimental).
   - Includes saving a model to a `.onnx` file, that can be served with other inference systems that support ONNX (e.g. [KnightAnalytics Hugot](https://github.com/knights-analytics/hugot)).
 - **🚀 NEW 🚀** The "go" backend has been greatly optimized, **closely matching "xla:cpu" speeds for FNN models** (try out the [UCI-Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html)).
@@ -155,6 +158,7 @@ Some selected highlights:
 
 * **🚀 NEW 🚀**: **Gradient checkpointing**: trade-off memory usage for recomputation when training large models, with a very simple API.
 * **🚀 NEW 🚀**: Save models to a `.onnx` file, that can be used with ONNX Runtime. See example in [UCI-Adult demo](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/save_onnx.go).
+* **Parameter-efficient fine-tuning (PEFT)** with native LoRA and NF4 QLoRA layers: architecture-safe target injection, multiple named adapters per frozen projection, and adapter-only optimizer variables. See the [PEFT guide](docs/peft.md).
 
 * HuggingFace Go compatibility with [go-huggingface](https://github.com/gomlx/go-huggingface):
   - Download files from models/datasets sharing the same cache framework as the python version.
