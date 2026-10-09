@@ -368,6 +368,7 @@ func (c *Config) Done() *Node {
 			biasNode = biasVar.NodeValue(g)
 		}
 
+		linearInput := x
 		if !isEnsemble {
 			x = nn.Dense(x, weights, biasNode, c.weightsLayout)
 		} else if c.ensembleAxis >= 0 {
@@ -413,6 +414,7 @@ func (c *Config) Done() *Node {
 				}
 			}
 		}
+		x = layers.ApplyPostLinearHooks(layerScope, linearInput, x)
 	}
 
 	if isEnsemble {

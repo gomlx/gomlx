@@ -135,6 +135,7 @@ func DenseWithLayout(scope *model.Scope, input *Node, layout compute.DenseLayout
 		biasNode = biasVar.NodeValue(g)
 	}
 	res := nn.Dense(input, weights, biasNode, layout)
+	res = ApplyPostLinearHooks(scope, input, res)
 	if len(outputDimensions) > 1 {
 		newDims := make([]int, inputRank-1+len(outputDimensions))
 		copy(newDims, inputShape.Dimensions[:inputRank-1])
