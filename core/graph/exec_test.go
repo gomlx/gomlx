@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
@@ -452,3 +454,182 @@ func TestExecCompileGraph(t *testing.T) {
 		assert.Same(t, g1, g3)
 	})
 }
+
+func TestExecFinalize(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		t.Run("Basic", func(t *testing.T) {
+			exec, err := NewExec(backend, EuclideanDistance)
+			require.NoError(t, err)
+
+			// Normal execution before finalization.
+			a := []float32{3}
+			b := []float32{0}
+			outputs, err := exec.Call(a, b)
+			require.NoError(t, err)
+			require.InDelta(t, float32(3), tensors.ToScalar[float32](outputs[0]), 1e-4)
+
+			// Finalize the Exec.
+			exec.Finalize()
+
+			// Repeated Finalize should be a safe no-op.
+			exec.Finalize()
+
+			// Call after finalization must fail with ErrExecFinalized.
+			_, err = exec.Call(a, b)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, ErrExecFinalized)
+
+			// Compile after finalization must fail with ErrExecFinalized.
+			_, err = exec.Compile(shapes.Make(dtypes.Float32, 1), shapes.Make(dtypes.Float32, 1))
+			require.Error(t, err)
+			assert.ErrorIs(t, err, ErrExecFinalized)
+		})
+
+		t.Run("ConcurrentCallDraining", func(t *testing.T) {
+			exec, err := NewExec(backend, EuclideanDistance)
+			require.NoError(t, err)
+
+			callStarted := make(chan struct{})
+			allowCallToFinish := make(chan struct{})
+
+			// Use SetSideParamsHook to deterministically pause inside compileAndExecute.
+			exec.SetSideParamsHook(func(graph *Graph, inputBuffers []compute.Buffer, donate []bool) error {
+				close(callStarted)
+				<-allowCallToFinish
+				return nil
+			})
+
+			// Start in-flight call in a goroutine.
+			callDone := make(chan struct{})
+			var callOutputs []*tensors.Tensor
+			var callErr error
+			go func() {
+				defer close(callDone)
+				callOutputs, callErr = exec.Call([]float32{4}, []float32{1})
+			}()
+
+			<-callStarted
+
+			// Now start Finalize in a goroutine — it must block waiting for the in-flight call.
+			finalizeDone := make(chan struct{})
+			go func() {
+				defer close(finalizeDone)
+				exec.Finalize()
+			}()
+
+			// Give Finalize a moment to run and block on muInFlight.
+			time.Sleep(20 * time.Millisecond)
+			select {
+			case <-finalizeDone:
+				t.Fatal("Finalize returned while a Call was still in flight!")
+			default:
+				// As expected, Finalize is blocked.
+			}
+
+			// Any new call initiated after Finalize has started must fail immediately.
+			_, newCallErr := exec.Call([]float32{0}, []float32{0})
+			require.Error(t, newCallErr)
+			assert.ErrorIs(t, newCallErr, ErrExecFinalized)
+
+			// Allow the in-flight call to finish.
+			close(allowCallToFinish)
+			<-callDone
+			require.NoError(t, callErr)
+			require.Len(t, callOutputs, 1)
+			require.InDelta(t, float32(3), tensors.ToScalar[float32](callOutputs[0]), 1e-4)
+
+			// Now Finalize must unblock and complete.
+			select {
+			case <-finalizeDone:
+				// OK!
+			case <-time.After(2 * time.Second):
+				t.Fatal("Finalize timed out after in-flight call completed")
+			}
+		})
+
+		t.Run("ConcurrentCompileDraining", func(t *testing.T) {
+			compileStarted := make(chan struct{})
+			allowCompileToFinish := make(chan struct{})
+
+			blockingGraphFn := func(x *Node) *Node {
+				close(compileStarted)
+				<-allowCompileToFinish
+				return Add(x, Scalar(x.Graph(), x.DType(), 1))
+			}
+
+			exec, err := NewExec(backend, blockingGraphFn)
+			require.NoError(t, err)
+
+			compileDone := make(chan struct{})
+			var compiledGraph *Graph
+			var compileErr error
+			go func() {
+				defer close(compileDone)
+				compiledGraph, compileErr = exec.Compile(shapes.Make(dtypes.Float32, 2))
+			}()
+
+			<-compileStarted
+
+			finalizeDone := make(chan struct{})
+			go func() {
+				defer close(finalizeDone)
+				exec.Finalize()
+			}()
+
+			time.Sleep(20 * time.Millisecond)
+			select {
+			case <-finalizeDone:
+				t.Fatal("Finalize returned while Compile was still in flight!")
+			default:
+			}
+
+			// New Compile while Finalize is running should return ErrExecFinalized immediately.
+			_, err = exec.Compile(shapes.Make(dtypes.Float32, 3))
+			require.Error(t, err)
+			assert.ErrorIs(t, err, ErrExecFinalized)
+
+			close(allowCompileToFinish)
+			<-compileDone
+			require.NoError(t, compileErr)
+			require.NotNil(t, compiledGraph)
+
+			select {
+			case <-finalizeDone:
+			case <-time.After(2 * time.Second):
+				t.Fatal("Finalize timed out after in-flight Compile completed")
+			}
+		})
+
+		t.Run("StressRace", func(t *testing.T) {
+			exec, err := NewExec(backend, EuclideanDistance)
+			require.NoError(t, err)
+
+			const numGoroutines = 8
+			const iterationsPerGoroutine = 50
+
+			var wg sync.WaitGroup
+			wg.Add(numGoroutines)
+
+			for range numGoroutines {
+				go func() {
+					defer wg.Done()
+					for range iterationsPerGoroutine {
+						outputs, err := exec.Call([]float32{3}, []float32{0})
+						if err != nil {
+							assert.ErrorIs(t, err, ErrExecFinalized)
+							return
+						}
+						assert.InDelta(t, float32(3), tensors.ToScalar[float32](outputs[0]), 1e-4)
+					}
+				}()
+			}
+
+			// Let some calls run before triggering Finalize.
+			time.Sleep(5 * time.Millisecond)
+			exec.Finalize()
+
+			wg.Wait()
+		})
+	})
+}
+

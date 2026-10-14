@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
@@ -27,7 +28,10 @@ import (
 //
 // Notice that the associated Store is linked to the graphs built with it
 // (for each different shape of inputs), and is available through model.GetStore(g)
-// any time -- but just the Store, you don't get a Scope with it.
+// ErrExecFinalized is returned when an operation (such as Exec, Call, or Compile) is attempted on an Exec
+// instance that has been finalized.
+var ErrExecFinalized = graph.ErrExecFinalized
+
 type Exec struct {
 	backend compute.Backend
 	store   *Store
@@ -56,6 +60,16 @@ type Exec struct {
 	// Initializing variables within the modelGraphFn would lead to an infinite recursion.
 	// This checks for that.
 	isInitializeVariablesExec bool
+
+	// finalized and muInFlight coordinate graceful shutdown and teardown of Exec.
+	//
+	// In-flight operations (CallWithGraph, Compile, etc.) check finalized (returning ErrExecFinalized immediately if true),
+	// acquire an RLock on muInFlight, re-check finalized, and release RUnlock when the operation returns.
+	//
+	// Finalize() sets finalized to true using Swap, then acquires muInFlight.Lock() to wait for all
+	// in-flight calls and compilations to finish before safely finalizing underlying graph.Exec resources.
+	finalized  atomic.Bool
+	muInFlight sync.RWMutex
 }
 
 // NewExecCanonical constructs an Exec object for the given model store and symbolic computation function modelGraphFn.
@@ -132,7 +146,20 @@ func (e *Exec) buildGraphFn() graph.CanonicalExecGraphFn {
 
 // Finalize clears the cache, finalizing and releasing the memory for all compiled graphs.
 // The Exec object shouldn't be used after that.
+//
+// Finalize marks the Exec as finalized, preventing any new calls or compilations from starting
+// (they will immediately return ErrExecFinalized). It then blocks until all currently active
+// in-flight calls and compilations finish executing, and finally releases resources for all
+// cached graphs.
+//
+// It is safe to call Finalize multiple times; calls after the first are no-ops.
 func (e *Exec) Finalize() {
+	if e.finalized.Swap(true) {
+		return
+	}
+	e.muInFlight.Lock()
+	defer e.muInFlight.Unlock()
+
 	e.exec.Finalize()
 }
 
@@ -448,6 +475,15 @@ func (e *Exec) SetStore(store *Store) *Exec {
 // Compile creates (if not yet created) and compiles the computation graph for the given input shapes,
 // without executing it.
 func (e *Exec) Compile(inputShapes ...shapes.Shape) (*graph.Graph, error) {
+	if e.finalized.Load() {
+		return nil, errors.Wrapf(ErrExecFinalized, "model.Exec %q is finalized", e.Name())
+	}
+	e.muInFlight.RLock()
+	defer e.muInFlight.RUnlock()
+	if e.finalized.Load() {
+		return nil, errors.Wrapf(ErrExecFinalized, "model.Exec %q is finalized", e.Name())
+	}
+
 	return e.exec.Compile(inputShapes...)
 }
 
@@ -459,6 +495,15 @@ func (e *Exec) Exec(args ...any) ([]*tensors.Tensor, error) {
 
 // CallWithGraph is similar to Exec, but it also returns the computation graph used in the call.
 func (e *Exec) CallWithGraph(args ...any) (outputs []*tensors.Tensor, g *Graph, err error) {
+	if e.finalized.Load() {
+		return nil, nil, errors.Wrapf(ErrExecFinalized, "model.Exec %q is finalized", e.Name())
+	}
+	e.muInFlight.RLock()
+	defer e.muInFlight.RUnlock()
+	if e.finalized.Load() {
+		return nil, nil, errors.Wrapf(ErrExecFinalized, "model.Exec %q is finalized", e.Name())
+	}
+
 	outputs, g, err = e.exec.CallWithGraph(args...)
 	if err != nil {
 		return nil, nil, err
