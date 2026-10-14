@@ -311,6 +311,14 @@ func (g *Graph) Name() string { return g.name }
 // all the nodes.
 // The graph is left in an unusable state.
 // It is safe to call it more than once. Calls on a finalized Graph are no-ops.
+//
+// It is the responsibility of the caller to guarantee that there are no unfinished executions
+// (such as calls to [Graph.RunWithBuffers] or [Graph.Run]) before calling Finalize. Calling Finalize
+// while an execution is still running may lead to undefined behavior and potentially crash depending on the backend.
+//
+// Calling Finalize is optional: one can always leave it to the garbage collector (GC), which will
+// properly clean up native resources eventually. Alternatively, callers can rely on higher-level
+// coordinator objects such as [Exec] or model.Exec to coordinate safe concurrent execution and teardown.
 func (g *Graph) Finalize() {
 	if g == nil {
 		return

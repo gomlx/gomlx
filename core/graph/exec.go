@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gomlx/compute"
@@ -123,6 +124,18 @@ type LoggerFn func(graph *Graph, messages []string, values []*tensors.Tensor, no
 // Exec compiles graphs for different input shapes concurrently. The provided graphFn must
 // be safe for concurrent invocation — each call receives its own Graph and Node arguments,
 // but graphFn must not mutate external shared state without its own synchronization.
+//
+// # Lifecycle and Finalization
+//
+// When an Exec is no longer needed, call Exec.Finalize to immediately release backend and device resources.
+// Exec.Finalize coordinates with active operations: it waits for any in-flight Call or Compile operations
+// to finish before freeing cached graphs, while causing any new operations initiated after finalization starts
+// to return ErrExecFinalized immediately.
+//
+// ErrExecFinalized is returned when an operation (such as Call or Compile) is attempted on an Exec
+// instance that has been finalized.
+var ErrExecFinalized = errors.New("exec is finalized")
+
 type Exec struct {
 	name    string
 	backend compute.Backend
@@ -161,15 +174,24 @@ type Exec struct {
 	setSideParams SideParamsFn
 	loggerFn      LoggerFn
 
-	// Protects cache structure, pending map, and finalized flag.
-	cacheMu   sync.Mutex
-	cache     []*execGraphCacheEntry
-	finalized bool // set by Finalize; prevents new compilations
+	// Protects cache structure and pending map.
+	cacheMu sync.Mutex
+	cache   []*execGraphCacheEntry
 
 	// pending tracks in-flight compilations so concurrent callers wait
 	// rather than duplicating work. Uses linear search like cache, since
 	// the number of concurrent compilations is expected to be small.
 	pending []*pendingCompilation
+
+	// finalized and muInFlight coordinate graceful shutdown and teardown of Exec.
+	//
+	// In-flight operations (Call, Compile, etc.) check finalized (returning ErrExecFinalized immediately if true),
+	// acquire an RLock on muInFlight, re-check finalized, and release RUnlock when the operation returns.
+	//
+	// Finalize() sets finalized to true using Swap, then acquires muInFlight.Lock() to wait for all
+	// in-flight calls and compilations to finish before safely freeing cached graphs.
+	finalized  atomic.Bool
+	muInFlight sync.RWMutex
 }
 
 // pendingCompilation tracks an in-flight graph compilation.
@@ -611,6 +633,15 @@ func (e *Exec) expandArgsToTotalParams(g *Graph, argsAsBuffers []compute.Buffer,
 // Compile creates (if not yet created) and compiles the computation graph for the given input shapes,
 // without executing it.
 func (e *Exec) Compile(inputShapes ...shapes.Shape) (*Graph, error) {
+	if e.finalized.Load() {
+		return nil, errors.Wrapf(ErrExecFinalized, "Exec %q is finalized", e.Name())
+	}
+	e.muInFlight.RLock()
+	defer e.muInFlight.RUnlock()
+	if e.finalized.Load() {
+		return nil, errors.Wrapf(ErrExecFinalized, "Exec %q is finalized", e.Name())
+	}
+
 	entry, err := e.compile(inputShapes...)
 	if err != nil {
 		return nil, err
@@ -640,6 +671,15 @@ func (e *Exec) compile(inputShapes ...shapes.Shape) (*execGraphCacheEntry, error
 // WithDeviceAssignment). Otherwise, it is ignored.
 func (e *Exec) compileAndExecute(execute bool, defaultDevice compute.DeviceNum, args ...any) (
 	[]*tensors.Tensor, *Graph, error) {
+	if e.finalized.Load() {
+		return nil, nil, errors.Wrapf(ErrExecFinalized, "Exec %q is finalized", e.Name())
+	}
+	e.muInFlight.RLock()
+	defer e.muInFlight.RUnlock()
+	if e.finalized.Load() {
+		return nil, nil, errors.Wrapf(ErrExecFinalized, "Exec %q is finalized", e.Name())
+	}
+
 	args = unwrapListOfTensors(args)
 	var err error
 	args, err = unwrapDistributedTensors(e.numDevices, args)
@@ -953,9 +993,9 @@ func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) (*execGraphCacheEntr
 
 	e.cacheMu.Lock()
 
-	if e.finalized {
+	if e.finalized.Load() {
 		e.cacheMu.Unlock()
-		return nil, errors.Errorf("Exec %q has been finalized and cannot compile new graphs", e.name)
+		return nil, errors.Wrapf(ErrExecFinalized, "Exec %q is finalized", e.name)
 	}
 
 	// Fast path: already in cache.
@@ -1010,19 +1050,20 @@ func (e *Exec) findOrCreateGraph(argsShapes []shapes.Shape) (*execGraphCacheEntr
 // Finalize clears the cache, finalizing the compiled graphs. The Exec object shouldn't be
 // used after that.
 //
-// Finalize sets a flag to prevent new compilations, waits for any in-flight
-// compilations to complete, then finalizes all cached graphs.
+// Finalize marks the Exec as finalized, preventing any new calls or compilations from starting
+// (they will immediately return ErrExecFinalized). It then blocks until all currently active
+// in-flight calls and compilations finish executing, and finally releases resources for all
+// cached graphs.
+//
+// It is safe to call Finalize multiple times; calls after the first are no-ops.
 func (e *Exec) Finalize() {
-	// Mark as finalized and snapshot in-flight compilations.
-	e.cacheMu.Lock()
-	e.finalized = true
-	pendingList := slices.Clone(e.pending)
-	e.cacheMu.Unlock()
-
-	// Wait outside the lock so in-flight compilations can finish.
-	for _, pc := range pendingList {
-		<-pc.done
+	if e.finalized.Swap(true) {
+		return
 	}
+
+	// Acquire exclusive lock: blocks until all in-flight calls and compilations finish.
+	e.muInFlight.Lock()
+	defer e.muInFlight.Unlock()
 
 	e.cacheMu.Lock()
 	defer e.cacheMu.Unlock()
@@ -1032,6 +1073,7 @@ func (e *Exec) Finalize() {
 		entry.graph = nil
 	}
 	e.cache = e.cache[:0]
+	e.pending = nil
 }
 
 // DefaultNodeLogger for nodes marked to be logged. It prints the message and

@@ -5,8 +5,11 @@ package model_test
 import (
 	"fmt"
 	"math"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/gobackend"
@@ -450,5 +453,173 @@ func TestCompileGraph(t *testing.T) {
 	require.NoError(t, err)
 	assert.Same(t, g1, g2)
 }
+
+func TestExecFinalize(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		t.Run("Basic", func(t *testing.T) {
+			store := model.NewStore()
+			exec, err := model.NewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+				return AddScalar(x, 10)
+			})
+			require.NoError(t, err)
+
+			a := float32(5)
+			results, err := exec.Exec(a)
+			require.NoError(t, err)
+			require.Equal(t, float32(15), tensors.ToScalar[float32](results[0]))
+
+			exec.Finalize()
+			exec.Finalize() // Idempotent
+
+			_, err = exec.Exec(a)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, model.ErrExecFinalized)
+
+			_, err = exec.Compile(shapes.Make(dtypes.Float32))
+			require.Error(t, err)
+			assert.ErrorIs(t, err, model.ErrExecFinalized)
+		})
+
+		t.Run("ConcurrentCallDraining", func(t *testing.T) {
+			store := model.NewStore()
+			callStarted := make(chan struct{})
+			allowCallToFinish := make(chan struct{})
+
+			exec, err := model.NewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+				return AddScalar(x, 10)
+			})
+			require.NoError(t, err)
+
+			exec.SetNodeLogger(func(graph *Graph, messages []string, values []*tensors.Tensor, nodes []NodeId) {
+				close(callStarted)
+				<-allowCallToFinish
+			})
+
+			callDone := make(chan struct{})
+			var callOutputs []*tensors.Tensor
+			var callErr error
+			go func() {
+				defer close(callDone)
+				callOutputs, callErr = exec.Exec(float32(5))
+			}()
+
+			<-callStarted
+
+			finalizeDone := make(chan struct{})
+			go func() {
+				defer close(finalizeDone)
+				exec.Finalize()
+			}()
+
+			time.Sleep(20 * time.Millisecond)
+			select {
+			case <-finalizeDone:
+				t.Fatal("Finalize returned while model.Exec call was still in flight!")
+			default:
+			}
+
+			_, newCallErr := exec.Exec(float32(1))
+			require.Error(t, newCallErr)
+			assert.ErrorIs(t, newCallErr, model.ErrExecFinalized)
+
+			close(allowCallToFinish)
+			<-callDone
+			require.NoError(t, callErr)
+			require.Equal(t, float32(15), tensors.ToScalar[float32](callOutputs[0]))
+
+			select {
+			case <-finalizeDone:
+			case <-time.After(2 * time.Second):
+				t.Fatal("Finalize timed out after in-flight call completed")
+			}
+		})
+
+		t.Run("ConcurrentCompileDraining", func(t *testing.T) {
+			store := model.NewStore()
+			compileStarted := make(chan struct{})
+			allowCompileToFinish := make(chan struct{})
+
+			exec, err := model.NewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+				close(compileStarted)
+				<-allowCompileToFinish
+				return AddScalar(x, 1)
+			})
+			require.NoError(t, err)
+
+			compileDone := make(chan struct{})
+			var compiledGraph *Graph
+			var compileErr error
+			go func() {
+				defer close(compileDone)
+				compiledGraph, compileErr = exec.Compile(shapes.Make(dtypes.Float32, 2))
+			}()
+
+			<-compileStarted
+
+			finalizeDone := make(chan struct{})
+			go func() {
+				defer close(finalizeDone)
+				exec.Finalize()
+			}()
+
+			time.Sleep(20 * time.Millisecond)
+			select {
+			case <-finalizeDone:
+				t.Fatal("Finalize returned while model.Exec Compile was still in flight!")
+			default:
+			}
+
+			// New Compile while Finalize is running should return ErrExecFinalized immediately.
+			_, err = exec.Compile(shapes.Make(dtypes.Float32, 3))
+			require.Error(t, err)
+			assert.ErrorIs(t, err, model.ErrExecFinalized)
+
+			close(allowCompileToFinish)
+			<-compileDone
+			require.NoError(t, compileErr)
+			require.NotNil(t, compiledGraph)
+
+			select {
+			case <-finalizeDone:
+			case <-time.After(2 * time.Second):
+				t.Fatal("Finalize timed out after in-flight Compile completed")
+			}
+		})
+
+		t.Run("StressRace", func(t *testing.T) {
+			store := model.NewStore()
+			exec, err := model.NewExec(backend, store, func(scope *model.Scope, x *Node) *Node {
+				return AddScalar(x, 1)
+			})
+			require.NoError(t, err)
+
+			const numGoroutines = 8
+			const iterationsPerGoroutine = 50
+
+			var wg sync.WaitGroup
+			wg.Add(numGoroutines)
+
+			for range numGoroutines {
+				go func() {
+					defer wg.Done()
+					for range iterationsPerGoroutine {
+						outputs, err := exec.Exec(float32(2))
+						if err != nil {
+							assert.ErrorIs(t, err, model.ErrExecFinalized)
+							return
+						}
+						assert.Equal(t, float32(3), tensors.ToScalar[float32](outputs[0]))
+					}
+				}()
+			}
+
+			time.Sleep(5 * time.Millisecond)
+			exec.Finalize()
+
+			wg.Wait()
+		})
+	})
+}
+
 
 
