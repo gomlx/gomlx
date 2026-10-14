@@ -2,6 +2,14 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-10-14:
+  - Documented `graph.Graph.Finalize()` lifecycle contract regarding in-flight executions.
+  - Implemented safe in-flight call draining on `graph.Exec.Finalize()` and `model.Exec.Finalize()` (fixes #470):
+    - Added `finalized atomic.Bool` and `muInFlight sync.RWMutex` to `graph.Exec` and `model.Exec`.
+    - Added `graph.ErrExecFinalized` (and `model.ErrExecFinalized`), returned when calls or compilations are attempted on finalized executors.
+    - Synchronized `Finalize()` to wait for active executions and compilations to finish before releasing cached graphs, while causing new calls/compilations to fail fast with `ErrExecFinalized`.
+    - Added comprehensive unit tests in `core/graph` and `ml/model` for graceful draining, rejection of new calls, and race conditions.
+
 - 2026-09-12:
   - Updated `QKVProjectionDecomposed` in `ml/layers/attention` to support dynamic shapes using `graph.MatMul` and `SliceAxisSpec` without requiring fixed static batch/sequence dimensions.
 
