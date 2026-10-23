@@ -267,6 +267,124 @@ func MirroredLog1p(x *Node) *Node {
 	return Mul(Log1p(Abs(x)), Sign(x))
 }
 
+// Sinh returns the element-wise hyperbolic sine of x:
+//
+//	$$
+//	\sinh(x) = \frac{e^x - e^{-x}}{2}
+//	$$
+//
+// For half-precision types (Float16, BFloat16), intermediate calculations are performed in Float32.
+func Sinh(x *Node) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	origDType := x.DType()
+	if !origDType.IsFloat() {
+		Panicf("Sinh requires a float input, got %s", x.Shape())
+	}
+	if origDType.IsHalfPrecision() {
+		x = ConvertDType(x, dtypes.Float32)
+	}
+	res := MulScalar(Sub(Exp(x), Exp(Neg(x))), 0.5)
+	if origDType.IsHalfPrecision() {
+		res = ConvertDType(res, origDType)
+	}
+	return res
+}
+
+// Cosh returns the element-wise hyperbolic cosine of x:
+//
+//	$$
+//	\cosh(x) = \frac{e^x + e^{-x}}{2}
+//	$$
+//
+// For half-precision types (Float16, BFloat16), intermediate calculations are performed in Float32.
+func Cosh(x *Node) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	origDType := x.DType()
+	if !origDType.IsFloat() {
+		Panicf("Cosh requires a float input, got %s", x.Shape())
+	}
+	if origDType.IsHalfPrecision() {
+		x = ConvertDType(x, dtypes.Float32)
+	}
+	res := MulScalar(Add(Exp(x), Exp(Neg(x))), 0.5)
+	if origDType.IsHalfPrecision() {
+		res = ConvertDType(res, origDType)
+	}
+	return res
+}
+
+// Atanh returns the element-wise inverse hyperbolic tangent of x (for x in (-1, 1)):
+//
+//	$$
+//	\operatorname{atanh}(x) = \frac{1}{2}\left(\operatorname{log1p}(x) - \operatorname{log1p}(-x)\right)
+//	$$
+//
+// For half-precision types (Float16, BFloat16), intermediate calculations are performed in Float32.
+func Atanh(x *Node) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	origDType := x.DType()
+	if !origDType.IsFloat() {
+		Panicf("Atanh requires a float input, got %s", x.Shape())
+	}
+	if origDType.IsHalfPrecision() {
+		x = ConvertDType(x, dtypes.Float32)
+	}
+	res := MulScalar(Sub(Log1p(x), Log1p(Neg(x))), 0.5)
+	if origDType.IsHalfPrecision() {
+		res = ConvertDType(res, origDType)
+	}
+	return res
+}
+
+// Asinh returns the element-wise inverse hyperbolic sine of x:
+//
+//	$$
+//	\operatorname{asinh}(x) = \operatorname{sign}(x) \ln\left(|x| + \sqrt{x^2 + 1}\right)
+//	$$
+//
+// It is implemented using Log1p to preserve precision for small |x| and avoid cancellation for negative x.
+// For half-precision types (Float16, BFloat16), intermediate calculations are performed in Float32.
+func Asinh(x *Node) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	origDType := x.DType()
+	if !origDType.IsFloat() {
+		Panicf("Asinh requires a float input, got %s", x.Shape())
+	}
+	if origDType.IsHalfPrecision() {
+		x = ConvertDType(x, dtypes.Float32)
+	}
+	absX := Abs(x)
+	x2 := Square(absX)
+	res := Mul(SignPlusOrMinus(x), Log1p(Add(absX, Div(x2, OnePlus(Sqrt(OnePlus(x2)))))))
+	if origDType.IsHalfPrecision() {
+		res = ConvertDType(res, origDType)
+	}
+	return res
+}
+
+// Acosh returns the element-wise inverse hyperbolic cosine of x (for x >= 1):
+//
+//	$$
+//	\operatorname{acosh}(x) = \ln\left(x + \sqrt{x - 1}\sqrt{x + 1}\right)
+//	$$
+//
+// For half-precision types (Float16, BFloat16), intermediate calculations are performed in Float32.
+func Acosh(x *Node) *Node {
+	_ = validateBuildingGraphFromInputs(x)
+	origDType := x.DType()
+	if !origDType.IsFloat() {
+		Panicf("Acosh requires a float input, got %s", x.Shape())
+	}
+	if origDType.IsHalfPrecision() {
+		x = ConvertDType(x, dtypes.Float32)
+	}
+	res := Log(Add(x, Mul(Sqrt(MinusOne(x)), Sqrt(OnePlus(x)))))
+	if origDType.IsHalfPrecision() {
+		res = ConvertDType(res, origDType)
+	}
+	return res
+}
+
 // Clip is a shortcut to `Min(max, Max(x, min))`, which returns the values of x clipped between
 // min and max.
 func Clip(x, min, max *Node) *Node {

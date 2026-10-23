@@ -22,6 +22,7 @@ This table maps common functions from the `core/graph` package to their PyTorch 
 | `Min(a, b)` | Element-wise minimum of two nodes. | `torch.minimum(a, b)` |
 | `Sigmoid(x)` / `Logistic(x)` | Element-wise sigmoid activation function. | `torch.sigmoid(x)` |
 | `Sin(x)`, `Cos(x)`, `Tanh(x)` | Element-wise trigonometric functions. | `torch.sin(x)`, `torch.cos(x)`, `torch.tanh(x)` |
+| `Sinh(x)`, `Cosh(x)`, `Asinh(x)`, `Acosh(x)`, `Atanh(x)` | Element-wise hyperbolic and inverse hyperbolic trigonometric functions. | `torch.sinh(x)`, `torch.cosh(x)`, `torch.asinh(x)`, `torch.acosh(x)`, `torch.atanh(x)` |
 | **Shape & Tensor Manipulation** | | |
 | `Reshape(x, dims...)` | Reshapes a node to the given dimensions. | `torch.reshape(x, dims)` or `x.view(dims)` |
 | `TransposeAllDims(x)` | Reverses the order of all dimensions (similar to `.T` in 2D). | `x.T` (for 2D) |

@@ -8,6 +8,8 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
@@ -205,6 +207,139 @@ func TestMirroredLog1p(t *testing.T) {
 			output = MirroredLog1p(input)
 			return output, []*Node{input}
 		}, []any{[]float32{0.0, 1.0 / (2 + 1), 1.0 / (3 + 1)}})
+}
+
+func TestHyperbolicTrig(t *testing.T) {
+	// Forward tests in Float64.
+	xSinhCoshAsinh := []float64{-3.0, -0.5, -1e-4, 0.0, 1e-4, 0.5, 3.0}
+	testFuncOneInputDefaultBackend(t, "Sinh",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, xSinhCoshAsinh)
+			output = Sinh(input)
+			return
+		}, xslices.Map(xSinhCoshAsinh, math.Sinh))
+
+	testFuncOneInputDefaultBackend(t, "Cosh",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, xSinhCoshAsinh)
+			output = Cosh(input)
+			return
+		}, xslices.Map(xSinhCoshAsinh, math.Cosh))
+
+	testFuncOneInputDefaultBackend(t, "Asinh",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, xSinhCoshAsinh)
+			output = Asinh(input)
+			return
+		}, xslices.Map(xSinhCoshAsinh, math.Asinh))
+
+	xAtanh := []float64{-0.9, -0.5, -1e-4, 0.0, 1e-4, 0.5, 0.9}
+	testFuncOneInputDefaultBackend(t, "Atanh",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, xAtanh)
+			output = Atanh(input)
+			return
+		}, xslices.Map(xAtanh, math.Atanh))
+
+	xAcosh := []float64{1.0, 1.0001, 1.5, 3.0, 100.0}
+	testFuncOneInputDefaultBackend(t, "Acosh",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, xAcosh)
+			output = Acosh(input)
+			return
+		}, xslices.Map(xAcosh, math.Acosh))
+
+	// Half-precision (Float16 and BFloat16) forward tests, including large values (> 256)
+	// that would overflow x^2 in Float16 without Float32 promotion.
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		f16Vals := []float32{-500.0, -1.0, 0.0, 0.5, 500.0}
+		f16Input := xslices.Map(f16Vals, float16.FromFloat32)
+		graphtest.RunTestGraphFnWithBackend(t, "Asinh(Float16)", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, f16Input)
+				return []*Node{x}, []*Node{Asinh(x)}
+			}, []any{
+				xslices.Map(f16Input, func(v float16.Float16) float16.Float16 {
+					return float16.FromFloat32(float32(math.Asinh(float64(v.Float32()))))
+				}),
+			}, 1e-2)
+
+		f16AcoshInput := xslices.Map([]float32{1.0, 2.0, 500.0}, float16.FromFloat32)
+		graphtest.RunTestGraphFnWithBackend(t, "Acosh(Float16)", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, f16AcoshInput)
+				return []*Node{x}, []*Node{Acosh(x)}
+			}, []any{
+				xslices.Map(f16AcoshInput, func(v float16.Float16) float16.Float16 {
+					return float16.FromFloat32(float32(math.Acosh(float64(v.Float32()))))
+				}),
+			}, 1e-2)
+
+		bf16AtanhInput := xslices.Map([]float32{-0.75, -0.25, 0.0, 0.25, 0.75}, bfloat16.FromFloat32)
+		graphtest.RunTestGraphFnWithBackend(t, "Atanh(BFloat16)", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, bf16AtanhInput)
+				return []*Node{x}, []*Node{Atanh(x)}
+			}, []any{
+				xslices.Map(bf16AtanhInput, func(v bfloat16.BFloat16) bfloat16.BFloat16 {
+					return bfloat16.FromFloat32(float32(math.Atanh(float64(v.Float32()))))
+				}),
+			}, 2e-2)
+
+		bf16SinhCoshInput := xslices.Map([]float32{-2.0, -0.25, 0.0, 0.25, 2.0}, bfloat16.FromFloat32)
+		graphtest.RunTestGraphFnWithBackend(t, "Sinh_Cosh(BFloat16)", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, bf16SinhCoshInput)
+				return []*Node{x}, []*Node{Sinh(x), Cosh(x)}
+			}, []any{
+				xslices.Map(bf16SinhCoshInput, func(v bfloat16.BFloat16) bfloat16.BFloat16 {
+					return bfloat16.FromFloat32(float32(math.Sinh(float64(v.Float32()))))
+				}),
+				xslices.Map(bf16SinhCoshInput, func(v bfloat16.BFloat16) bfloat16.BFloat16 {
+					return bfloat16.FromFloat32(float32(math.Cosh(float64(v.Float32()))))
+				}),
+			}, 2e-2)
+	})
+
+	// Gradient tests.
+	gradX := []float64{-2.0, -0.5, 0.0, 0.5, 2.0}
+	testGradients(t, "Sinh gradient",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, gradX)
+			return Sinh(input), []*Node{input}
+		}, []any{xslices.Map(gradX, math.Cosh)})
+
+	testGradients(t, "Cosh gradient",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, gradX)
+			return Cosh(input), []*Node{input}
+		}, []any{xslices.Map(gradX, math.Sinh)})
+
+	testGradients(t, "Asinh gradient",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, gradX)
+			return Asinh(input), []*Node{input}
+		}, []any{xslices.Map(gradX, func(x float64) float64 {
+			return 1.0 / math.Sqrt(x*x+1.0)
+		})})
+
+	gradXAtanh := []float64{-0.8, -0.3, 0.0, 0.3, 0.8}
+	testGradients(t, "Atanh gradient",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, gradXAtanh)
+			return Atanh(input), []*Node{input}
+		}, []any{xslices.Map(gradXAtanh, func(x float64) float64 {
+			return 1.0 / (1.0 - x*x)
+		})})
+
+	gradXAcosh := []float64{1.2, 2.0, 5.0}
+	testGradients(t, "Acosh gradient",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, gradXAcosh)
+			return Acosh(input), []*Node{input}
+		}, []any{xslices.Map(gradXAcosh, func(x float64) float64 {
+			return 1.0 / math.Sqrt(x*x-1.0)
+		})})
 }
 
 func TestShiftWithScalar(t *testing.T) {
