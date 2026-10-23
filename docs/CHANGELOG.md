@@ -2,6 +2,9 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-10-23:
+  - Added hyperbolic trigonometric functions `Sinh`, `Cosh`, `Atanh`, `Asinh`, and `Acosh` in `core/graph` (complementing `Tanh`), with automatic `Float32` intermediate promotion for half-precision types (`Float16`, `BFloat16`).
+
 - 2026-10-14:
   - Documented `graph.Graph.Finalize()` lifecycle contract regarding in-flight executions.
   - Implemented safe in-flight call draining on `graph.Exec.Finalize()` and `model.Exec.Finalize()` (fixes #470):
