@@ -3,6 +3,8 @@
 package graph
 
 import (
+	"math"
+
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/gotype"
@@ -267,15 +269,32 @@ func MirroredLog1p(x *Node) *Node {
 	return Mul(Log1p(Abs(x)), Sign(x))
 }
 
+// sinhCoshLargeThreshold is the |x| above which e^-|x| is negligible against e^|x| in Float32 and Float64
+// (e^-40 < 2^-52), so that sinh(|x|) = cosh(|x|) = exp(|x| - ln 2).
+const sinhCoshLargeThreshold = 20.0
+
+// inverseHyperbolicLargeThreshold returns 1/sqrt(epsilon) of dtype (Float32 or Float64): above it x² ± 1 == x²,
+// so that asinh(|x|) = acosh(|x|) = ln(2|x|) = ln(|x|) + ln 2.
+func inverseHyperbolicLargeThreshold(dtype dtypes.DType) float64 {
+	if dtype == dtypes.Float64 {
+		return 1 << 26
+	}
+	return 1 << 12
+}
+
 // Sinh returns the element-wise hyperbolic sine of x:
 //
 //	$$
 //	\sinh(x) = \frac{e^x - e^{-x}}{2}
 //	$$
 //
+// It is computed on |x| as (t + t/(t+1))/2 with t = Expm1(|x|), which avoids the cancellation of e^x - e^{-x}
+// for |x| close to 0, and as exp(|x| - ln 2) for large |x|, which only overflows where sinh(x) itself does
+// (e^x overflows earlier).
+//
 // For half-precision types (Float16, BFloat16), intermediate calculations are performed in Float32.
 func Sinh(x *Node) *Node {
-	_ = validateBuildingGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	origDType := x.DType()
 	if !origDType.IsFloat() {
 		Panicf("Sinh requires a float input, got %s", x.Shape())
@@ -283,7 +302,17 @@ func Sinh(x *Node) *Node {
 	if origDType.IsHalfPrecision() {
 		x = ConvertDType(x, dtypes.Float32)
 	}
-	res := MulScalar(Sub(Exp(x), Exp(Neg(x))), 0.5)
+	threshold := Scalar(g, x.DType(), sinhCoshLargeThreshold)
+	absX := Abs(x)
+	isLarge := GreaterThan(absX, threshold)
+	// Each branch only sees the values it is selected for (the others are clamped to the threshold), so the
+	// discarded branch never produces Inf or NaN, neither in the forward pass nor in the gradient.
+	// NaNs take the small branch.
+	small := Where(isLarge, threshold, absX)
+	t := Expm1(small)
+	sinhSmall := MulScalar(Add(t, Div(t, OnePlus(t))), 0.5)
+	sinhLarge := Exp(AddScalar(Where(isLarge, absX, threshold), -math.Ln2))
+	res := Mul(SignPlusOrMinus(x), Where(isLarge, sinhLarge, sinhSmall))
 	if origDType.IsHalfPrecision() {
 		res = ConvertDType(res, origDType)
 	}
@@ -296,9 +325,12 @@ func Sinh(x *Node) *Node {
 //	\cosh(x) = \frac{e^x + e^{-x}}{2}
 //	$$
 //
+// For large |x| it is computed as exp(|x| - ln 2), which only overflows where cosh(x) itself does
+// (e^x overflows earlier).
+//
 // For half-precision types (Float16, BFloat16), intermediate calculations are performed in Float32.
 func Cosh(x *Node) *Node {
-	_ = validateBuildingGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	origDType := x.DType()
 	if !origDType.IsFloat() {
 		Panicf("Cosh requires a float input, got %s", x.Shape())
@@ -306,7 +338,14 @@ func Cosh(x *Node) *Node {
 	if origDType.IsHalfPrecision() {
 		x = ConvertDType(x, dtypes.Float32)
 	}
-	res := MulScalar(Add(Exp(x), Exp(Neg(x))), 0.5)
+	threshold := Scalar(g, x.DType(), sinhCoshLargeThreshold)
+	absX := Abs(x)
+	isLarge := GreaterThan(absX, threshold)
+	// See Sinh about the clamping of the branches.
+	small := Where(isLarge, threshold, absX)
+	coshSmall := MulScalar(Add(Exp(small), Exp(Neg(small))), 0.5)
+	coshLarge := Exp(AddScalar(Where(isLarge, absX, threshold), -math.Ln2))
+	res := Where(isLarge, coshLarge, coshSmall)
 	if origDType.IsHalfPrecision() {
 		res = ConvertDType(res, origDType)
 	}
@@ -343,9 +382,11 @@ func Atanh(x *Node) *Node {
 //	$$
 //
 // It is implemented using Log1p to preserve precision for small |x| and avoid cancellation for negative x.
+// For |x| > 1/sqrt(epsilon), where x² would lose precision or overflow, it uses ln(|x|) + ln 2.
+//
 // For half-precision types (Float16, BFloat16), intermediate calculations are performed in Float32.
 func Asinh(x *Node) *Node {
-	_ = validateBuildingGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	origDType := x.DType()
 	if !origDType.IsFloat() {
 		Panicf("Asinh requires a float input, got %s", x.Shape())
@@ -353,9 +394,15 @@ func Asinh(x *Node) *Node {
 	if origDType.IsHalfPrecision() {
 		x = ConvertDType(x, dtypes.Float32)
 	}
+	threshold := Scalar(g, x.DType(), inverseHyperbolicLargeThreshold(x.DType()))
 	absX := Abs(x)
-	x2 := Square(absX)
-	res := Mul(SignPlusOrMinus(x), Log1p(Add(absX, Div(x2, OnePlus(Sqrt(OnePlus(x2)))))))
+	isLarge := GreaterThan(absX, threshold)
+	// See Sinh about the clamping of the branches.
+	small := Where(isLarge, threshold, absX)
+	small2 := Square(small)
+	asinhSmall := Log1p(Add(small, Div(small2, OnePlus(Sqrt(OnePlus(small2))))))
+	asinhLarge := AddScalar(Log(Where(isLarge, absX, threshold)), math.Ln2)
+	res := Mul(SignPlusOrMinus(x), Where(isLarge, asinhLarge, asinhSmall))
 	if origDType.IsHalfPrecision() {
 		res = ConvertDType(res, origDType)
 	}
@@ -368,9 +415,12 @@ func Asinh(x *Node) *Node {
 //	\operatorname{acosh}(x) = \ln\left(x + \sqrt{x - 1}\sqrt{x + 1}\right)
 //	$$
 //
+// It is implemented as Log1p((x-1) + sqrt(x-1)sqrt(x+1)) to preserve precision for x close to 1.
+// For x > 1/sqrt(epsilon), where x + sqrt(x-1)sqrt(x+1) would overflow for the largest values, it uses ln(x) + ln 2.
+//
 // For half-precision types (Float16, BFloat16), intermediate calculations are performed in Float32.
 func Acosh(x *Node) *Node {
-	_ = validateBuildingGraphFromInputs(x)
+	g := validateBuildingGraphFromInputs(x)
 	origDType := x.DType()
 	if !origDType.IsFloat() {
 		Panicf("Acosh requires a float input, got %s", x.Shape())
@@ -378,7 +428,14 @@ func Acosh(x *Node) *Node {
 	if origDType.IsHalfPrecision() {
 		x = ConvertDType(x, dtypes.Float32)
 	}
-	res := Log(Add(x, Mul(Sqrt(MinusOne(x)), Sqrt(OnePlus(x)))))
+	threshold := Scalar(g, x.DType(), inverseHyperbolicLargeThreshold(x.DType()))
+	isLarge := GreaterThan(x, threshold)
+	// See Sinh about the clamping of the branches.
+	small := Where(isLarge, threshold, x)
+	smallMinusOne := MinusOne(small)
+	acoshSmall := Log1p(Add(smallMinusOne, Mul(Sqrt(smallMinusOne), Sqrt(OnePlus(small)))))
+	acoshLarge := AddScalar(Log(Where(isLarge, x, threshold)), math.Ln2)
+	res := Where(isLarge, acoshLarge, acoshSmall)
 	if origDType.IsHalfPrecision() {
 		res = ConvertDType(res, origDType)
 	}
