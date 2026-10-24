@@ -4,6 +4,8 @@ It hasn't reached yet a 1.0 release yet (it is close), so instead we use every m
 
 - 2026-10-23:
   - Added hyperbolic trigonometric functions `Sinh`, `Cosh`, `Atanh`, `Asinh`, and `Acosh` in `core/graph` (complementing `Tanh`), with automatic `Float32` intermediate promotion for half-precision types (`Float16`, `BFloat16`).
+  - Made `Sinh`, `Cosh`, `Asinh` and `Acosh` numerically stable: no cancellation in `Sinh` for |x| close to 0 (`Expm1`), no premature overflow of `Sinh`/`Cosh` for large |x| (`exp(|x| - ln 2)`), and `ln(|x|) + ln 2` in `Asinh`/`Acosh` above 1/sqrt(epsilon), where `x²` loses precision or overflows (`Asinh(±Inf)` is now `±Inf` instead of `NaN`). `Acosh` uses `Log1p` for x close to 1.
+  - Added the gradient of `Expm1`.
 
 - 2026-10-14:
   - Documented `graph.Graph.Finalize()` lifecycle contract regarding in-flight executions.

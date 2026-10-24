@@ -419,6 +419,7 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeNeg:                            vjpForSingleOutput(negVJP),
 	NodeTypeAbs:                            vjpForSingleOutput(absVJP),
 	NodeTypeExp:                            vjpForSingleOutput(expVJP),
+	NodeTypeExpm1:                          vjpForSingleOutput(expm1VJP),
 	NodeTypeLog:                            vjpForSingleOutput(logVJP),
 	NodeTypeLog1p:                          vjpForSingleOutput(log1pVJP),
 	NodeTypeCos:                            vjpForSingleOutput(cosVJP),
@@ -585,6 +586,11 @@ func absVJP(node, v *Node, _ shapes.Shape) []*Node {
 
 func expVJP(node, v *Node, _ shapes.Shape) []*Node {
 	return []*Node{Mul(v, node)}
+}
+
+// expm1VJP uses d(e^x - 1)/dx = e^x = Expm1(x) + 1.
+func expm1VJP(node, v *Node, _ shapes.Shape) []*Node {
+	return []*Node{Mul(v, OnePlus(node))}
 }
 
 func logVJP(node, v *Node, _ shapes.Shape) []*Node {

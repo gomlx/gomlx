@@ -342,6 +342,137 @@ func TestHyperbolicTrig(t *testing.T) {
 		})})
 }
 
+func TestHyperbolicTrigNumericalStability(t *testing.T) {
+	inf32, nan32 := float32(math.Inf(1)), float32(math.NaN())
+	inf64 := math.Inf(1)
+	asinh32 := func(x float32) float32 { return float32(math.Asinh(float64(x))) }
+	acosh32 := func(x float32) float32 { return float32(math.Acosh(float64(x))) }
+	ln2 := float32(math.Ln2)
+
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		// Around the threshold for large values (20) both branches must agree with math.Sinh/math.Cosh.
+		xAround20 := []float64{-20.5, -19.5, 19.5, 20.5}
+		tiny := []float32{1e-6, -1e-10, 1e-30}
+		graphtest.RunTestGraphFnWithBackend(t, "Sinh", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				tinyX := Const(g, tiny)
+				inputs = []*Node{tinyX}
+				outputs = []*Node{
+					// sinh(x)/x -> 1 for x -> 0: no cancellation of e^x - e^-x for small |x|.
+					Div(Sinh(tinyX), tinyX),
+					// sinh(±89) ~ ±2.2e38 fits in Float32 but e^89 doesn't: ln|sinh(±89)| = 89 - ln 2.
+					Log(Abs(Sinh(Const(g, []float32{89, -89})))),
+					Sinh(Const(g, xAround20)),
+					Sinh(Const(g, []float32{inf32, -inf32})),
+					IsNaN(Sinh(Const(g, []float32{nan32}))),
+				}
+				return
+			}, []any{
+				[]float32{1, 1, 1},
+				[]float32{89 - ln2, 89 - ln2},
+				xslices.Map(xAround20, math.Sinh),
+				[]float32{inf32, -inf32},
+				[]bool{true},
+			}, 1e-4)
+
+		graphtest.RunTestGraphFnWithBackend(t, "Cosh", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, []float32{89, -89})
+				inputs = []*Node{x}
+				outputs = []*Node{
+					// cosh(±89) ~ 2.2e38 fits in Float32 but e^89 doesn't: ln(cosh(±89)) = 89 - ln 2.
+					Log(Cosh(x)),
+					Cosh(Const(g, xAround20)),
+					Cosh(Const(g, []float32{inf32, -inf32})),
+					IsNaN(Cosh(Const(g, []float32{nan32}))),
+				}
+				return
+			}, []any{
+				[]float32{89 - ln2, 89 - ln2},
+				xslices.Map(xAround20, math.Cosh),
+				[]float32{inf32, inf32},
+				[]bool{true},
+			}, 1e-4)
+
+		// Float32 threshold for large values is 4096; x² overflows Float32 above ~1.8e19.
+		xAsinh32 := []float32{-1e30, -100, -0.5, 0, 0.5, 4095, 4097, 1e20}
+		xAsinh64 := []float64{-1e300, 1e-200, 0.5, 6e7, 7e7, 1e154}
+		graphtest.RunTestGraphFnWithBackend(t, "Asinh", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, xAsinh32)
+				tinyX := Const(g, tiny)
+				inputs = []*Node{x}
+				outputs = []*Node{
+					Asinh(x),
+					// asinh(x)/x -> 1 for x -> 0: no precision loss for small |x|.
+					Div(Asinh(tinyX), tinyX),
+					Asinh(Const(g, xAsinh64)),
+					Asinh(Const(g, []float32{inf32, -inf32})),
+					IsNaN(Asinh(Const(g, []float32{nan32}))),
+				}
+				return
+			}, []any{
+				xslices.Map(xAsinh32, asinh32),
+				[]float32{1, 1, 1},
+				xslices.Map(xAsinh64, math.Asinh),
+				[]float32{inf32, -inf32},
+				[]bool{true},
+			}, 1e-4)
+
+		// x + sqrt(x-1)sqrt(x+1) overflows Float32 for x > ~1.7e38.
+		xAcosh32 := []float32{1.5, 4095, 4097, 1e20, 3e38}
+		xAcosh64 := []float64{1 + 1e-10, 6e7, 7e7, 1e300}
+		graphtest.RunTestGraphFnWithBackend(t, "Acosh", backend,
+			func(g *Graph) (inputs, outputs []*Node) {
+				x := Const(g, xAcosh32)
+				inputs = []*Node{x}
+				outputs = []*Node{
+					Acosh(x),
+					Acosh(Const(g, xAcosh64)),
+					Acosh(Const(g, []float64{inf64})),
+					// Outside the domain.
+					IsNaN(Acosh(Const(g, []float32{0.5, nan32}))),
+				}
+				return
+			}, []any{
+				xslices.Map(xAcosh32, acosh32),
+				xslices.Map(xAcosh64, math.Acosh),
+				[]float64{inf64},
+				[]bool{true, true},
+			}, 1e-4)
+	})
+
+	// Gradients in the branch for large values, and of Expm1 (used by Sinh for small values).
+	gradX := []float64{-21, 21}
+	testGradients(t, "Sinh gradient for large |x|",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, gradX)
+			return Sinh(input), []*Node{input}
+		}, []any{xslices.Map(gradX, math.Cosh)})
+
+	testGradients(t, "Cosh gradient for large |x|",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, gradX)
+			return Cosh(input), []*Node{input}
+		}, []any{xslices.Map(gradX, math.Sinh)})
+
+	gradXInverse := []float64{-1e8, 1e8}
+	testGradients(t, "Asinh gradient for large |x|",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, gradXInverse)
+			return Asinh(input), []*Node{input}
+		}, []any{xslices.Map(gradXInverse, func(x float64) float64 {
+			return 1.0 / math.Sqrt(x*x+1.0)
+		})})
+
+	gradXExpm1 := []float64{-2, 0, 1e-8, 2}
+	testGradients(t, "Expm1 gradient",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			input := Const(g, gradXExpm1)
+			return Expm1(input), []*Node{input}
+		}, []any{xslices.Map(gradXExpm1, math.Exp)})
+}
+
 func TestShiftWithScalar(t *testing.T) {
 	testFuncOneInputDefaultBackend(t, "ShiftWithScalar(input, axis=1, left, n=1, fill=0.0)",
 		func(g *Graph) (input, output *Node) {
