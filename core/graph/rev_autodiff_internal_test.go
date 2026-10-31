@@ -45,3 +45,7 @@ func TestReverseGraph(t *testing.T) {
 		testState(t, rg, e.node, e.selected, e.included, e.useful)
 	}
 }
+
+// CumMaxDecomposedForTest exposes cumMaxDecomposed to external tests in package graph_test.
+var CumMaxDecomposedForTest = cumMaxDecomposed
+

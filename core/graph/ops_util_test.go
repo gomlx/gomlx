@@ -651,6 +651,125 @@ func TestMaskedLogSoftmax(t *testing.T) {
 		}, xslices.Epsilon)
 }
 
+func TestCumMax(t *testing.T) {
+	graphtest.RunTestGraphFn(t, "TestCumMax()",
+		func(g *Graph) (inputs, outputs []*Node) {
+			inputs = []*Node{
+				Const(g, [][]int32{{3, 1, 4}, {6, 5, 2}}),
+			}
+			outputs = []*Node{
+				CumMax(inputs[0], -1),
+				CumMax(inputs[0], 0),
+				CumMax(inputs[0], -1, &CumSumOptions{Exclusive: true}),
+				CumMax(inputs[0], 0, &CumSumOptions{Exclusive: true}),
+				CumMax(inputs[0], -1, &CumSumOptions{Reverse: true}),
+				CumMax(inputs[0], 0, &CumSumOptions{Reverse: true}),
+				CumMax(inputs[0], -1, &CumSumOptions{Exclusive: true, Reverse: true}),
+				CumMax(inputs[0], 0, &CumSumOptions{Exclusive: true, Reverse: true}),
+				// Also verify decomposed fallback implementation matches directly:
+				CumMaxDecomposedForTest(inputs[0], 1, CumSumOptions{}),
+				CumMaxDecomposedForTest(inputs[0], 1, CumSumOptions{Exclusive: true}),
+				CumMaxDecomposedForTest(inputs[0], 1, CumSumOptions{Reverse: true}),
+				CumMaxDecomposedForTest(inputs[0], 1, CumSumOptions{Exclusive: true, Reverse: true}),
+			}
+			return
+		}, []any{
+			// -1, default
+			[][]int32{
+				{3, 3, 4},
+				{6, 6, 6},
+			},
+			// 0, default
+			[][]int32{
+				{3, 1, 4},
+				{6, 5, 4},
+			},
+			// -1, exclusive
+			[][]int32{
+				{math.MinInt32, 3, 3},
+				{math.MinInt32, 6, 6},
+			},
+			// 0, exclusive
+			[][]int32{
+				{math.MinInt32, math.MinInt32, math.MinInt32},
+				{3, 1, 4},
+			},
+			// -1, reverse
+			[][]int32{
+				{4, 4, 4},
+				{6, 5, 2},
+			},
+			// 0, reverse
+			[][]int32{
+				{6, 5, 4},
+				{6, 5, 2},
+			},
+			// -1, exclusive+reverse
+			[][]int32{
+				{4, 4, math.MinInt32},
+				{5, 2, math.MinInt32},
+			},
+			// 0, exclusive+reverse
+			[][]int32{
+				{6, 5, 2},
+				{math.MinInt32, math.MinInt32, math.MinInt32},
+			},
+			// Decomposed: axis 1, default
+			[][]int32{
+				{3, 3, 4},
+				{6, 6, 6},
+			},
+			// Decomposed: axis 1, exclusive
+			[][]int32{
+				{math.MinInt32, 3, 3},
+				{math.MinInt32, 6, 6},
+			},
+			// Decomposed: axis 1, reverse
+			[][]int32{
+				{4, 4, 4},
+				{6, 5, 2},
+			},
+			// Decomposed: axis 1, exclusive+reverse
+			[][]int32{
+				{4, 4, math.MinInt32},
+				{5, 2, math.MinInt32},
+			},
+		}, xslices.Epsilon)
+
+	// Test gradients (autodiff)
+	graphtest.RunTestGraphFn(t, "TestCumMaxGradients",
+		func(g *Graph) (inputs, outputs []*Node) {
+			x := Const(g, []float64{3, 1, 4, 2})
+			inputs = []*Node{x}
+
+			// Forward
+			yDefault := CumMax(x, 0)
+			yExclusive := CumMax(x, 0, &CumSumOptions{Exclusive: true})
+			yReverse := CumMax(x, 0, &CumSumOptions{Reverse: true})
+			yExclRev := CumMax(x, 0, &CumSumOptions{Exclusive: true, Reverse: true})
+
+			gradDefault := Gradient(ReduceAllSum(yDefault), x)[0]
+			gradExclusive := Gradient(ReduceAllSum(yExclusive), x)[0]
+			gradReverse := Gradient(ReduceAllSum(yReverse), x)[0]
+			gradExclRev := Gradient(ReduceAllSum(yExclRev), x)[0]
+
+			outputs = []*Node{gradDefault, gradExclusive, gradReverse, gradExclRev}
+			return
+		}, []any{
+			[]float64{2, 0, 2, 0},
+			[]float64{2, 0, 1, 0},
+			[]float64{0, 0, 3, 1},
+			[]float64{0, 0, 2, 1},
+		}, xslices.Epsilon)
+
+	// Test panic when more than one option is passed.
+	require.Panics(t, func() {
+		g := NewGraph(compute.MustNew(), "test_cummax_multiple_options")
+		x := IotaFull(g, shapes.Make(dtypes.Float32, 3))
+		CumMax(x, 0, &CumSumOptions{}, &CumSumOptions{})
+	})
+}
+
 func TestCumSum(t *testing.T) {
 	graphtest.RunTestGraphFn(t, "TestCumSum()",
 		func(g *Graph) (inputs, outputs []*Node) {

@@ -2,6 +2,9 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-10-31:
+  - Added `CumMax` in `core/graph` (reusing `CumSumOptions` for `Exclusive` and `Reverse`), with `MaxPool`-based fallback (`cumMaxDecomposed`) for backends without native `OpTypeCumMax` support and reverse-mode autodiff support (`cumMaxVJP`).
+
 - 2026-10-23:
   - Added hyperbolic trigonometric functions `Sinh`, `Cosh`, `Atanh`, `Asinh`, and `Acosh` in `core/graph` (complementing `Tanh`), with automatic `Float32` intermediate promotion for half-precision types (`Float16`, `BFloat16`).
   - Made `Sinh`, `Cosh`, `Asinh` and `Acosh` numerically stable: no cancellation in `Sinh` for |x| close to 0 (`Expm1`), no premature overflow of `Sinh`/`Cosh` for large |x| (`exp(|x| - ln 2)`), and `ln(|x|) + ln 2` in `Asinh`/`Acosh` above 1/sqrt(epsilon), where `x²` loses precision or overflows (`Asinh(±Inf)` is now `±Inf` instead of `NaN`). `Acosh` uses `Log1p` for x close to 1.
