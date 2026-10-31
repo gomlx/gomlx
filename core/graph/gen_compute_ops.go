@@ -51,6 +51,7 @@ const (
 	NodeTypeConvGeneral
 	NodeTypeConvertDType
 	NodeTypeCos
+	NodeTypeCumMax
 	NodeTypeCumSum
 	NodeTypeDiv
 	NodeTypeDotGeneral
@@ -1546,6 +1547,62 @@ func Cos(x *Node) (
 	return
 }
 
+// nodeInputsCumMax holds the inputs used for the call to compute.CumMax.
+type nodeInputsCumMax struct {
+	operand *Node
+	axis    int
+	options compute.CumSumOptions
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsCumMax) Type() NodeType {
+	return NodeTypeCumMax
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsCumMax) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], axis=%v, options=%+v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.axis,
+		ni.options,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsCumMax) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	return backendCumMax(new_operand, ni.axis, ni.options)
+}
+
+// backendCumMax is a Graph wrapper for the backend.Builder.CumMax method.
+func backendCumMax(operand *Node, axis int, options compute.CumSumOptions) (
+	node *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsCumMax{
+		operand: operand,
+		axis:    axis,
+		options: options,
+	}
+	result, err := g.currentFunc.backendFunc.CumMax(operand.outputOps[0], inputs.axis, inputs.options)
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
 // nodeInputsCumSum holds the inputs used for the call to compute.CumSum.
 type nodeInputsCumSum struct {
 	operand *Node
@@ -2025,8 +2082,10 @@ func (ni *nodeInputsDynamicShape) CloneWithInputs(originalNode *Node, newInputs 
 	return DynamicShape(new_operand)
 }
 
-// DynamicShape returns the shape of the operand as a dynamic value.
-// This is only supported by backends that support dynamic shapes (see Capabilities.DynamicAxes).
+// DynamicShape returns the shape of the operand as a dynamic 1D tensor.
+// This is only supported by backends that support dynamic shapes (see Capabilities.DynamicShapes).
+//
+// The returned 1D tensor has dtype Capabilities.DynamicDimDType (typically Int64, or backend-dependent).
 func DynamicShape(operand *Node) (
 	node *Node) {
 	inputNodes := []*Node{operand}

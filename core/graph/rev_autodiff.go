@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/support/exceptions"
@@ -478,6 +479,7 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeDynamicDimensionSize:  vjpForSingleOutput(zeroVJP),
 	NodeTypeDynamicReshape:        vjpForSingleOutput(dynamicReshapeVJP),
 	NodeTypeDynamicShape:          vjpForSingleOutput(zeroVJP),
+	NodeTypeCumMax:                vjpForSingleOutput(cumMaxVJP),
 	NodeTypeCumSum:                vjpForSingleOutput(cumSumVJP),
 	NodeTypePad:                   vjpForSingleOutput(padVJP),
 	NodeTypeDynamicPad:            vjpForSingleOutput(dynamicPadVJP),
@@ -781,6 +783,44 @@ func reduceSumVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// Now all we need it to broadcast the v on the reduced dimensions.
 	vjp := BroadcastLike(expandedV, x)
 	return []*Node{vjp}
+}
+
+func cumMaxVJP(node, v *Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsCumMax)
+	x := inputs.operand
+	axis := inputs.axis
+	options := inputs.options
+	g := x.Graph()
+
+	dim := x.Shape().Dimensions[axis]
+	if dim == 0 || (dim == 1 && options.Exclusive) {
+		return []*Node{ZerosLike(x)}
+	}
+
+	cur := x
+	grad := v
+	if options.Reverse {
+		cur = Reverse(cur, axis)
+		grad = Reverse(grad, axis)
+	}
+
+	if options.Exclusive {
+		padAxes := make([]compute.PadAxis, cur.Rank())
+		padAxes[axis] = compute.PadAxis{End: 1}
+		grad = Pad(SliceAxis(grad, axis, AxisRange(1, dim)), ScalarZero(g, grad.DType()), padAxes...)
+	}
+
+	windowSizes := xslices.SliceWithValue(cur.Rank(), 1)
+	windowSizes[axis] = dim
+	strides := xslices.SliceWithValue(cur.Rank(), 1)
+	paddings := make([][2]int, cur.Rank())
+	paddings[axis][0] = dim - 1
+
+	gradX := checkedSelectAndScatter(cur, grad, compute.ReduceOpMax, windowSizes, strides, paddings)
+	if options.Reverse {
+		gradX = Reverse(gradX, axis)
+	}
+	return []*Node{gradX}
 }
 
 func cumSumVJP(node, v *Node, _ shapes.Shape) []*Node {

@@ -1098,6 +1098,71 @@ func growImpl(x *Node, axis int, dir ShiftDirection, n int, fillValue float64) *
 // CumSumOptions are options for the CumSum operation.
 type CumSumOptions = compute.CumSumOptions
 
+// CumMax returns the cumulative maximum along the given axis.
+//
+// Examples:
+//
+//	CumMax([[3, 1, 4], [6, 5, 2]], -1) = [[3, 3, 4], [6, 6, 6]]
+//	CumMax([[3, 1, 4], [6, 5, 2]], 0) = [[3, 1, 4], [6, 5, 4]]
+//	CumMax([3, 1, 4], 0, &CumSumOptions{Exclusive: true}) = [-Inf, 3, 3]
+//	CumMax([3, 1, 4], 0, &CumSumOptions{Reverse: true}) = [4, 4, 4]
+//	CumMax([3, 1, 4, 2], 0, &CumSumOptions{Exclusive: true, Reverse: true}) = [4, 4, 2, -Inf]
+func CumMax(x *Node, axis int, options ...*CumSumOptions) *Node {
+	if len(options) > 1 {
+		exceptions.Panicf("CumMax takes at most one CumSumOptions, but %d were provided", len(options))
+	}
+	var opt CumSumOptions
+	if len(options) == 1 && options[0] != nil {
+		opt = *options[0]
+	}
+	adjustedAxis := MustAdjustAxis(axis, x)
+
+	var node *Node
+	err := exceptions.TryCatch[error](func() {
+		node = backendCumMax(x, adjustedAxis, opt)
+	})
+	if err == nil {
+		return node
+	}
+	if !compute.IsNotImplemented(err) {
+		panic(err)
+	}
+
+	// Fallback to decomposed implementation (using MaxPool).
+	return cumMaxDecomposed(x, adjustedAxis, opt)
+}
+
+func cumMaxDecomposed(x *Node, axis int, options CumSumOptions) *Node {
+	g := x.Graph()
+	cur := x
+	if options.Reverse {
+		cur = Reverse(cur, axis)
+	}
+
+	dim := cur.Shape().Dimensions[axis]
+	if dim == 0 {
+		return cur
+	}
+	windowSizes := xslices.SliceWithValue(cur.Rank(), 1)
+	windowSizes[axis] = dim
+	paddings := make([][2]int, cur.Rank())
+	paddings[axis][0] = windowSizes[axis] - 1
+	inclusive := MaxPool(cur).FullShape().WindowPerAxis(windowSizes...).PaddingPerDim(paddings).Strides(1).Done()
+
+	res := inclusive
+	if options.Exclusive {
+		padAxes := make([]compute.PadAxis, cur.Rank())
+		padAxes[axis] = compute.PadAxis{Start: 1}
+		lowest := lowestForDType(g, cur.DType())
+		padded := Pad(inclusive, lowest, padAxes...)
+		res = SliceAxis(padded, axis, AxisRange(0, dim))
+	}
+	if options.Reverse {
+		res = Reverse(res, axis)
+	}
+	return res
+}
+
 // CumSum returns the cumulative sum along the given axis.
 //
 // Examples:
