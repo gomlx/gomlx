@@ -2,6 +2,11 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-11-01:
+  - Optimized memory usage for inference by allowing variables to be embedded and shared as backend constants:
+    - Added `model.Exec.DonateStore()` to donate a `Store` to an `Exec` for inference: variables used by the computation graph are converted into backend constants (when supported by `Capabilities.SharedConstants`) and their host/device `Tensor` values in the `Store` (as well as unused variables) are immediately finalized to minimize memory usage.
+    - Added support for backend `Capabilities.SharedConstants` (`graph.SharedConstant`, `Node.BackendValue`, `graph.FinalizeConstantValue`), allowing cached backend constants (and any derived packed weight caches) in `model.Variable` to be shared and reused across dynamic graph recompilations (e.g., for different input shapes) within the same backend.
+
 - 2026-10-31:
   - Added `CumMax` in `core/graph` (reusing `CumSumOptions` for `Exclusive` and `Reverse`), with `MaxPool`-based fallback (`cumMaxDecomposed`) for backends without native `OpTypeCumMax` support and reverse-mode autodiff support (`cumMaxVJP`).
 
