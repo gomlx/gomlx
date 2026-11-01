@@ -53,6 +53,11 @@ type Store struct {
 
 	// variablesAsConst embeds variable values as Const graph nodes instead of graph Parameters.
 	variablesAsConst bool
+
+	// donated indicates that the Store has been donated to an Exec for inference.
+	// Variable values are converted into shared backend constants and their host/device Tensor
+	// copies in the Store are finalized.
+	donated bool
 }
 
 // Loader can be implemented by any library providing loading of variables for
@@ -111,6 +116,11 @@ func (s *Store) WithVariableAsConst(enabled bool) *Store {
 // VariablesAsConst returns whether variables are embedded as Constant nodes in computation graphs.
 func (s *Store) VariablesAsConst() bool {
 	return s.variablesAsConst
+}
+
+// IsDonated returns whether the Store has been donated to an Exec for inference.
+func (s *Store) IsDonated() bool {
+	return s != nil && s.donated
 }
 
 // RootScope returns a new Scope for the given Store.

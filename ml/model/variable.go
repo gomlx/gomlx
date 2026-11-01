@@ -3,6 +3,7 @@
 package model
 
 import (
+	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
@@ -55,6 +56,15 @@ type Variable struct {
 	// shardingSpec defines how the variable is split in a distributed model.
 	// If nil, the variable is considered replicated (or local).
 	shardingSpec *distributed.ShardingSpec
+
+	// sharedConstValue holds the cached backend constant compute.Value for backends
+	// that support Capabilities.SharedConstants across graphs.
+	sharedConstValue   compute.Value
+	sharedConstBackend compute.Backend
+
+	// donatedAsConst is set to true once the variable's value has been donated as a
+	// backend constant (via Exec.DonateStore) and its Tensor value has been finalized.
+	donatedAsConst bool
 }
 
 // CloneToStore Variable.
@@ -150,12 +160,37 @@ func (v *Variable) AssertValid() {
 	}
 }
 
+// clearSharedConst drops the Variable's reference to any cached shared backend constant
+// without destroying the underlying ConstantData (which may still be referenced by a live compiled Executable).
+func (v *Variable) clearSharedConst() {
+	if v == nil {
+		return
+	}
+	v.sharedConstValue = nil
+	v.sharedConstBackend = nil
+}
+
+// finalizeSharedConst releases any cached shared backend constant associated with v.
+func (v *Variable) finalizeSharedConst() {
+	if v == nil {
+		return
+	}
+	if v.sharedConstValue != nil {
+		graph.FinalizeConstantValue(v.sharedConstValue)
+		v.sharedConstValue = nil
+		v.sharedConstBackend = nil
+	}
+	v.donatedAsConst = false
+}
+
 // Reset sets the variable value to nil while preserving the shape.
 //
 // If you intend to reuse the variable, remember to mark the scope as needing initialization.
 //
 // This will force to be variable to be reinitialized the next time a graph using the variable is executed.
 func (v *Variable) Reset() error {
+	v.clearSharedConst()
+	v.donatedAsConst = false
 	if v.value != nil {
 		// Don't wait for the GC to free the memory from the accelerator.
 		err := v.value.FinalizeAll()
@@ -298,6 +333,11 @@ func (v *Variable) Value() (*tensors.Tensor, error) {
 	if err := v.CheckValid(); err != nil {
 		return nil, err
 	}
+	if v.donatedAsConst {
+		return nil, errors.Errorf(
+			"variable %q was donated as a backend constant for inference and its value can no longer be read",
+			v.Path())
+	}
 
 	if v.value != nil {
 		// Value is already there.
@@ -317,7 +357,7 @@ func (v *Variable) Value() (*tensors.Tensor, error) {
 // HasValue returns true if the variable has a value set: if the variable has not yet
 // been initialized or if it has been finalized, this returns false.
 func (v *Variable) HasValue() bool {
-	return v.value != nil || v.distValue != nil
+	return v.value != nil || v.distValue != nil || v.sharedConstValue != nil
 }
 
 // SetValue updates the tensor holding the variable value and marks it as no longer needing initialization.
@@ -370,6 +410,8 @@ func (v *Variable) SetValuePreservingOld(value *tensors.Tensor) error {
 	if err := v.CheckValid(); err != nil {
 		return err
 	}
+	v.clearSharedConst()
+	v.donatedAsConst = false
 	v.value = value
 	v.distValue = nil
 	if value != nil {
@@ -499,8 +541,8 @@ func (v *Variable) ValueGraph(nodeOrGraph graph.GraphProvider) *Node {
 // It's a computation graph building function, and panics on errors.
 func (v *Variable) SetNodeValue(value *Node) {
 	v.AssertValid()
-	if v.store != nil && v.store.variablesAsConst {
-		exceptions.Panicf("cannot call SetNodeValue on variable %q when Store.WithVariableAsConst is set to true (variables are embedded as constant graph nodes and cannot be mutated in the graph)", v.Path())
+	if v.store != nil && (v.store.variablesAsConst || v.store.donated) {
+		exceptions.Panicf("cannot call SetNodeValue on variable %q when Store.WithVariableAsConst or Exec.DonateStore is enabled (variables are embedded as constant graph nodes and cannot be mutated in the graph)", v.Path())
 	}
 	g := value.Graph()
 	g.AssertValid()
@@ -540,12 +582,14 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		return nodes.paramNode, nil
 	}
 
+	backend := g.Backend()
+	canShareConst := backend != nil && backend.Capabilities().SharedConstants
 	useConst := false
 	if v.store != nil {
 		if v.store.variablesAsConst {
 			useConst = true
-		} else if backend := g.Backend(); backend != nil && backend.Capabilities().PreferConstantsForVariables {
-			// If backend prefers constants for variables, embed as constant if NOT in training mode
+		} else if v.store.donated && backend != nil && (backend.Capabilities().PreferConstantsForVariables || canShareConst) {
+			// When Store is donated to Exec for inference, embed as constant if NOT in training mode
 			// and the variable already has a value initialized.
 			if !v.store.IsTraining(g) && v.HasValue() {
 				useConst = true
@@ -557,14 +601,61 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		if !v.HasValue() {
 			return nil, errors.Errorf("variable %q has no value initialized when embedding as constant graph node", v.Path())
 		}
-		val, err := v.Value()
-		if err != nil {
-			return nil, errors.WithMessagef(err, "failed to get value of variable %q for graph Constant node", v.Path())
+		var constNode *Node
+		if canShareConst && v.sharedConstValue != nil && v.sharedConstBackend == backend {
+			constNode = graph.SharedConstant(g, v.sharedConstValue)
+		} else {
+			val, err := v.Value()
+			if err != nil {
+				return nil, errors.WithMessagef(err, "failed to get value of variable %q for graph Constant node", v.Path())
+			}
+			constNode = graph.ConstTensor(g, val)
+			if canShareConst {
+				v.sharedConstValue = constNode.BackendValue()
+				v.sharedConstBackend = backend
+				if v.store != nil && v.store.donated {
+					// Immediately release the Tensor value on host/device; only the shared backend
+					// constant (or its packed cache) will be kept.
+					if v.value != nil {
+						_ = v.value.FinalizeAll()
+						v.value = nil
+					}
+					if v.distValue != nil {
+						_ = v.distValue.FinalizeAll()
+						v.distValue = nil
+					}
+					v.donatedAsConst = true
+				}
+			}
 		}
-		constNode := graph.ConstTensor(g, val)
 		nodes = &variableNodes{variable: v, valueNode: constNode, paramNode: constNode}
 		gs.setVariableNodes(v, nodes)
 		return constNode, nil
+	}
+
+	// If the Store was donated on a backend that does not support SharedConstants, still mark
+	// the variable as donated once used by the graph so Value() cannot be mutated/read externally.
+	if v.store != nil && v.store.donated && !v.store.IsTraining(g) && v.HasValue() {
+		paramName := v.Path()
+		var paramNode *Node
+		strategy := g.DistributedStrategy()
+		switch strategy {
+		case distributed.SPMD:
+			if v.shardingSpec == nil {
+				v.shardingSpec = v.store.defaultShardingSpec
+			}
+			paramNode = graph.ShardedParameter(g, paramName, v.ShardShape(), v.shardingSpec)
+		case distributed.AutoSharding:
+			if v.shardingSpec == nil {
+				v.shardingSpec = v.store.defaultShardingSpec
+			}
+			paramNode = graph.ShardedParameter(g, paramName, v.shape, v.shardingSpec)
+		default:
+			paramNode = graph.Parameter(g, paramName, v.shape)
+		}
+		nodes = &variableNodes{variable: v, valueNode: paramNode, paramNode: paramNode}
+		gs.setVariableNodes(v, nodes)
+		return paramNode, nil
 	}
 
 	paramName := v.Path()
@@ -617,6 +708,8 @@ func (v *Variable) Finalize() error {
 		// Already finalized.
 		return nil
 	}
+	v.clearSharedConst()
+	v.donatedAsConst = false
 	var firstErr error
 	if v.value != nil {
 		firstErr = v.value.FinalizeAll()

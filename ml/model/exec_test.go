@@ -621,5 +621,114 @@ func TestExecFinalize(t *testing.T) {
 	})
 }
 
+func TestExecDonateStore(t *testing.T) {
+	simpleBackend, err := gobackend.New("")
+	require.NoError(t, err)
+	defer simpleBackend.Finalize()
+
+	t.Run("MultiShapeRecompilationAndUnusedCleanup", func(t *testing.T) {
+		store := model.NewStore()
+		const K = 32
+		const N = 64
+		wData := make([]float32, K*N)
+		for i := range wData {
+			wData[i] = 1.0
+		}
+		wVar, err := store.CreateVariable("/dense/weights", tensors.FromFlatDataAndDimensions(wData, K, N))
+		require.NoError(t, err)
+		bData := make([]float32, N)
+		for i := range bData {
+			bData[i] = 2.0
+		}
+		bVar, err := store.CreateVariable("/dense/biases", tensors.FromFlatDataAndDimensions(bData, N))
+		require.NoError(t, err)
+		unusedVar, err := store.CreateVariable("/unused/table", tensors.FromFlatDataAndDimensions(make([]float32, 128), 128))
+		require.NoError(t, err)
+
+		exec, err := model.NewExec(simpleBackend, store, func(scope *model.Scope, x *Node) *Node {
+			return denseWithBias(scope.In("dense"), x, N)
+		})
+		require.NoError(t, err)
+		exec.DonateStore()
+		defer exec.Finalize()
+
+		require.True(t, store.IsDonated())
+
+		// Run 1: batch = 4
+		x1 := tensors.FromFlatDataAndDimensions(make([]float32, 4*K), 4, K)
+		out1, err := exec.Exec(x1)
+		require.NoError(t, err)
+		out1Slice := out1[0].Value().([][]float32)
+		require.Equal(t, float32(2.0), out1Slice[0][0])
+
+		// Both used and unused variables must have had their host tensors released and Value() blocked.
+		_, err = wVar.Value()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "donated")
+
+		_, err = bVar.Value()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "donated")
+
+		_, err = unusedVar.Value()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "donated")
+
+		// Run 2: batch = 8 (triggers new graph compilation + LRU eviction of batch=4 graph, reusing packed weights!)
+		x2Data := make([]float32, 8*K)
+		for i := range x2Data {
+			x2Data[i] = 1.0
+		}
+		x2 := tensors.FromFlatDataAndDimensions(x2Data, 8, K)
+		out2, err := exec.Exec(x2)
+		require.NoError(t, err)
+		out2Slice := out2[0].Value().([][]float32)
+		require.Equal(t, float32(K+2), out2Slice[0][0])
+
+		// Run 3: batch = 4 again (recompiles batch=4 graph from the already-packed shared constant!)
+		x3Data := make([]float32, 4*K)
+		for i := range x3Data {
+			x3Data[i] = 1.0
+		}
+		x3 := tensors.FromFlatDataAndDimensions(x3Data, 4, K)
+		out3, err := exec.Exec(x3)
+		require.NoError(t, err)
+		out3Slice := out3[0].Value().([][]float32)
+		require.Equal(t, float32(K+2), out3Slice[0][0])
+	})
+
+	t.Run("IncompatibleSubgraphAcrossCompilationsError", func(t *testing.T) {
+		store := model.NewStore()
+		const K = 32
+		var err error
+		_, err = store.CreateVariable("/w", tensors.FromFlatDataAndDimensions(make([]float32, K*K), K, K))
+		require.NoError(t, err)
+
+		exec, err := model.NewExec(simpleBackend, store, func(scope *model.Scope, x *Node) *Node {
+			g := x.Graph()
+			w := scope.VariableWithShape("w", shapes.Make(dtypes.Float32, K, K)).NodeValue(g)
+			// Use w directly when batch==2, but Transpose(w) when batch==4.
+			if x.Shape().Dimensions[0] == 4 {
+				w = Transpose(w, 1, 0)
+			}
+			return MatMul(x, w)
+		})
+		require.NoError(t, err)
+		exec.DonateStore()
+		defer exec.Finalize()
+
+		// First compilation (batch=2) succeeds and optimizes /w for direct Dot.
+		x1 := tensors.FromFlatDataAndDimensions(make([]float32, 2*K), 2, K)
+		_, err = exec.Exec(x1)
+		require.NoError(t, err)
+
+		// Second compilation (batch=4) tries to compile /w with Transpose(w), which must return a clear error.
+		x2 := tensors.FromFlatDataAndDimensions(make([]float32, 4*K), 4, K)
+		_, err = exec.Exec(x2)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "was optimized in a first compilation")
+	})
+}
+
 
 

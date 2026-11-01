@@ -128,6 +128,10 @@ func (e *Exec) buildGraphFn() graph.CanonicalExecGraphFn {
 			if v.ChangedInGraph(g) {
 				changedVars = append(changedVars, v)
 				allValues = append(allValues, v.NodeValue(g))
+			} else if e.store.donated && !e.isInitializeVariablesExec && !v.InUseByGraph(g) && !v.donatedAsConst {
+				// Release variables in a donated Store that are not used by the computation graph.
+				_ = v.Reset()
+				v.donatedAsConst = true
 			}
 		}
 		{
@@ -161,6 +165,16 @@ func (e *Exec) Finalize() {
 	defer e.muInFlight.Unlock()
 
 	e.exec.Finalize()
+	if e.store != nil {
+		for _, v := range e.store.variables {
+			if v != nil && v.sharedConstBackend == e.backend {
+				v.finalizeSharedConst()
+			}
+		}
+		if e.store.donated {
+			e.store.Finalize()
+		}
+	}
 }
 
 // setSideParams is used by computation.Exec.SetSideParamsHook to set up
@@ -469,6 +483,26 @@ func (e *Exec) Store() *Store {
 // SetStore associates the given Store with the Exec object.
 func (e *Exec) SetStore(store *Store) *Exec {
 	e.store = store
+	return e
+}
+
+// DonateStore donates the associated Store to this Exec for inference.
+//
+// When donated:
+//   - Variables used by the computation graph are converted into backend constants (when supported
+//     by the backend via Capabilities.SharedConstants) and their host/device Tensor values in the
+//     Store are immediately finalized to minimize memory usage.
+//   - Cached backend constants (and any derived packed weight caches) are stored in the Variable
+//     and reused across dynamic graph recompilations (e.g. for different input shapes) within this Exec.
+//   - Variables in the Store that are not used by the computation graph are also finalized after
+//     the graph is built.
+//   - Once donated, Variable.Value() can no longer be read and will return an error, and variables
+//     cannot be modified in the graph via Variable.SetNodeValue().
+//   - When Exec.Finalize() is called, the donated Store and all cached backend constants are finalized.
+func (e *Exec) DonateStore() *Exec {
+	if e.store != nil {
+		e.store.donated = true
+	}
 	return e
 }
 

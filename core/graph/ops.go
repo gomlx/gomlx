@@ -250,6 +250,43 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 	return
 }
 
+// SharedConstant creates a Constant node in g reusing a backend constant compute.Value
+// created in another graph on the same backend (requires Backend.Capabilities().SharedConstants).
+func SharedConstant(g *Graph, val compute.Value) *Node {
+	g.AssertBuilding()
+	shape := mustNoError(g.builder.OpShape(val))
+	nodeInputs := &nodeInputsConstant{
+		shape: shape,
+	}
+	node := &Node{
+		graph:        g,
+		outputOps:    []compute.Value{val},
+		outputShapes: []shapes.Shape{shape},
+		inputs:       nodeInputs,
+	}
+	g.registerNode(node)
+	return node
+}
+
+// BackendValue returns the underlying compute.Value for a single-output Node.
+func (n *Node) BackendValue() compute.Value {
+	if n == nil || len(n.outputOps) != 1 {
+		return nil
+	}
+	return n.outputOps[0]
+}
+
+// FinalizeConstantValue releases backend resources held by a shared constant compute.Value
+// if the backend value implements Finalize().
+func FinalizeConstantValue(val compute.Value) {
+	if val == nil {
+		return
+	}
+	if finalizer, ok := val.(interface{ Finalize() }); ok {
+		finalizer.Finalize()
+	}
+}
+
 // ConstCachedTensor returns a constant node for the tensor t.
 // If it's the first time the tensor is used in this graph, a new node is created.
 // Otherwise, a previously created node is reused.
