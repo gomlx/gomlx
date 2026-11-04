@@ -67,11 +67,10 @@ and error messages are useful (always with a stack-trace) and try to make it eas
   - **Selective targeting & multi-adapter**: Target specific projections (`-set=peft_target_modules=query,value`), freeze layers (`peft_adapter=off`), and store or switch multiple named adapters in the same checkpoint. See the [PEFT guide](docs/peft.md).
 - **🚀 NEW 🚀** New `onnx` backend, based on ONNX Runtime. It has support for "onnx:cpu", "onnx:cuda" (CUDA) and "onnx:rocm" versions support. For WebAssembly (WASM) it supports "onnx:wasm" (CPU), "webgpu" (GPU) and "webnn" (experimental).
   - Includes saving a model to a `.onnx` file, that can be served with other inference systems that support ONNX (e.g. [KnightAnalytics Hugot](https://github.com/knights-analytics/hugot)).
-- **🚀 NEW 🚀** The "go" backend has been greatly optimized, **closely matching "xla:cpu" speeds for FNN models** (try out the [UCI-Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html)).
-  - The main execution engine has been updated to minimize synchronization costs;
-  - Improved buffer management;
-  - Updated and greatly broadened SIMD suport -- where possible using go1.27 portable `simd` (so should work for any platforms).
-  - Matrix multiplications are still very architecture dependent, hence only AVX2 and AVX512 were optimized so far. the microkernel was written in assembly due to some pending go `simd` issues ([#80829](https://github.com/golang/go/issues/80829) and [#78753](https://github.com/golang/go/issues/78753)). **[Consider donating for Apple hardware](https://github.com/gomlx/gomlx?tab=readme-ov-file#-support-the-project)**, I'd love to add support for Neon SIMD/assembly optimized kernels!
+- **🚀 NEW 🚀** The "go" backend has been greatly optimized, **matching or exceeding "xla:cpu" speeds on many FNN and Transformer workloads** (try out the [UCI-Adult/Census model](https://gomlx.github.io/gomlx/notebooks/uci-adult.html)):
+  - **Hierarchical 3-Level Parallel Scheduler**: Replaced `workerspool` with a persistent, deadlock-free scheduler prioritizing `Inter-Call` > `Intra-Op` > `Inter-Op` parallelism with dynamic graph execution, Guided Self-Scheduling (GSS), and $2 \times W$ proportional chunking to minimize synchronization overhead and maximize cache locality.
+  - **Improved Buffer & Constant Memory Management**: Shared constants across compilations, exact-sized non-pooled constant allocations, and one-time GEMM weight panel pre-packing with automatic raw buffer eviction.
+  - **Broadened SIMD Support (AMD64 & ARM64)**: Uses Go 1.27 portable `simd` across platforms alongside handwritten assembly microkernels for **AMD64** (`AVX2` and `AVX-512`) and **ARM64** (`NEON` and Apple `SME` on Darwin and Linux)—reaching up to **2.51 TFlops/s** on Apple M6 (**20×–25× faster** than `nosimd`) and outperforming `xla:cpu` by **1.38×** on `all-MiniLM-L6-v2` sentence encoding.
 - **🚀 NEW 🚀** Greatly improved DynamicShape support, with new ops to support it. This enabled creating ONNX models
   with variable-sized inputs, from GoMLX trained (or fine-tuned) models.
 
@@ -144,19 +143,18 @@ different implementations (more planned in the future):
       For linux/amd64, linux/arm64 (CPU) and darwin/arm64 (CPU) for now. The Go API is defined under the [go-xla](https://github.com/gomlx/go-xla) project,
       in `github.com/gomlx/go-xla/compute/xla/autoinstall`. It is included by default.
    2. **`go`**: a pure Go backend (no C/C++ dependencies), implemented in `github.com/gomlx/compute/gobackend`, but included by default.
-      It is slower than XLA but very portable (compiles to WASM/Windows/etc.).
-      * Some SIMD support: for AVX-2/AVX-512 for MatMul (not other operations yet). 
-        See [SIMD for Go](https://github.com/golang/go/issues/73787) and [go-highway](https://github.com/ajroetker/go-highway)(under development); 
-      * **🚀 NEW 🚀**: added support for some **fused operations** and for some types of quantization, greatly improving performance
-        in some cases.
+      It is slower than XLA for large training workloads, but very portable (compiles to WASM/Windows/etc.) and fast on CPU.
+      * **SIMD support**: portable Go 1.27 `simd` vectorization plus handwritten assembly microkernels for **AMD64** (`AVX2`, `AVX-512`) and **ARM64** (`NEON`, Apple `SME` on Darwin and Linux) across `DotGeneral`/`FusedDense`, `FusedScaledDotProductAttention`, reductions, binary broadcasts, and half-precision (`Float16`/`BFloat16`).
+      * **🚀 NEW 🚀**: hierarchical 3-level parallel scheduler (`Inter-Call` > `Intra-Op` > `Inter-Op`) with asymmetric CPU cluster awareness (Super, Performance, and Efficiency cores), **fused operations**, constant weight panel caching, and quantization support.
       * See also [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
-      * Dynamic shape support planned (maybe mid-2026).
+      * Supports dynamic shapes (experimental).
    3. **🚀 NEW 🚀** **[onnx](https://github.com/gomlx/compute-onnx)**: A backend that uses ONNX Runtime to execute GoMLX graphs: for Linux/Windows AMD64. Build with tag `--tags=onnx` to get it imported by `github.com/gomlx/gomlx/backends/default`, or import it directly from `github.com/gomlx/compute-onnx`.
 
 ### Highlights
 
 Some selected highlights:
 
+* **🚀 NEW 🚀**: **ARM64 NEON & Apple SME SIMD Support + Improved Parallel Scheduler** in the pure Go backend (`gobackend`): handwritten NEON and `FEAT_SME` microkernels for Darwin and Linux ARM64 (reaching up to **2.51 TFlops/s** on Apple Silicon), asymmetric CPU cluster scheduling, and a hierarchical 3-level parallel scheduler (`Inter-Call` > `Intra-Op` > `Inter-Op`) with constant weight panel caching.
 * **🚀 NEW 🚀**: **Gradient checkpointing**: trade-off memory usage for recomputation when training large models, with a very simple API.
 * **🚀 NEW 🚀**: Save models to a `.onnx` file, that can be used with ONNX Runtime. See example in [UCI-Adult demo](https://github.com/gomlx/gomlx/blob/main/examples/adult/demo/save_onnx.go).
 * **Parameter-efficient fine-tuning (PEFT / LoRA)**: Zero-code-change fine-tuning via post-linear hooks across `FNN`, `Dense`, and `MultiHeadAttention`. Configure via hyperparameters (`peft_adapter`, `peft_rank`, `peft_target_modules`), with automatic base-weight freezing and multi-adapter support. See the [PEFT guide](docs/peft.md).
@@ -351,9 +349,12 @@ without linking GoMLX -- it will save a little executable size.
       One can install PJRTs built for NVIDIA GPUs (there is an installation script for that), there is also one for ROCm (not tested by the author),
       for TPU (Google Cloud) and reports of PJRTs being built to even new accelerators (e.g.: [TensTorrent XLA](https://github.com/tenstorrent/tt-xla))
   - For the native Go backend:
-    - `GOMLX_SIMD_AVX512`: set to `0` or `false` to disable AVX512 SIMD implementation in the native Go backend. The default is enabled if AVX512 is present.
-    - `GOMLX_SIMD_AVX2`: set to `0` or `false` to disable AVX2 SIMD implementation in the native Go backend. The default is enabled if AVX2 is present.
-    - `GOMLX_FUSION`: if set to `0`, `false` to disable fused operations in the native Go backend. The default is enabled.
+    - `GOMLX_GO_SIMD_AVX512`: set to `0` or `false` to disable AVX512 SIMD implementation in the native Go backend. The default is enabled if AVX512 is present.
+    - `GOMLX_GO_SIMD_AVX2`: set to `0` or `false` to disable AVX2 SIMD implementation in the native Go backend. The default is enabled if AVX2 is present.
+    - `GOMLX_GO_SIMD_NEON`: set to `0` or `false` to disable ARM64 NEON SIMD implementation in the native Go backend. The default is enabled if NEON is present.
+    - `GOMLX_GO_SIMD_SVE`: set to `0` or `false` to disable ARM64 SVE SIMD implementation in the native Go backend. The default is enabled if SVE is present.
+    - `GOMLX_GO_SIMD_SME`: set to `0` or `false` to disable ARM64 Scalable Matrix Extension (`FEAT_SME`) implementation in the native Go backend. The default is enabled if SME is present.
+    - `GOMLX_GO_FUSION`: if set to `0`, `false` to disable fused operations in the native Go backend. The default is enabled.
   - For the [XLA backend](https://github.com/gomlx/go-xla/tree/main/compute/xla)
     - `PJRT_PLUGIN_LIBRARY_PATH`: the underlying XLA backend uses this variable as an extra directory to search for plugin locations.
       It searches for the systems library paths (`$LD_LIBRARY_PATH`, `/etc/ld.so.conf`), the default `/usr/local/lib/gomlx/pjrt` and `$PJRT_PLUGIN_LIBRARY_PATH` if set.
