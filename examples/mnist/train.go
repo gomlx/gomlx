@@ -120,7 +120,7 @@ func NewDatasetsConfigurationFromScope(scope *model.Scope, dataDir string) *Data
 }
 
 // Train based on configuration and flags.
-func Train(store *model.Store, dataDir, checkpointPath string, paramsSet []string) error {
+func Train(store *model.Store, dataDir, checkpointPath string, report bool, paramsSet []string) error {
 	scope := store.RootScope()
 	dataDir = fsutil.MustReplaceTildeInDir(dataDir)
 	if !fsutil.MustFileExists(dataDir) {
@@ -241,11 +241,13 @@ func Train(store *model.Store, dataDir, checkpointPath string, paramsSet []strin
 			"to current global step.\n", numTrainSteps)
 	}
 	// Finally, print an evaluation on train and test datasets.
-	fmt.Println()
-	if err = commandline.ReportEval(trainer, trainEvalDS, validationEvalDS); err != nil {
-		return errors.WithMessagef(err, "while generating report with evaluation of trained %s", modelType)
+	if report {
+		fmt.Println()
+		if err = commandline.ReportEval(trainer, trainEvalDS, validationEvalDS); err != nil {
+			return errors.WithMessagef(err, "while generating report with evaluation of trained %s", modelType)
+		}
+		fmt.Println()
 	}
-	fmt.Println()
 	return nil
 }
 

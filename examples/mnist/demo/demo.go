@@ -40,6 +40,7 @@ var (
 	flagDataDir    = flag.String("data", "~/work/mnist", "Directory to cache downloaded dataset.")
 	flagCheckpoint = flag.String("checkpoint", "",
 		"Checkpoint directory from/to where to load/save the trained model. Path is relative to --data.")
+	flagReport = flag.Bool("report", true, "Flag to report evaluation on the validation and training datasets at the end.")
 )
 
 func main() {
@@ -58,7 +59,7 @@ func main() {
 		klog.Infof("Data downloaded in %s", *flagDataDir)
 	}
 	if *flagTrain {
-		if err := mnist.Train(store, *flagDataDir, *flagCheckpoint, paramsSet); err != nil {
+		if err := mnist.Train(store, *flagDataDir, *flagCheckpoint, *flagReport, paramsSet); err != nil {
 			klog.Fatal(err)
 		}
 	}

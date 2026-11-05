@@ -4,6 +4,8 @@ package dataset
 
 import (
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
@@ -47,7 +49,11 @@ func Normalization(backend compute.Backend, ds train.Dataset, inputsIndex int, i
 		batchSum := graph.ReduceAndKeep(batch, graph.ReduceSum, reduceAxes...)
 		reducedCount := batch.Shape().Size() / batchSum.Shape().Size()
 
-		countVar := scope.VariableWithValue("count", 0.0)
+		countDType := batch.DType()
+		if countDType.Bits() < 32 {
+			countDType = dtypes.Float32
+		}
+		countVar := scope.VariableWithValue("count", shapes.CastAsDType(0.0, countDType))
 		countVar.SetNodeValue(graph.AddScalar(countVar.NodeValue(g), float64(reducedCount)))
 
 		sumVar := scope.VariableWithShape("sum", batchSum.Shape())

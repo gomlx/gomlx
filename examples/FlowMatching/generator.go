@@ -150,7 +150,11 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 				endTime = 1.0 // Avoiding numeric issues.
 			}
 			buf := must.M1(DonateTensorBuffer(imagesBatch, backend, 0))
-			imagesBatch = must.M1(g.stepExec.Call1(buf, g.flowerIds, startTime, endTime))
+			dtype := g.config.DType
+			imagesBatch = must.M1(g.stepExec.Call1(
+				buf, g.flowerIds,
+				shapes.CastAsDType(startTime, dtype),
+				shapes.CastAsDType(endTime, dtype)))
 		}
 		if (n > 0 && step%n == 0) || step == g.numSteps-1 {
 			times = append(times, endTime)
