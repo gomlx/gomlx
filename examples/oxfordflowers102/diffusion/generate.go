@@ -434,7 +434,12 @@ func (g *ImagesGenerator) GenerateEveryN(n int) (predictedImages []*tensors.Tens
 	for step := 0; step < g.numDiffusionSteps; step++ {
 		diffusionTime := 1.0 - float64(step)*stepSize
 		nextDiffusionTime := math.Max(diffusionTime-stepSize, 0)
-		parts := g.diffusionStepExec.MustCall(noisyImages, diffusionTime, nextDiffusionTime, g.flowerIds)
+		dtype := g.config.DType
+		parts := g.diffusionStepExec.MustCall(
+			noisyImages,
+			shapes.CastAsDType(diffusionTime, dtype),
+			shapes.CastAsDType(nextDiffusionTime, dtype),
+			g.flowerIds)
 		if imagesBatch != nil {
 			imagesBatch.MustFinalizeAll() // Immediate release of (GPU) memory for intermediary results.
 		}
