@@ -66,6 +66,8 @@ github.com/gomlx/compute-onnx v0.1.22 h1:DDgzBwq5WOQI4+v8054oAj/roHQzqU91midwvSz
 github.com/gomlx/compute-onnx v0.1.22/go.mod h1:oMN35nBTS5gb3XPWBgCMXORXESCzKA0eL9IiuBEePzo=
 github.com/gomlx/exceptions v0.0.3 h1:HKnTgEjj4jlmhr8zVFkTP9qmV1ey7ypYYosQ8GzXWuM=
 github.com/gomlx/exceptions v0.0.3/go.mod h1:uHL0TQwJ0xaV2/snJOJV6hSE4yRmhhfymuYgNredGxU=
+github.com/gomlx/go-darwinml v0.1.0 h1:Bd5xohAjgiNHeAnqizeHTsIxQtCO2DfLr6iJTWTqWMs=
+github.com/gomlx/go-darwinml v0.1.0/go.mod h1:JupKnKa1DyRBpMTztk5SKG9rqvF1dED/ikuK6KzSna8=
 github.com/gomlx/go-xla v0.4.23 h1:OK6OaQQwUZGNI6Yp+0Cr3doo/XV8cBW18KLXXGWnFL4=
 github.com/gomlx/go-xla v0.4.23/go.mod h1:ivJjRtuxsgqfYAKrZB8WcWYIedu8MWgA3obzUQW/U9c=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
