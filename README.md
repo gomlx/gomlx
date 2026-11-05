@@ -61,6 +61,10 @@ and error messages are useful (always with a stack-trace) and try to make it eas
 
 ## News
 
+- **🚀 NEW 🚀** **Apple Silicon `"mps"` GPU Backend** ([`github.com/gomlx/go-darwinml`](https://github.com/gomlx/go-darwinml)):
+  - Native macOS GPU acceleration using Apple's Metal Performance Shaders Graph (`MPSGraph`), with zero-copy unified memory shared buffers (`MTLBuffer`) and mixed-scope ping-pong buffer pooling for training.
+  - Automatically included in `github.com/gomlx/gomlx/backends/default` on Darwin builds (select with `GOMLX_BACKEND=mps`, or exclude at build time with `-tags=nomps`).
+  - *Note*: With the new ARM64 NEON and Apple `SME` SIMD microkernels in the `"go"` backend, `"go"` is often faster than `"mps"` on Apple Silicon for many small-to-medium workloads.
 - **🚀 NEW 🚀** **Parameter-Efficient Fine-Tuning (PEFT / LoRA)** ([`ml/layers/peft`](ml/layers/peft)):
   - **Zero code changes**: Simply `import _ "github.com/gomlx/gomlx/ml/layers/peft"` and set the hyperparameter (e.g. `-set=peft_adapter=my_lora;peft_rank=16`).
   - **Automatic adapter injection**: Hooks into `FNN`, `Dense`, and `MultiHeadAttention` linear layers, automatically freezing base weights and training only low-rank adapters.
@@ -127,16 +131,16 @@ on different backends to compile and execute the computation on very different
 hardware.
 
 The supporting backend package must always be included in a GoMLX program, and the
-default backends (`xla`, `go` and optionally `onnx`, see below) are included if you import:
+default backends (`xla`, `go`, `mps` on Darwin, and optionally `onnx`, see below) are included if you import:
 
 ```
 import _ "github.com/gomlx/gomlx/backends/default"
 ```
 
-At runtime, it will pick the fastest backend available to you, but you can specify which backend to use by setting the `GOMLX_BACKEND` environment variable (e.g. `export GOMLX_BACKEND=xla:cuda`, `export GOMLX_BACKEND=xla:cpu`, or `export GOMLX_BACKEND=go`).
+At runtime, it will pick the fastest backend available to you, but you can specify which backend to use by setting the `GOMLX_BACKEND` environment variable (e.g. `export GOMLX_BACKEND=xla:cuda`, `export GOMLX_BACKEND=xla:cpu`, `export GOMLX_BACKEND=mps`, or `export GOMLX_BACKEND=go`).
 
 There is a common `compute.Backend` interface defined in
-[`github.com/gomlx/compute`](https://github.com/gomlx/compute). And there are 3
+[`github.com/gomlx/compute`](https://github.com/gomlx/compute). And there are 4
 different implementations (more planned in the future):
 
    1. **`xla`**: [OpenXLA](https://github.com/openxla/xla) backend for CPUs, GPUs, and TPUs. State-of-the-art as these things go, but only static-shape.
@@ -148,7 +152,8 @@ different implementations (more planned in the future):
       * **🚀 NEW 🚀**: hierarchical 3-level parallel scheduler (`Inter-Call` > `Intra-Op` > `Inter-Op`) with asymmetric CPU cluster awareness (Super, Performance, and Efficiency cores), **fused operations**, constant weight panel caching, and quantization support.
       * See also [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
       * Supports dynamic shapes (experimental).
-   3. **🚀 NEW 🚀** **[onnx](https://github.com/gomlx/compute-onnx)**: A backend that uses ONNX Runtime to execute GoMLX graphs: for Linux/Windows AMD64. Build with tag `--tags=onnx` to get it imported by `github.com/gomlx/gomlx/backends/default`, or import it directly from `github.com/gomlx/compute-onnx`.
+   3. **🚀 NEW 🚀** **[`mps`](https://github.com/gomlx/go-darwinml)**: Apple Silicon GPU backend for Darwin (macOS) using Apple's Metal Performance Shaders Graph (`MPSGraph`), implemented in `github.com/gomlx/go-darwinml/compute/mps` and included by default on Darwin builds (can be excluded with `-tags=nomps`). Note that with the ARM64 `NEON` and Apple `SME` SIMD acceleration in the `"go"` backend, `"go"` is often faster than `"mps"` on Macs.
+   4. **🚀 NEW 🚀** **[onnx](https://github.com/gomlx/compute-onnx)**: A backend that uses ONNX Runtime to execute GoMLX graphs: for Linux/Windows AMD64. Build with tag `--tags=onnx` to get it imported by `github.com/gomlx/gomlx/backends/default`, or import it directly from `github.com/gomlx/compute-onnx`.
 
 ### Highlights
 
@@ -338,7 +343,8 @@ without linking GoMLX -- it will save a little executable size.
 - **What are the environment variables used by GoMLX?** 
   - `GOMLX_BACKEND`: defines the backend engine to use (if using `backends.New()`). The value is formatted as "<backend_name>[:<backend_config>]",
     with the config part being optional. Examples:
-    - `GOMLX_BACKEND=go`: Use the Go backend, the pure Go implementation that is very portable but slow.
+    - `GOMLX_BACKEND=go`: Use the Go backend, the pure Go implementation that is very portable and SIMD-accelerated.
+    - `GOMLX_BACKEND=mps`: Use the Apple Silicon Metal Performance Shaders Graph (`MPSGraph`) GPU backend on Darwin (macOS).
     - `GOMLX_BACKEND="xla"`: Use XLA for whatever the default plugin is (it uses `cuda` if available).
     - `GOMLX_BACKEND="xla:help"`: It will print out documentation on all options for the `"xla"` backend, and return
       an error.
@@ -364,10 +370,11 @@ without linking GoMLX -- it will save a little executable size.
   - `GOMLX_TENSOR_SUMMARY_SIZE`: when a tensor is printed, it only displays by default the first and last 3 elements of each row. 
     Set this to a number to change this default.
 - **What backends to include when using GoMLX?**
-  - The recommendation is to use `import _ "github.com/gomlx/gomlx/backends/default"` which will import `xla` (or the alias `stablehlo`) and
-    `go` backends. If you add `-tags=noxla` to the compiler it won't include the XLA backend.
+  - The recommendation is to use `import _ "github.com/gomlx/gomlx/backends/default"` which will import `xla` (or the alias `stablehlo`), `mps` (on Darwin), and
+    `go` backends. If you add `-tags=noxla` to the compiler it won't include the XLA backend (and `-tags=nomps` on Darwin will exclude the MPS backend).
   - `import _ "github.com/gomlx/compute/gobackend"` to include only `go` (no C++ dependencies)
   - `import _ "github.com/gomlx/go-xla/compute/xla/autoinstall"` to import only XLA (with the auto-installer).
+  - `import _ "github.com/gomlx/go-darwinml/compute/mps"` to import only the Apple Silicon MPSGraph backend on macOS.
 - **Where are AI context files for (Gemini, Claude, SKILLS.md, etc.)**
   - To prevent cluttering the root folder of the project, they are all moved to the `.agents/` directory and also included in the `.gitignore`. This way
     one can simply symbolic link whichever AI configuration file they use to the root directory of their local copy to use them.

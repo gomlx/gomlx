@@ -2,6 +2,9 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-11-05:
+  - Automatically registered the Apple Silicon MPSGraph (`"mps"`) backend (`github.com/gomlx/go-darwinml/compute/mps`) in `backends/default` on `darwin` (can be excluded with the `nomps` build tag).
+
 - 2026-11-01:
   - Optimized memory usage for inference by allowing variables to be embedded and shared as backend constants:
     - Added `model.Exec.DonateStore()` to donate a `Store` to an `Exec` for inference: variables used by the computation graph are converted into backend constants (when supported by `Capabilities.SharedConstants`) and their host/device `Tensor` values in the `Store` (as well as unused variables) are immediately finalized to minimize memory usage.
