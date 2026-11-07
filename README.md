@@ -76,8 +76,6 @@ and error messages are useful (always with a stack-trace) and try to make it eas
   - **Hierarchical 3-Level Parallel Scheduler**: Replaced `workerspool` with a persistent, deadlock-free scheduler prioritizing `Inter-Call` > `Intra-Op` > `Inter-Op` parallelism with dynamic graph execution, Guided Self-Scheduling (GSS), and $2 \times W$ proportional chunking to minimize synchronization overhead and maximize cache locality.
   - **Improved Buffer & Constant Memory Management**: Shared constants across compilations, exact-sized non-pooled constant allocations, and one-time GEMM weight panel pre-packing with automatic raw buffer eviction.
   - **Broadened SIMD Support (AMD64 & ARM64)**: Uses Go 1.27 portable `simd` across platforms alongside handwritten assembly microkernels for **AMD64** (`AVX2` and `AVX-512`) and **ARM64** (`NEON` and Apple `SME` on Darwin and Linux)—reaching up to **2.51 TFlops/s** on Apple M6 (**20×–25× faster** than `nosimd`) and outperforming `xla:cpu` by **1.38×** on `all-MiniLM-L6-v2` sentence encoding. Also added SIMD convolution implementations.
-- **🚀 NEW 🚀** Greatly improved DynamicShape support, with new ops to support it. This enabled creating ONNX models
-  with variable-sized inputs, from GoMLX trained (or fine-tuned) models.
 
 ## 🗺️ Overview
 
@@ -153,11 +151,11 @@ different implementations (more planned in the future):
       * **🚀 NEW 🚀**: hierarchical 3-level parallel scheduler (`Inter-Call` > `Intra-Op` > `Inter-Op`) with asymmetric CPU cluster awareness (Super, Performance, and Efficiency cores), **fused operations**, constant weight panel caching, and quantization support.
       * See also [GoMLX compiled to WASM to power the AI for a game of Hive](https://janpfeifer.github.io/hiveGo/www/hive/)
       * Supports dynamic shapes (experimental).
-   3. **🚀 NEW 🚀** **[`mps`](https://github.com/gomlx/go-darwinml)** and **[`mlx`](https://github.com/gomlx/go-darwinml)**: Apple Silicon GPU backends for Darwin (macOS) in [`github.com/gomlx/go-darwinml`](https://github.com/gomlx/go-darwinml), both included by default on Darwin builds (can be excluded with `-tags=nomps` or `-tags=nomlx`):
+   3. **[onnx](https://github.com/gomlx/compute-onnx)**: A backend that uses ONNX Runtime to execute GoMLX graphs: for Linux/Windows AMD64 only. Build with tag `--tags=onnx` to get it imported by `github.com/gomlx/gomlx/backends/default`, or import it directly from `github.com/gomlx/compute-onnx`. It supports CPU (`GOMLX_BACKEND="onnx:cpu"`), GPU (`"onnx:cuda"` or `"onnx:gpu"`), WASM CPU (`"onnx:wasm"`), WASM GPU (`"onnx:webgpu"`) and the exeperimental WASM WebNN (`"onnx:webnn"`).
+   4. **🚀 NEW 🚀** **[`mps`](https://github.com/gomlx/go-darwinml)** and **[`mlx`](https://github.com/gomlx/go-darwinml)**: Apple Silicon GPU backends for Darwin (macOS) in [`github.com/gomlx/go-darwinml`](https://github.com/gomlx/go-darwinml), both included by default on Darwin builds (can be excluded with `-tags=nomps` or `-tags=nomlx`):
       * **`mps`** (`github.com/gomlx/go-darwinml/compute/mps`): Uses Apple's system Metal Performance Shaders Graph (`MPSGraph`) framework (no external libraries required).
       * **`mlx`** (`github.com/gomlx/go-darwinml/compute/mlx`): Uses Apple's [MLX](https://github.com/ml-explore/mlx) framework (`brew install mlx`), supporting both compiled static execution (`GOMLX_BACKEND=mlx`) and native dynamic shapes (`GOMLX_BACKEND=mlx:dynamic`).
       * Note that with the ARM64 `NEON` and Apple `SME` SIMD acceleration in the `"go"` backend, `"go"` is often faster than `"mps"`/`"mlx"` on Macs for small-to-medium workloads.
-   4. **🚀 NEW 🚀** **[onnx](https://github.com/gomlx/compute-onnx)**: A backend that uses ONNX Runtime to execute GoMLX graphs: for Linux/Windows AMD64. Build with tag `--tags=onnx` to get it imported by `github.com/gomlx/gomlx/backends/default`, or import it directly from `github.com/gomlx/compute-onnx`.
 
 ### Highlights
 
