@@ -8,7 +8,7 @@ require (
 	github.com/daniellowtw/matlab v0.0.0-20190528220746-1ed1d96a6637
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-gota/gota v0.12.0
-	github.com/gomlx/compute v0.1.24
+	github.com/gomlx/compute v0.1.25-0.20261107060134-fb1c7a50c973
 	github.com/gomlx/go-huggingface v0.4.26
 	github.com/gomlx/gomlx v0.28.28
 	github.com/gomlx/onnx-gomlx v0.5.25
@@ -40,7 +40,7 @@ require (
 	github.com/gomlx/bsplines v0.2.0 // indirect
 	github.com/gomlx/compute-onnx v0.1.23 // indirect
 	github.com/gomlx/exceptions v0.0.3 // indirect
-	github.com/gomlx/go-darwinml v0.1.1 // indirect
+	github.com/gomlx/go-darwinml v0.1.2-0.20261106210914-8c76bbb9e828 // indirect
 	github.com/gomlx/go-xla v0.4.24 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
