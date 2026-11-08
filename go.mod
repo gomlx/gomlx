@@ -10,7 +10,7 @@ require (
 	github.com/gomlx/compute v0.1.26-0.20261108103954-b4c1e1f204e2
 	github.com/gomlx/compute-onnx v0.1.24
 	github.com/gomlx/go-darwinml v0.1.2
-	github.com/gomlx/go-xla v0.4.25
+	github.com/gomlx/go-xla v0.4.26-0.20261108162047-30d6bfb1ca1f
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.5

@@ -41,7 +41,7 @@ require (
 	github.com/gomlx/compute-onnx v0.1.24 // indirect
 	github.com/gomlx/exceptions v0.0.3 // indirect
 	github.com/gomlx/go-darwinml v0.1.2 // indirect
-	github.com/gomlx/go-xla v0.4.25 // indirect
+	github.com/gomlx/go-xla v0.4.26-0.20261108162047-30d6bfb1ca1f // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
