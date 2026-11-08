@@ -432,9 +432,11 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeDiv:                            vjpForSingleOutput(divVJP),
 	NodeTypePow:                            vjpForSingleOutput(powVJP),
 	NodeTypeSqrt:                           vjpForSingleOutput(sqrtVJP),
+	NodeTypeRsqrt:                          vjpForSingleOutput(rsqrtVJP),
 	NodeTypeErf:                            vjpForSingleOutput(erfVJP),
 	NodeTypeBatchNormForTraining:           batchNormForTrainingVJP,
 	NodeTypeFusedDense:                     vjpForSingleOutput(fusedDenseVJP),
+	NodeTypeFusedLayerNorm:                 vjpForSingleOutput(fusedLayerNormVJP),
 	NodeTypeFusedActivation:                vjpForSingleOutput(fusedActivationVJP),
 	NodeTypeFusedScaledDotProductAttention: fusedScaledDotProductAttentionVJP,
 
@@ -630,6 +632,11 @@ func erfVJP(node, v *Node, _ shapes.Shape) []*Node {
 func sqrtVJP(node, v *Node, _ shapes.Shape) []*Node {
 	// d(x^0.5)/dx = 0.5 * x^(-0.5) = 0.5/sqrt(x)
 	return []*Node{Mul(v, MulScalar(Reciprocal(node), 0.5))}
+}
+
+func rsqrtVJP(node, v *Node, _ shapes.Shape) []*Node {
+	// node = x^(-0.5) => d(x^(-0.5))/dx = -0.5 * x^(-1.5) = -0.5 * node^3
+	return []*Node{Mul(v, MulScalar(Mul(node, Square(node)), -0.5))}
 }
 
 // realVJP projects v back to a complex number -- the gradient on the imaginary

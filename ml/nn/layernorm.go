@@ -3,6 +3,7 @@
 package nn
 
 import (
+	"github.com/gomlx/compute"
 	. "github.com/gomlx/gomlx/core/graph"
 )
 
@@ -21,10 +22,12 @@ func LayerNorm(x *Node, axes []int, epsilon float64, gamma, beta, mask *Node) *N
 
 	// Only try fused when there's no mask (fused ops don't support masking).
 	if mask == nil {
+		backend := x.Graph().Backend()
+		hasFusedLayerNormVJP := backend != nil && backend.Capabilities().Operations[compute.OpTypeFusedLayerNormVJP]
 		res, _ := InternalFusedOpCaller(
 			func() *Node { return BackendFusedLayerNorm(x, axes, epsilon, gamma, beta) },
 			decomposed,
-			true,
+			!hasFusedLayerNormVJP,
 		)
 		return res
 	}
@@ -51,7 +54,7 @@ func layerNormDecomposed(x *Node, axes []int, epsilon float64, gamma, beta, mask
 		variance = MaskedReduceAndKeep(Square(xCentered), mask, MaskedReduceMean, axes...)
 	}
 	eps := ConstAs(x, epsilon)
-	normalized := Div(xCentered, Sqrt(Add(variance, eps)))
+	normalized := Mul(xCentered, Rsqrt(Add(variance, eps)))
 	if gamma != nil {
 		if gamma.Rank() < normalized.Rank() {
 			gamma = ExpandLeftToRank(gamma, normalized.Rank())

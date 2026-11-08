@@ -4,6 +4,7 @@ package graph
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/shapes"
@@ -154,6 +155,139 @@ func BackendFusedActivationVJP(y, x, dOutput *Node, cfg compute.ActivationConfig
 // Internal: prefer nn.LayerNorm which handles fallback and gradients.
 func BackendFusedLayerNorm(x *Node, axes []int, epsilon float64, gamma, beta *Node) *Node {
 	return backendFusedLayerNorm(x, axes, epsilon, gamma, beta)
+}
+
+// nodeInputsFusedLayerNormVJP holds the inputs used for the call to compute.FusedLayerNormVJP.
+type nodeInputsFusedLayerNormVJP struct {
+	x       *Node
+	dOutput *Node
+	axes    []int
+	epsilon float64
+	gamma   *Node
+	beta    *Node
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedLayerNormVJP) Type() NodeType {
+	return NodeTypeFusedLayerNormVJP
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedLayerNormVJP) String() string {
+	return fmt.Sprintf("%s(x=[#%d], dOutput=[#%d], axes=%v, epsilon=%v, gamma=%s, beta=%s)",
+		ni.Type(),
+		ni.x.Id(),
+		ni.dOutput.Id(),
+		ni.axes,
+		ni.epsilon,
+		strNillableNode(ni.gamma),
+		strNillableNode(ni.beta),
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedLayerNormVJP) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// inputNodes ordering from BackendFusedLayerNormVJP: [x, dOutput, gamma?, beta?]
+	idx := 0
+	newX := newInputs[idx]
+	idx++
+	newDOutput := newInputs[idx]
+	idx++
+	var newGamma *Node
+	if ni.gamma != nil {
+		newGamma = newInputs[idx]
+		idx++
+	}
+	var newBeta *Node
+	if ni.beta != nil {
+		newBeta = newInputs[idx]
+		idx++
+	}
+	r0, _, _ := BackendFusedLayerNormVJP(newX, newDOutput, ni.axes, ni.epsilon, newGamma, newBeta)
+	if r0.Type() == NodeTypeSplitNode {
+		return r0.inputNodes[0]
+	}
+	return r0
+}
+
+// BackendFusedLayerNormVJP computes the vector-jacobian product (gradients) of FusedLayerNorm
+// with respect to its inputs (x, gamma, and beta).
+// Internal: this is used for reverse-mode autodiff of FusedLayerNorm.
+func BackendFusedLayerNormVJP(x, dOutput *Node, axes []int, epsilon float64, gamma, beta *Node) (dx, dGamma, dBeta *Node) {
+	inputNodes := []*Node{x, dOutput}
+	if gamma != nil {
+		inputNodes = append(inputNodes, gamma)
+	}
+	if beta != nil {
+		inputNodes = append(inputNodes, beta)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedLayerNormVJP{
+		x:       x,
+		dOutput: dOutput,
+		axes:    slices.Clone(axes),
+		epsilon: epsilon,
+		gamma:   gamma,
+		beta:    beta,
+	}
+	var gammaVal, betaVal compute.Value
+	if gamma != nil {
+		gammaVal = gamma.outputOps[0]
+	}
+	if beta != nil {
+		betaVal = beta.outputOps[0]
+	}
+	v0, v1, v2, err := g.currentFunc.backendFunc.FusedLayerNormVJP(
+		x.outputOps[0], dOutput.outputOps[0], inputs.axes, inputs.epsilon, gammaVal, betaVal)
+	if err != nil {
+		panic(err)
+	}
+
+	outputOps := []compute.Value{v0}
+	outputShapes := []shapes.Shape{mustNoError(g.builder.OpShape(v0))}
+	if gamma != nil {
+		outputOps = append(outputOps, v1)
+		outputShapes = append(outputShapes, mustNoError(g.builder.OpShape(v1)))
+	}
+	if beta != nil {
+		outputOps = append(outputOps, v2)
+		outputShapes = append(outputShapes, mustNoError(g.builder.OpShape(v2)))
+	}
+
+	node := &Node{
+		outputOps:    outputOps,
+		outputShapes: outputShapes,
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	splitNodes := splitNode(node)
+	outIdx := 0
+	dx = splitNodes[outIdx]
+	outIdx++
+	if gamma != nil {
+		dGamma = splitNodes[outIdx]
+		outIdx++
+	}
+	if beta != nil {
+		dBeta = splitNodes[outIdx]
+	}
+	return
+}
+
+// fusedLayerNormVJP is the registered VJP for NodeTypeFusedLayerNorm.
+func fusedLayerNormVJP(node *Node, vjp *Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsFusedLayerNorm)
+	dx, dGamma, dBeta := BackendFusedLayerNormVJP(inputs.x, vjp, inputs.axes, inputs.epsilon, inputs.gamma, inputs.beta)
+	res := []*Node{ConvertDType(dx, inputs.x.DType())}
+	if inputs.gamma != nil {
+		res = append(res, ConvertDType(dGamma, inputs.gamma.DType()))
+	}
+	if inputs.beta != nil {
+		res = append(res, ConvertDType(dBeta, inputs.beta.DType()))
+	}
+	return res
 }
 
 // BackendFusedDense performs fused matmul + optional bias + optional activation.
@@ -478,16 +612,18 @@ const FusionEnv = "GOMLX_FUSION"
 // Note: If "GOMLX_FUSION" (see FusionEnv constant) is disabled (set to "0", "false", etc.) the fused
 // version is never used. The default is enabled though.
 func InternalFusedOpCaller(fused, decomposed func() *Node, useDecomposedAlternateVJP bool) (output *Node, opFused bool) {
-	// Build decomposed output first so it has a lower nodeIdx than the fused
-	// node. The gradient loop iterates from output down to 0, so it will
-	// visit the fused node first and transfer its VJP to the decomposed
-	// output, which is then processed normally.
-	decomposedOutput := decomposed()
-
 	if enabled, err := envutil.ReadBool(FusionEnv, true); err != nil {
 		panic(err)
 	} else if !enabled {
-		return decomposedOutput, false
+		return decomposed(), false
+	}
+
+	// When useDecomposedAlternateVJP is true, build the decomposed output first so it has a lower
+	// nodeIdx than the fused node. The gradient loop iterates from output down to 0, so it will
+	// visit the fused node first and transfer its VJP to the decomposed output.
+	var decomposedOutput *Node
+	if useDecomposedAlternateVJP {
+		decomposedOutput = decomposed()
 	}
 
 	klog.V(2).Info("Attempt to call fused op")
@@ -498,6 +634,9 @@ func InternalFusedOpCaller(fused, decomposed func() *Node, useDecomposedAlternat
 		if compute.IsNotImplemented(err) {
 			if klog.V(2).Enabled() {
 				klog.Infof("InternalFusedOpCaller(): failed to call fused op (not implemented). Falling back to decomposed op: %v", err)
+			}
+			if decomposedOutput == nil {
+				decomposedOutput = decomposed()
 			}
 			// Expected: fused op doesn't support this config; fall back to decomposed.
 			return decomposedOutput, false
