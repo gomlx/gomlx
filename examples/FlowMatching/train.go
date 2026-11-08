@@ -10,6 +10,8 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/compute/support"
+	"github.com/gomlx/compute/support/humanize"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	flowers "github.com/gomlx/gomlx/examples/oxfordflowers102"
@@ -155,10 +157,28 @@ func TrainModel(config *diffusion.Config, checkpointPath string, evaluateOnEnd b
 	globalStep := int(optimizer.GetGlobalStep(scope.Store()))
 	if globalStep < numTrainSteps {
 		fmt.Println("Starting training stage:")
+		var startCPUTime time.Duration
+		var startWallTime time.Time
+		loop.OnFirstStep("cpu_and_wall_time_tracker", 1000, func(loop *train.Loop, _ []*tensors.Tensor) error {
+			// Skip the first step (when most of the time goes on compiling the graph).
+			startCPUTime = support.CPUTime()
+			startWallTime = time.Now()
+			return nil
+		})
 		_, err := loop.RunSteps(trainDS, numTrainSteps-globalStep)
 		if verbosity >= 1 {
-			fmt.Printf("\t[Step %d] median train step: %d microseconds\n",
-				loop.LoopStep, loop.MedianTrainStepDuration().Microseconds())
+			fmt.Printf("\t[Step %d] median train step: %s\n",
+				loop.LoopStep, humanize.Duration(loop.MedianTrainStepDuration()))
+			if timedSteps := loop.LoopStep - loop.StartStep - 1; timedSteps > 0 {
+				totalCPUTime := support.CPUTime() - startCPUTime
+				totalWallTime := time.Since(startWallTime)
+				fmt.Printf("\tCPU Time/step: %s\n",
+					humanize.Duration(totalCPUTime/time.Duration(timedSteps)))
+				if totalCPUTime > 0 && totalWallTime > 0 {
+					fmt.Printf("\tMean core utilization: %.1f\n",
+						float64(totalCPUTime)/float64(totalWallTime))
+				}
+			}
 		}
 		if err != nil {
 			if loop.LoopStep > loop.StartStep {
