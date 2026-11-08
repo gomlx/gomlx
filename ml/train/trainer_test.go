@@ -3,6 +3,7 @@
 package train
 
 import (
+	"iter"
 	"testing"
 
 	"github.com/gomlx/compute/gobackend"
@@ -238,4 +239,50 @@ func TestBatchOnDeviceClone(t *testing.T) {
 	// Clean up
 	require.NoError(t, batch.Finalize())
 	require.NoError(t, cloned.Finalize())
+}
+
+type simpleTestDataset struct{}
+
+func (simpleTestDataset) Name() string { return "simple" }
+func (simpleTestDataset) Iter() iter.Seq2[Batch, error] {
+	return func(yield func(Batch, error) bool) {
+		for {
+			b := Batch{
+				Inputs: []*tensors.Tensor{tensors.FromScalar(float32(1))},
+				Labels: []*tensors.Tensor{tensors.FromScalar(float32(2))},
+			}
+			if !yield(b, nil) {
+				return
+			}
+		}
+	}
+}
+
+func TestLoop_OnFirstStep(t *testing.T) {
+	backend, err := gobackend.New("")
+	require.NoError(t, err)
+	store := model.NewStore()
+	modelFn := func(scope *model.Scope, x *graph.Node) *graph.Node {
+		return graph.AddScalar(x, 1)
+	}
+	trainer := NewTrainer(backend, store, modelFn, loss.MeanAbsoluteError, optimizer.StochasticGradientDescent().Done(), nil, nil)
+	loop := NewLoop(trainer)
+
+	var firstStepCalls, allStepsCalls int
+	firstStepSeen := -1
+	loop.OnFirstStep("first", 0, func(loop *Loop, _ []*tensors.Tensor) error {
+		firstStepCalls++
+		firstStepSeen = loop.LoopStep
+		return nil
+	})
+	loop.OnStep("all", 0, func(loop *Loop, _ []*tensors.Tensor) error {
+		allStepsCalls++
+		return nil
+	})
+
+	_, err = loop.RunSteps(simpleTestDataset{}, 5)
+	require.NoError(t, err)
+	assert.Equal(t, 1, firstStepCalls)
+	assert.Equal(t, 0, firstStepSeen)
+	assert.Equal(t, 5, allStepsCalls)
 }
