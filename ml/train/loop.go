@@ -537,6 +537,20 @@ func (loop *Loop) OnStep(name string, priority Priority, fn OnStepFn) {
 	})
 }
 
+// OnFirstStep adds a hook with given priority and name (for error reporting) that is called
+// only on the first step of the loop, and automatically deregisters itself afterward.
+func (loop *Loop) OnFirstStep(name string, priority Priority, fn OnStepFn) {
+	var hook *hookWithName[OnStepFn]
+	hook = &hookWithName[OnStepFn]{
+		name: name,
+		fn: func(loop *Loop, metrics []*tensors.Tensor) error {
+			loop.onStep.Remove(priority, hook)
+			return fn(loop, metrics)
+		},
+	}
+	loop.onStep.Add(priority, hook)
+}
+
 // OnEnd adds a hook with given priority and name (for error reporting) to the end of a loop.
 func (loop *Loop) OnEnd(name string, priority Priority, fn OnEndFn) {
 	loop.onEnd.Add(priority, &hookWithName[OnEndFn]{
@@ -552,11 +566,11 @@ type hookWithName[F any] struct {
 }
 
 // priorityHooks organizes hooks for type F per priority.
-type priorityHooks[H any] struct {
+type priorityHooks[H comparable] struct {
 	hooks map[Priority][]H
 }
 
-func newPriorityHooks[H any]() *priorityHooks[H] {
+func newPriorityHooks[H comparable]() *priorityHooks[H] {
 	return &priorityHooks[H]{
 		hooks: make(map[Priority][]H),
 	}
@@ -567,6 +581,23 @@ func (h *priorityHooks[H]) Add(priority Priority, hook H) {
 	list := h.hooks[priority]
 	list = append(list, hook)
 	h.hooks[priority] = list
+}
+
+// Remove hook from the given priority.
+func (h *priorityHooks[H]) Remove(priority Priority, hook H) {
+	list := h.hooks[priority]
+	idx := slices.Index(list, hook)
+	if idx < 0 {
+		return
+	}
+	if len(list) == 1 {
+		delete(h.hooks, priority)
+		return
+	}
+	newList := make([]H, 0, len(list)-1)
+	newList = append(newList, list[:idx]...)
+	newList = append(newList, list[idx+1:]...)
+	h.hooks[priority] = newList
 }
 
 // All returns an iterator over all registered hooks in priority order.

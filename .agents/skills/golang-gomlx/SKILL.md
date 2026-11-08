@@ -272,6 +272,12 @@ trainer := train.NewTrainer(backend, store, Model, loss.BinaryCrossentropyLogits
 // Create a standard training loop
 loop := train.NewLoop(trainer)
 
+// Optional lifecycle hooks on the loop:
+// - loop.OnStart(name, priority, fn)
+// - loop.OnFirstStep(name, priority, fn) (automatically deregisters after the first step)
+// - loop.OnStep(name, priority, fn)
+// - loop.OnEnd(name, priority, fn)
+
 // Attach a progress bar to the loop.
 commandline.AttachProgressBar(loop)
 
