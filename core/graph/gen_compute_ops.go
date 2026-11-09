@@ -76,6 +76,7 @@ const (
 	NodeTypeFusedDense
 	NodeTypeFusedDenseVJP
 	NodeTypeFusedLayerNorm
+	NodeTypeFusedLayerNormVJP
 	NodeTypeFusedQuantizedDense
 	NodeTypeFusedScaledDotProductAttention
 	NodeTypeFusedScaledDotProductAttentionVJP

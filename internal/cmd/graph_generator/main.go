@@ -52,7 +52,7 @@ var (
 
 		// Fused ops: exported wrappers with "Internal:" comments are hand-written in ops_fused.go.
 		"FusedActivation", "FusedActivationVJP", "FusedDense", "FusedDenseVJP",
-		"FusedLayerNorm", "FusedSoftmax",
+		"FusedLayerNorm", "FusedLayerNormVJP", "FusedSoftmax",
 		"FusedScaledDotProductAttention", "FusedScaledDotProductAttentionVJP",
 		"FusedAttentionQKVProjection",
 		"FusedQuantizedDense", "QuantizedEmbeddingLookup",
@@ -68,12 +68,13 @@ var (
 	// methodsNotGenerated get a NodeType but no auto-generated wrapper
 	// (hand-written implementations).
 	methodsNotGenerated = sets.MakeWith(
-		"Constant", "Parameter", "FusedQuantizedDense", "QuantizedEmbeddingLookup", "FusedDenseVJP")
+		"Constant", "Parameter", "FusedQuantizedDense", "QuantizedEmbeddingLookup", "FusedDenseVJP", "FusedLayerNormVJP")
 
 	// nillableParams lists Value parameters that can be nil (passed as *Node).
 	// Key format: "MethodName.paramName"
 	nillableParams = sets.MakeWith(
 		"FusedLayerNorm.gamma", "FusedLayerNorm.beta",
+		"FusedLayerNormVJP.gamma", "FusedLayerNormVJP.beta",
 		"FusedDense.bias",
 		"FusedDenseVJP.bias",
 		"FusedActivationVJP.x",
