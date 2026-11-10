@@ -842,15 +842,66 @@ func padVJP(node, v *Node, _ shapes.Shape) []*Node {
 	inputs := node.inputs.(*nodeInputsPad)
 	x := inputs.x
 	fillValue := inputs.fillValue
-	starts := make([]int, x.Rank())
-	limits := make([]int, x.Rank())
-	strides := make([]int, x.Rank())
-	for i, padAxis := range inputs.axesConfig {
-		starts[i] = padAxis.Start
-		limits[i] = padAxis.Start + (x.Shape().Dimensions[i]-1)*(1+padAxis.Interior) + 1
-		strides[i] = 1 + padAxis.Interior
+	g := node.Graph()
+	rank := x.Rank()
+
+	hasNegativeEdge := false
+	hasInterior := false
+	for i := range rank {
+		var padAxis compute.PadAxis
+		if i < len(inputs.axesConfig) {
+			padAxis = inputs.axesConfig[i]
+		}
+		if padAxis.Start < 0 || padAxis.End < 0 {
+			hasNegativeEdge = true
+		}
+		if padAxis.Interior > 0 && x.Shape().Dimensions[i] > 1 {
+			hasInterior = true
+		}
 	}
-	gradX := backendSlice(v, starts, limits, strides)
+
+	var gradX *Node
+	if !hasNegativeEdge {
+		starts := make([]int, rank)
+		limits := make([]int, rank)
+		strides := make([]int, rank)
+		for i := range rank {
+			var padAxis compute.PadAxis
+			if i < len(inputs.axesConfig) {
+				padAxis = inputs.axesConfig[i]
+			}
+			starts[i] = padAxis.Start
+			limits[i] = padAxis.Start + (x.Shape().Dimensions[i]-1)*(1+padAxis.Interior) + 1
+			strides[i] = 1 + padAxis.Interior
+		}
+		gradX = backendSlice(v, starts, limits, strides)
+	} else {
+		// Undo Start/End padding/cropping by padding with negated Start/End and zero fill.
+		invEdgeConfig := make([]compute.PadAxis, rank)
+		for i := range rank {
+			if i < len(inputs.axesConfig) {
+				invEdgeConfig[i] = compute.PadAxis{
+					Start: -inputs.axesConfig[i].Start,
+					End:   -inputs.axesConfig[i].End,
+				}
+			}
+		}
+		gradX = Pad(v, ScalarZero(g, x.DType()), invEdgeConfig...)
+		if hasInterior {
+			starts := make([]int, rank)
+			limits := make([]int, rank)
+			strides := make([]int, rank)
+			for i := range rank {
+				stride := 1
+				if i < len(inputs.axesConfig) && x.Shape().Dimensions[i] > 1 {
+					stride += inputs.axesConfig[i].Interior
+				}
+				limits[i] = gradX.Shape().Dimensions[i]
+				strides[i] = stride
+			}
+			gradX = backendSlice(gradX, starts, limits, strides)
+		}
+	}
 	gradFill := ZerosLike(fillValue)
 	return []*Node{gradX, gradFill}
 }
@@ -859,32 +910,34 @@ func dynamicPadVJP(node, v *Node, _ shapes.Shape) []*Node {
 	inputs := node.inputs.(*nodeInputsDynamicPad)
 	x := inputs.x
 	fillValue := inputs.fillValue
-	starts := make([]*Node, x.Rank())
-	sizes := make([]int, x.Rank())
+	g := node.Graph()
+	invSpecs := make([]DynamicPadAxisSpec, len(inputs.axesConfig))
 	valIdx := 2
 	for i, padAxis := range inputs.axesConfig {
 		if padAxis.InteriorValue != nil || padAxis.Interior != 0 {
 			Panicf("dynamicPadVJP: gradient for interior padding not supported")
 		}
 		if padAxis.StartValue != nil {
-			starts[i] = node.inputNodes[valIdx]
+			invSpecs[i].StartNode = Neg(node.inputNodes[valIdx])
 			valIdx++
 		} else {
-			starts[i] = Const(node.Graph(), int32(padAxis.Start))
+			invSpecs[i].Start = -padAxis.Start
 		}
 		if padAxis.EndValue != nil {
+			invSpecs[i].EndNode = Neg(node.inputNodes[valIdx])
 			valIdx++
+		} else {
+			invSpecs[i].End = -padAxis.End
 		}
-		sizes[i] = x.Shape().Dim(i)
 	}
-	gradX := DynamicSlice(v, starts, sizes)
+	gradX := DynamicPad(v, ScalarZero(g, x.DType()), invSpecs...)
+	if !gradX.Shape().Equal(x.Shape()) {
+		gradX = DynamicReshapeLike(gradX, x)
+	}
 	gradFill := ZerosLike(fillValue)
 	vjps := make([]*Node, len(node.inputNodes))
 	vjps[0] = gradX
 	vjps[1] = gradFill
-	for j := 2; j < len(node.inputNodes); j++ {
-		vjps[j] = ZerosLike(node.inputNodes[j])
-	}
 	return vjps
 }
 

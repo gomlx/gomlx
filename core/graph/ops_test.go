@@ -972,13 +972,19 @@ func TestPad(t *testing.T) {
 			func(g *Graph) (inputs, outputs []*Node) {
 				x := Const(g, []float32{10, 20, 30, 40, 50})
 				zero := ScalarZero(g, x.DType())
+				padded := Pad(x, zero, PadAxis{Start: -1, End: -1})
+				weights := Const(g, []float32{2, 3, 4})
+				loss := ReduceAllSum(Mul(padded, weights))
+				gradX := Gradient(loss, x)[0]
 				inputs = []*Node{x, zero}
 				outputs = []*Node{
-					Pad(x, zero, PadAxis{Start: -1, End: -1}),
+					padded,
+					gradX,
 				}
 				return
 			}, []any{
 				[]float32{20, 30, 40},
+				[]float32{0, 2, 3, 4, 0},
 			}, Epsilon)
 	})
 }
