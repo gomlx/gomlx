@@ -483,6 +483,10 @@ func DynamicIota(g *Graph, dtype dtypes.DType, iotaAxis int, axisSpecs ...Dimens
 
 // DynamicPadAxisSpec specifies the padding configuration for an axis in DynamicPad.
 // It can specify static integer padding amounts and/or dynamic scalar *Node amounts.
+//
+// Start and End (as well as StartNode and EndNode) can be negative, in which case they truncate (crop)
+// elements from the start or end of the axis respectively (applied after interior padding).
+// Interior (as well as InteriorNode) must be non-negative (>= 0).
 type DynamicPadAxisSpec struct {
 	Start, End, Interior             int
 	StartNode, EndNode, InteriorNode *Node
@@ -490,6 +494,8 @@ type DynamicPadAxisSpec struct {
 }
 
 // DynamicPadAxis creates a DynamicPadAxisSpec with static padding amounts.
+//
+// start and end can be negative to truncate (crop) the axis; interior must be non-negative (>= 0).
 func DynamicPadAxis(start, end, interior int) DynamicPadAxisSpec {
 	return DynamicPadAxisSpec{
 		Start:    start,
@@ -499,7 +505,16 @@ func DynamicPadAxis(start, end, interior int) DynamicPadAxisSpec {
 }
 
 // DynamicPad injects padding on the start, end, or interior of the given operand using static
-// and/or dynamic scalar padding amounts.
+// and/or dynamic scalar padding amounts, with the value given in fillValue (which must be a scalar
+// of the same DType as x).
+//
+// For each axis, interior padding is applied first (inserting Interior/InteriorNode copies of fillValue
+// between adjacent elements, adding max(0, dim-1)*interior elements), followed by Start/StartNode and
+// End/EndNode padding at the boundaries.
+//
+// Start and End (and StartNode, EndNode) can be negative, in which case they truncate (crop) elements
+// from the start or end of the axis (after interior padding is applied).
+// Interior (and InteriorNode) must be non-negative (>= 0). The resulting dimension size for every axis must be >= 0.
 //
 // If all padding specifications and operand shape are static, it delegates to static Pad.
 func DynamicPad(x, fillValue *Node, axesConfig ...DynamicPadAxisSpec) *Node {
@@ -560,5 +575,7 @@ func DynamicPad(x, fillValue *Node, axesConfig ...DynamicPadAxisSpec) *Node {
 		}
 	}
 
-	return backendDynamicPad(x, fillValue, dynConfigs...)
+	node := backendDynamicPad(x, fillValue, dynConfigs...)
+	node.inputNodes = inputNodes
+	return node
 }

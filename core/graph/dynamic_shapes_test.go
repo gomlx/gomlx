@@ -321,6 +321,45 @@ func TestDynamicShapes(t *testing.T) {
 				{0, 0, 0},
 			}
 			assert.Equal(t, expected, out[0].Value())
+
+			// Negative dynamic padding (cropping) and gradient check.
+			execNeg, err := NewExec(backend, func(x *Node, padStart, padEnd *Node) (*Node, *Node) {
+				fillVal := Const(x.Graph(), float32(-1))
+				padded := DynamicPad(x, fillVal,
+					DynamicPadAxisSpec{StartNode: padStart, EndNode: padEnd, TargetAxisName: "rows"},
+					DynamicPadAxis(-1, 1, 0),
+				)
+				loss := ReduceAllSum(Mul(padded, IotaLike(padded, 1)))
+				gradX := Gradient(loss, x)[0]
+				return padded, gradX
+			})
+			require.NoError(t, err)
+
+			xInput2 := [][]float32{
+				{1, 2, 3},
+				{4, 5, 6},
+				{7, 8, 9},
+			}
+			outNeg, err := execNeg.Call(xInput2, int32(-1), int32(1))
+			require.NoError(t, err)
+			// Axis 0: Start=-1, End=1 -> crops row 0, pads 1 row of -1 at end
+			// Axis 1: Start=-1, End=1 -> crops col 0, pads 1 col of -1 at end
+			expectedPadded := [][]float32{
+				{5, 6, -1},
+				{8, 9, -1},
+				{-1, -1, -1},
+			}
+			assert.Equal(t, expectedPadded, outNeg[0].Value())
+			// Multipliers from DynamicIota along axis 1 are [0, 1, 2]:
+			// row 0 of x was cropped -> [0, 0, 0]
+			// row 1 of x: col 0 cropped -> 0, col 1 at pos 0 -> 0, col 2 at pos 1 -> 1 => [0, 0, 1]
+			// row 2 of x: col 0 cropped -> 0, col 1 at pos 0 -> 0, col 2 at pos 1 -> 1 => [0, 0, 1]
+			expectedGrad := [][]float32{
+				{0, 0, 0},
+				{0, 0, 1},
+				{0, 0, 1},
+			}
+			assert.Equal(t, expectedGrad, outNeg[1].Value())
 		})
 
 		t.Run("BroadcastLike_Dynamic", func(t *testing.T) {
