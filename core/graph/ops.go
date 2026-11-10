@@ -19,8 +19,10 @@ import (
 
 // PadAxis defines the amount of padding preceding one axis (Start), at the end of axis (End)
 // or in between the inputNodes (Interior).
+// Start and End can be negative to truncate (crop) elements from the start or end of the axis,
+// while Interior must be non-negative (Interior >= 0).
 // This is used as a parameter for the Pad function.
-// This is an alias to compute.PadAxis
+// This is an alias to compute.PadAxis.
 type PadAxis = compute.PadAxis
 
 // nodeInputsParameter holds the inputs used for the call to compute.Parameter.

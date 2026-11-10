@@ -4788,6 +4788,21 @@ func (ni *nodeInputsPad) CloneWithInputs(originalNode *Node, newInputs ...*Node)
 // There must be at most `operand.Rank()` axesConfig values. Missing PadAxis are assumed to be zeros,
 // that is, no padding for those axes.
 //
+// For each axis i:
+//   - `Interior` elements of `fillValue` are first inserted between consecutive elements along the axis
+//     (only when `x.Dimensions[i] > 1`). `Interior` cannot be negative (`Interior >= 0`).
+//   - `Start` and `End` specify padding at the start and end of the axis. They can be negative,
+//     in which case elements are truncated (cropped) from the start or end of the axis (after interior padding is applied).
+//   - The resulting dimension size for axis i is:
+//     `output.Dimensions[i] = x.Dimensions[i] + max(x.Dimensions[i]-1, 0)*Interior + Start + End`
+//     which must be non-negative (`>= 0`).
+//
+// Examples (for 1D `x = [1, 2, 3]` and `fillValue = 0`):
+//   - `PadAxis{Start: 1, End: 2}` -> `[0, 1, 2, 3, 0, 0]` (shape `[6]`)
+//   - `PadAxis{Interior: 1}` -> `[1, 0, 2, 0, 3]` (shape `[5]`)
+//   - `PadAxis{Start: -1, End: -1}` -> `[2]` (shape `[1]`)
+//   - `PadAxis{Start: -1, End: 1, Interior: 1}` -> `[0, 2, 0, 3, 0]` (shape `[5]`)
+//
 // Dynamic shapes: Padding on a dynamic axis is currently not supported if the padding is non-zero,
 // because the resulting size cannot be represented symbolically yet (requires axis expressions).
 func Pad(x *Node, fillValue *Node, axesConfig ...compute.PadAxis) (
