@@ -123,16 +123,21 @@ func (e *Exec) buildGraphFn() graph.CanonicalExecGraphFn {
 
 		// Find variables that were changed and their updated graph values (*Node).
 		var changedVars []*Variable
+		var unusedDonatedVars []*Variable
 		var allValues []*graph.Node
 		for _, v := range e.store.variables {
 			if v.ChangedInGraph(g) {
 				changedVars = append(changedVars, v)
 				allValues = append(allValues, v.NodeValue(g))
 			} else if e.store.donated && !e.isInitializeVariablesExec && !v.InUseByGraph(g) && !v.donatedAsConst {
-				// Release variables in a donated Store that are not used by the computation graph.
-				_ = v.Reset()
-				v.donatedAsConst = true
+				unusedDonatedVars = append(unusedDonatedVars, v)
 			}
+		}
+		for _, v := range unusedDonatedVars {
+			// Remove variables in a donated Store that are not used by the computation graph,
+			// while marking any detached *Variable handle as donated.
+			_ = e.store.DeleteVariable(v.Path())
+			v.donatedAsConst = true
 		}
 		{
 			// Save list of variables changed.

@@ -2,7 +2,6 @@ package pos
 
 import (
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 )
 
@@ -30,11 +29,17 @@ import (
 //	posIndices := SequentialPositions(g, Const(g, []int32{5, 10}), 4)
 //	// Result: [[5, 6, 7, 8], [10, 11, 12, 13]] with shape [2, 4]
 func SequentialPositions(g *Graph, startPos *Node, seqLen int) *Node {
+	return DynamicSequentialPositions(g, startPos, StaticDim(seqLen))
+}
+
+// DynamicSequentialPositions creates position indices for sequential positions starting from startPos,
+// supporting both static and dynamic sequence lengths via seqDim.
+func DynamicSequentialPositions(g *Graph, startPos *Node, seqDim DimensionSpec) *Node {
 	// Convert startPos to Int32
 	posNode := ConvertDType(startPos, dtypes.Int32)
 
 	// Create [0, 1, 2, ..., seqLen-1]
-	offsets := Iota(g, shapes.Make(dtypes.Int32, seqLen), 0)
+	offsets := DynamicIota(g, dtypes.Int32, 0, seqDim)
 
 	// Scalar case
 	if posNode.Rank() == 0 || (posNode.Rank() == 1 && posNode.Shape().Dimensions[0] == 1) {

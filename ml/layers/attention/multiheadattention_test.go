@@ -610,3 +610,85 @@ func TestMultiHeadAttentionTraining(t *testing.T) {
 		}
 	}
 }
+
+func TestMultiHeadAttentionDynamicShapesAndSlidingWindow(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		t.Run("SlidingWindowWithCausalAndSeqLens", func(t *testing.T) {
+			store := model.NewStore()
+			exec := model.MustNewExec(backend, store, func(scope *model.Scope, x, seqLen *Node) []*Node {
+				scope = scope.WithInitializer(initializer.One)
+				out, coef := SelfAttention(scope, x, 4, 4).
+					WithNumKVHeads(2).
+					WithRoPE(10000.0).
+					WithCausalMask(true).
+					WithSlidingWindow(2).
+					WithScoreSoftCap(50.0).
+					WithSeqLens(seqLen, seqLen).
+					DoneWithCoefficients()
+				return []*Node{out, coef}
+			})
+
+			// batch=2, seq=4, dim=8; batch 0 has seqLen=4, batch 1 has seqLen=3.
+			x := make([]float32, 2*4*8)
+			for i := range x {
+				x[i] = float32(i+1) * 0.05
+			}
+			xT := tensors.FromFlatDataAndDimensions(x, 2, 4, 8)
+			seqLenT := tensors.FromValue([]int32{4, 3})
+			results := exec.MustCall(xT, seqLenT)
+			coef := results[1].Value().([][][][]float32) // [batch=2, q=4, heads=4, k=4]
+
+			// For batch 0 (seqLen=4) with causal + slidingWindow=2:
+			// q=0 attends only to k=0; q=2 attends only to k in {1, 2} (k=0 is outside window, k=3 is future).
+			assert.InDelta(t, float32(1.0), coef[0][0][0][0], 1e-5)
+			assert.Equal(t, float32(0.0), coef[0][2][0][0])
+			assert.Equal(t, float32(0.0), coef[0][2][0][3])
+			assert.Greater(t, coef[0][2][0][1], float32(0.0))
+			assert.Greater(t, coef[0][2][0][2], float32(0.0))
+
+			// For batch 1 (seqLen=3), padded query q=3 has all-zero coefficients, and valid queries ignore k=3.
+			assert.Equal(t, float32(0.0), coef[1][2][0][3])
+		})
+
+		t.Run("DynamicShapesParityWithStatic", func(t *testing.T) {
+			if !backend.Capabilities().HasDynamicShapes() {
+				t.Skip("backend does not support dynamic shapes")
+			}
+			store := model.NewStore()
+			buildFn := func(scope *model.Scope, x, seqLen *Node) *Node {
+				scope = scope.WithInitializer(initializer.One)
+				return SelfAttention(scope, x, 4, 4).
+					WithNumKVHeads(2).
+					WithRoPE(10000.0).
+					WithCausalMask(true).
+					WithSlidingWindow(2).
+					WithScoreSoftCap(50.0).
+					WithSeqLens(seqLen, seqLen).
+					Done()
+			}
+
+			staticExec := model.MustNewExec(backend, store, buildFn)
+			dynExec := model.MustNewExec(backend, store, buildFn).WithDynamicAxes([]string{"batch", "seq_len", ""}, []string{"batch"})
+
+			// Run on two different shapes [2, 4, 8] and [3, 5, 8] using the single dynamic compilation.
+			for _, dims := range [][2]int{{2, 4}, {3, 5}} {
+				b, s := dims[0], dims[1]
+				xData := make([]float32, b*s*8)
+				for i := range xData {
+					xData[i] = float32((i%13)+1) * 0.1
+				}
+				seqLens := make([]int32, b)
+				for i := range seqLens {
+					seqLens[i] = int32(s - (i % 2))
+				}
+				xT := tensors.FromFlatDataAndDimensions(xData, b, s, 8)
+				seqT := tensors.FromValue(seqLens)
+
+				staticOut := staticExec.MustCall(xT, seqT)[0]
+				dynOut := dynExec.MustCall(xT, seqT)[0]
+				require.Truef(t, xslices.SlicesInDelta(staticOut.Value(), dynOut.Value(), 1e-4),
+					"dynamic vs static mismatch for shape [%d, %d, 8]", b, s)
+			}
+		})
+	})
+}

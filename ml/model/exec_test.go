@@ -674,6 +674,10 @@ func TestExecDonateStore(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "donated")
 
+		// The unused variable must also have been deleted from the Store.
+		assert.Nil(t, store.GetVariable("/unused/table"))
+		assert.Equal(t, 2, store.NumVariables())
+
 		// Run 2: batch = 8 (triggers new graph compilation + LRU eviction of batch=4 graph, reusing packed weights!)
 		x2Data := make([]float32, 8*K)
 		for i := range x2Data {
@@ -728,6 +732,82 @@ func TestExecDonateStore(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "was optimized in a first compilation")
 	})
+
+	t.Run("UnusedImportedVarWithNewUninitializedLayerAndLoader", func(t *testing.T) {
+		store := model.NewStore()
+		loader := &recordingLoader{
+			values: map[string]*tensors.Tensor{
+				"/unused/output_head": tensors.FromFlatDataAndDimensions(make([]float32, 64), 64),
+			},
+		}
+		store.SetLoader(loader)
+
+		const K, N = 16, 8
+		wData := make([]float32, K*N)
+		for i := range wData {
+			wData[i] = 1.0
+		}
+		_, err := store.CreateVariable("/base/weights", tensors.FromFlatDataAndDimensions(wData, K, N))
+		require.NoError(t, err)
+		// Load /unused/output_head into the Store via GetVariable (no initializer configured, like imported weights).
+		unusedHead := store.GetVariable("/unused/output_head")
+		require.NotNil(t, unusedHead)
+
+		exec, err := model.NewExec(simpleBackend, store, func(scope *model.Scope, x *Node) *Node {
+			g := x.Graph()
+			baseW := scope.In("base").VariableWithShape("weights", shapes.Make(dtypes.Float32, K, N)).NodeValue(g)
+			h := MatMul(x, baseW)
+			// Construct a new uninitialized layer on top of the imported Store (triggers Store.InitializeVariables).
+			headB := scope.In("head").WithInitializer(func(g *Graph, s shapes.Shape) *Node {
+				return BroadcastToShape(Scalar(g, s.DType, 3.0), s)
+			}).VariableWithShape("biases", shapes.Make(dtypes.Float32, N)).NodeValue(g)
+			return Add(h, ExpandLeftToRank(headB, h.Rank()))
+		})
+		require.NoError(t, err)
+		exec.DonateStore()
+		defer exec.Finalize()
+
+		// Run 1: batch = 2 (compiles, deletes /unused/output_head from Store & Loader, and initializes /head/biases without panicking)
+		x1 := tensors.FromFlatDataAndDimensions(make([]float32, 2*K), 2, K)
+		out1, err := exec.Exec(x1)
+		require.NoError(t, err)
+		require.Equal(t, float32(3.0), out1[0].Value().([][]float32)[0][0])
+
+		assert.Nil(t, store.GetVariable("/unused/output_head"))
+		assert.Contains(t, loader.deleted, "/unused/output_head")
+		_, err = unusedHead.Value()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "donated")
+
+		// Run 2: batch = 4 (new shape compilation now embeds /head/biases as a shared constant too)
+		x2Data := make([]float32, 4*K)
+		for i := range x2Data {
+			x2Data[i] = 1.0
+		}
+		x2 := tensors.FromFlatDataAndDimensions(x2Data, 4, K)
+		out2, err := exec.Exec(x2)
+		require.NoError(t, err)
+		require.Equal(t, float32(N*0+K+3.0), out2[0].Value().([][]float32)[0][0])
+	})
+}
+
+type recordingLoader struct {
+	values  map[string]*tensors.Tensor
+	deleted []string
+}
+
+func (l *recordingLoader) LoadVariable(_ *model.Store, fullPath string) (*tensors.Tensor, bool) {
+	v, ok := l.values[fullPath]
+	if ok {
+		delete(l.values, fullPath)
+	}
+	return v, ok
+}
+
+func (l *recordingLoader) DeleteVariable(_ *model.Store, fullPath string) error {
+	l.deleted = append(l.deleted, fullPath)
+	delete(l.values, fullPath)
+	return nil
 }
 
 

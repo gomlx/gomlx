@@ -91,10 +91,10 @@ func outputEquation(l AxesLayout, isGQA bool) string {
 func reshapeQueryForGQA(query *Node, numQueryHeads, numKVHeads int, layout AxesLayout) *Node {
 	groupSize := numQueryHeads / numKVHeads
 	headsAxis := layout.HeadsAxis()
-	newDims := slices.Clone(query.Shape().Dimensions)
-	newDims = slices.Insert(newDims, headsAxis+1, groupSize)
-	newDims[headsAxis] = numKVHeads
-	return Reshape(query, newDims...)
+	specs := DimensionSpecsFor(query)
+	specs = slices.Insert(specs, headsAxis+1, StaticDim(groupSize))
+	specs[headsAxis] = StaticDim(numKVHeads)
+	return DynamicReshape(query, specs...)
 }
 
 // reshapeMaskForGQA adapts a 4D mask to the 5D score shape used during Grouped Query
@@ -107,10 +107,10 @@ func reshapeMaskForGQA(mask *Node, numQueryHeads, numKVHeads int, layout AxesLay
 	if maskHeadDim == numQueryHeads {
 		// Per-head mask: split heads axis into (numKVHeads, groupSize).
 		groupSize := numQueryHeads / numKVHeads
-		newDims := slices.Clone(mask.Shape().Dimensions)
-		newDims = slices.Insert(newDims, headsAxis+1, groupSize)
-		newDims[headsAxis] = numKVHeads
-		return Reshape(mask, newDims...)
+		specs := DimensionSpecsFor(mask)
+		specs = slices.Insert(specs, headsAxis+1, StaticDim(groupSize))
+		specs[headsAxis] = StaticDim(numKVHeads)
+		return DynamicReshape(mask, specs...)
 	}
 	// Head dim is 1 or numKVHeads: insert a dim for groupSize that will broadcast.
 	return InsertAxes(mask, headsAxis+1)
@@ -138,23 +138,21 @@ func expandMaskTo4D(mask *Node, layout AxesLayout) *Node {
 // heads axis for the attention output tensor. The input is 5D and the output is 4D.
 // This correctly handles d_v != d_q since it operates on the node's own dimensions.
 func mergeOutputGQAHeads(node *Node, numQueryHeads int, layout AxesLayout) *Node {
-	dims := node.Shape().Dimensions
 	headsAxis := layout.HeadsAxis()
-	mergedDims := slices.Clone(dims)
-	mergedDims = slices.Delete(mergedDims, headsAxis+1, headsAxis+2)
-	mergedDims[headsAxis] = numQueryHeads
-	return Reshape(node, mergedDims...)
+	specs := DimensionSpecsFor(node)
+	specs = slices.Delete(specs, headsAxis+1, headsAxis+2)
+	specs[headsAxis] = StaticDim(numQueryHeads)
+	return DynamicReshape(node, specs...)
 }
 
 // mergeGQACoefficientHeads merges the split (numKVHeads, groupSize) axes back into a
 // single heads axis for the attention coefficient tensor. The input is 5D and the output is 4D.
 func mergeGQACoefficientHeads(node *Node, numQueryHeads int, layout AxesLayout) *Node {
-	dims := node.Shape().Dimensions
 	headsAxis := layout.HeadsAxis()
-	mergedDims := slices.Clone(dims)
-	mergedDims = slices.Delete(mergedDims, headsAxis+1, headsAxis+2)
-	mergedDims[headsAxis] = numQueryHeads
-	return Reshape(node, mergedDims...)
+	specs := DimensionSpecsFor(node)
+	specs = slices.Delete(specs, headsAxis+1, headsAxis+2)
+	specs[headsAxis] = StaticDim(numQueryHeads)
+	return DynamicReshape(node, specs...)
 }
 
 // CoreOptions packs all the optional parameters for Core.
@@ -321,17 +319,19 @@ func Core(query, key, value *Node, layout AxesLayout, options CoreOptions) (outp
 	// We use this as a closure (as opposed to calculating it directly), because it's required
 	// by InternalFusedOpCaller() below.
 	decomposedFn := func() (output *Node, coefficients *Node) {
-		// Build causal mask for the decomposed path.
+		// Build causal mask for the decomposed path (supports both static and dynamic sequence dimensions).
 		decomposedMask := options.AttentionMask
 		if options.UseCausalMask {
-			seqLen := query.Shape().Dimensions[layout.SeqAxis()]
-			causalBool := LowerTriangular(g, seqLen)
-			// Reshape for correct broadcasting with score layout.
+			seqAxis := layout.SeqAxis()
+			qIdx := ExpandDims(DynamicIota(g, dtypes.Int32, 0, DimensionSpecFor(query, seqAxis)), -1) // [Sq, 1]
+			kIdx := ExpandDims(DynamicIota(g, dtypes.Int32, 0, DimensionSpecFor(key, seqAxis)), 0)    // [1, Skv]
+			causalBool := GreaterOrEqual(qIdx, kIdx)                                                  // [Sq, Skv]
+			// Expand for broadcasting with score layout.
 			switch layout {
 			case LayoutBHSD:
-				causalBool = Reshape(causalBool, 1, 1, seqLen, seqLen)
+				causalBool = ExpandAxes(causalBool, 0, 1) // [1, 1, Sq, Skv]
 			default: // LayoutBSHD
-				causalBool = Reshape(causalBool, 1, seqLen, 1, seqLen)
+				causalBool = ExpandAxes(causalBool, 0, 2) // [1, Sq, 1, Skv]
 			}
 			decomposedMask = causalBool
 		}

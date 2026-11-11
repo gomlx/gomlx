@@ -2,6 +2,14 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-11-11:
+  - `ml/model`, `ml/model/checkpoint`:
+    - Updated `model.Exec.buildGraphFn` to delete unused variables from a donated `Store` via `Store.DeleteVariable` (cascading to `Loader.DeleteVariable`) while still marking any detached `*Variable` handle as donated, preventing `Store.InitializeVariables` from panicking or re-initializing unused imported variables when new layers are constructed on top of a donated `Store`.
+    - Clarified docstrings on `model.Loader.DeleteVariable` and `checkpoint.Handler.DeleteVariable` that deletion only removes the in-memory reference in the loader (not files on disk).
+  - `ml/layers/attention`, `ml/layers/attention/pos`, `ml/zoo/transformer`:
+    - Added `pos.DynamicSequentialPositions` and updated `attention.Core`, `attention.MultiHeadAttention`, mask builders, and `transformer.Model.PrePositionalEncoder` to support dynamic batch and sequence dimensions (`DynamicIota`, `DynamicReshape`, `DynamicBroadcastInDim`).
+    - Fixed `MultiHeadAttention.WithSlidingWindow` when used without KV cache, and folded `WithSeqLens` padding masks into internal sliding-window masks before calling `attention.Core`.
+
 - 2026-11-08:
   - Added `FusedLayerNormVJP` (`BackendFusedLayerNormVJP`, `fusedLayerNormVJP`, and `rsqrtVJP`) in `core/graph` and `ml/nn/layernorm.go`, eliminating dual forward execution of `layerNormDecomposed` and replacing `Div(..., Sqrt(...))` with `Mul(..., Rsqrt(...))`.
 

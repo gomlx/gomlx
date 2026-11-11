@@ -67,7 +67,11 @@ type Loader interface {
 	// If it's not found, returns false, and initialization continues as usual.
 	LoadVariable(store *Store, fullPath string) (value *tensors.Tensor, found bool)
 
-	// DeleteVariable is called whenever Store.DeleteVariable is called.
+	// DeleteVariable is called whenever Store.DeleteVariable (or Scope.DeleteVariable) is called,
+	// including when a Store being loaded has variables that are not used by the model and are
+	// deleted from the Store (e.g., when donated to an Exec).
+	// It only deletes the in-memory reference to the variable in the loader so it does not
+	// reappear after deletion -- it does NOT delete any files on disk.
 	DeleteVariable(store *Store, fullPath string) error
 }
 
