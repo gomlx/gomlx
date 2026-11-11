@@ -151,11 +151,11 @@ func (b *MultiHeadAttentionBuilder) WithCausalMask(useCausalMask bool) *MultiHea
 	return b
 }
 
-// buildAttentionMask returns a normalized mask for shape `[batch, <query_elements>, num_heads, <key_elements>]`.
+// buildAttentionMask returns a normalized or broadcastable mask for shape `[batch, <query_elements>, num_heads, <key_elements>]`.
 //
-// When not using KV cache, the simple causal mask is handled by Core (via the causal flag),
-// so buildAttentionMask only includes user-provided masks. When using KV cache, the position-aware
-// causal mask is built here because Core doesn't know about cache positions.
+// When not using KV cache or sliding window, the simple causal mask is handled by Core (via the causal flag),
+// so buildAttentionMask only includes user-provided masks. When slidingWindow > 0 or causal masking needs to
+// be combined with another mask, it is built here.
 func (b *MultiHeadAttentionBuilder) buildAttentionMask() (mask *Node) {
 	// User-provided masks.
 	if b.queryMask != nil || b.keyMask != nil {
@@ -164,13 +164,31 @@ func (b *MultiHeadAttentionBuilder) buildAttentionMask() (mask *Node) {
 		mask = b.queryKeyMatrixMask
 	}
 
-	// Causal mask is usually left to be calculated by Core, but if KV cache is used, or if it needs to be combined
-	// with another mask, it is built here.
-	if b.useCausalMask && mask != nil {
-		causalMask := b.buildCausalAttentionMask()
-		mask = LogicalAnd(mask, causalMask)
+	// Causal mask is usually left to be calculated by Core, unless a sliding window is configured
+	// or it needs to be combined with another mask.
+	if b.slidingWindow > 0 || (b.useCausalMask && mask != nil) {
+		localOrCausalMask := b.buildCausalAttentionMask()
+		if mask != nil {
+			mask = LogicalAnd(mask, localOrCausalMask)
+		} else {
+			mask = localOrCausalMask
+		}
 	}
 	return
+}
+
+// broadcastToAttentionShape broadcasts x (either scalar or already expanded to attentionShape.Rank())
+// to `[batch, <query_elements>, num_heads, <key_elements>]`, supporting both static and dynamic dimensions.
+func (b *MultiHeadAttentionBuilder) broadcastToAttentionShape(x *Node) *Node {
+	specs := b.attentionDimensionSpecs()
+	if x.Rank() == 0 {
+		return DynamicBroadcastInDim(x, nil, specs...)
+	}
+	broadcastAxes := make([]int, x.Rank())
+	for i := range broadcastAxes {
+		broadcastAxes[i] = i
+	}
+	return DynamicBroadcastInDim(x, broadcastAxes, specs...)
 }
 
 // buildAttentionMaskFromSplitMasks creates cross mask from split queryMask and keyMask.
@@ -185,7 +203,7 @@ func (b *MultiHeadAttentionBuilder) buildAttentionMaskFromSplitMasks() (mask *No
 		// attentionShape=`[batch, <query_elements>, num_heads, <key_elements>]`
 		// b.keyMask.shape=`[batch, <key_elements>]`
 		keyMask = InsertAxes(b.keyMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.keyMask.Rank(), 1)...)
-		keyMask = BroadcastToShape(keyMask, b.attentionShape)
+		keyMask = b.broadcastToAttentionShape(keyMask)
 	}
 	var queryMask *Node
 	if b.queryMask == nil {
@@ -194,7 +212,7 @@ func (b *MultiHeadAttentionBuilder) buildAttentionMaskFromSplitMasks() (mask *No
 	} else {
 		// Expand dims at the end.
 		queryMask = InsertAxes(b.queryMask, xslices.SliceWithValue(b.attentionShape.Rank()-b.queryMask.Rank(), -1)...)
-		queryMask = BroadcastToShape(queryMask, b.attentionShape)
+		queryMask = b.broadcastToAttentionShape(queryMask)
 	}
 	return LogicalAnd(queryMask, keyMask)
 }
@@ -233,17 +251,18 @@ func buildSeqLenPaddingMask(query, key *Node, querySeqLen, keyValueSeqLen *Node)
 	}
 }
 
-// buildCausalAttentionMask creates a mask where queries can only attend to keys with "smaller index" than itself.
+// buildCausalAttentionMask creates a causal and/or sliding-window mask shaped `[1, queryLen, 1, keyLen]`,
+// broadcastable to `[batch, queryLen, numHeads, keyLen]` across both static and dynamic sequence dimensions.
 func (b *MultiHeadAttentionBuilder) buildCausalAttentionMask() (mask *Node) {
 	queryShape := b.query.Shape()
 	keyShape := b.key.Shape()
 
 	if queryShape.Rank() != 3 || keyShape.Rank() != 3 {
-		Panicf("MultiHeadAttention's WithCausalMask requires key and query to be rank-3,"+
+		Panicf("MultiHeadAttention's causal/sliding-window mask requires key and query to be rank-3,"+
 			" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
 	}
 	if !reflect.DeepEqual(keyShape.Dimensions[:keyShape.Rank()-1], queryShape.Dimensions[:queryShape.Rank()-1]) {
-		Panicf("MultiHeadAttention's WithCausalMask requires inner shapes of query and key be the same,"+
+		Panicf("MultiHeadAttention's causal/sliding-window mask requires inner shapes of query and key be the same,"+
 			" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
 	}
 
@@ -255,21 +274,20 @@ func (b *MultiHeadAttentionBuilder) buildCausalAttentionMask() (mask *Node) {
 	keyIndices := DynamicIota(b.g, dtypes.Int32, 0, DimensionSpecFor(b.key, 1))
 	keyIndices = ExpandDims(keyIndices, 0) // [1, keyLen]
 
-	mask = GreaterOrEqual(queryIndices, keyIndices) // [queryLen, keyLen]
-
-	// If using a sliding window, add distance mask: (q - k) < slidingWindow
-	if b.slidingWindow > 0 {
-		qMinusK := Sub(queryIndices, keyIndices)
-		slidingMask := LessThan(qMinusK, Const(b.g, int32(b.slidingWindow)))
-		mask = LogicalAnd(mask, slidingMask)
+	if b.useCausalMask {
+		mask = GreaterOrEqual(queryIndices, keyIndices) // [queryLen, keyLen]
+		// If using a sliding window, add distance mask: (q - k) < slidingWindow
+		if b.slidingWindow > 0 {
+			qMinusK := Sub(queryIndices, keyIndices)
+			slidingMask := LessThan(qMinusK, Const(b.g, int32(b.slidingWindow)))
+			mask = LogicalAnd(mask, slidingMask)
+		}
+	} else {
+		// Bidirectional sliding window: |q - k| < slidingWindow
+		dist := Abs(Sub(queryIndices, keyIndices))
+		mask = LessThan(dist, Const(b.g, int32(b.slidingWindow)))
 	}
 
-	// Broadcast mask to target shape: [batch, <query_elements>, numHeads, <key_elements>]
-	// mask is currently [queryLen, keyLen], need to add batch and numHeads dimensions
-	// InsertAxes at beginning for batch dimension
-	mask = ExpandDims(mask, 0) // [1, queryLen, keyLen]
-	// Add dimension for numHeads at position 2 (after batch and query)
-	mask = ExpandDims(mask, 2)                                  // [1, queryLen, 1, keyLen]
-	mask = BroadcastToShape(mask, b.attentionShape)              // Broadcast to target dimensions
-	return mask
+	// Expand to [1, queryLen, 1, keyLen], which broadcasts implicitly across batch and numHeads.
+	return ExpandAxes(mask, 0, 2)
 }

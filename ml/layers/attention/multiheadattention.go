@@ -12,7 +12,6 @@ package attention
 import (
 	"math"
 	"reflect"
-	"slices"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
@@ -417,20 +416,12 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 
 	// Flatten inner axes to a single sequence axis before projection.
 	// This turns [batch, q1, q2, ..., inputDim] into [batch, q_flat, inputDim].
-	batchSize := b.query.Shape().Dim(0)
-	var queryInnerDims, keyInnerDims []int
 	flatQuery, flatKey, flatValue := b.query, b.key, b.value
 	needsUnflatten := b.innerKeyAxes > 1 || b.innerQueryAxes > 1
 	if needsUnflatten {
-		qDims := b.query.Shape().Dimensions
-		kDims := b.key.Shape().Dimensions
-
-		queryInnerDims = slices.Clone(qDims[1 : 1+b.innerQueryAxes])
-		keyInnerDims = slices.Clone(kDims[1 : 1+b.innerKeyAxes])
-
-		flatQuery = Reshape(b.query, batchSize, -1, b.query.Shape().Dim(-1))
-		flatKey = Reshape(b.key, batchSize, -1, b.key.Shape().Dim(-1))
-		flatValue = Reshape(b.value, batchSize, -1, b.value.Shape().Dim(-1))
+		flatQuery = DynamicReshape(b.query, DimensionSpecFor(b.query, 0), InferredDim(), StaticDim(b.query.Shape().Dim(-1)))
+		flatKey = DynamicReshape(b.key, DimensionSpecFor(b.key, 0), InferredDim(), StaticDim(b.key.Shape().Dim(-1)))
+		flatValue = DynamicReshape(b.value, DimensionSpecFor(b.value, 0), InferredDim(), StaticDim(b.value.Shape().Dim(-1)))
 	}
 
 	kvHeads := b.effectiveNumKVHeads()
@@ -465,26 +456,28 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	if b.positionalEncoder != nil {
 		qkEncoder, ok := b.positionalEncoder.(pos.QKEncoder)
 		if ok {
-			seqLen := projectedQuery.Shape().Dimensions[seqAxis]
+			seqDimSpec := DimensionSpecFor(projectedQuery, seqAxis)
 			var posIndices *Node
 			if b.position != nil {
-				posIndices = pos.SequentialPositions(b.g, b.position, seqLen)
+				posIndices = pos.DynamicSequentialPositions(b.g, b.position, seqDimSpec)
 			} else {
-				posIndices = pos.SequentialPositions(b.g, ScalarZero(b.g, dtypes.Int32), seqLen)
+				posIndices = pos.DynamicSequentialPositions(b.g, ScalarZero(b.g, dtypes.Int32), seqDimSpec)
 			}
 			projectedQuery, projectedKey = qkEncoder.EncodeQK(projectedQuery, projectedKey, posIndices, seqAxis)
 		}
 	}
 
 	// Build the mask before any flattening, since buildMask uses the original attentionShape.
-	// Mask shape: [batch, <query_elements>, num_heads, <key_elements>]
+	// Mask shape: [batch, <query_elements>, num_heads, <key_elements>] (or broadcastable to it)
 	mask := b.buildAttentionMask()
 
 	// Flatten the mask to match the now-flat Q/K/V when inner axes > 1.
 	if needsUnflatten && mask != nil {
-		qFlat := projectedQuery.Shape().Dimensions[seqAxis]
-		kFlat := projectedKey.Shape().Dimensions[seqAxis]
-		mask = Reshape(mask, batchSize, qFlat, b.numHeads, kFlat)
+		mask = DynamicReshape(mask,
+			DimensionSpecFor(projectedQuery, 0),
+			DimensionSpecFor(projectedQuery, seqAxis),
+			StaticDim(b.numHeads),
+			DimensionSpecFor(projectedKey, seqAxis))
 	}
 
 	scale := 1.0 / math.Sqrt(float64(b.keyQueryDim))
@@ -492,9 +485,17 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 		scale = b.queryKeyScale
 	}
 
-	// Pass causal to Core only when not using KV cache (Core builds a simple lower-triangular mask).
-	// When using KV cache, the position-aware causal mask is already built in buildMask above.
+	// Pass causal to Core only when no mask was constructed above.
+	// When sliding window or KV cache is active, causal masking is already folded into mask.
 	useCausalMask := b.useCausalMask && mask == nil
+	querySeqLen, kvSeqLen := b.querySeqLen, b.keyValueSeqLen
+	if mask != nil && (querySeqLen != nil || kvSeqLen != nil) {
+		// Core requires AttentionMask and QuerySeqLen/KVSeqLen to be mutually exclusive;
+		// fold padding seqlens into the internal mask (e.g. from WithSlidingWindow).
+		padMask := buildSeqLenPaddingMask(projectedQuery, projectedKey, querySeqLen, kvSeqLen)
+		mask = LogicalAnd(mask, padMask)
+		querySeqLen, kvSeqLen = nil, nil
+	}
 	attentionOutput, attentionCoefficients = Core(projectedQuery, projectedKey, projectedValue, b.layout, CoreOptions{
 		DisableFusion: !b.useFusion,
 
@@ -504,8 +505,8 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 
 		AttentionMask: mask,
 		UseCausalMask: useCausalMask,
-		QuerySeqLen:   b.querySeqLen,
-		KVSeqLen:      b.keyValueSeqLen,
+		QuerySeqLen:   querySeqLen,
+		KVSeqLen:      kvSeqLen,
 		AttentionBias: b.attentionBias,
 
 		Scope:       b.scope,
@@ -525,12 +526,7 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	// Unflatten coefficients back to original inner axis structure when needed.
 	if wantCoefficients && needsUnflatten {
 		// attentionCoefficients: [batch, q_flat, heads, k_flat] -> [batch, <query_inner>, heads, <key_inner>]
-		coefDims := attentionCoefficients.Shape().Dimensions
-		unflatCoef := []int{coefDims[0]}
-		unflatCoef = append(unflatCoef, queryInnerDims...)
-		unflatCoef = append(unflatCoef, coefDims[2]) // heads
-		unflatCoef = append(unflatCoef, keyInnerDims...)
-		attentionCoefficients = Reshape(attentionCoefficients, unflatCoef...)
+		attentionCoefficients = DynamicReshape(attentionCoefficients, b.attentionDimensionSpecs()...)
 	}
 
 	// Final shape: `[batch, <query_elements>, outputDim]`
@@ -628,6 +624,21 @@ func (b *MultiHeadAttentionBuilder) buildAttentionShape() {
 	} else {
 		b.attentionShape = shapes.Make(b.key.DType(), finalDims...)
 	}
+}
+
+// attentionDimensionSpecs returns the DimensionSpec list for `[batch, <query_elements>, num_heads, <key_elements>]`,
+// supporting both static and dynamic dimensions.
+func (b *MultiHeadAttentionBuilder) attentionDimensionSpecs() []DimensionSpec {
+	specs := make([]DimensionSpec, 0, 2+b.innerQueryAxes+b.innerKeyAxes)
+	specs = append(specs, DimensionSpecFor(b.key, 0))
+	for i := range b.innerQueryAxes {
+		specs = append(specs, DimensionSpecFor(b.query, 1+i))
+	}
+	specs = append(specs, StaticDim(b.numHeads))
+	for i := range b.innerKeyAxes {
+		specs = append(specs, DimensionSpecFor(b.key, 1+i))
+	}
+	return specs
 }
 
 // SelfAttention is a convenience wrapper for MultiHeadAttention where query, key, and value

@@ -872,8 +872,7 @@ func (m *Model) PrePositionalEncoder(x *Node, position int, useKVCache bool) *No
 
 	g := x.Graph()
 	seqAxis := 1 // Sequence is always the axis 1 for now.
-	seqLen := x.Shape().Dimensions[seqAxis]
-	posIndices := pos.SequentialPositions(g, Scalar(g, dtypes.Int32, position), seqLen)
+	posIndices := pos.DynamicSequentialPositions(g, Scalar(g, dtypes.Int32, position), DimensionSpecFor(x, seqAxis))
 	return preEnc.PreEncode(x, posIndices, seqAxis)
 }
 

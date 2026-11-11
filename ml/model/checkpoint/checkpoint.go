@@ -1142,8 +1142,12 @@ func (h *Handler) LoadVariable(store *model.Store, fullPath string) (value *tens
 }
 
 // DeleteVariable implements model.Loader.
-// It is called whenever Scope.DeleteVariable is called. The deletion should cascade to the
-// loader, otherwise the variable will reappear after deletion.
+// It is called whenever Store.DeleteVariable (or Scope.DeleteVariable) is called, including
+// when a Store being loaded has variables that are not used by the model and are deleted
+// from the Store (e.g., when donated to an Exec).
+// It only deletes the in-memory reference to the variable in the loader (cascading to any
+// previous loader) so the variable will not reappear after deletion -- it does NOT delete
+// any checkpoint files on disk.
 func (h *Handler) DeleteVariable(store *model.Store, fullPath string) error {
 	if h.prevStoreLoader != nil {
 		_ = h.prevStoreLoader.DeleteVariable(store, fullPath)
