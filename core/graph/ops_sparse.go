@@ -3,6 +3,7 @@
 package graph
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/gomlx/compute/dtypes"
@@ -420,12 +421,24 @@ func ScatterUpdate(operand, indices, updates *Node, sorted, unique bool) *Node {
 	}
 	g := operand.Graph()
 	dtype := operand.DType()
-	shape := operand.Shape()
 
 	zero := ScalarZero(g, dtype)
 	maskUpdates := OnesLike(updates)
-	updateMask := Scatter(indices, maskUpdates, shape, sorted, unique)
+	updateMask := ScatterSum(ZerosLike(operand), indices, maskUpdates, sorted, unique)
 	updateMaskBool := ConvertDType(updateMask, dtypes.Bool)
+	if operand.Shape().IsDynamic() {
+		// Anonymous dynamic axes never compare equal, even when they represent
+		// the same runtime dimension. Name both Where operands consistently.
+		specs := DimensionSpecsFor(operand)
+		for axis, dim := range operand.Shape().Dimensions {
+			if dim == shapes.DynamicDim {
+				name := fmt.Sprintf("scatter_update_%d_axis_%d", operand.Id(), axis)
+				specs[axis] = NamedDynamicDim(name, DimensionSize(operand, axis))
+			}
+		}
+		operand = DynamicReshape(operand, specs...)
+		updateMaskBool = DynamicReshape(updateMaskBool, specs...)
+	}
 	operand = Where(updateMaskBool, zero, operand)
 	return ScatterSum(operand, indices, updates, sorted, unique)
 }

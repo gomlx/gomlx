@@ -854,7 +854,7 @@ func (g *Graph) getScalarConst(dtype dtypes.DType, value float64) (output *Node)
 		g.scalars[dtype] = dtypeMap
 	}
 	output, found = dtypeMap[value]
-	if found {
+	if found && output.scope == g.currentFunc {
 		return output
 	}
 	output = Const(g, shapes.CastAsDType(value, dtype))

@@ -54,7 +54,7 @@ var (
 		"FusedActivation", "FusedActivationVJP", "FusedDense", "FusedDenseVJP",
 		"FusedLayerNorm", "FusedLayerNormVJP", "FusedSoftmax",
 		"FusedScaledDotProductAttention", "FusedScaledDotProductAttentionVJP",
-		"FusedAttentionQKVProjection",
+		"FusedAttentionQKVProjection", "FusedTopK",
 		"FusedQuantizedDense", "FusedQuantizedDenseVJP", "QuantizedEmbeddingLookup",
 
 		// Dynamic shape methods (see ops_dynamic.go):

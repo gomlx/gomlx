@@ -82,6 +82,7 @@ const (
 	NodeTypeFusedScaledDotProductAttention
 	NodeTypeFusedScaledDotProductAttentionVJP
 	NodeTypeFusedSoftmax
+	NodeTypeFusedTopK
 	NodeTypeGather
 	NodeTypeGreaterOrEqual
 	NodeTypeGreaterOrEqualTotalOrder
@@ -107,6 +108,7 @@ const (
 	NodeTypeMin
 	NodeTypeMul
 	NodeTypeNeg
+	NodeTypeNonZero
 	NodeTypeNotEqual
 	NodeTypeNotEqualTotalOrder
 	NodeTypeOptimizationBarrier
@@ -3225,6 +3227,68 @@ func backendFusedSoftmax(x *Node, axis int) (
 	return
 }
 
+// nodeInputsFusedTopK holds the inputs used for the call to compute.FusedTopK.
+type nodeInputsFusedTopK struct {
+	operand *Node
+	k       int
+	axis    int
+	largest bool
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedTopK) Type() NodeType {
+	return NodeTypeFusedTopK
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedTopK) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], k=%v, axis=%v, largest=%v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.k,
+		ni.axis,
+		ni.largest,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedTopK) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	r0, _ := backendFusedTopK(new_operand, ni.k, ni.axis, ni.largest)
+	return r0.inputNodes[0]
+}
+
+// backendFusedTopK is a Graph wrapper for the backend.Builder.FusedTopK method.
+func backendFusedTopK(operand *Node, k int, axis int, largest bool) (
+	values, indices *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedTopK{
+		operand: operand,
+		k:       k,
+		axis:    axis,
+		largest: largest,
+	}
+	v0, v1, err := g.currentFunc.backendFunc.FusedTopK(operand.outputOps[0], inputs.k, compute.FusedTopKConfig{Axis: inputs.axis, Smallest: !inputs.largest})
+	if err != nil {
+		panic(err)
+	}
+	node := &Node{
+		outputOps:    []compute.Value{v0, v1},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	splitNodes := splitNode(node)
+	values, indices = splitNodes[0], splitNodes[1]
+	return
+}
+
 // nodeInputsGather holds the inputs used for the call to compute.Gather.
 type nodeInputsGather struct {
 	operand            *Node
@@ -4572,6 +4636,62 @@ func Neg(x *Node) (
 		x: x,
 	}
 	result, err := g.currentFunc.backendFunc.Neg(x.outputOps[0])
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsNonZero holds the inputs used for the call to compute.NonZero.
+type nodeInputsNonZero struct {
+	operand       *Node
+	countAxisName string
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsNonZero) Type() NodeType {
+	return NodeTypeNonZero
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsNonZero) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], countAxisName=%v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.countAxisName,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsNonZero) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	return NonZero(new_operand, ni.countAxisName)
+}
+
+// NonZero returns row-major coordinates of nonzero elements as an int64
+// tensor [operand rank, count]. The data-dependent count dimension is named
+// countAxisName, which must be nonempty and unique to this result.
+// A scalar operand produces shape [0, 0] or [0, 1].
+func NonZero(operand *Node, countAxisName string) (
+	node *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsNonZero{
+		operand:       operand,
+		countAxisName: countAxisName,
+	}
+	result, err := g.currentFunc.backendFunc.NonZero(operand.outputOps[0], compute.NonZeroConfig{CountAxisName: inputs.countAxisName, Transpose: true})
 	if err != nil {
 		panic(err)
 	}

@@ -64,7 +64,6 @@ func (ni *nodeInputsSort) CloneWithInputs(originalNode *Node, newInputs ...*Node
 	return node
 }
 
-
 // Sort sorts a single tensor along the specified axis.
 //
 // This is a simplified version of SortFunc that doesn't require a comparator closure.
@@ -271,6 +270,17 @@ func topKImpl(x *Node, k int, axis int, ascending bool) (values, indices *Node) 
 	}
 	if axisSize != shapes.DynamicDim && k > axisSize {
 		exceptions.Panicf("TopK/BottomK: k=%d exceeds axis size %d", k, axisSize)
+	}
+
+	// Prefer native ranking on backends without comparator closures.
+	err := exceptions.TryCatch[error](func() {
+		values, indices = backendFusedTopK(x, k, axis, !ascending)
+	})
+	if err == nil {
+		return values, indices
+	}
+	if !compute.IsNotImplemented(err) {
+		panic(err)
 	}
 
 	// Create indices tensor using IotaLike along the sort axis

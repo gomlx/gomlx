@@ -304,7 +304,7 @@ func FinalizeConstantValue(val compute.Value) {
 func ConstCachedTensor(g *Graph, t *tensors.Tensor) *Node {
 	g.AssertBuilding()
 	node, found := g.tensorConstants[t]
-	if found {
+	if found && node.scope == g.currentFunc {
 		return node
 	}
 	node = ConstTensor(g, t)
