@@ -159,3 +159,7 @@ Auto-generated files don't need a copyright, but should include a comment with t
 
 For every new feature, refactoring or API change, update `.agents/AGENTS.md` and the files 
 under `.agents/skills/golang-gomlx/` accordingly.
+
+### Git Workflow
+
+Never `git commit` or `git push` changes before the user has reviewed them and explicitly asked to commit. Always leave changes uncommitted in the working tree for review.
