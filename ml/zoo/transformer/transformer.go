@@ -882,7 +882,15 @@ func (m *Model) PrePositionalEncoder(x *Node, position int, useKVCache bool) *No
 // This step is done automatically by Logits (which builds the full forward path from the tokens), but if needed, it can
 // be used separately by calling this method.
 func (m *Model) LogitsFromEmbeddings(embeddings *Node) *Node {
-	logits := layers.Dense(m.Scope.In("output"), embeddings, false, m.VocabSize)
+	layout := compute.DenseLayoutInputOutputs
+	if outVar := m.Scope.At("output").At("dense").GetVariable("weights"); outVar != nil &&
+		(outVar.Quantization() != nil ||
+			(m.TransposedProjections && outVar.Shape().Rank() == 2 && outVar.Shape().Dimensions[0] == m.VocabSize && outVar.Shape().Dimensions[1] != m.VocabSize)) {
+		layout = compute.DenseLayoutOutputsInput
+	}
+	logits := layers.NewDense(m.Scope.In("output"), embeddings, m.VocabSize).
+		WithLayout(layout).
+		Done()
 	if m.FinalLogitSoftCap > 0 {
 		logits = nn.SoftCap(logits, m.FinalLogitSoftCap)
 	}
@@ -1068,8 +1076,7 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x *N
 	x = m.normalize(layerScope.In("norm1"), x, m.Normalization)
 
 	residual = x
-	ff := m.dense(layerScope.In("ff1"), x, m.UseBias, m.FFNDim*m.Activation.HiddenDimMultiplier())
-	ff = activation.Apply(m.Activation, ff)
+	ff := m.denseWithActivation(layerScope.In("ff1"), x, m.UseBias, m.Activation, m.FFNDim*m.Activation.HiddenDimMultiplier())
 	if m.Dropout > 0 {
 		ff = layers.Dropout(layerScope.In("ff_dropout"), ff, Scalar(ff.Graph(), ff.DType(), m.Dropout))
 	}
@@ -1084,10 +1091,19 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x *N
 // If it is, it computes the dense layer using DenseWithLayout with DenseLayoutOutputsInput, expecting weights in the format [outDim, inDim].
 // PyTorch nn.Linear stores its matrix in this transposed format.
 func (m *Model) dense(scope *model.Scope, op *Node, useBias bool, outputDims ...int) *Node {
-	if !m.TransposedProjections {
-		return layers.Dense(scope, op, useBias, outputDims...)
+	return m.denseWithActivation(scope, op, useBias, activation.TypeNone, outputDims...)
+}
+
+func (m *Model) denseWithActivation(scope *model.Scope, op *Node, useBias bool, act activation.Type, outputDims ...int) *Node {
+	layout := compute.DenseLayoutInputOutputs
+	if m.TransposedProjections {
+		layout = compute.DenseLayoutOutputsInput
 	}
-	return layers.DenseWithLayout(scope, op, compute.DenseLayoutOutputsInput, useBias, outputDims...)
+	return layers.NewDense(scope, op, outputDims...).
+		WithBias(useBias).
+		WithLayout(layout).
+		WithActivation(act).
+		Done()
 }
 
 func (m *Model) normalize(scope *model.Scope, operand *Node, normType string) *Node {

@@ -29,7 +29,6 @@ import (
 	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
-	"github.com/gomlx/gomlx/ml/nn"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -301,8 +300,9 @@ func (c *Config) Done() *Node {
 			layerScope = scope.In("fnn_output_layer")
 		}
 
-		// In between-layers: some don't apply to the input (ii == 0)
-		if ii > 0 {
+		// In between-layers: some don't apply to the input (ii == 0).
+		// Note: when !isEnsemble, hidden-layer activations are fused/applied inside layers.NewDense.
+		if isEnsemble && ii > 0 {
 			x = activation.Apply(c.activation, x)
 		}
 		if dropoutRatio != nil {
@@ -335,12 +335,27 @@ func (c *Config) Done() *Node {
 			}
 		}
 
-		// Linear transformation
+		// Standard (non-ensemble) layers delegate directly to layers.NewDense,
+		// sharing variable handling, quantized dense dispatch, fused activations, and post-linear hooks.
+		if !isEnsemble {
+			layerAct := activation.TypeNone
+			if ii < c.numHiddenLayers {
+				layerAct = c.activation
+			}
+			x = layers.NewDense(layerScope, x, outputDims...).
+				CurrentScope().
+				WithBias(c.useBias).
+				WithLayout(c.weightsLayout).
+				WithRegularizer(c.regularizer).
+				WithActivation(layerAct).
+				Done()
+			continue
+		}
+
+		// Ensemble linear transformation (weights carry a leading ensembleSize axis).
 		inputLastDimension := x.Shape().Dimensions[x.Rank()-1]
 		weightsDims := make([]int, 0, 2+len(outputDims))
-		if isEnsemble {
-			weightsDims = append(weightsDims, c.ensembleSize)
-		}
+		weightsDims = append(weightsDims, c.ensembleSize)
 		switch c.weightsLayout {
 		case compute.DenseLayoutInputOutputs:
 			weightsDims = append(weightsDims, inputLastDimension)
@@ -360,18 +375,14 @@ func (c *Config) Done() *Node {
 		var biasNode *Node
 		if c.useBias {
 			biasDims := make([]int, 0, 1+len(outputDims))
-			if isEnsemble {
-				biasDims = append(biasDims, c.ensembleSize)
-			}
+			biasDims = append(biasDims, c.ensembleSize)
 			biasDims = append(biasDims, outputDims...)
 			biasVar := layerScope.VariableWithShape("biases", shapes.Make(dtype, biasDims...))
 			biasNode = biasVar.NodeValue(g)
 		}
 
 		linearInput := x
-		if !isEnsemble {
-			x = nn.Dense(x, weights, biasNode, c.weightsLayout)
-		} else if c.ensembleAxis >= 0 {
+		if c.ensembleAxis >= 0 {
 			if ii == 0 {
 				x = Dot(x, weights).General([]int{x.Rank() - 1}, []int{c.ensembleAxis}, []int{1}, []int{0})
 			} else {

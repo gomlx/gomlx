@@ -4,6 +4,7 @@ package nn
 
 import (
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/support/envutil"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/ggml"
 )
@@ -15,8 +16,9 @@ import (
 // llama.cpp's ggml_get_rows. The full embedding table stays in native quantized format
 // and only the rows selected by indices are dequantized to float32.
 //
-// Types with a decomposed graph-level fallback (Q4_0, Q8_0, IQ4_NL) work on any backend
-// (including XLA). K-quant types (Q4_K, Q6_K, etc.) require a backend with a fused
+// Types with a decomposed graph-level fallback (Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, IQ4_NL, Q8_K)
+// work on any backend (including XLA) when batch dimensions are static. K-quant types
+// (Q4_K, Q6_K, etc.) and dynamic batch dimensions require a backend with a fused
 // executor (e.g. simplego); other backends will panic.
 //
 // Parameters:
@@ -31,11 +33,27 @@ func QuantizedGather(table, indices *Node, quant *Quantization) *Node {
 	if quant.Scheme != compute.QuantGGML {
 		panic("nn.QuantizedGather: only QuantGGML scheme is supported")
 	}
+
+	decomposed := func() *Node {
+		return ggml.EmbeddingLookupDecomposed(table, indices, quant.GGMLType)
+	}
+
+	if enabled, err := envutil.ReadBool(FusionEnv, true); err != nil {
+		panic(err)
+	} else if !enabled {
+		return decomposed()
+	}
+
+	backend := table.Graph().Backend()
+	if backend != nil && !backend.Capabilities().Operations[compute.OpTypeQuantizedEmbeddingLookup] {
+		return decomposed()
+	}
+
 	if ggml.CanDecompose(quant.GGMLType) {
 		res, _ := InternalFusedOpCaller(
 			func() *Node { return BackendQuantizedEmbeddingLookup(table, indices, quant) },
-			func() *Node { return ggml.EmbeddingLookupDecomposed(table, indices, quant.GGMLType) },
-			true,
+			decomposed,
+			false,
 		)
 		return res
 	}

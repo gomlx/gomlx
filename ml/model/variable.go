@@ -65,21 +65,93 @@ type Variable struct {
 	// donatedAsConst is set to true once the variable's value has been donated as a
 	// backend constant (via Exec.DonateStore) and its Tensor value has been finalized.
 	donatedAsConst bool
+
+	// quantization holds optional quantization metadata when this variable stores
+	// pre-quantized weights or embedding tables (e.g. GGML block formats from GGUF).
+	quantization *Quantization
+}
+
+// Quantization describes how a pre-quantized Variable's raw tensor values are interpreted
+// when building computation graphs (for example, GGML block-quantized weights from GGUF
+// or linear/NF4 quantized weights with companion scale/zero-point variables).
+type Quantization struct {
+	// Scheme selects the quantization family (QuantLinear, QuantNF4, QuantGGML).
+	Scheme compute.QuantizationScheme
+
+	// GGMLType specifies the block format when Scheme == compute.QuantGGML.
+	GGMLType compute.GGMLQuantType
+
+	// Scale holds the optional scale variable for QuantLinear / QuantNF4.
+	Scale *Variable
+
+	// ZeroPoint holds the optional zero-point variable for QuantLinear.
+	ZeroPoint *Variable
+
+	// BlockAxis and BlockSize describe sub-channel blocking for QuantLinear / QuantNF4.
+	BlockAxis int
+	BlockSize int
+
+	// QuantizedDType optionally specifies the logical sub-byte dtype when packed in Uint8.
+	QuantizedDType dtypes.DType
+}
+
+// ToGraph converts the variable-level Quantization metadata into a graph.Quantization
+// bound to graph g (materializing any companion Scale/ZeroPoint variables as graph nodes).
+func (q *Quantization) ToGraph(g *Graph) *graph.Quantization {
+	if q == nil {
+		return nil
+	}
+	gq := &graph.Quantization{
+		Scheme:         q.Scheme,
+		GGMLType:       q.GGMLType,
+		BlockAxis:      q.BlockAxis,
+		BlockSize:      q.BlockSize,
+		QuantizedDType: q.QuantizedDType,
+	}
+	if q.Scale != nil {
+		gq.Scale = q.Scale.NodeValue(g)
+	}
+	if q.ZeroPoint != nil {
+		gq.ZeroPoint = q.ZeroPoint.NodeValue(g)
+	}
+	return gq
+}
+
+// WithQuantization attaches quantization metadata to the variable and returns the variable
+// itself for method chaining.
+func (v *Variable) WithQuantization(q *Quantization) *Variable {
+	v.AssertValid()
+	v.quantization = q
+	return v
+}
+
+// Quantization returns the variable's quantization metadata, or nil if the variable is unquantized.
+func (v *Variable) Quantization() *Quantization {
+	if v == nil {
+		return nil
+	}
+	return v.quantization
 }
 
 // CloneToStore Variable.
 //
-// Value, name, scopePath, trainable state, shardingSpec spec, and initializer are cloned.
+// Value, name, scopePath, trainable state, shardingSpec spec, quantization metadata, and initializer are cloned.
 // But the new clone starts with no graph node mapping -- so it's assumed it's not in use by any Graph.
 //
 // The variable is then inserted into the given store.
 func (v *Variable) CloneToStore(toStore *Store) (*Variable, error) {
+	var clonedQuant *Quantization
+	if v.quantization != nil {
+		cp := *v.quantization
+		clonedQuant = &cp
+	}
 	newV := &Variable{
 		name:         v.name,
 		fullPath:     v.fullPath,
 		shape:        v.shape,
 		Trainable:    v.Trainable,
 		shardingSpec: v.shardingSpec,
+		quantization: clonedQuant,
 	}
 
 	// Copy the value if it exists.
