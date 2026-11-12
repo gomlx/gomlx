@@ -63,7 +63,7 @@ func TestDenseAndEmbeddingWithQuantizedVariables(t *testing.T) {
 	denseScope.VariableWithValue("biases", []float32{0.5, 1.0})
 
 	for _, quantMatmul := range []bool{true, false} {
-		store.SetParam(layers.ParamQuantizedMatmuls, quantMatmul)
+		store.SetParam(layers.ParamQuantizedMatmul, quantMatmul)
 		exec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
 			emb := layers.Embedding(scope.In("token_embed"), tokens, dtypes.Float32, 2, 32)
 			return layers.NewDense(scope.In("proj"), emb, 2).
@@ -81,6 +81,22 @@ func TestDenseAndEmbeddingWithQuantizedVariables(t *testing.T) {
 		// token 1 -> emb=[0, 2, ...]: pre-relu=[2*0+0.5, -1*2+1.0]=[0.5, -1.0] -> relu=[0.5, 0.0]
 		assert.InDeltaSlice(t, []float32{2.5, 1.0, 0.5, 0.0}, got, 1e-2, "quantMatmul=%v", quantMatmul)
 	}
+
+	// Explicit WithQuantizedMatmul(false) overrides ParamQuantizedMatmul=true on the store.
+	store.SetParam(layers.ParamQuantizedMatmul, true)
+	execOverride := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+		emb := layers.Embedding(scope.In("token_embed"), tokens, dtypes.Float32, 2, 32)
+		return layers.NewDense(scope.In("proj"), emb, 2).
+			WithBias(true).
+			WithLayout(compute.DenseLayoutOutputsInput).
+			WithActivation(activation.TypeRelu).
+			WithQuantizedMatmul(false).
+			Done()
+	})
+	outsOverride := execOverride.MustExec([][]int32{{0, 1}})
+	gotOverride, err := tensors.CopyFlatData[float32](outsOverride[0])
+	require.NoError(t, err)
+	assert.InDeltaSlice(t, []float32{2.5, 1.0, 0.5, 0.0}, gotOverride, 1e-5)
 }
 
 func TestFNNWithQuantizedVariables(t *testing.T) {

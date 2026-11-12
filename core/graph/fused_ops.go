@@ -142,9 +142,9 @@ type QuantizedDenseConfig struct {
 	// Nil (the default) returns a floating-point output.
 	OutputQuantization *Quantization
 
-	// QuantizedMatmuls is an optional optimization hint used when XQuantization == nil.
+	// QuantizedMatmul is an optional optimization hint used when XQuantization == nil.
 	// If true, the backend may dynamically quantize x on-the-fly to run integer SIMD dot products.
-	QuantizedMatmuls bool
+	QuantizedMatmul bool
 
 	// Activation is applied after matmul + scale + bias; defaults to ActivationNone.
 	Activation compute.ActivationConfig
@@ -159,7 +159,7 @@ func (cfg QuantizedDenseConfig) toBackend() compute.FusedQuantizedDenseConfig {
 		WeightQuantization: cfg.WeightQuantization.toBackend(),
 		XQuantization:      cfg.XQuantization.toBackend(),
 		OutputQuantization: cfg.OutputQuantization.toBackend(),
-		QuantizedMatmuls:   cfg.QuantizedMatmuls,
+		QuantizedMatmul:    cfg.QuantizedMatmul,
 		Activation:         cfg.Activation,
 		WeightLayout:       cfg.WeightLayout,
 	}
@@ -197,7 +197,7 @@ func (ni *nodeInputsFusedQuantizedDense) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsFusedQuantizedDense) String() string {
-	return fmt.Sprintf("%s(x=[#%d], weight=[#%d], bias=%s, wq=%s, xq=%s, oq=%s, quantizedMatmuls=%v, activation=%+v, layout=%s)",
+	return fmt.Sprintf("%s(x=[#%d], weight=[#%d], bias=%s, wq=%s, xq=%s, oq=%s, quantizedMatmul=%v, activation=%+v, layout=%s)",
 		ni.Type(),
 		ni.x.Id(),
 		ni.weight.Id(),
@@ -205,7 +205,7 @@ func (ni *nodeInputsFusedQuantizedDense) String() string {
 		ni.cfg.WeightQuantization,
 		ni.cfg.XQuantization,
 		ni.cfg.OutputQuantization,
-		ni.cfg.QuantizedMatmuls,
+		ni.cfg.QuantizedMatmul,
 		ni.cfg.Activation,
 		ni.cfg.WeightLayout,
 	)
@@ -637,7 +637,7 @@ func (ni *nodeInputsFusedQuantizedDenseVJP) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsFusedQuantizedDenseVJP) String() string {
-	return fmt.Sprintf("%s(x=%s, weight=[#%d], bias=%s, y=%s, dOutput=[#%d], wq=%s, quantizedMatmuls=%v, activation=%+v, layout=%s)",
+	return fmt.Sprintf("%s(x=%s, weight=[#%d], bias=%s, y=%s, dOutput=[#%d], wq=%s, quantizedMatmul=%v, activation=%+v, layout=%s)",
 		ni.Type(),
 		strNillableNode(ni.x),
 		ni.weight.Id(),
@@ -645,7 +645,7 @@ func (ni *nodeInputsFusedQuantizedDenseVJP) String() string {
 		strNillableNode(ni.y),
 		ni.dOutput.Id(),
 		ni.cfg.WeightQuantization,
-		ni.cfg.QuantizedMatmuls,
+		ni.cfg.QuantizedMatmul,
 		ni.cfg.Activation,
 		ni.cfg.WeightLayout,
 	)

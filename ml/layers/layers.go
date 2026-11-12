@@ -50,10 +50,11 @@ const (
 	// Default is `0.0`, which means never do any DropPath.
 	ParamDropPathProbability = "droppath_prob"
 
-	// ParamQuantizedMatmuls scope hyperparameter controls whether quantized dense layers
-	// with GGML weights quantize floating-point activations on-the-fly for block-integer
-	// dot products (true, the default) or dequantize weights to floating-point (false).
-	ParamQuantizedMatmuls = "quantized_matmuls"
+	// ParamQuantizedMatmul scope hyperparameter controls whether quantized dense layers
+	// quantize floating-point activations on-the-fly for integer dot products (true, the default)
+	// or dequantize weights to floating-point (false). Can also be overridden per layer via
+	// [DenseBuilder.WithQuantizedMatmul].
+	ParamQuantizedMatmul = "quantized_matmul"
 )
 
 // DenseWithBias adds a single dense linear layer, a learnable linear transformation plus a bias term.
@@ -106,15 +107,17 @@ func DenseWithLayout(scope *model.Scope, input *Node, layout compute.DenseLayout
 // DenseBuilder configures and builds a single dense (linear) layer.
 // Create it with [NewDense], chain optional configuration methods, and call [DenseBuilder.Done].
 type DenseBuilder struct {
-	scope            *model.Scope
-	input            *Node
-	outputDimensions []int
-	useBias          bool
-	layout           compute.DenseLayout
-	activation       activation.Type
-	regularizer      regularizer.Regularizer
-	regularizerSet   bool
-	newScope         bool
+	scope              *model.Scope
+	input              *Node
+	outputDimensions   []int
+	useBias            bool
+	layout             compute.DenseLayout
+	activation         activation.Type
+	regularizer        regularizer.Regularizer
+	regularizerSet     bool
+	quantizedMatmul    bool
+	quantizedMatmulSet bool
+	newScope           bool
 }
 
 // NewDense prepares a single dense (linear) projection layer on `input` producing `<outputDimensions...>`.
@@ -125,6 +128,8 @@ type DenseBuilder struct {
 //   - Weight layout: [compute.DenseLayoutInputOutputs] (override with [DenseBuilder.WithLayout]).
 //   - Activation: [activation.TypeNone] (override with [DenseBuilder.WithActivation]).
 //   - Regularization: [regularizer.FromScope] on the layer scope (override with [DenseBuilder.WithRegularizer]).
+//   - Quantized matmul: reads [ParamQuantizedMatmul] from the layer scope, defaulting to `true`
+//     (override per layer with [DenseBuilder.WithQuantizedMatmul]).
 //
 // Quantized weights do not need explicit builder configuration: if the `"weights"` variable in the
 // target scope already exists with quantization metadata (see [model.Variable.WithQuantization]),
@@ -183,6 +188,17 @@ func (b *DenseBuilder) WithActivation(act activation.Type) *DenseBuilder {
 func (b *DenseBuilder) WithRegularizer(reg regularizer.Regularizer) *DenseBuilder {
 	b.regularizer = reg
 	b.regularizerSet = true
+	return b
+}
+
+// WithQuantizedMatmul configures whether pre-loaded quantized `"weights"` dynamically quantize
+// floating-point input activations on-the-fly for integer dot products (`true`) or dequantize
+// weights to floating-point (`false`), overriding [ParamQuantizedMatmul] in `scope`.
+//
+// If `"weights"` is not quantized, this setting has no effect.
+func (b *DenseBuilder) WithQuantizedMatmul(enabled bool) *DenseBuilder {
+	b.quantizedMatmul = enabled
+	b.quantizedMatmulSet = true
 	return b
 }
 
@@ -251,10 +267,14 @@ func (b *DenseBuilder) Done() *Node {
 	switch {
 	case existingWeights != nil && existingWeights.Quantization() != nil:
 		weights := existingWeights.NodeValue(g)
+		quantMatmul := b.quantizedMatmul
+		if !b.quantizedMatmulSet {
+			quantMatmul = model.GetParamOr(scope, ParamQuantizedMatmul, true)
+		}
 		qCfg := QuantizedDenseConfig{
 			WeightQuantization: existingWeights.Quantization().ToGraph(g),
 			WeightLayout:       b.layout,
-			QuantizedMatmuls:   model.GetParamOr(scope, ParamQuantizedMatmuls, true),
+			QuantizedMatmul:    quantMatmul,
 		}
 		res = nn.QuantizedDense(b.input, weights, biasNode, qCfg, fusedAct)
 
