@@ -2,6 +2,13 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-11-12:
+  - `core/graph`, `ml/nn`, `ml/ggml`, `ml/layers/peft`:
+    - Reworked quantized linear projection (`Quantization`, `QuantizedDenseConfig`, `BackendFusedQuantizedDense`, and `nn.QuantizedDense`) to align with standard `(q - zp) * scale` zero-point subtraction semantics, arbitrary scale/zero-point granularities (per-tensor scalar/`[1]`, 1D `[N]`, 2D `BlockAxis=0` & `1`), `DenseLayoutInputOutputs` (`[K, N]`) and `DenseLayoutOutputsInput` (`[N, K]`), pre-quantized input activations (`XQuantization` for `QuantLinear` exact `Int32` accumulation and `QuantGGML` `Q8_0`/`Q8_K`), and optional `OutputQuantization`.
+    - Added `BackendFusedQuantizedDenseVJP` (`NodeTypeFusedQuantizedDenseVJP` and `fusedQuantizedDenseVJP`), enabling memory-efficient backpropagation (`dx` and `dBias`) through frozen quantized weights (such as QLoRA `NF4` or `QuantGGML` K-quants) without materializing dequantized `[K, N]` float weight matrices or building dual forward graphs when supported by the backend.
+    - Added `ggml.Quantize`, `ggml.ActivationQuantTypeFor`, and `compute.GGMLQ8_K` support in `ml/ggml` so GGML activations can be quantized once in the graph (`Q8_0` or `Q8_K`) and shared across sibling `nn.QuantizedDense` projections (e.g., Q/K/V or Gate/Up).
+    - Updated `peft.NF4` to `QuantizedDenseConfig`.
+
 - 2026-11-11:
   - `ml/model`, `ml/model/checkpoint`:
     - Updated `model.Exec.buildGraphFn` to delete unused variables from a donated `Store` via `Store.DeleteVariable` (cascading to `Loader.DeleteVariable`) while still marking any detached `*Variable` handle as donated, preventing `Store.InitializeVariables` from panicking or re-initializing unused imported variables when new layers are constructed on top of a donated `Store`.

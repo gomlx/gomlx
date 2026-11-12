@@ -111,6 +111,79 @@ func TestNF4QLoRAUsesScopeParameters(t *testing.T) {
 	}
 }
 
+func TestNF4QLoRAMultiLayerGradients(t *testing.T) {
+	w1, err := QuantizeNF4(2, 4, 2, []float32{
+		1.0, -0.5, 0.5, -1.0,
+		-0.5, 1.0, -1.0, 0.5,
+	})
+	require.NoError(t, err)
+	w2, err := QuantizeNF4Double(4, 2, 2, 2, []float32{
+		0.8, -0.4,
+		-0.6, 0.7,
+		0.5, 0.3,
+		-0.9, 0.6,
+	})
+	require.NoError(t, err)
+
+	runQLoRAGrads := func(t *testing.T, fusion string) [][]float32 {
+		t.Helper()
+		t.Setenv(graph.FusionEnv, fusion)
+		store := model.NewStore()
+		store.RootScope().SetParams(map[string]any{
+			ParamRank:  2,
+			ParamAlpha: float32(4),
+			ParamBias:  BiasAll,
+		})
+		backend := gobackend.GetBackend()
+		gradExec, err := model.NewExec(backend, store, func(scope *model.Scope, input *graph.Node) []*graph.Node {
+			s1 := scope.In("layer1")
+			b1 := s1.VariableWithValue("bias", []float32{0.1, -0.1, 0.2, -0.2})
+			h := NewNF4(s1, input, w1, b1).Done()
+			h = graph.Tanh(h)
+			s2 := scope.In("layer2")
+			b2 := s2.VariableWithValue("bias", []float32{0.05, -0.05})
+			out := NewNF4(s2, h, w2, b2).Done()
+			loss := graph.ReduceAllSum(graph.Mul(out, graph.Const(out.Graph(), [][]float32{{1.2, -0.8}})))
+			return scope.BuildTrainableVariablesGradientsGraph(loss)
+		})
+		require.NoError(t, err)
+		_, err = gradExec.Call([][]float32{{1.0, -0.5}})
+		require.NoError(t, err)
+
+		require.NoError(t, store.GetVariable("/layer1/qlora/lora/A").SetValue(
+			tensors.FromFlatDataAndDimensions([]float32{0.2, -0.1, 0.3, 0.4}, 2, 2)))
+		require.NoError(t, store.GetVariable("/layer1/qlora/lora/B").SetValue(
+			tensors.FromFlatDataAndDimensions([]float32{0.1, -0.2, 0.3, -0.1, -0.2, 0.4, 0.1, 0.2}, 2, 4)))
+		require.NoError(t, store.GetVariable("/layer2/qlora/lora/A").SetValue(
+			tensors.FromFlatDataAndDimensions([]float32{0.15, -0.25, 0.2, 0.1, -0.3, 0.2, 0.1, -0.15}, 4, 2)))
+		require.NoError(t, store.GetVariable("/layer2/qlora/lora/B").SetValue(
+			tensors.FromFlatDataAndDimensions([]float32{0.25, -0.35, -0.15, 0.3}, 2, 2)))
+
+		rawGrads, err := gradExec.Call([][]float32{{1.0, -0.5}, {-0.25, 0.75}})
+		require.NoError(t, err)
+		require.Len(t, rawGrads, 6) // layer1 (bias, A, B) + layer2 (bias, A, B); NF4 packed/scales stay frozen!
+
+		out := make([][]float32, len(rawGrads))
+		for i, rg := range rawGrads {
+			vals, err := tensors.CopyFlatData[float32](rg)
+			require.NoError(t, err)
+			out[i] = vals
+		}
+		return out
+	}
+
+	fusedGrads := runQLoRAGrads(t, "1")
+	decompGrads := runQLoRAGrads(t, "0")
+	for i := range fusedGrads {
+		assert.InDeltaSlice(t, decompGrads[i], fusedGrads[i], 1e-4, "gradient[%d] mismatch between FusedQuantizedDenseVJP and decomposed", i)
+		var norm float64
+		for _, v := range fusedGrads[i] {
+			norm += float64(v * v)
+		}
+		assert.Greater(t, norm, 0.0, "expected non-zero gradient[%d] through multi-layer QLoRA", i)
+	}
+}
+
 func TestQuantizeNF4RejectsOddOutput(t *testing.T) {
 	if _, err := QuantizeNF4(2, 3, 2, make([]float32, 6)); err == nil {
 		t.Fatal("odd NF4 output must be rejected")
@@ -354,4 +427,3 @@ func TestAttentionWithAutomaticPEFT(t *testing.T) {
 	// Gradients should only be for Query (A, B) and Value (A, B) -> 4 variables:
 	assert.Len(t, grads, 4)
 }
-

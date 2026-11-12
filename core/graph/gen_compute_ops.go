@@ -78,6 +78,7 @@ const (
 	NodeTypeFusedLayerNorm
 	NodeTypeFusedLayerNormVJP
 	NodeTypeFusedQuantizedDense
+	NodeTypeFusedQuantizedDenseVJP
 	NodeTypeFusedScaledDotProductAttention
 	NodeTypeFusedScaledDotProductAttentionVJP
 	NodeTypeFusedSoftmax

@@ -7,55 +7,76 @@ import (
 	"slices"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/envutil"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"k8s.io/klog/v2"
 )
 
-// Quantization describes how a graph-level quantized tensor is dequantized.
-// This is the graph-layer counterpart of compute.Quantization, holding *Node
-// references for Scale and ZeroPoint instead of compute.Value.
+// Quantization describes how a graph-level quantized tensor maps between quantized codes and real values.
+// This is the graph-layer counterpart of compute.Quantization, holding *Node references for Scale
+// and ZeroPoint instead of compute.Value so GoMLX tracks them as graph dependencies.
+//
+// For QuantLinear, the dequantization formula is standard zero-point affine quantization:
+//
+//	real_value = (float(quant_value) - float(zero_point)) * scale
+//
+// (When ZeroPoint is nil, zero_point = 0: real_value = float(quant_value) * scale.)
+//
+// Migration note for existing callers:
+//   - Standard integer/float zero-points (ONNX, PyTorch, TFLite, GPTQ/AWQ qzeros) are passed directly as ZeroPoint.
+//   - Legacy callers storing a post-scale float additive offset (real = float(q)*scale + offset) should convert
+//     it via ZeroPoint: Neg(Div(oldOffset, scale)) (or -offset/scale on host); in weight-only float mode
+//     (XQuantization == nil), float ZeroPoint values are subtracted directly in Float32 without integer rounding.
+//   - Scalar [] / [1] and 1D [N] Scale/ZeroPoint nodes can be passed directly without [K, NumBlocks] broadcasts.
 type Quantization struct {
-	// Scheme: Linear, NF4, or GGML.
+	// Scheme: QuantLinear, QuantNF4, or QuantGGML.
 	Scheme compute.QuantizationScheme
 
-	// Scale is the multiplicative factor.
-	// Shape: [K, NumBlocks] (block-wise), where K is the input-features
-	// (contracting) dimension of the [K, N] weight matrix and
-	// NumBlocks = ceil(N / BlockSize).
+	// Scale is the multiplicative scale factor (Float32 / Float16 / BFloat16).
+	// Accepted shapes for a 2D tensor [D0, D1] (or flattened [M, K] / [M, N] tensor):
+	//   - Scalar [] or [1]: per-tensor scale.
+	//   - 1D [D_other]: per-channel scale along the non-contracting axis (e.g. [N] for weights, [M] for x).
+	//   - 2D [ceil(D0/BlockSize), D1] when BlockAxis == 0, or [D0, ceil(D1/BlockSize)] when BlockAxis == 1.
 	// Nil for QuantGGML (scales are embedded in the blocks).
 	Scale *Node
 
-	// ZeroPoint is the additive offset (only for Linear).
-	// If nil, the quantization is assumed symmetric.
+	// ZeroPoint is the optional zero-point subtracted BEFORE multiplying by Scale (only for QuantLinear).
+	// Must be broadcast-compatible with Scale's shape. Nil means symmetric quantization (zero_point = 0).
 	// Unused for QuantGGML and QuantNF4.
 	ZeroPoint *Node
 
-	// BlockAxis is the dimension of the quantized tensor that is blocked.
-	// This is the output-features dimension (axis 1) of a [K, N] weight matrix.
-	// Currently only BlockAxis=1 is supported.
-	// Unused for QuantGGML.
+	// BlockAxis is the axis of the quantized tensor partitioned into blocks of size BlockSize
+	// (0 or 1 for a 2D weight matrix; -1 or K-axis for input x).
+	// Ignored when Scale is scalar or 1D per-channel, or when Scheme == QuantGGML.
 	BlockAxis int
 
-	// BlockSize is the number of elements in BlockAxis that share one scale.
-	// If BlockSize == values.Shape()[BlockAxis], it's effectively per-axis quantization.
-	// Unused for QuantGGML.
+	// BlockSize is the number of elements along BlockAxis sharing one scale/zero-point.
+	// If 0, inferred from ceil(dim(BlockAxis) / Scale.Shape().Dimensions[BlockAxis]).
 	BlockSize int
 
-	// GGMLType specifies the concrete GGML block format (Q4_0, Q8_0, etc.).
+	// GGMLType specifies the concrete GGML block format (Q4_0, Q8_0, Q4_K, Q8_K, etc.).
 	// Only used when Scheme == QuantGGML.
 	GGMLType compute.GGMLQuantType
+
+	// QuantizedDType optionally specifies the target quantized output dtype (Int8 or Uint8)
+	// when used as OutputQuantization and ZeroPoint is nil or float.
+	QuantizedDType dtypes.DType
 }
 
 // toBackend converts the graph-level Quantization to a compute.Quantization
 // by extracting the backend Values from the *Node fields.
 func (q *Quantization) toBackend() *compute.Quantization {
+	if q == nil {
+		return nil
+	}
 	bq := &compute.Quantization{
-		Scheme:    q.Scheme,
-		BlockAxis: q.BlockAxis,
-		BlockSize: q.BlockSize,
-		GGMLType:  q.GGMLType,
+		Scheme:         q.Scheme,
+		BlockAxis:      q.BlockAxis,
+		BlockSize:      q.BlockSize,
+		GGMLType:       q.GGMLType,
+		QuantizedDType: q.QuantizedDType,
 	}
 	if q.Scale != nil {
 		bq.Scale = q.Scale.outputOps[0]
@@ -66,15 +87,107 @@ func (q *Quantization) toBackend() *compute.Quantization {
 	return bq
 }
 
+func (q *Quantization) appendNodes(dst []*Node) []*Node {
+	if q == nil {
+		return dst
+	}
+	if q.Scale != nil {
+		dst = append(dst, q.Scale)
+	}
+	if q.ZeroPoint != nil {
+		dst = append(dst, q.ZeroPoint)
+	}
+	return dst
+}
+
+func (q *Quantization) cloneFromInputs(newInputs []*Node, idx *int) *Quantization {
+	if q == nil {
+		return nil
+	}
+	cloned := *q
+	if q.Scale != nil {
+		cloned.Scale = newInputs[*idx]
+		*idx++
+	}
+	if q.ZeroPoint != nil {
+		cloned.ZeroPoint = newInputs[*idx]
+		*idx++
+	}
+	return &cloned
+}
+
+func (q *Quantization) String() string {
+	if q == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("{Scheme:%s Scale:%s ZeroPoint:%s BlockAxis:%d BlockSize:%d GGMLType:%s QuantizedDType:%s}",
+		q.Scheme, strNillableNode(q.Scale), strNillableNode(q.ZeroPoint), q.BlockAxis, q.BlockSize, q.GGMLType, q.QuantizedDType)
+}
+
+// QuantizedDenseConfig holds configuration and quantization metadata for BackendFusedQuantizedDense,
+// BackendFusedQuantizedDenseVJP, and nn.QuantizedDense. It is the graph-layer counterpart of
+// compute.FusedQuantizedDenseConfig.
+type QuantizedDenseConfig struct {
+	// WeightQuantization describes how the weight tensor is quantized. Required (must not be nil).
+	WeightQuantization *Quantization
+
+	// XQuantization describes how the input x is quantized for integer-matmul schemes:
+	//   - QuantLinear (Int8/Uint8 x + Scale/ZeroPoint), or
+	//   - QuantGGML (GGMLQ8_0 / GGMLQ8_K packed Uint8 x).
+	// Nil (the default) means x is passed in floating-point.
+	XQuantization *Quantization
+
+	// OutputQuantization optionally re-quantizes the post-activation output tensor using
+	// caller-provided Scale and ZeroPoint (e.g. ONNX QLinearMatMul).
+	// Nil (the default) returns a floating-point output.
+	OutputQuantization *Quantization
+
+	// QuantizedMatmuls is an optional optimization hint used when XQuantization == nil.
+	// If true, the backend may dynamically quantize x on-the-fly to run integer SIMD dot products.
+	QuantizedMatmuls bool
+
+	// Activation is applied after matmul + scale + bias; defaults to ActivationNone.
+	Activation compute.ActivationConfig
+
+	// WeightLayout specifies whether weight is [K, N] (DenseLayoutInputOutputs, default)
+	// or [N, K] (DenseLayoutOutputsInput; required for QuantGGML where shape is [N, bytesPerRow]).
+	WeightLayout compute.DenseLayout
+}
+
+func (cfg QuantizedDenseConfig) toBackend() compute.FusedQuantizedDenseConfig {
+	return compute.FusedQuantizedDenseConfig{
+		WeightQuantization: cfg.WeightQuantization.toBackend(),
+		XQuantization:      cfg.XQuantization.toBackend(),
+		OutputQuantization: cfg.OutputQuantization.toBackend(),
+		QuantizedMatmuls:   cfg.QuantizedMatmuls,
+		Activation:         cfg.Activation,
+		WeightLayout:       cfg.WeightLayout,
+	}
+}
+
+func (cfg QuantizedDenseConfig) appendNodes(dst []*Node) []*Node {
+	dst = cfg.WeightQuantization.appendNodes(dst)
+	dst = cfg.XQuantization.appendNodes(dst)
+	dst = cfg.OutputQuantization.appendNodes(dst)
+	return dst
+}
+
+func (cfg QuantizedDenseConfig) cloneFromInputs(newInputs []*Node, idx *int) QuantizedDenseConfig {
+	cloned := cfg
+	cloned.WeightQuantization = cfg.WeightQuantization.cloneFromInputs(newInputs, idx)
+	cloned.XQuantization = cfg.XQuantization.cloneFromInputs(newInputs, idx)
+	cloned.OutputQuantization = cfg.OutputQuantization.cloneFromInputs(newInputs, idx)
+	return cloned
+}
+
 // nodeInputsFusedQuantizedDense holds the inputs used for the call to compute.FusedQuantizedDense.
-// Hand-written (not generated) because the backend interface uses a *compute.Quantization struct
-// but the graph layer stores scale and zeroPoint as individual *Node values.
+// Hand-written (not generated) because the backend interface uses compute.FusedQuantizedDenseConfig
+// while the graph layer tracks Scale and ZeroPoint tensors as *Node dependencies.
 type nodeInputsFusedQuantizedDense struct {
-	x          *Node
-	weights    *Node
-	bias       *Node
-	wq         *Quantization
-	activation compute.ActivationType
+	x      *Node
+	weight *Node
+	bias   *Node
+	cfg    QuantizedDenseConfig
 }
 
 // Type implements the interface NodeInputs.
@@ -84,55 +197,36 @@ func (ni *nodeInputsFusedQuantizedDense) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsFusedQuantizedDense) String() string {
-	return fmt.Sprintf("%s(x=[#%d], weights=[#%d], bias=%s, scale=%s, zeroPoint=%s, scheme=%s, blockAxis=%v, blockSize=%v, ggmlType=%s, activation=%s)",
+	return fmt.Sprintf("%s(x=[#%d], weight=[#%d], bias=%s, wq=%s, xq=%s, oq=%s, quantizedMatmuls=%v, activation=%+v, layout=%s)",
 		ni.Type(),
 		ni.x.Id(),
-		ni.weights.Id(),
+		ni.weight.Id(),
 		strNillableNode(ni.bias),
-		strNillableNode(ni.wq.Scale),
-		strNillableNode(ni.wq.ZeroPoint),
-		ni.wq.Scheme,
-		ni.wq.BlockAxis,
-		ni.wq.BlockSize,
-		ni.wq.GGMLType,
-		ni.activation,
+		ni.cfg.WeightQuantization,
+		ni.cfg.XQuantization,
+		ni.cfg.OutputQuantization,
+		ni.cfg.QuantizedMatmuls,
+		ni.cfg.Activation,
+		ni.cfg.WeightLayout,
 	)
 }
 
 // CloneWithInputs implements the interface NodeInputs.
 func (ni *nodeInputsFusedQuantizedDense) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
 	// inputNodes ordering from BackendFusedQuantizedDense is:
-	// [x, weights, scale?, zeroPoint?, bias?]
+	// [x, weight, wq.Scale?, wq.ZeroPoint?, xq.Scale?, xq.ZeroPoint?, oq.Scale?, oq.ZeroPoint?, bias?]
 	idx := 0
 	newX := newInputs[idx]
 	idx++
-	newWeights := newInputs[idx]
+	newWeight := newInputs[idx]
 	idx++
-	var newScale *Node
-	if ni.wq.Scale != nil {
-		newScale = newInputs[idx]
-		idx++
-	}
-	var newZeroPoint *Node
-	if ni.wq.ZeroPoint != nil {
-		newZeroPoint = newInputs[idx]
-		idx++
-	}
+	newCfg := ni.cfg.cloneFromInputs(newInputs, &idx)
 	var newBias *Node
 	if ni.bias != nil {
 		newBias = newInputs[idx]
 		idx++
 	}
-	// Note: We need a new Quantization spec because Scale and ZeroPoint might have changed.
-	newWq := &Quantization{
-		Scale:     newScale,
-		ZeroPoint: newZeroPoint,
-		Scheme:    ni.wq.Scheme,
-		BlockAxis: ni.wq.BlockAxis,
-		BlockSize: ni.wq.BlockSize,
-		GGMLType:  ni.wq.GGMLType,
-	}
-	return BackendFusedQuantizedDense(newX, newWeights, newBias, newWq, ni.activation)
+	return BackendFusedQuantizedDense(newX, newWeight, newBias, newCfg)
 }
 
 // BackendFusedSoftmax computes softmax along the specified axis.
@@ -465,37 +559,44 @@ func fusedScaledDotProductAttentionVJP(node *Node, vjps []*Node, _ shapes.Shape)
 	return grads
 }
 
-// BackendFusedQuantizedDense performs fused dequantization + matmul + optional bias + optional activation.
+// BackendFusedQuantizedDense performs fused quantized matmul + optional bias + optional activation
+// (+ optional output re-quantization when cfg.OutputQuantization != nil).
+//
+// Bias handling (when bias != nil, shape [N]):
+//   - Floating-point bias: added in floating-point AFTER dequantization / (xScale * wScale) rescaling
+//     and BEFORE cfg.Activation (and cfg.OutputQuantization).
+//   - Int32 bias (valid only when cfg.XQuantization != nil with Scheme == compute.QuantLinear and
+//     neither XQuantization.Scale nor WeightQuantization.Scale partitions K into multiple blocks):
+//     added directly to the Int32 matmul accumulator BEFORE converting to Float32 and multiplying by
+//     xScale[m] * wScale[n], i.e. z[m, n] = float32(acc_int32[m, n] + bias[n]) * (xScale[m] * wScale[n]).
+//
 // Internal: prefer nn.QuantizedDense which handles fallback and gradients.
-func BackendFusedQuantizedDense(x, weights, bias *Node,
-	wq *Quantization, activation compute.ActivationType) *Node {
-
-	if wq == nil {
-		exceptions.Panicf("BackendFusedQuantizedDense: wq must not be nil")
+func BackendFusedQuantizedDense(x, weight, bias *Node, cfg QuantizedDenseConfig) *Node {
+	if cfg.WeightQuantization == nil {
+		exceptions.Panicf("BackendFusedQuantizedDense: cfg.WeightQuantization must not be nil")
 	}
+	wq := cfg.WeightQuantization
 	if wq.Scale == nil && wq.Scheme != compute.QuantGGML {
-		exceptions.Panicf("BackendFusedQuantizedDense: wq.Scale must not be nil for scheme %s", wq.Scheme)
+		exceptions.Panicf("BackendFusedQuantizedDense: WeightQuantization.Scale must not be nil for scheme %s", wq.Scheme)
 	}
 
-	// inputNodes ordering: [x, weights, scale?, zeroPoint?, bias?].
-	inputNodes := []*Node{x, weights}
-	if wq.Scale != nil {
-		inputNodes = append(inputNodes, wq.Scale)
-	}
-	if wq.ZeroPoint != nil {
-		inputNodes = append(inputNodes, wq.ZeroPoint)
-	}
+	// inputNodes ordering:
+	// [x, weight, wq.Scale?, wq.ZeroPoint?, xq.Scale?, xq.ZeroPoint?, oq.Scale?, oq.ZeroPoint?, bias?].
+	inputNodes := []*Node{x, weight}
+	inputNodes = cfg.appendNodes(inputNodes)
 	if bias != nil {
 		inputNodes = append(inputNodes, bias)
 	}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 
+	// Clone Quantization pointers so caller mutations after graph construction do not alias node inputs.
+	idx := 2
+	clonedCfg := cfg.cloneFromInputs(inputNodes, &idx)
 	inputs := &nodeInputsFusedQuantizedDense{
-		x:          x,
-		weights:    weights,
-		bias:       bias,
-		wq:         wq,
-		activation: activation,
+		x:      x,
+		weight: weight,
+		bias:   bias,
+		cfg:    clonedCfg,
 	}
 
 	var biasVal compute.Value
@@ -504,7 +605,7 @@ func BackendFusedQuantizedDense(x, weights, bias *Node,
 	}
 
 	result, err := g.currentFunc.backendFunc.FusedQuantizedDense(
-		x.outputOps[0], weights.outputOps[0], biasVal, wq.toBackend(), activation)
+		x.outputOps[0], weight.outputOps[0], biasVal, clonedCfg.toBackend())
 	if err != nil {
 		panic(err)
 	}
@@ -517,6 +618,165 @@ func BackendFusedQuantizedDense(x, weights, bias *Node,
 	}
 	g.registerNode(node)
 	return node
+}
+
+// nodeInputsFusedQuantizedDenseVJP holds the inputs used for the call to compute.FusedQuantizedDenseVJP.
+type nodeInputsFusedQuantizedDenseVJP struct {
+	x       *Node
+	weight  *Node
+	bias    *Node
+	y       *Node
+	dOutput *Node
+	cfg     QuantizedDenseConfig
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedQuantizedDenseVJP) Type() NodeType {
+	return NodeTypeFusedQuantizedDenseVJP
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedQuantizedDenseVJP) String() string {
+	return fmt.Sprintf("%s(x=%s, weight=[#%d], bias=%s, y=%s, dOutput=[#%d], wq=%s, quantizedMatmuls=%v, activation=%+v, layout=%s)",
+		ni.Type(),
+		strNillableNode(ni.x),
+		ni.weight.Id(),
+		strNillableNode(ni.bias),
+		strNillableNode(ni.y),
+		ni.dOutput.Id(),
+		ni.cfg.WeightQuantization,
+		ni.cfg.QuantizedMatmuls,
+		ni.cfg.Activation,
+		ni.cfg.WeightLayout,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedQuantizedDenseVJP) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// inputNodes ordering from BackendFusedQuantizedDenseVJP:
+	// [weight, dOutput, x?, y?, wq.Scale?, wq.ZeroPoint?, xq.Scale?, xq.ZeroPoint?, oq.Scale?, oq.ZeroPoint?, bias?]
+	idx := 0
+	newWeight := newInputs[idx]
+	idx++
+	newDOutput := newInputs[idx]
+	idx++
+	var newX *Node
+	if ni.x != nil {
+		newX = newInputs[idx]
+		idx++
+	}
+	var newY *Node
+	if ni.y != nil {
+		newY = newInputs[idx]
+		idx++
+	}
+	newCfg := ni.cfg.cloneFromInputs(newInputs, &idx)
+	var newBias *Node
+	if ni.bias != nil {
+		newBias = newInputs[idx]
+		idx++
+	}
+	r0, _ := BackendFusedQuantizedDenseVJP(newX, newWeight, newBias, newY, newDOutput, newCfg)
+	if r0.Type() == NodeTypeSplitNode {
+		return r0.inputNodes[0]
+	}
+	return r0
+}
+
+// BackendFusedQuantizedDenseVJP computes the vector-jacobian product (gradients) of FusedQuantizedDense
+// with respect to its floating-point inputs (x and optional bias), dequantizing weight on-the-fly
+// without materializing the full float weight matrix.
+// Internal: used for reverse-mode autodiff of NodeTypeFusedQuantizedDense.
+func BackendFusedQuantizedDenseVJP(x, weight, bias, y, dOutput *Node, cfg QuantizedDenseConfig) (dx, dBias *Node) {
+	if cfg.WeightQuantization == nil {
+		exceptions.Panicf("BackendFusedQuantizedDenseVJP: cfg.WeightQuantization must not be nil")
+	}
+	inputNodes := []*Node{weight, dOutput}
+	if x != nil {
+		inputNodes = append(inputNodes, x)
+	}
+	if y != nil {
+		inputNodes = append(inputNodes, y)
+	}
+	cfgStartIdx := len(inputNodes)
+	inputNodes = cfg.appendNodes(inputNodes)
+	if bias != nil {
+		inputNodes = append(inputNodes, bias)
+	}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+
+	idx := cfgStartIdx
+	clonedCfg := cfg.cloneFromInputs(inputNodes, &idx)
+	inputs := &nodeInputsFusedQuantizedDenseVJP{
+		x:       x,
+		weight:  weight,
+		bias:    bias,
+		y:       y,
+		dOutput: dOutput,
+		cfg:     clonedCfg,
+	}
+
+	var xVal, biasVal, yVal compute.Value
+	if x != nil {
+		xVal = x.outputOps[0]
+	}
+	if bias != nil {
+		biasVal = bias.outputOps[0]
+	}
+	if y != nil {
+		yVal = y.outputOps[0]
+	}
+
+	v0, v1, err := g.currentFunc.backendFunc.FusedQuantizedDenseVJP(
+		xVal, weight.outputOps[0], biasVal, yVal, dOutput.outputOps[0], clonedCfg.toBackend())
+	if err != nil {
+		panic(err)
+	}
+
+	outputOps := []compute.Value{v0}
+	outputShapes := []shapes.Shape{mustNoError(g.builder.OpShape(v0))}
+	if bias != nil {
+		outputOps = append(outputOps, v1)
+		outputShapes = append(outputShapes, mustNoError(g.builder.OpShape(v1)))
+	}
+
+	node := &Node{
+		outputOps:    outputOps,
+		outputShapes: outputShapes,
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	splitNodes := splitNode(node)
+	dx = splitNodes[0]
+	if bias != nil {
+		dBias = splitNodes[1]
+	}
+	return
+}
+
+// fusedQuantizedDenseVJP is the registered VJP for NodeTypeFusedQuantizedDense.
+func fusedQuantizedDenseVJP(node *Node, vjp *Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsFusedQuantizedDense)
+	var xForVJP, yForVJP *Node
+	if inputs.x.Shape().IsDynamic() || inputs.x.DType() != vjp.DType() || len(inputs.x.Shape().AxisNames) > 0 {
+		xForVJP = inputs.x
+	}
+	if inputs.cfg.Activation.Type != compute.ActivationNone {
+		yForVJP = node
+	}
+	dx, dBias := BackendFusedQuantizedDenseVJP(xForVJP, inputs.weight, inputs.bias, yForVJP, vjp, inputs.cfg)
+	// Align 1-to-1 with node.inputNodes:
+	//   - dx at index 0 (for x)
+	//   - nil for weight and quantization Scale/ZeroPoint nodes (discrete/frozen)
+	//   - dBias at len(vjps)-1 (for bias, when bias != nil)
+	vjps := make([]*Node, len(node.inputNodes))
+	vjps[0] = ConvertDType(dx, inputs.x.DType())
+	if inputs.bias != nil {
+		vjps[len(vjps)-1] = ConvertDType(dBias, inputs.bias.DType())
+	}
+	return vjps
 }
 
 // nodeInputsQuantizedEmbeddingLookup holds the inputs used for the call to compute.QuantizedEmbeddingLookup.

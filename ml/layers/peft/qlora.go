@@ -165,7 +165,20 @@ func (l *NF4) Done() *Node {
 		scaleCodes = qScope.VariableWithValue("nf4_scale_codes", tensors.FromFlatDataAndDimensions(l.weight.ScaleCodes, l.weight.InputFeatures, blocks)).SetTrainable(false)
 		scaleScales = qScope.VariableWithValue("nf4_scale_scales", tensors.FromFlatDataAndDimensions(l.weight.ScaleScales, l.weight.InputFeatures, (blocks+l.weight.ScaleBlockSize-1)/l.weight.ScaleBlockSize)).SetTrainable(false)
 	}
-	base := nn.QuantizedDense(l.input, Reshape(Bitcast(packed.NodeValue(l.input), dtypes.Uint4), l.weight.InputFeatures, l.weight.OutputFeatures), &Quantization{Scheme: compute.QuantNF4, Scale: nf4Scales(l.input, scales, scaleCodes, scaleScales, l.weight), BlockAxis: 1, BlockSize: l.weight.BlockSize}, nodeValue(l.bias, l.input))
+	base := nn.QuantizedDense(
+		l.input,
+		Reshape(Bitcast(packed.NodeValue(l.input), dtypes.Uint4), l.weight.InputFeatures, l.weight.OutputFeatures),
+		nodeValue(l.bias, l.input),
+		QuantizedDenseConfig{
+			WeightQuantization: &Quantization{
+				Scheme:    compute.QuantNF4,
+				Scale:     nf4Scales(l.input, scales, scaleCodes, scaleScales, l.weight),
+				BlockAxis: 1,
+				BlockSize: l.weight.BlockSize,
+			},
+			WeightLayout: compute.DenseLayoutInputOutputs,
+		},
+	)
 	if l.config.rank == 0 {
 		return base
 	}
