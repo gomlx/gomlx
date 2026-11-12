@@ -23,6 +23,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
+	"github.com/gomlx/gomlx/ml/nn"
 )
 
 // Learned implements a learned positional embedding.
@@ -60,19 +61,29 @@ func (l *Learned) Name() string {
 func (l *Learned) PreEncode(x, positionIndices *Node, seqAxis int) *Node {
 	g := x.Graph()
 
-	// Variable with all the positional embeddings: created if it doesn't exist yet.
-	posEmbedFull := l.scope.In("pos_embed").VariableWithShape("embeddings",
-		shapes.Make(x.DType(), l.maxPosEmbedding, l.embedDim)).NodeValue(g)
-
 	// Ensure positionIndices has an integer dtype for Gather.
 	if !positionIndices.DType().IsInt() {
 		positionIndices = ConvertDType(positionIndices, dtypes.Int64)
 	}
+	gatherIndices := ExpandDims(positionIndices, -1)
 
-	// Gather the corresponding positional embeddings for the given positions
-	// positionIndices is shaped [[batchSize...,] seqLen], ExpandDims makes it [[batchSize...,] seqLen, 1]
-	// Gathering from [maxPosEmbedding, embedDim] variable yields [[batchSize...,] seqLen, embedDim]
-	posEmbed := Gather(posEmbedFull, ExpandDims(positionIndices, -1))
+	// Variable with all the positional embeddings: created if it doesn't exist yet.
+	posScope := l.scope.In("pos_embed")
+	var posEmbed *Node
+	if existing := posScope.GetVariable("embeddings"); existing != nil {
+		if existing.Quantization() != nil {
+			posEmbed = nn.QuantizedGather(existing.NodeValue(g), gatherIndices, existing.Quantization().ToGraph(g))
+		} else {
+			posEmbed = Gather(existing.NodeValue(g), gatherIndices)
+		}
+		if posEmbed.DType() != x.DType() {
+			posEmbed = ConvertDType(posEmbed, x.DType())
+		}
+	} else {
+		posEmbedFull := posScope.VariableWithShape("embeddings",
+			shapes.Make(x.DType(), l.maxPosEmbedding, l.embedDim)).NodeValue(g)
+		posEmbed = Gather(posEmbedFull, gatherIndices)
+	}
 
 	// If posEmbed is missing batch dimensions (e.g., posEmbed is [seqLen, embedDim] while x is [batchSize, seqLen, embedDim]),
 	// we explicitly broadcast it to match x's shape, similar to what is done with BroadcastPrefix.

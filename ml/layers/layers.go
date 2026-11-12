@@ -14,6 +14,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/ml/layers/activation"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/nn"
@@ -48,105 +49,282 @@ const (
 	//
 	// Default is `0.0`, which means never do any DropPath.
 	ParamDropPathProbability = "droppath_prob"
+
+	// ParamQuantizedMatmul scope hyperparameter controls whether quantized dense layers
+	// quantize floating-point activations on-the-fly for integer dot products (true, the default)
+	// or dequantize weights to floating-point (false). Can also be overridden per layer via
+	// [DenseBuilder.WithQuantizedMatmul].
+	ParamQuantizedMatmul = "quantized_matmul"
 )
 
 // DenseWithBias adds a single dense linear layer, a learnable linear transformation plus a bias term.
 //
 // It creates a "dense" sub-scope under `scope`.
 //
-// It the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
+// If the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
 //
-// See also FNN for a more configurable (including hidden layers) version.
+// Deprecated: Use [NewDense] to configure layout, fused activation, regularization, or scope behavior,
+// and `fnn.New` for multi-layer feedforward networks.
 func DenseWithBias(scope *model.Scope, input *Node, outputDimensions ...int) *Node {
-	return Dense(scope, input, true, outputDimensions...)
+	return NewDense(scope, input, outputDimensions...).WithBias(true).Done()
 }
 
 // Dense adds a single dense linear layer, a learnable linear transformation.
-// Optionally, it can include a bias term. Weight layout is compute.DenseLayoutInputOutputs.
+// Optionally, it can include a bias term. Weight layout is [compute.DenseLayoutInputOutputs].
 //
 // It creates a "dense" sub-scope under `scope`.
 //
-// It automatically adds regularization to the weights (not to biases) configured in hyperparameters -- see regularizers.FromScope.
+// It automatically adds regularization to the weights (not to biases) configured in hyperparameters -- see [regularizer.FromScope].
 //
 // If the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
 //
-// See also DenseWithLayout to specify a weight layout, and FNN for a more configurable (including hidden layers) version.
+// Deprecated: Use [NewDense] to configure layout, fused activation, regularization, or scope behavior,
+// and `fnn.New` for multi-layer feedforward networks.
 func Dense(scope *model.Scope, input *Node, useBias bool, outputDimensions ...int) *Node {
-	return DenseWithLayout(scope, input, compute.DenseLayoutInputOutputs, useBias, outputDimensions...)
+	return NewDense(scope, input, outputDimensions...).WithBias(useBias).Done()
 }
 
 // DenseWithLayout adds a single dense linear layer with a specific weight layout.
 //
 // It creates a "dense" sub-scope under `scope`.
 //
-// If layout is compute.DenseLayoutInputOutputs, weights have shape `[inputLastDimension, outputDimensions...]`.
-// If layout is compute.DenseLayoutOutputsInput, weights have shape `[outputDimensions..., inputLastDimension]`.
+// If layout is [compute.DenseLayoutInputOutputs], weights have shape `[inputLastDimension, prod(outputDimensions)]`.
+// If layout is [compute.DenseLayoutOutputsInput], weights have shape `[prod(outputDimensions), inputLastDimension]`.
 //
 // Optionally, it can include a bias term.
-// It automatically adds regularization to the weights (not to biases) configured in hyperparameters -- see regularizers.FromScope.
+// It automatically adds regularization to the weights (not to biases) configured in hyperparameters -- see [regularizer.FromScope].
 //
 // If the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
+//
+// Deprecated: Use [NewDense] for additional options such as fused activations.
 func DenseWithLayout(scope *model.Scope, input *Node, layout compute.DenseLayout, useBias bool, outputDimensions ...int) *Node {
-	scope = scope.In("dense")
-	g := input.Graph()
-	regularizer := regularizer.FromScope(scope)
+	return NewDense(scope, input, outputDimensions...).WithBias(useBias).WithLayout(layout).Done()
+}
 
-	inputShape := input.Shape()
-	inputRank := inputShape.Rank()
-	if inputRank == 0 {
-		Panicf("input for layers.DenseWithLayout needs to have rank >= 1, got %s", input.Shape())
+// DenseBuilder configures and builds a single dense (linear) layer.
+// Create it with [NewDense], chain optional configuration methods, and call [DenseBuilder.Done].
+type DenseBuilder struct {
+	scope              *model.Scope
+	input              *Node
+	outputDimensions   []int
+	useBias            bool
+	layout             compute.DenseLayout
+	activation         activation.Type
+	regularizer        regularizer.Regularizer
+	regularizerSet     bool
+	quantizedMatmul    bool
+	quantizedMatmulSet bool
+	newScope           bool
+}
+
+// NewDense prepares a single dense (linear) projection layer on `input` producing `<outputDimensions...>`.
+//
+// Defaults:
+//   - Sub-scope: creates `"dense"` under `scope` (call [DenseBuilder.CurrentScope] to place `"weights"`/`"biases"` directly in `scope`).
+//   - Bias: disabled (`false`; enable with [DenseBuilder.WithBias]).
+//   - Weight layout: [compute.DenseLayoutInputOutputs] (override with [DenseBuilder.WithLayout]).
+//   - Activation: [activation.TypeNone] (override with [DenseBuilder.WithActivation]).
+//   - Regularization: [regularizer.FromScope] on the layer scope (override with [DenseBuilder.WithRegularizer]).
+//   - Quantized matmul: reads [ParamQuantizedMatmul] from the layer scope, defaulting to `true`
+//     (override per layer with [DenseBuilder.WithQuantizedMatmul]).
+//
+// Quantized weights do not need explicit builder configuration: if the `"weights"` variable in the
+// target scope already exists with quantization metadata (see [model.Variable.WithQuantization]),
+// [DenseBuilder.Done] automatically dispatches to [nn.QuantizedDense] without materializing
+// dequantized floating-point weights.
+func NewDense(scope *model.Scope, input *Node, outputDimensions ...int) *DenseBuilder {
+	if input.Rank() == 0 {
+		Panicf("input for layers.NewDense needs to have rank >= 1, got %s", input.Shape())
 	}
 	if len(outputDimensions) == 0 {
-		Panicf("at least one outputDimension must be given for layers.DenseWithLayout, got 0 -- use outputDims=[1] for a scalar output")
+		Panicf("at least one outputDimension must be given for layers.NewDense, got 0 -- use outputDims=[1] for a scalar output")
 	}
-	inputLastDimension := inputShape.Dimensions[inputShape.Rank()-1]
+	for _, dim := range outputDimensions {
+		if dim <= 0 {
+			Panicf("dimensions for outputDimensions in layers.NewDense must be > 0, got %v", outputDimensions)
+		}
+	}
+	return &DenseBuilder{
+		scope:            scope,
+		input:            input,
+		outputDimensions: outputDimensions,
+		layout:           compute.DenseLayoutInputOutputs,
+		activation:       activation.TypeNone,
+		newScope:         true,
+	}
+}
 
-	// Linear transformation.
+// WithBias configures whether to include an additive bias term (`"biases"` variable).
+// Default is false.
+func (b *DenseBuilder) WithBias(useBias bool) *DenseBuilder {
+	b.useBias = useBias
+	return b
+}
+
+// WithLayout configures the memory layout of the `"weights"` variable:
+//   - [compute.DenseLayoutInputOutputs] (default): `[inputFeatures, outFeatures]`
+//   - [compute.DenseLayoutOutputsInput]: `[outFeatures, inputFeatures]` (used by PyTorch `nn.Linear` and GGUF/GGML)
+func (b *DenseBuilder) WithLayout(layout compute.DenseLayout) *DenseBuilder {
+	b.layout = layout
+	return b
+}
+
+// WithActivation configures an activation function applied after the linear projection (and after
+// any registered post-linear hooks). When possible, the activation is fused directly into
+// [nn.Dense] or [nn.QuantizedDense].
+//
+// Note: For gating activations that halve the last dimension (such as [activation.TypeSwiGLU]),
+// `outputDimensions` specifies the pre-activation linear output dimension (e.g. `dim * act.HiddenDimMultiplier()`).
+func (b *DenseBuilder) WithActivation(act activation.Type) *DenseBuilder {
+	b.activation = act
+	return b
+}
+
+// WithRegularizer sets the regularizer applied to `"weights"` (never to `"biases"`), overriding
+// [regularizer.FromScope]. Pass `nil` to explicitly disable regularization.
+func (b *DenseBuilder) WithRegularizer(reg regularizer.Regularizer) *DenseBuilder {
+	b.regularizer = reg
+	b.regularizerSet = true
+	return b
+}
+
+// WithQuantizedMatmul configures whether pre-loaded quantized `"weights"` dynamically quantize
+// floating-point input activations on-the-fly for integer dot products (`true`) or dequantize
+// weights to floating-point (`false`), overriding [ParamQuantizedMatmul] in `scope`.
+//
+// If `"weights"` is not quantized, this setting has no effect.
+func (b *DenseBuilder) WithQuantizedMatmul(enabled bool) *DenseBuilder {
+	b.quantizedMatmul = enabled
+	b.quantizedMatmulSet = true
+	return b
+}
+
+// CurrentScope configures the layer not to create a `"dense"` sub-scope, placing `"weights"` and
+// `"biases"` directly in the scope passed to [NewDense].
+func (b *DenseBuilder) CurrentScope() *DenseBuilder {
+	b.newScope = false
+	return b
+}
+
+// Done builds the dense layer graph operations and returns the output node.
+func (b *DenseBuilder) Done() *Node {
+	scope := b.scope
+	if b.newScope {
+		scope = scope.In("dense")
+	}
+	g := b.input.Graph()
+	reg := b.regularizer
+	if !b.regularizerSet {
+		reg = regularizer.FromScope(scope)
+	}
+
+	inputShape := b.input.Shape()
+	inputRank := inputShape.Rank()
+	inputLastDimension := inputShape.Dimensions[inputRank-1]
+
 	outDim := 1
-	for _, d := range outputDimensions {
+	for _, d := range b.outputDimensions {
 		outDim *= d
 	}
 
 	var weightsDims []int
-	switch layout {
+	switch b.layout {
 	case compute.DenseLayoutInputOutputs:
 		weightsDims = []int{inputLastDimension, outDim}
 	case compute.DenseLayoutOutputsInput:
 		weightsDims = []int{outDim, inputLastDimension}
 	default:
-		Panicf("layers.DenseWithLayout: unknown layout %v", layout)
+		Panicf("layers.NewDense: unknown layout %v", b.layout)
 	}
 
-	weightsVar := scope.VariableWithShape("weights", shapes.Make(inputShape.DType, weightsDims...))
-	if regularizer != nil {
-		// Only for the weights, not for the bias.
-		regularizer(g, weightsVar)
-	}
-	weights := weightsVar.NodeValue(g)
-
-	// Dispatch to nn.Dense which handles arbitrary rank, multi-dimensional
-	// output weights, and fused ops.
 	var biasNode *Node
-	if useBias {
-		biasVar := scope.VariableWithShape("biases", shapes.Make(inputShape.DType, outDim))
-		biasNode = biasVar.NodeValue(g)
+	if b.useBias {
+		if existingBias := scope.GetVariable("biases"); existingBias != nil {
+			biasNode = existingBias.NodeValue(g)
+			if biasNode.DType().IsFloat() && biasNode.DType() != inputShape.DType {
+				biasNode = ConvertDType(biasNode, inputShape.DType)
+			}
+		} else {
+			biasVar := scope.VariableWithShape("biases", shapes.Make(inputShape.DType, outDim))
+			biasNode = biasVar.NodeValue(g)
+		}
 	}
-	res := nn.Dense(input, weights, biasNode, layout)
-	res = ApplyPostLinearHooks(scope, input, res)
-	if len(outputDimensions) > 1 {
-		newDims := make([]int, inputRank-1+len(outputDimensions))
-		copy(newDims, inputShape.Dimensions[:inputRank-1])
-		copy(newDims[inputRank-1:], outputDimensions)
-		res = Reshape(res, newDims...)
+
+	canFuseAct := b.activation != activation.TypeNone &&
+		b.activation != activation.TypeSwiGLU &&
+		len(b.outputDimensions) == 1 &&
+		!hasPostLinearHooks()
+	fusedAct := activation.TypeNone
+	if canFuseAct {
+		fusedAct = b.activation
+	}
+
+	var res *Node
+	existingWeights := scope.GetVariable("weights")
+	switch {
+	case existingWeights != nil && existingWeights.Quantization() != nil:
+		weights := existingWeights.NodeValue(g)
+		quantMatmul := b.quantizedMatmul
+		if !b.quantizedMatmulSet {
+			quantMatmul = model.GetParamOr(scope, ParamQuantizedMatmul, true)
+		}
+		qCfg := QuantizedDenseConfig{
+			WeightQuantization: existingWeights.Quantization().ToGraph(g),
+			WeightLayout:       b.layout,
+			QuantizedMatmul:    quantMatmul,
+		}
+		res = nn.QuantizedDense(b.input, weights, biasNode, qCfg, fusedAct)
+
+	case existingWeights != nil && existingWeights.DType().IsFloat() && existingWeights.DType() != inputShape.DType:
+		if reg != nil {
+			reg(g, existingWeights)
+		}
+		weights := ConvertDType(existingWeights.NodeValue(g), inputShape.DType)
+		res = nn.Dense(b.input, weights, biasNode, b.layout, fusedAct)
+
+	default:
+		weightsVar := scope.VariableWithShape("weights", shapes.Make(inputShape.DType, weightsDims...))
+		if reg != nil {
+			// Only for the weights, not for the bias.
+			reg(g, weightsVar)
+		}
+		weights := weightsVar.NodeValue(g)
+		res = nn.Dense(b.input, weights, biasNode, b.layout, fusedAct)
+	}
+
+	res = ApplyPostLinearHooks(scope, b.input, res)
+	if len(b.outputDimensions) > 1 {
+		if inputShape.IsDynamic() {
+			outAxisSpecs := make([]DimensionSpec, inputRank-1+len(b.outputDimensions))
+			for i := range inputRank - 1 {
+				outAxisSpecs[i] = DimensionSpecFor(b.input, i)
+			}
+			for j, d := range b.outputDimensions {
+				outAxisSpecs[inputRank-1+j] = StaticDim(d)
+			}
+			res = DynamicReshape(res, outAxisSpecs...)
+		} else {
+			newDims := make([]int, inputRank-1+len(b.outputDimensions))
+			copy(newDims, inputShape.Dimensions[:inputRank-1])
+			copy(newDims[inputRank-1:], b.outputDimensions)
+			res = Reshape(res, newDims...)
+		}
+	}
+	if b.activation != activation.TypeNone && !canFuseAct {
+		res = activation.Apply(b.activation, res)
 	}
 	return res
 }
 
 // Embedding creates an embedding table with vocabSize elements (typically a vocabulary size)
 // each of dimension values -- so a [vocabSize, dimension] variable table.
+//
+// If the "embeddings" variable in `scope` already exists with quantization metadata
+// (see [model.Variable.WithQuantization]), it automatically dispatches to [nn.QuantizedGather]
+// to dequantize only the selected token rows on-the-fly.
 //
 // It then converts each integer value of the input to an embedding of the given dimension size.
 // The input must have an integer dtype, and the last dimension must be of size 1. If it's not
@@ -169,8 +347,22 @@ func Embedding(scope *model.Scope, input *Node, dtype dtypes.DType, vocabSize, d
 		// and index of size 1.
 		input = InsertAxes(input, -1)
 	}
+	g := input.Graph()
+	if existing := scope.GetVariable("embeddings"); existing != nil {
+		if existing.Quantization() != nil {
+			res := nn.QuantizedGather(existing.NodeValue(g), input, existing.Quantization().ToGraph(g))
+			if res.DType() != dtype {
+				res = ConvertDType(res, dtype)
+			}
+			return res
+		}
+		if existing.DType() != dtype {
+			res := Gather(existing.NodeValue(g), input, indicesAreSorted...)
+			return ConvertDType(res, dtype)
+		}
+	}
 	embeddingTable := scope.VariableWithShape("embeddings", shapes.Make(dtype, vocabSize, dimension))
-	return Gather(embeddingTable.NodeValue(input.Graph()), input, indicesAreSorted...)
+	return Gather(embeddingTable.NodeValue(g), input, indicesAreSorted...)
 }
 
 // AssertQuantilesForPWLCalibrationValid validates that raw values for quantiles are ok to be used for

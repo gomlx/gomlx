@@ -3,13 +3,17 @@
 package nn_test
 
 import (
+	"encoding/binary"
 	"testing"
 
 	"github.com/gomlx/compute"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/nn"
 	"github.com/gomlx/gomlx/support/testutil"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestQuantizedGather_GGML_Q8_0 tests QuantizedGather with Q8_0 block format.
@@ -165,5 +169,69 @@ func TestQuantizedGather_GGML_IQ4NL(t *testing.T) {
 			y := nn.QuantizedGather(table, indices, quant)
 			return []*Node{table}, []*Node{y}
 		}, []any{[][]float32{expected0}}, 1e-4)
+	})
+}
+
+// TestQuantizedGather_Q5_0_And_Dynamic verifies Q5_0 quantized lookup and dynamic batch/seq shapes
+// (regression test for InternalFusedOpCaller eager decomposed evaluation on dynamic shapes).
+func TestQuantizedGather_Q5_0_And_Dynamic(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		const bytesPerRow = 22
+		row0 := make([]uint8, bytesPerRow)
+		row0[0], row0[1] = 0x00, 0x3C // d = 1.0
+		// q0[0] = 17 (low nibble 1, high bit 1 -> +1.0), rest = 16 (low nibble 0, high bit 1 -> 0.0)
+		binary.LittleEndian.PutUint32(row0[2:6], 0xFFFFFFFF)
+		row0[6] = 0x01
+
+		row1 := make([]uint8, bytesPerRow)
+		row1[0], row1[1] = 0x00, 0x40 // d = 2.0
+		// q0[16] = 18 (high nibble of byte 0 = 2, high bit 16 = 1 -> 2*(18-16) = 4.0), rest = 16 (-> 0.0)
+		binary.LittleEndian.PutUint32(row1[2:6], 0xFFFFFFFF)
+		row1[6] = 0x20
+
+		tableData := [][]uint8{row0, row1}
+		wantRow0 := make([]float32, 32)
+		wantRow0[0] = 1.0
+		wantRow1 := make([]float32, 32)
+		wantRow1[16] = 4.0
+
+		graphtest.RunTestGraphFnWithBackend(t, "Q5_0_static", backend, func(g *Graph) ([]*Node, []*Node) {
+			table := Const(g, tableData)
+			indices := Const(g, [][]int32{{1}, {0}})
+			y := nn.QuantizedGather(table, indices, &Quantization{
+				Scheme:   compute.QuantGGML,
+				GGMLType: compute.GGMLQ5_0,
+			})
+			return []*Node{table}, []*Node{y}
+		}, []any{[][]float32{wantRow1, wantRow0}}, 1e-4)
+
+		if !backend.Capabilities().Operations[compute.OpTypeQuantizedEmbeddingLookup] {
+			return
+		}
+
+		// Dynamic [batch, seq, 1] execution on backends with fused QuantizedEmbeddingLookup.
+		var sawDynamic bool
+		exec := MustNewExec(backend, func(indices *Node) *Node {
+			sawDynamic = indices.Shape().IsDynamic()
+			g := indices.Graph()
+			table := Const(g, tableData)
+			return nn.QuantizedGather(table, indices, &Quantization{
+				Scheme:   compute.QuantGGML,
+				GGMLType: compute.GGMLQ5_0,
+			})
+		}).WithDynamicAxes([]string{"batch", "seq", ""})
+
+		inTensor := tensors.FromValue([][][]int32{{{0}, {1}}, {{1}, {0}}})
+		outs, err := exec.Exec(inTensor)
+		require.NoError(t, err)
+		assert.True(t, sawDynamic, "expected indices parameter to have dynamic shape")
+		require.Len(t, outs, 1)
+		assert.Equal(t, []int{2, 2, 32}, outs[0].Shape().Dimensions)
+		gotFlat, err := tensors.CopyFlatData[float32](outs[0])
+		require.NoError(t, err)
+		assert.InDeltaSlice(t, wantRow0, gotFlat[0:32], 1e-4)
+		assert.InDeltaSlice(t, wantRow1, gotFlat[32:64], 1e-4)
+		assert.InDeltaSlice(t, wantRow1, gotFlat[64:96], 1e-4)
+		assert.InDeltaSlice(t, wantRow0, gotFlat[96:128], 1e-4)
 	})
 }

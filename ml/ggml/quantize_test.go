@@ -24,6 +24,9 @@ func TestActivationQuantTypeFor(t *testing.T) {
 	}{
 		{compute.GGMLQ8_0, compute.GGMLQ8_0},
 		{compute.GGMLQ4_0, compute.GGMLQ8_0},
+		{compute.GGMLQ4_1, compute.GGMLQ8_0},
+		{compute.GGMLQ5_0, compute.GGMLQ8_0},
+		{compute.GGMLQ5_1, compute.GGMLQ8_0},
 		{compute.GGMLIQ4NL, compute.GGMLQ8_0},
 		{compute.GGMLQ2_K, compute.GGMLQ8_K},
 		{compute.GGMLQ3_K, compute.GGMLQ8_K},
@@ -36,6 +39,81 @@ func TestActivationQuantTypeFor(t *testing.T) {
 		assert.True(t, ok, "expected ActivationQuantTypeFor(%s) to succeed", tc.wType)
 		assert.Equal(t, tc.want, got)
 	}
+}
+
+func TestDequantize_Q4_1_Q5_0_Q5_1(t *testing.T) {
+	const (
+		dBits = uint16(0x3800) // IEEE-754 binary16 exact 0.5
+		mBits = uint16(0xBD00) // IEEE-754 binary16 exact -1.25
+		d     = float32(0.5)
+		m     = float32(-1.25)
+	)
+
+	// Q4_1: 20 bytes per 32-element block
+	q41Row := make([]uint8, 20)
+	binary.LittleEndian.PutUint16(q41Row[0:2], dBits)
+	binary.LittleEndian.PutUint16(q41Row[2:4], mBits)
+	wantQ41 := make([]float32, 32)
+	for j := range 16 {
+		lo := uint8((j * 3) & 0x0F)
+		hi := uint8((j*5 + 7) & 0x0F)
+		q41Row[4+j] = lo | (hi << 4)
+		wantQ41[j] = d*float32(lo) + m
+		wantQ41[16+j] = d*float32(hi) + m
+	}
+	graphtest.RunTestGraphFn(t, "Dequant_Q4_1", func(g *Graph) ([]*Node, []*Node) {
+		w := Const(g, [][]uint8{q41Row})
+		return []*Node{w}, []*Node{ggml.Dequantize(w, compute.GGMLQ4_1, 1)}
+	}, []any{[][]float32{wantQ41}}, 1e-5)
+
+	// Q5_0: 22 bytes per 32-element block
+	q50Row := make([]uint8, 22)
+	binary.LittleEndian.PutUint16(q50Row[0:2], dBits)
+	var qh50 uint32
+	wantQ50 := make([]float32, 32)
+	for j := range 16 {
+		q0 := uint8((j * 7) % 32)
+		q1 := uint8((j*11 + 5) % 32)
+		q50Row[6+j] = (q0 & 0x0F) | ((q1 & 0x0F) << 4)
+		if q0&0x10 != 0 {
+			qh50 |= uint32(1) << uint(j)
+		}
+		if q1&0x10 != 0 {
+			qh50 |= uint32(1) << uint(16+j)
+		}
+		wantQ50[j] = d * float32(int(q0)-16)
+		wantQ50[16+j] = d * float32(int(q1)-16)
+	}
+	binary.LittleEndian.PutUint32(q50Row[2:6], qh50)
+	graphtest.RunTestGraphFn(t, "Dequant_Q5_0", func(g *Graph) ([]*Node, []*Node) {
+		w := Const(g, [][]uint8{q50Row})
+		return []*Node{w}, []*Node{ggml.Dequantize(w, compute.GGMLQ5_0, 1)}
+	}, []any{[][]float32{wantQ50}}, 1e-5)
+
+	// Q5_1: 24 bytes per 32-element block
+	q51Row := make([]uint8, 24)
+	binary.LittleEndian.PutUint16(q51Row[0:2], dBits)
+	binary.LittleEndian.PutUint16(q51Row[2:4], mBits)
+	var qh51 uint32
+	wantQ51 := make([]float32, 32)
+	for j := range 16 {
+		q0 := uint8((j*9 + 3) % 32)
+		q1 := uint8((j*13 + 1) % 32)
+		q51Row[8+j] = (q0 & 0x0F) | ((q1 & 0x0F) << 4)
+		if q0&0x10 != 0 {
+			qh51 |= uint32(1) << uint(j)
+		}
+		if q1&0x10 != 0 {
+			qh51 |= uint32(1) << uint(16+j)
+		}
+		wantQ51[j] = d*float32(q0) + m
+		wantQ51[16+j] = d*float32(q1) + m
+	}
+	binary.LittleEndian.PutUint32(q51Row[4:8], qh51)
+	graphtest.RunTestGraphFn(t, "Dequant_Q5_1", func(g *Graph) ([]*Node, []*Node) {
+		w := Const(g, [][]uint8{q51Row})
+		return []*Node{w}, []*Node{ggml.Dequantize(w, compute.GGMLQ5_1, 1)}
+	}, []any{[][]float32{wantQ51}}, 1e-5)
 }
 
 func TestQuantizeDequantize_Q8_0_And_Q8_K(t *testing.T) {

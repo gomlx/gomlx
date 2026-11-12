@@ -171,7 +171,7 @@ func quantizedDenseDecomposed(x, weight, bias *Node, cfg QuantizedDenseConfig) *
 			WeightQuantization: quantizationToShapes(cfg.WeightQuantization),
 			XQuantization:      quantizationToShapes(cfg.XQuantization),
 			OutputQuantization: quantizationToShapes(cfg.OutputQuantization),
-			QuantizedMatmuls:   cfg.QuantizedMatmuls,
+			QuantizedMatmul:    cfg.QuantizedMatmul,
 			Activation:         cfg.Activation,
 			WeightLayout:       cfg.WeightLayout,
 		},

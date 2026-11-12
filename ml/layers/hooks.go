@@ -66,6 +66,14 @@ func ClearPostLinearHooks() {
 	hookSeqOrder = 0
 }
 
+// hasPostLinearHooks reports whether any post-linear hooks are currently registered.
+func hasPostLinearHooks() bool {
+	hooksMu.RLock()
+	n := len(linearHooks)
+	hooksMu.RUnlock()
+	return n > 0
+}
+
 // ApplyPostLinearHooks executes all registered post-linear hooks in priority order.
 func ApplyPostLinearHooks(scope *model.Scope, input, output *Node) *Node {
 	hooksMu.RLock()
