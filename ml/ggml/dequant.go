@@ -16,10 +16,10 @@ import (
 )
 
 // CanDecompose returns true for GGML quantization types that have a graph-level
-// decomposed implementation (Q4_0, Q8_0, IQ4_NL).
+// decomposed implementation (Q4_0, Q8_0, IQ4_NL, Q8_K).
 func CanDecompose(t compute.GGMLQuantType) bool {
 	switch t {
-	case compute.GGMLQ4_0, compute.GGMLQ8_0, compute.GGMLIQ4NL:
+	case compute.GGMLQ4_0, compute.GGMLQ8_0, compute.GGMLIQ4NL, compute.GGMLQ8_K:
 		return true
 	default:
 		return false
@@ -48,9 +48,28 @@ func Dequantize(weights *Node, ggmlType compute.GGMLQuantType, N int) *Node {
 		return dequantQ4_0(weights, N, numBlocks)
 	case compute.GGMLIQ4NL:
 		return dequantIQ4NL(weights, N, numBlocks)
+	case compute.GGMLQ8_K:
+		return dequantQ8_K(weights, N, numBlocks)
 	default:
 		panic("ggml.Dequantize: unsupported type " + ggmlType.String())
 	}
+}
+
+// dequantQ8_K dequantizes Q8_K blocks: 4-byte fp32 scale + 256 int8 quants + 32-byte int16 bsums per 292-byte block.
+// Returns [N, K] Float32 where K = numBlocks * 256.
+func dequantQ8_K(weights *Node, N, numBlocks int) *Node {
+	w := Reshape(weights, N, numBlocks, 292)
+
+	scaleBytes := Slice(w, AxisRange(), AxisRange(), AxisRange(0, 4))
+	scale := Bitcast(scaleBytes, dtypes.Float32)
+	scale = Reshape(scale, N, numBlocks, 1)
+
+	quantBytes := Slice(w, AxisRange(), AxisRange(), AxisRange(4, 260))
+	quants := Bitcast(quantBytes, dtypes.Int8)
+	quants = ConvertDType(quants, dtypes.Float32)
+
+	result := Mul(quants, scale)
+	return Reshape(result, N, numBlocks*256)
 }
 
 // dequantQ8_0 dequantizes Q8_0 blocks: 2-byte fp16 scale + 32 int8 quants per block.

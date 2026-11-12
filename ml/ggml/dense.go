@@ -33,24 +33,18 @@ func DenseDecomposed(x, weights *Node, ggmlType compute.GGMLQuantType,
 	dequantW := Dequantize(weights, ggmlType, N)
 	K := dequantW.Shape().Dimensions[1]
 
-	// Flatten x to [M, K] if needed.
+	// Flatten x to [M, K] if needed, or contract along x's last axis directly.
 	xShape := x.Shape()
 	if xShape.Dim(-1) != K {
 		exceptions.Panicf("ggml.DenseDecomposed expects x to be shaped [batch..., K] and (decomposed) weights [N, K], "+
 			"but got x.shape=%s and weight.shape=%s", xShape, dequantW.Shape())
 	}
-	x2d := Reshape(x, -1, K)
-
-	// Tansposed matmul: [M, K] x [N, K] → [M, N]
-	y := Dot(x2d, dequantW).EinsumAxes([][2]int{{1, 1}}, nil) // Contract the axis 1 of both sides.
-
-	// Reshape back if x had more than 2 dimensions.
-	if xShape.Rank() > 2 {
-		outDims := make([]int, xShape.Rank())
-		copy(outDims, xShape.Dimensions[:xShape.Rank()-1])
-		outDims[xShape.Rank()-1] = N
-		y = Reshape(y, outDims...)
+	if xShape.DType != dequantW.DType() {
+		dequantW = ConvertDType(dequantW, xShape.DType)
 	}
+
+	// Transposed matmul: [batch..., K] x [N, K] → [batch..., N].
+	y := DotGeneral(x, []int{xShape.Rank() - 1}, nil, dequantW, []int{1}, nil)
 
 	if bias != nil {
 		y = Add(y, ExpandLeftToRank(bias, y.Rank()))
