@@ -63,7 +63,7 @@ const (
 // If the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
 //
-// See [NewDense] to configure layout, fused activation, regularization, or scope behavior,
+// Deprecated: Use [NewDense] to configure layout, fused activation, regularization, or scope behavior,
 // and `fnn.New` for multi-layer feedforward networks.
 func DenseWithBias(scope *model.Scope, input *Node, outputDimensions ...int) *Node {
 	return NewDense(scope, input, outputDimensions...).WithBias(true).Done()
@@ -79,7 +79,7 @@ func DenseWithBias(scope *model.Scope, input *Node, outputDimensions ...int) *No
 // If the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
 //
-// See [NewDense] to configure layout, fused activation, regularization, or scope behavior,
+// Deprecated: Use [NewDense] to configure layout, fused activation, regularization, or scope behavior,
 // and `fnn.New` for multi-layer feedforward networks.
 func Dense(scope *model.Scope, input *Node, useBias bool, outputDimensions ...int) *Node {
 	return NewDense(scope, input, outputDimensions...).WithBias(useBias).Done()
@@ -98,7 +98,7 @@ func Dense(scope *model.Scope, input *Node, useBias bool, outputDimensions ...in
 // If the input has shape `[<batch dimensions...>, featureDimension]`, the output will have
 // shape `[<batch dimensions...>, <outputDimensions...>]`.
 //
-// See [NewDense] for additional options such as fused activations.
+// Deprecated: Use [NewDense] for additional options such as fused activations.
 func DenseWithLayout(scope *model.Scope, input *Node, layout compute.DenseLayout, useBias bool, outputDimensions ...int) *Node {
 	return NewDense(scope, input, outputDimensions...).WithBias(useBias).WithLayout(layout).Done()
 }
