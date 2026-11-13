@@ -648,8 +648,8 @@ func TestQuantizedDense_FusedVJP(t *testing.T) {
 	})
 
 	t.Run("QuantGGML_Q4_K_FusedBackward", func(t *testing.T) {
-		// Q4_K is a 256-value K-quant with NO decomposed graph fallback; FusedQuantizedDenseVJP
-		// enables backpropagation through frozen Q4_K GGUF layers directly!
+		// Verify FusedQuantizedDenseVJP through frozen Q4_K GGUF layers against both
+		// decomposed autodiff (GOMLX_FUSION=0) and central finite differences.
 		const K, N = 256, 2
 		wQ4K := make([][]uint8, N)
 		for n := range N {
@@ -688,8 +688,7 @@ func TestQuantizedDense_FusedVJP(t *testing.T) {
 			return vals[0]
 		}
 
-		t.Setenv(FusionEnv, "1")
-		grads := MustExecOnceN(backend, func(g *Graph) []*Node {
+		gradFn := func(g *Graph) []*Node {
 			x := Const(g, [][]float32{xRow})
 			b := Const(g, bVals)
 			y := nn.QuantizedDense(x, Const(g, wQ4K), b, QuantizedDenseConfig{
@@ -701,11 +700,23 @@ func TestQuantizedDense_FusedVJP(t *testing.T) {
 			}, activation.TypeSilu)
 			loss := ReduceAllSum(Mul(y, Const(g, [][]float32{{1.5, -0.75}})))
 			return Gradient(loss, x, b)
-		})
+		}
+
+		t.Setenv(FusionEnv, "1")
+		grads := MustExecOnceN(backend, gradFn)
+		t.Setenv(FusionEnv, "0")
+		decompGrads := MustExecOnceN(backend, gradFn)
+
 		dx, err := tensors.CopyFlatData[float32](grads[0])
 		require.NoError(t, err)
 		dBias, err := tensors.CopyFlatData[float32](grads[1])
 		require.NoError(t, err)
+		decompDx, err := tensors.CopyFlatData[float32](decompGrads[0])
+		require.NoError(t, err)
+		decompDBias, err := tensors.CopyFlatData[float32](decompGrads[1])
+		require.NoError(t, err)
+		assert.InDeltaSlice(t, decompDx, dx, 1e-4)
+		assert.InDeltaSlice(t, decompDBias, dBias, 1e-4)
 		require.Len(t, dx, K)
 		require.Len(t, dBias, N)
 		var norm float64

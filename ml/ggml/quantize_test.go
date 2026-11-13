@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/gobackend"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -178,4 +179,121 @@ func TestQuantizeDequantize_Q8_0_And_Q8_K(t *testing.T) {
 	require.NoError(t, err)
 	assert.InDeltaSlice(t, row0, deqVals[:256], 0.02)
 	assert.InDeltaSlice(t, row1, deqVals[256:], 1e-6)
+}
+
+func TestDequantize_KQuants(t *testing.T) {
+	const (
+		N         = 2
+		numBlocks = 2
+		K         = numBlocks * 256
+		d0Bits    = uint16(0x3800) // 0.5
+		d1Bits    = uint16(0x3400) // 0.25
+		dmin0Bits = uint16(0x3000) // 0.125
+		dmin1Bits = uint16(0x3600) // 0.375
+	)
+
+	goBackend := gobackend.GetBackend()
+
+	for _, tc := range []struct {
+		ggmlType compute.GGMLQuantType
+		fillBlk  func(blk []uint8, row, b int)
+	}{
+		{
+			ggmlType: compute.GGMLQ2_K,
+			fillBlk: func(blk []uint8, row, b int) {
+				for j := range 80 {
+					blk[j] = uint8((j*37 + row*19 + b*53 + 11) & 0xFF)
+				}
+				dBits, dminBits := d0Bits, dmin0Bits
+				if (row+b)%2 == 1 {
+					dBits, dminBits = d1Bits, dmin1Bits
+				}
+				binary.LittleEndian.PutUint16(blk[80:82], dBits)
+				binary.LittleEndian.PutUint16(blk[82:84], dminBits)
+			},
+		},
+		{
+			ggmlType: compute.GGMLQ3_K,
+			fillBlk: func(blk []uint8, row, b int) {
+				for j := range 108 {
+					blk[j] = uint8((j*41 + row*23 + b*67 + 7) & 0xFF)
+				}
+				dBits := d0Bits
+				if (row+b)%2 == 1 {
+					dBits = d1Bits
+				}
+				binary.LittleEndian.PutUint16(blk[108:110], dBits)
+			},
+		},
+		{
+			ggmlType: compute.GGMLQ4_K,
+			fillBlk: func(blk []uint8, row, b int) {
+				dBits, dminBits := d0Bits, dmin0Bits
+				if (row+b)%2 == 1 {
+					dBits, dminBits = d1Bits, dmin1Bits
+				}
+				binary.LittleEndian.PutUint16(blk[0:2], dBits)
+				binary.LittleEndian.PutUint16(blk[2:4], dminBits)
+				for j := 4; j < 144; j++ {
+					blk[j] = uint8((j*29 + row*31 + b*71 + 3) & 0xFF)
+				}
+			},
+		},
+		{
+			ggmlType: compute.GGMLQ5_K,
+			fillBlk: func(blk []uint8, row, b int) {
+				dBits, dminBits := d0Bits, dmin0Bits
+				if (row+b)%2 == 1 {
+					dBits, dminBits = d1Bits, dmin1Bits
+				}
+				binary.LittleEndian.PutUint16(blk[0:2], dBits)
+				binary.LittleEndian.PutUint16(blk[2:4], dminBits)
+				for j := 4; j < 176; j++ {
+					blk[j] = uint8((j*43 + row*17 + b*83 + 5) & 0xFF)
+				}
+			},
+		},
+		{
+			ggmlType: compute.GGMLQ6_K,
+			fillBlk: func(blk []uint8, row, b int) {
+				for j := range 208 {
+					blk[j] = uint8((j*59 + row*29 + b*97 + 13) & 0xFF)
+				}
+				dBits := d0Bits
+				if (row+b)%2 == 1 {
+					dBits = d1Bits
+				}
+				binary.LittleEndian.PutUint16(blk[208:210], dBits)
+			},
+		},
+	} {
+		assert.True(t, ggml.CanDecompose(tc.ggmlType), "expected CanDecompose(%s) == true", tc.ggmlType)
+		bpb := tc.ggmlType.BytesPerBlock()
+		rows := make([][]uint8, N)
+		for r := range N {
+			rows[r] = make([]uint8, numBlocks*bpb)
+			for b := range numBlocks {
+				tc.fillBlk(rows[r][b*bpb:(b+1)*bpb], r, b)
+			}
+		}
+
+		// Compute reference float32 values using gobackend's native QuantizedEmbeddingLookup kernel.
+		refTensor := MustExecOnce(goBackend, func(g *Graph) *Node {
+			table := Const(g, rows)
+			indices := Const(g, [][]int32{{0}, {1}})
+			return BackendQuantizedEmbeddingLookup(table, indices, &Quantization{
+				Scheme:   compute.QuantGGML,
+				GGMLType: tc.ggmlType,
+			})
+		})
+		refFlat, err := tensors.CopyFlatData[float32](refTensor)
+		require.NoError(t, err)
+		require.Len(t, refFlat, N*K)
+		want := [][]float32{refFlat[:K], refFlat[K : 2*K]}
+
+		graphtest.RunTestGraphFn(t, "Dequant_"+tc.ggmlType.String(), func(g *Graph) ([]*Node, []*Node) {
+			w := Const(g, rows)
+			return []*Node{w}, []*Node{ggml.Dequantize(w, tc.ggmlType, N)}
+		}, []any{want}, 1e-5)
+	}
 }

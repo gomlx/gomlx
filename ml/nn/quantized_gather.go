@@ -16,10 +16,10 @@ import (
 // llama.cpp's ggml_get_rows. The full embedding table stays in native quantized format
 // and only the rows selected by indices are dequantized to float32.
 //
-// Types with a decomposed graph-level fallback (Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, IQ4_NL, Q8_K)
-// work on any backend (including XLA) when batch dimensions are static. K-quant types
-// (Q4_K, Q6_K, etc.) and dynamic batch dimensions require a backend with a fused
-// executor (e.g. simplego); other backends will panic.
+// All supported GGML types (Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, IQ4_NL, Q2_K, Q3_K, Q4_K,
+// Q5_K, Q6_K, Q8_K) have a decomposed graph-level fallback and work on any backend
+// (including XLA) when batch dimensions are static. Dynamic batch dimensions require
+// a backend with a fused executor (e.g. "go"); other backends will panic.
 //
 // Parameters:
 //   - table: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.

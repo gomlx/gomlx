@@ -2,6 +2,10 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-11-13:
+  - `ml/ggml`, `ml/nn`:
+    - Added graph-level decomposed dequantization (`ggml.CanDecompose` and `ggml.Dequantize`) for all remaining GGML K-quant formats (`GGMLQ2_K`, `GGMLQ3_K`, `GGMLQ4_K`, `GGMLQ5_K`, and `GGMLQ6_K`), enabling GGUF K-quant models (`nn.QuantizedDense` and static-shape `nn.QuantizedGather`) to execute out-of-the-box on XLA (CPU/CUDA) and any other backend without native `OpTypeFusedQuantizedDense` support.
+
 - 2026-11-12:
   - `ml/model`, `ml/layers`, `ml/layers/fnn`, `ml/layers/attention/pos`, `ml/zoo/transformer`, `ml/nn`, `ml/ggml`:
     - Added `model.Quantization` metadata (`Variable.WithQuantization`, `Variable.Quantization`, preserved across `CloneToStore`) to represent pre-quantized model variables (`QuantLinear`, `QuantNF4`, `QuantGGML`).
