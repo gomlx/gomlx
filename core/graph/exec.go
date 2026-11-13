@@ -649,6 +649,28 @@ func (e *Exec) Compile(inputShapes ...shapes.Shape) (*Graph, error) {
 	return entry.graph, nil
 }
 
+// CompileUncached builds and compiles a fresh graph with this executor's configuration.
+// The caller owns the returned graph and must call Graph.Finalize when finished.
+func (e *Exec) CompileUncached(inputShapes ...shapes.Shape) (*Graph, error) {
+	if e.finalized.Load() {
+		return nil, errors.Wrapf(ErrExecFinalized, "Exec %q is finalized", e.Name())
+	}
+	e.muInFlight.RLock()
+	defer e.muInFlight.RUnlock()
+	if e.finalized.Load() {
+		return nil, errors.Wrapf(ErrExecFinalized, "Exec %q is finalized", e.Name())
+	}
+	templateShapes, err := e.makeTemplateShapes(inputShapes)
+	if err != nil {
+		return nil, err
+	}
+	entry, err := e.buildAndCompileGraph(templateShapes, -1)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed during uncached graph construction/compilation")
+	}
+	return entry.graph, nil
+}
+
 // compile creates (if not yet created) and compiles the computation graph for the given input shapes.
 func (e *Exec) compile(inputShapes ...shapes.Shape) (*execGraphCacheEntry, error) {
 	entry, err := e.findOrCreateGraph(inputShapes)

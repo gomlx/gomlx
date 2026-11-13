@@ -44,21 +44,15 @@ func Save(backend compute.Backend, exec *model.Exec, w io.Writer, inputShapes []
 	store.WithVariableAsConst(true)
 	defer store.WithVariableAsConst(prevVariablesAsConst)
 
-	g, err := exec.Compile(inputShapes...)
+	g, err := exec.CompileUncached(inputShapes...)
 	if err != nil {
 		return errors.Wrap(err, "failed to compile computation graph for ONNX export")
 	}
+	defer g.Finalize()
 
 	onnxExecutable := g.Executable()
 	if onnxExecutable == nil {
 		return errors.Errorf("compiled graph has no compute.Executable")
-	}
-	if onExec, ok := onnxExecutable.(*onnxbackend.Executable); ok && onExec.ModelProto() == nil {
-		g, err = exec.Compile(inputShapes...)
-		if err != nil {
-			return errors.Wrap(err, "failed to re-compile computation graph for ONNX export with retained proto")
-		}
-		onnxExecutable = g.Executable()
 	}
 	err = onnxbackend.SaveModel(backend, onnxExecutable, w, inputNames, outputNames)
 	if err != nil {

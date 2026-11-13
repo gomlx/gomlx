@@ -128,6 +128,10 @@ func EuclideanDistance(a, b *Node) *Node {
 
 ### Dynamic Shapes (Input-Conditioned Shapes)
 
+For one-off compilation such as ONNX export, `exec.CompileUncached(inputShapes...)` builds a fresh
+graph with the current configuration. The caller must finalize the returned graph. Both graph and
+model executors provide this method.
+
 GoMLX supports input-conditioned dynamic shapes where dimensions can vary at runtime without rebuilding the graph.
 
 #### 1. Backend Capabilities
