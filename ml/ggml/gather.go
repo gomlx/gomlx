@@ -5,6 +5,7 @@ package ggml
 import (
 	"github.com/gomlx/compute"
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/support/exceptions"
 )
 
 // EmbeddingLookupDecomposed performs a quantized embedding lookup using graph-level dequantization.
@@ -14,11 +15,15 @@ import (
 //
 // Parameters:
 //   - table: [vocabSize, bytesPerRow] Uint8 with native GGML block layout.
-//   - indices: integer tensor with last dimension = 1 (Gather convention).
-//   - ggmlType: the GGML block format (Q4_0, Q8_0, IQ4_NL).
+//   - indices: integer tensor with static batch dimensions and last dimension = 1 (Gather convention).
+//   - ggmlType: the GGML block format (e.g. Q4_0, Q8_0, IQ4_NL, Q4_K, Q6_K).
 //
 // Output: Float32 tensor with shape [batch..., K] where K is the logical embedding dimension.
 func EmbeddingLookupDecomposed(table, indices *Node, ggmlType compute.GGMLQuantType) *Node {
+	indicesShape := indices.Shape()
+	if indicesShape.IsDynamic() {
+		exceptions.Panicf("ggml.EmbeddingLookupDecomposed does not support dynamic indices shape %s (requires fused QuantizedEmbeddingLookup backend support)", indicesShape)
+	}
 	tableShape := table.Shape()
 	bytesPerRow := tableShape.Dimensions[1]
 	bpb := ggmlType.BytesPerBlock()
@@ -30,7 +35,6 @@ func EmbeddingLookupDecomposed(table, indices *Node, ggmlType compute.GGMLQuantT
 	gathered := Gather(table, indices)
 
 	// Flatten batch dimensions for dequant: [totalRows, bytesPerRow]
-	indicesShape := indices.Shape()
 	batchDims := indicesShape.Dimensions[:indicesShape.Rank()-1]
 	totalRows := 1
 	for _, d := range batchDims {

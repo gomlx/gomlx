@@ -17,7 +17,7 @@ import (
 // Parameters:
 //   - x: [batch..., K] Float32 input activations.
 //   - weights: [N, bytesPerRow] Uint8 in native GGML block layout.
-//   - ggmlType: the GGML block format (Q4_0, Q8_0, IQ4_NL).
+//   - ggmlType: the GGML block format (e.g. Q4_0, Q8_0, IQ4_NL, Q4_K, Q6_K).
 //   - bias: [N] Float32 (nil for no bias).
 //   - activation: optional activation function.
 func DenseDecomposed(x, weights *Node, ggmlType compute.GGMLQuantType,
