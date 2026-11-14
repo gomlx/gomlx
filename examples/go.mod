@@ -8,7 +8,7 @@ require (
 	github.com/daniellowtw/matlab v0.0.0-20190528220746-1ed1d96a6637
 	github.com/disintegration/imaging v1.6.2
 	github.com/go-gota/gota v0.12.0
-	github.com/gomlx/compute v0.1.29
+	github.com/gomlx/compute v0.1.30-0.20261114193541-d2a948806b22
 	github.com/gomlx/go-huggingface v0.4.33
 	github.com/gomlx/gomlx v0.28.35
 	github.com/gomlx/onnx-gomlx v0.5.32
