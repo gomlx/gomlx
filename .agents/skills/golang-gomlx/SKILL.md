@@ -148,6 +148,8 @@ exec.WithDynamicAxes(
 )
 ```
 
+Static axes use `""` (empty string). User-named axes (like `"batch"`) enforce matching runtime sizes across inputs at compile/execute time; for non-user-named dynamic dimensions that only need runtime compatibility checks, generate unique `#`-prefixed names via `shapes.UniqueAxisName(prefix)`.
+
 #### 3. Operations Supporting Dynamic Shapes
 - **Dimension Abstraction**:
   - `DimensionSpecFor(x, axis)`: Returns a `DimensionSpec` representing the dimension (static or dynamic with name).
