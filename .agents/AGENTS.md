@@ -103,6 +103,9 @@ parameters.
 Creating `Exec` objects implies in JIT-compiling for the first execution: that is expensive. Always reuse 
 the executor (`Exec` object) when possible.
 
+`graph.Exec.CompileUncached` and `model.Exec.CompileUncached` build a fresh graph with the current
+configuration for one-off operations such as ONNX export. The caller owns and finalizes that graph.
+
 Also, currently GoMLX doesn't support dynamic shapes. That means each different input shape will trigger a different
 compilation. If a program needs different shapes, consider using powers of 2 (or see
 `github.com/gomlx/compute/support.TwoBitBucketLen`) shapes, and pad accordingly. The `compute.Backend` API already

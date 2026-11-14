@@ -1,5 +1,8 @@
 # GoMLX `graph` Package Reference
 
+`Exec.CompileUncached(inputShapes...)` builds a fresh graph with the executor's configuration.
+Use `Graph.Finalize` to release the returned graph after a one-off operation such as model export.
+
 This table maps common functions from the `core/graph` package to their PyTorch equivalents, to help AI agents understand their purpose.
 
 **Note**: It is assumed that the `graph` package is dot-imported (`import . "github.com/gomlx/gomlx/core/graph"`), so these functions can be called directly without the `graph.` prefix.
