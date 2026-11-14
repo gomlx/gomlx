@@ -46,9 +46,9 @@ type Function struct {
 	// scalars maintains a cache of scalar values already created in this Function for re-use.
 	scalars scalarCache
 
-	// tensorConstants maintains a cache of tensors that have been converted to a constant node in this Function
-	// to avoid creating duplicate nodes.
-	tensorConstants tensorConstCache
+	// tensorConstants maintains a weak, versioned cache of tensors converted to constant nodes in this Function
+	// to avoid creating duplicate nodes while still allowing unused tensors to be garbage collected.
+	tensorConstants *tensorConstCache
 }
 
 // newMainFunc is called during the creation of a Graph.
@@ -61,7 +61,7 @@ func (g *Graph) newMainFunc() *Function {
 		returned:              false,
 		parameterNameToHandle: make(map[string]ParameterHandle),
 		scalars:               make(scalarCache),
-		tensorConstants:       make(tensorConstCache),
+		tensorConstants:       newTensorConstCache(),
 	}
 	g.functions[MainName] = f
 	return f
@@ -270,7 +270,7 @@ func NewClosureWithSharding(g *Graph, funcDef func(g *Graph) ([]*Node, []*distri
 		parent:                g.currentFunc,
 		parameterNameToHandle: make(map[string]ParameterHandle),
 		scalars:               make(scalarCache),
-		tensorConstants:       make(tensorConstCache),
+		tensorConstants:       newTensorConstCache(),
 	}
 	var err error
 	f.backendFunc, err = g.builder.Main().Closure()
@@ -354,7 +354,7 @@ func NewFunctionWithSharding(g *Graph, name string, funcDef func(g *Graph) ([]*N
 		name:                  name,
 		parameterNameToHandle: make(map[string]ParameterHandle),
 		scalars:               make(scalarCache),
-		tensorConstants:       make(tensorConstCache),
+		tensorConstants:       newTensorConstCache(),
 	}
 	var err error
 	f.backendFunc, err = g.builder.NewFunction(name)

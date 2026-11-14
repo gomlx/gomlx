@@ -58,6 +58,7 @@ This table maps common functions from the `core/graph` package to their PyTorch 
 | `Softmax(logits, axes...)` | Computes Softmax over the specified axes (dimensions). | `torch.softmax(logits, dim=axes)` |
 | **Constants & Generation** | | |
 | `Const(g, value)` | Creates a constant node in the graph `g` from a given value (scalar, slice, tensor, etc). | `torch.tensor(value)` |
+| `ConstDonatedTensor(g, t)` | Creates a constant node donating `t`'s buffer (zero-copy when already on `g.Backend()` and supported) and invalidating `t`. | N/A |
 | `Scalar(g, dtype, value)` | Creates a scalar node in the graph `g`. | `torch.tensor(value, dtype=dtype)` |
 | `Zeros(g, shape)` | Creates a tensor of zeros. | `torch.zeros(shape)` |
 | `Ones(g, shape)` | Creates a tensor of ones. | `torch.ones(shape)` |
