@@ -125,12 +125,12 @@ func EuclideanDistance(a, b *Node) *Node {
 - The Exec object will automatically recompile the graph, calling again the graph building function, if the shape of the
   inputs changes. It has a limited cache size for different shapes, and compiling a graph is orders of magnitude slower
   than executing it, so it's better to reuse the same input shapes where possible, using padding to fixed sizes.
+- For one-off compilation, `exec.CompileUncached(inputShapes...)` builds a fresh
+  graph with the current configuration. The caller takes onwership of the returned Graph (and must
+  finalize it). It is used in `onnx.Save()` to save the compiled graph as an `.onnx` file.
+
 
 ### Dynamic Shapes (Input-Conditioned Shapes)
-
-For one-off compilation such as ONNX export, `exec.CompileUncached(inputShapes...)` builds a fresh
-graph with the current configuration. The caller must finalize the returned graph. Both graph and
-model executors provide this method.
 
 GoMLX supports input-conditioned dynamic shapes where dimensions can vary at runtime without rebuilding the graph.
 
