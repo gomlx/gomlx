@@ -100,3 +100,12 @@ This table maps common functions from the `core/graph` package to their PyTorch 
 | `IotaLike(ref, axis)` | Generates a sequence tensor matching `ref` shape. | N/A |
 | `DynamicPad(x, fillVal, padSpecs...)` | Dynamic padding with runtime padding amounts. | `torch.nn.functional.pad(x, ...)` |
 | `NonZero(x, config...)` | Returns coordinates of non-zero elements (requires dynamic-shape backend; use boolean masking on static-shape backends). | `torch.nonzero(x)` |
+
+## Standalone graph compilation
+
+`graph.Exec.CompileStandalone(inputShapes...)` builds a fresh graph using the executor's configuration.
+The caller owns the graph and must call `Graph.Finalize` when finished, for example after model export.
+
+`model.Exec.CompileStandalone` also uses the current Store settings. When the executor owns the
+Store through `DonateStore()`, finalize the returned graph before the executor, whose finalization
+releases the model's variable tensors.

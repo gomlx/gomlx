@@ -125,6 +125,10 @@ func EuclideanDistance(a, b *Node) *Node {
 - The Exec object will automatically recompile the graph, calling again the graph building function, if the shape of the
   inputs changes. It has a limited cache size for different shapes, and compiling a graph is orders of magnitude slower
   than executing it, so it's better to reuse the same input shapes where possible, using padding to fixed sizes.
+- For one-off compilation, `exec.CompileStandalone(inputShapes...)` builds a fresh
+  graph with the current configuration. The caller takes onwership of the returned Graph (and must
+  finalize it). It is used in `onnx.Save()` to save the compiled graph as an `.onnx` file.
+
 
 ### Dynamic Shapes (Input-Conditioned Shapes)
 

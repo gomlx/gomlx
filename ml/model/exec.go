@@ -533,6 +533,29 @@ func (e *Exec) Compile(inputShapes ...shapes.Shape) (*graph.Graph, error) {
 	return e.exec.Compile(inputShapes...)
 }
 
+// CompileStandalone builds and compiles a fresh model graph with the current Store settings.
+// The caller owns the returned graph and must call Graph.Finalize when finished.
+// When DonateStore is used, the returned graph must be finalized before this Exec:
+// Exec.Finalize releases the variable tensors referenced by the graph.
+func (e *Exec) CompileStandalone(inputShapes ...shapes.Shape) (*graph.Graph, error) {
+	if e.finalized.Load() {
+		return nil, errors.Wrapf(ErrExecFinalized, "model.Exec %q is finalized", e.Name())
+	}
+	e.muInFlight.RLock()
+	defer e.muInFlight.RUnlock()
+	if e.finalized.Load() {
+		return nil, errors.Wrapf(ErrExecFinalized, "model.Exec %q is finalized", e.Name())
+	}
+	g, err := e.exec.CompileStandalone(inputShapes...)
+	if err != nil {
+		return nil, err
+	}
+	e.muChangedVars.Lock()
+	delete(e.changedVars, g.GraphId())
+	e.muChangedVars.Unlock()
+	return g, nil
+}
+
 // Exec parses the arguments and executes the graph.
 func (e *Exec) Exec(args ...any) ([]*tensors.Tensor, error) {
 	outputs, _, err := e.CallWithGraph(args...)
