@@ -235,7 +235,7 @@ func HeFn(storeOrScope model.StoreProvider) VariableInitializer {
 // It also works with a scalar baseValue, which translates to constant value initializer.
 func BroadcastTensorToShape(baseValue *tensors.Tensor) VariableInitializer {
 	return func(g *Graph, shape shapes.Shape) *Node {
-		v := ConstCachedTensor(g, baseValue)
+		v := ConstTensor(g, baseValue)
 		v = ConvertDType(v, shape.DType)
 		if v.Shape().Equal(shape) {
 			return v

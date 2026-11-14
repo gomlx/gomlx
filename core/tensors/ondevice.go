@@ -541,6 +541,8 @@ func (t *Tensor) CopyFrom(tFrom *Tensor) error {
 		tFlat = t.local.flat
 	}
 
+	t.version.Add(1)
+
 	// Lock tFrom.
 	tFrom.mu.Lock()
 	defer tFrom.mu.Unlock()

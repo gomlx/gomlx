@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"runtime"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
@@ -117,10 +120,145 @@ func TestConstant(t *testing.T) {
 	{
 		g := NewGraph(backend, "")
 		t1 := tensors.FromValue([][]float32{{1.2, 1.3}, {2.4, 2.5}, {2.6, 2.7}})
-		n1 := ConstCachedTensor(g, t1)
-		n2 := ConstCachedTensor(g, t1)
-		require.Equal(t, n1, n2)
+		n1 := ConstTensor(g, t1)
+		n2 := ConstTensor(g, t1)
+		require.Same(t, n1, n2)
+		n3 := ConstCachedTensor(g, t1) //nolint:staticcheck // Verify deprecated alias forwards cleanly.
+		require.Same(t, n1, n3)
+		g.Finalize()
 	}
+	{
+		// Mutating or finalizing a cached tensor invalidates the cached node.
+		g := NewGraph(backend, "")
+		t1 := tensors.FromValue([]float32{1, 2})
+		n1 := ConstTensor(g, t1)
+		require.Same(t, n1, ConstTensor(g, t1))
+
+		tensors.MustMutableFlatData(t1, func(flat []float32) {
+			flat[0] = 10
+		})
+		n2 := ConstTensor(g, t1)
+		require.NotSame(t, n1, n2)
+
+		t2 := tensors.FromValue([]float32{100, 200})
+		require.NoError(t, t1.CopyFrom(t2))
+		n3 := ConstTensor(g, t1)
+		require.NotSame(t, n2, n3)
+
+		require.NoError(t, g.Compile(Add(n1, Add(n2, n3))))
+		got := g.Run()[0]
+		require.Equal(t, []float32{111, 204}, got.Value())
+
+		// Finalizing t1 prevents returning a stale node on subsequent ConstTensor calls.
+		require.NoError(t, t1.FinalizeAll())
+		g2 := NewGraph(backend, "")
+		ConstTensor(g2, t2)
+		require.NoError(t, t2.FinalizeAll())
+		require.Panics(t, func() {
+			ConstTensor(g2, t2)
+		})
+		g.Finalize()
+		g2.Finalize()
+	}
+	{
+		// Weak caching must not prevent the tensor from being garbage collected while g stays alive.
+		g := NewGraph(backend, "")
+		var collected atomic.Bool
+		func() {
+			// Use > MinConstValueSizeToKeep elements so nodeInputs does not retain a clone, and
+			// register a cleanup on the ephemeral tensor to verify GC reclaims it while g is alive.
+			ephemeral := tensors.FromFlatDataAndDimensions(make([]float32, MinConstValueSizeToKeep+4), MinConstValueSizeToKeep+4)
+			runtime.AddCleanup(ephemeral, func(done *atomic.Bool) {
+				done.Store(true)
+			}, &collected)
+			ConstTensor(g, ephemeral)
+		}()
+		deadline := time.Now().Add(2 * time.Second)
+		for !collected.Load() && time.Now().Before(deadline) {
+			runtime.GC()
+			runtime.Gosched()
+		}
+		require.True(t, collected.Load(), "expected weak constant cache to allow tensor GC while Graph is alive")
+		g.Finalize()
+	}
+}
+
+func TestInternalConstBuffer(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	shape := shapes.Make(dtypes.Float32, 2, 2)
+
+	for _, donate := range []bool{false, true} {
+		g := NewGraph(backend, "")
+		buf, err := backend.BufferFromFlatData(0, []float32{1, 2, 3, 4}, shape)
+		require.NoError(t, err)
+		c := InternalConstBuffer(g, buf, donate)
+		p := Parameter(g, "x", shape)
+		out := Add(c, p)
+		require.NoError(t, g.Compile(out))
+
+		in := tensors.FromFlatDataAndDimensions([]float32{10, 20, 30, 40}, 2, 2)
+		got := g.Run(in)[0]
+		require.Equal(t, [][]float32{{11, 22}, {33, 44}}, got.Value())
+		g.Finalize()
+		if !donate {
+			require.NoError(t, buf.Finalize())
+		}
+	}
+}
+
+func TestConstDonatedTensor(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	shape := shapes.Make(dtypes.Float32, 2, 2)
+
+	t.Run("LocalTensor", func(t *testing.T) {
+		tensorVal := tensors.FromFlatDataAndDimensions([]float32{1, 2, 3, 4}, 2, 2)
+		g := NewGraph(backend, "")
+		c := ConstDonatedTensor(g, tensorVal)
+		require.False(t, tensorVal.Ok(), "donated tensor should be invalidated after ConstDonatedTensor")
+
+		p := Parameter(g, "x", shape)
+		out := Add(c, p)
+		require.NoError(t, g.Compile(out))
+
+		in := tensors.FromFlatDataAndDimensions([]float32{10, 20, 30, 40}, 2, 2)
+		got := g.Run(in)[0]
+		require.Equal(t, [][]float32{{11, 22}, {33, 44}}, got.Value())
+		g.Finalize()
+	})
+
+	t.Run("OnDeviceTensor", func(t *testing.T) {
+		tensorVal := tensors.FromFlatDataAndDimensions([]float32{5, 6, 7, 8}, 2, 2)
+		require.NoError(t, tensorVal.ToDevice(backend, 0))
+		require.True(t, tensorVal.IsOnAnyDevice())
+
+		g := NewGraph(backend, "")
+		c := ConstDonatedTensor(g, tensorVal)
+		require.False(t, tensorVal.Ok(), "donated tensor should be invalidated after ConstDonatedTensor")
+
+		p := Parameter(g, "x", shape)
+		out := Add(c, p)
+		require.NoError(t, g.Compile(out))
+
+		in := tensors.FromFlatDataAndDimensions([]float32{1, 1, 1, 1}, 2, 2)
+		got := g.Run(in)[0]
+		require.Equal(t, [][]float32{{6, 7}, {8, 9}}, got.Value())
+		g.Finalize()
+
+		// Re-donating an already-invalidated tensor must panic.
+		g2 := NewGraph(backend, "")
+		require.Panics(t, func() {
+			ConstDonatedTensor(g2, tensorVal)
+		})
+		g2.Finalize()
+	})
+
+	t.Run("NilTensorPanics", func(t *testing.T) {
+		g := NewGraph(backend, "")
+		require.Panics(t, func() {
+			ConstDonatedTensor(g, nil)
+		})
+		g.Finalize()
+	})
 }
 
 func compileRunAndTakeFirst(t *testing.T, g *Graph) *tensors.Tensor {

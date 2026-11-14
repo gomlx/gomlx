@@ -1268,7 +1268,7 @@ func ConsecutiveDifference(x *Node, axis int, preserveShape bool) *Node {
 			paddings = make([][2]int, n)
 			paddings[adjustedAxis][0] = 1 // On the difference axis, pad 1.
 		}
-		kernel := ConstCachedTensor(g, consecutiveDifferenceKernel)
+		kernel := ConstTensor(g, consecutiveDifferenceKernel)
 		kernel = ConvertDType(kernel, dtype)
 		kernelDims := xslices.SliceWithValue(n+2, 1)
 		kernelDims[adjustedAxis] = 2

@@ -69,6 +69,7 @@ package tensors
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
@@ -132,6 +133,18 @@ type Tensor struct {
 
 	// backend to use for on-device tensors.
 	backend compute.Backend
+
+	// version increments on every mutation (MutableFlatData, CopyFrom) or finalization.
+	version atomic.Uint64
+}
+
+// Version returns a monotonically increasing version counter that increments whenever
+// the Tensor's data is mutated (e.g., MutableFlatData, MutableBytes, CopyFrom) or finalized.
+func (t *Tensor) Version() uint64 {
+	if t == nil {
+		return 0
+	}
+	return t.version.Load()
 }
 
 // newEmptyTensor returns a Tensor object initialized only with the shape, but no actual storage (local or on any device)
@@ -278,5 +291,6 @@ func (t *Tensor) lockedFinalizeAll() error {
 	t.shape = shapes.Invalid()
 	t.isShared = false
 	t.sharedFlat = nil
+	t.version.Add(1)
 	return err
 }

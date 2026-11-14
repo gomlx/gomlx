@@ -215,13 +215,41 @@ func (ni *nodeInputsConstant) CloneWithInputs(originalNode *Node, newInputs ...*
 	return originalNode
 }
 
-// ConstTensor returns a newly created constant node for the tensor t.
+func newConstantNode(g *Graph, result compute.Value, nodeInputs *nodeInputsConstant) *Node {
+	node := &Node{
+		graph:        g,
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		inputs:       nodeInputs,
+	}
+	g.registerNode(node)
+	return node
+}
+
+// ConstTensor returns a constant node for the tensor t in the current function scope.
 //
-// The value of t is copied into the graph. It's recommended that for very large tensors,
-// even if constants, that they are passed as side inputNodes (or variables, see context package) instead.
+// If the same unchanged tensor is passed multiple times within the same Function (e.g., Main, a top-level
+// Function, or a closure), the previously created constant node is reused automatically. The cache holds
+// weak references keyed by tensor mutation version, so tensors can still be garbage collected normally and
+// mutations or finalization automatically invalidate stale entries.
 //
-// See also ConstCachedTensor if you think you'll use the same tensor multiple times in the same graph.
+// The value of t is copied into the graph. For very large tensors that change frequently or should be moved
+// rather than copied, see ConstDonatedTensor or pass them as side inputs / variables (see context package).
 func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
+	g.AssertBuilding()
+	f := g.currentFunc
+	if cached := f.tensorConstants.get(t); cached != nil {
+		return cached
+	}
+	version := t.Version()
+	node = constTensorUncached(g, t)
+	if t != nil && t.Version() == version {
+		f.tensorConstants.set(t, node, version)
+	}
+	return node
+}
+
+func constTensorUncached(g *Graph, t *tensors.Tensor) *Node {
 	g.AssertBuilding()
 	nodeInputs := &nodeInputsConstant{
 		shape: t.Shape(),
@@ -242,45 +270,108 @@ func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
 	if err != nil {
 		panic(errors.WithMessagef(err, "ConstTensor failed to create a constant in the backend"))
 	}
-	node = &Node{
-		graph:        g,
-		outputOps:    []compute.Value{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
-		inputs:       nodeInputs,
-	}
-	g.registerNode(node)
-	return
+	return newConstantNode(g, result, nodeInputs)
 }
 
-// SharedConstant creates a Constant node in g reusing a backend constant compute.Value
+// ConstDonatedTensor returns a newly created constant node for t and transfers ownership of
+// t's backing resources into the graph when possible, leaving t finalized/invalid afterward.
+//
+// When t already holds an on-device (or shared) buffer on the graph's backend and the backend
+// implements ConstantFromBuffer, the buffer is adopted with zero copies. Otherwise t is copied
+// into the constant node and finalized.
+//
+// After ConstDonatedTensor returns, t is invalid (as via t.FinalizeAll()) and must not be used.
+func ConstDonatedTensor(g *Graph, t *tensors.Tensor) *Node {
+	g.AssertBuilding()
+	if err := t.CheckValid(); err != nil {
+		panic(errors.WithMessagef(err, "ConstDonatedTensor received invalid tensor"))
+	}
+	var node *Node
+	if t.IsOnAnyDevice() {
+		if tBackend, err := t.Backend(); err == nil && tBackend == g.Backend() {
+			buf, err := t.DonateBuffer(g.Backend(), 0)
+			if err != nil {
+				panic(errors.WithMessagef(err, "ConstDonatedTensor failed to donate buffer from tensor"))
+			}
+			node = InternalConstBuffer(g, buf, true)
+		}
+	}
+	if node == nil {
+		node = constTensorUncached(g, t)
+	}
+	if err := t.FinalizeAll(); err != nil {
+		panic(errors.WithMessagef(err, "ConstDonatedTensor failed to finalize donated tensor"))
+	}
+	return node
+}
+
+// InternalConstBuffer returns a newly created constant node backed by buf.
+//
+// WARNING: This is an internal GoMLX API exposed for packages like `ml/model` and
+// zero-copy tensor donation helpers. End-users building standard computation graphs
+// should use ConstTensor (or Const) instead.
+//
+// If donate is true, ownership of buf is transferred to the graph/backend (the caller must
+// not use buf afterwards). If donate is false, buf must remain valid and unmodified for the
+// lifetime of any executable built from this graph.
+//
+// Backends that do not implement ConstantFromBuffer natively fall back to reading buf's flat
+// data and calling Constant.
+func InternalConstBuffer(g *Graph, buf compute.Buffer, donate bool) *Node {
+	g.AssertBuilding()
+	if buf == nil {
+		exceptions.Panicf("InternalConstBuffer received nil buffer")
+	}
+	if buf.Backend() != nil && buf.Backend() != g.Backend() {
+		exceptions.Panicf("InternalConstBuffer received buffer from backend %q, but graph is on backend %q",
+			buf.Backend().Name(), g.Backend().Name())
+	}
+	shape, err := buf.Shape()
+	if err != nil {
+		panic(errors.WithMessagef(err, "InternalConstBuffer failed to get buffer shape"))
+	}
+	result, err := g.currentFunc.backendFunc.ConstantFromBuffer(buf, donate)
+	if err != nil && compute.IsNotImplemented(err) {
+		var flat any
+		if shape.IsZeroSize() {
+			flat = dtypes.MakeAnySlice(shape.DType, 0)
+		} else {
+			flat = dtypes.MakeAnySlice(shape.DType, shape.Size())
+			if toFlatErr := buf.ToFlatData(flat); toFlatErr != nil {
+				panic(errors.WithMessagef(toFlatErr, "InternalConstBuffer fallback failed to transfer buffer data"))
+			}
+		}
+		result, err = g.currentFunc.backendFunc.Constant(flat, shape.Dimensions...)
+		if err == nil && donate {
+			_ = buf.Finalize()
+		}
+	}
+	if err != nil {
+		panic(errors.WithMessagef(err, "InternalConstBuffer failed to create a constant in the backend"))
+	}
+	return newConstantNode(g, result, &nodeInputsConstant{shape: shape})
+}
+
+// InternalSharedConstant creates a Constant node in g reusing a backend constant compute.Value
 // created in another graph on the same backend (requires Backend.Capabilities().SharedConstants).
-func SharedConstant(g *Graph, val compute.Value) *Node {
+//
+// WARNING: This is an internal GoMLX API exposed specifically for packages like `ml/model`
+// (e.g. Exec.DonateStore). End-users should use ConstTensor instead.
+func InternalSharedConstant(g *Graph, val compute.Value) *Node {
 	g.AssertBuilding()
 	shape := mustNoError(g.builder.OpShape(val))
 	nodeInputs := &nodeInputsConstant{
 		shape: shape,
 	}
-	node := &Node{
-		graph:        g,
-		outputOps:    []compute.Value{val},
-		outputShapes: []shapes.Shape{shape},
-		inputs:       nodeInputs,
-	}
-	g.registerNode(node)
-	return node
+	return newConstantNode(g, val, nodeInputs)
 }
 
-// BackendValue returns the underlying compute.Value for a single-output Node.
-func (n *Node) BackendValue() compute.Value {
-	if n == nil || len(n.outputOps) != 1 {
-		return nil
-	}
-	return n.outputOps[0]
-}
-
-// FinalizeConstantValue releases backend resources held by a shared constant compute.Value
+// InternalFinalizeConstantValue releases backend resources held by a shared constant compute.Value
 // if the backend value implements Finalize().
-func FinalizeConstantValue(val compute.Value) {
+//
+// WARNING: This is an internal GoMLX API exposed specifically for packages like `ml/model`.
+// End-users should use ConstTensor instead.
+func InternalFinalizeConstantValue(val compute.Value) {
 	if val == nil {
 		return
 	}
@@ -290,27 +381,11 @@ func FinalizeConstantValue(val compute.Value) {
 }
 
 // ConstCachedTensor returns a constant node for the tensor t in the current function scope.
-// If it's the first time the tensor is used in the current function, a new node is created.
-// Otherwise, the previously created node in that function is reused.
 //
-// The caching of the tensor has the side effect of keeping the tensor alive (and its memory resources) until
-// the Graph is finalized or garbage collected. If this is a concern, use ConstTensor instead.
-//
-// TODO:this can be made default (ConstTensor) once weak references land into Go and the issue of keeping the
-// tensor alive is resolved.
-// See discussion in https://github.com/golang/go/issues/67552 and cache with
-// weak references example in
-// https://github.com/golang/go/issues/67552#issuecomment-2200755798
+// Deprecated: ConstTensor now caches constant tensors automatically per function scope using
+// weak pointers and mutation tracking. Call ConstTensor directly instead.
 func ConstCachedTensor(g *Graph, t *tensors.Tensor) *Node {
-	g.AssertBuilding()
-	f := g.currentFunc
-	node, found := f.tensorConstants[t]
-	if found {
-		return node
-	}
-	node = ConstTensor(g, t)
-	f.tensorConstants[t] = node
-	return node
+	return ConstTensor(g, t)
 }
 
 // Const creates constant nodes in the Graph. It can take a tensor as well as
@@ -328,8 +403,11 @@ func Const(g *Graph, x any) *Node {
 			"Const(g, x) can only take actual values, not another computation graph `*Node` -- " +
 				"for that you don't need Const(), just use it directly.")
 	}
+	if t, ok := x.(*tensors.Tensor); ok {
+		return ConstTensor(g, t)
+	}
 	t := tensors.MustFromAnyValue(x)
-	return ConstTensor(g, t)
+	return constTensorUncached(g, t)
 }
 
 // ConstAsDType creates a constant of the given DType. It adds the convenience

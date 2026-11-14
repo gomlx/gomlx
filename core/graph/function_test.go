@@ -194,8 +194,8 @@ func TestFunction(t *testing.T) {
 		mainScalar2 := graph.Scalar(g, dtypes.Float32, 3.5)
 		require.Same(t, mainScalar1, mainScalar2)
 
-		mainTensor1 := graph.ConstCachedTensor(g, sharedTensor)
-		mainTensor2 := graph.ConstCachedTensor(g, sharedTensor)
+		mainTensor1 := graph.ConstTensor(g, sharedTensor)
+		mainTensor2 := graph.ConstTensor(g, sharedTensor)
 		require.Same(t, mainTensor1, mainTensor2)
 
 		// Create the same constants inside a top-level sub-function:
@@ -205,8 +205,8 @@ func TestFunction(t *testing.T) {
 			x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32, 2))
 			subScalar1 = graph.Scalar(g, dtypes.Float32, 3.5)
 			subScalar2 = graph.Scalar(g, dtypes.Float32, 3.5)
-			subTensor1 = graph.ConstCachedTensor(g, sharedTensor)
-			subTensor2 = graph.ConstCachedTensor(g, sharedTensor)
+			subTensor1 = graph.ConstTensor(g, sharedTensor)
+			subTensor2 = graph.ConstTensor(g, sharedTensor)
 			return []*graph.Node{graph.Add(graph.Mul(x, subScalar2), subTensor2)}
 		})
 		require.Same(t, subScalar1, subScalar2)
@@ -219,8 +219,8 @@ func TestFunction(t *testing.T) {
 		_ = graph.NewClosure(g, func(g *graph.Graph) []*graph.Node {
 			closureScalar1 = graph.Scalar(g, dtypes.Float32, 3.5)
 			closureScalar2 = graph.Scalar(g, dtypes.Float32, 3.5)
-			closureTensor1 = graph.ConstCachedTensor(g, sharedTensor)
-			closureTensor2 = graph.ConstCachedTensor(g, sharedTensor)
+			closureTensor1 = graph.ConstTensor(g, sharedTensor)
+			closureTensor2 = graph.ConstTensor(g, sharedTensor)
 			return []*graph.Node{graph.Add(closureTensor2, closureScalar2)}
 		})
 		require.Same(t, closureScalar1, closureScalar2)
@@ -230,7 +230,7 @@ func TestFunction(t *testing.T) {
 
 		// Back in main: main's cached nodes must still be returned intact (not evicted).
 		require.Same(t, mainScalar1, graph.Scalar(g, dtypes.Float32, 3.5))
-		require.Same(t, mainTensor1, graph.ConstCachedTensor(g, sharedTensor))
+		require.Same(t, mainTensor1, graph.ConstTensor(g, sharedTensor))
 
 		// Verify end-to-end execution combining main constants and subFn call.
 		in := graph.Add(mainTensor1, mainScalar1) // [13.5, 23.5]

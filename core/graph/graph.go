@@ -97,9 +97,11 @@ package graph
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
+	"weak"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
@@ -161,11 +163,74 @@ var (
 	graphCount   GraphId
 )
 
-// tensorConstCache provides a cache of tensors used (converted to constants) in Graph, so they can be reused if needed.
-//
-// Notice this has the disadvantage of holding a reference to the tensor while the Graph is alive, so it won't be
-// GC-ed until the graph is destroyed.
-type tensorConstCache map[*tensors.Tensor]*Node
+type tensorConstCacheEntry struct {
+	node    *Node
+	version uint64
+}
+
+// tensorConstCache provides a cache of tensors converted to constant nodes in a Function,
+// keyed by weak.Pointer[tensors.Tensor] so cached entries do not prevent garbage collection of
+// tensors, and gated by Tensor.Version() so mutations or finalization invalidate stale entries.
+type tensorConstCache struct {
+	mu      sync.Mutex
+	entries map[weak.Pointer[tensors.Tensor]]tensorConstCacheEntry
+}
+
+func newTensorConstCache() *tensorConstCache {
+	return &tensorConstCache{
+		entries: make(map[weak.Pointer[tensors.Tensor]]tensorConstCacheEntry),
+	}
+}
+
+func (c *tensorConstCache) get(t *tensors.Tensor) *Node {
+	if c == nil || t == nil {
+		return nil
+	}
+	wp := weak.Make(t)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.entries == nil {
+		return nil
+	}
+	entry, found := c.entries[wp]
+	if !found || entry.version != t.Version() {
+		return nil
+	}
+	return entry.node
+}
+
+func (c *tensorConstCache) set(t *tensors.Tensor, node *Node, version uint64) {
+	if c == nil || t == nil {
+		return
+	}
+	wp := weak.Make(t)
+	c.mu.Lock()
+	if c.entries == nil {
+		c.entries = make(map[weak.Pointer[tensors.Tensor]]tensorConstCacheEntry)
+	}
+	_, existed := c.entries[wp]
+	c.entries[wp] = tensorConstCacheEntry{
+		node:    node,
+		version: version,
+	}
+	c.mu.Unlock()
+	if !existed {
+		runtime.AddCleanup(t, func(wp weak.Pointer[tensors.Tensor]) {
+			c.mu.Lock()
+			delete(c.entries, wp)
+			c.mu.Unlock()
+		}, wp)
+	}
+}
+
+func (c *tensorConstCache) clear() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.entries = nil
+	c.mu.Unlock()
+}
 
 // NewGraph constructs an empty Graph.
 //
@@ -320,6 +385,11 @@ func (g *Graph) Finalize() {
 	if g.executable != nil {
 		g.executable.Finalize()
 		g.executable = nil
+	}
+	for _, f := range g.functions {
+		if f != nil {
+			f.tensorConstants.clear()
+		}
 	}
 	g.nodes = nil
 	g.mainFunc = nil
