@@ -68,8 +68,8 @@ github.com/gomlx/exceptions v0.0.3 h1:HKnTgEjj4jlmhr8zVFkTP9qmV1ey7ypYYosQ8GzXWu
 github.com/gomlx/exceptions v0.0.3/go.mod h1:uHL0TQwJ0xaV2/snJOJV6hSE4yRmhhfymuYgNredGxU=
 github.com/gomlx/go-darwinml v0.1.6-0.20261114121221-52e5a094efe8 h1:Q4P+87l6XhaGDpnKPVVgdKoAwlKt+FFY231lwKyHcOg=
 github.com/gomlx/go-darwinml v0.1.6-0.20261114121221-52e5a094efe8/go.mod h1:NcIzDDXzhGOa4QSDvvZz9TgdDqKC4IVznCajtBU2iBs=
-github.com/gomlx/go-xla v0.4.29-0.20261114071834-aea70723f179 h1:jtMEEuahp7FDIdKluouLWLgvsrBjCzV6wK7bJ/7Jv3A=
-github.com/gomlx/go-xla v0.4.29-0.20261114071834-aea70723f179/go.mod h1:Lfigi1IYjb1ricWcp1nhZYb3y4PNgDgVTkAJEgJKwRY=
+github.com/gomlx/go-xla v0.4.29-0.20261114122244-953549b90bee h1:zK3pAZaWgrOMoImv3Iav6M6cd2wpfS/PEHxhBak7kyM=
+github.com/gomlx/go-xla v0.4.29-0.20261114122244-953549b90bee/go.mod h1:8jHse71zwThwtIGZHRvkcfB6KMaSzCLd5Mpc0wwr6kE=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
