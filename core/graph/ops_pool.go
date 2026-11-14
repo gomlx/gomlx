@@ -31,6 +31,7 @@ type PoolBuilder struct {
 	spatialAxes          []int // Indices of spatial axes.
 	channelsAxis         int
 	windowSizes, strides []int
+	windowDilations      []int
 	paddings             [][2]int
 	padSame              bool
 	isMean, isConcat     bool // Divide by the number of elements later if mean.
@@ -232,6 +233,29 @@ func (pool *PoolBuilder) StridePerAxis(strides ...int) *PoolBuilder {
 	return pool
 }
 
+// WindowDilations sets the window dilation factor to the same value across all spatial dimensions.
+// A dilation of d inserts d-1 spacing positions between consecutive window elements (default is 1, no dilation).
+func (pool *PoolBuilder) WindowDilations(dilation int) *PoolBuilder {
+	dilationsPerAxis := xslices.SliceWithValue(pool.numSpatialDims, dilation)
+	return pool.WindowDilationPerAxis(dilationsPerAxis...)
+}
+
+// WindowDilationPerAxis sets the window dilation factor for each spatial dimension.
+// Each dilation factor must be >= 1 (default is 1, no dilation).
+func (pool *PoolBuilder) WindowDilationPerAxis(dilations ...int) *PoolBuilder {
+	if len(dilations) != pool.numSpatialDims {
+		Panicf("received %d window dilations in WindowDilationPerAxis, but x has %d spatial dimensions",
+			len(dilations), pool.numSpatialDims)
+	}
+	for i, d := range dilations {
+		if d < 1 {
+			Panicf("window dilation at spatial axis %d must be >= 1, got %d", i, d)
+		}
+	}
+	pool.windowDilations = dilations
+	return pool
+}
+
 // PadSame adds paddings on the edges of x such that in the end the output
 // of the convolution has the same shapes as the input.
 //
@@ -316,15 +340,27 @@ func (pool *PoolBuilder) Done() *Node {
 		}
 	}
 
+	var windowDilations []int
+	for _, d := range pool.windowDilations {
+		if d > 1 {
+			windowDilations = makeSlice("WindowDilation", 1, pool.windowDilations)
+			break
+		}
+	}
+
 	// spatialPaddings can only be calculated after we are sure about the channels positioning.
 	spatialPaddings := pool.paddings
 	if spatialPaddings == nil && pool.padSame {
 		// Pad such that the output is shaped the same as the input.
 		spatialPaddings = make([][2]int, pool.numSpatialDims)
 		for dim := range spatialPaddings {
-			windowSize := pool.windowSizes[dim]            // for this dimension.
-			spatialPaddings[dim][0] = (windowSize - 1) / 2 // For an even-sized kernel, the padding is asymmetric.
-			spatialPaddings[dim][1] = windowSize / 2
+			dilation := 1
+			if dim < len(pool.windowDilations) {
+				dilation = pool.windowDilations[dim]
+			}
+			effectiveWindow := (pool.windowSizes[dim]-1)*dilation + 1
+			spatialPaddings[dim][0] = (effectiveWindow - 1) / 2 // For an even-sized kernel, the padding is asymmetric.
+			spatialPaddings[dim][1] = effectiveWindow / 2
 		}
 	}
 	var paddings [][2]int
@@ -341,7 +377,7 @@ func (pool *PoolBuilder) Done() *Node {
 	}
 
 	pooled := BackendReduceWindow(pool.x, pool.reductionType,
-		windowDimensions, strides, nil, nil, paddings)
+		windowDimensions, strides, nil, windowDilations, paddings)
 
 	// Take the mean.
 	if pool.isMean && pool.reductionType == compute.ReduceOpSum {
@@ -353,7 +389,7 @@ func (pool *PoolBuilder) Done() *Node {
 			}
 			pooled = DivScalar(pooled, float64(totalWindowSize))
 		} else {
-			pooled = takeMeanOfContributions(pool.x, pooled, pool.channelsAxis, windowDimensions, strides, paddings)
+			pooled = takeMeanOfContributions(pool.x, pooled, pool.channelsAxis, windowDimensions, strides, windowDilations, paddings)
 		}
 	}
 
@@ -361,16 +397,20 @@ func (pool *PoolBuilder) Done() *Node {
 }
 
 // takeMeanOfContributions divides the pooled sum by the number of contributions at each position.
-func takeMeanOfContributions(x, pooledSum *Node, channelsAxis int, windowDimensions, strides []int, paddings [][2]int) *Node {
+func takeMeanOfContributions(x, pooledSum *Node, channelsAxis int, windowDimensions, strides, windowDilations []int, paddings [][2]int) *Node {
 	// We need to normalize the sum by the number of elements that were actually used, ignoring the padding.
 	// We use a similar BackendReduceWindow configuration, but as input a tensor with ones and dropping the
 	// batch and channels axes, since they are the same.
 	shapeNoBatchOrChannels := x.Shape().Clone()
 	shapeNoBatchOrChannels.Dimensions[0] = 1
 	shapeNoBatchOrChannels.Dimensions[channelsAxis] = 1
+	if shapeNoBatchOrChannels.AxisNames != nil {
+		shapeNoBatchOrChannels.AxisNames[0] = ""
+		shapeNoBatchOrChannels.AxisNames[channelsAxis] = ""
+	}
 	ones := Ones(x.graph, shapeNoBatchOrChannels)
 	pooledOnes := BackendReduceWindow(ones, compute.ReduceOpSum,
-		windowDimensions, strides, nil, nil, paddings)
+		windowDimensions, strides, nil, windowDilations, paddings)
 	pooledOnes = StopGradient(pooledOnes)
 	return Div(pooledSum, pooledOnes)
 }

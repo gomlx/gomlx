@@ -437,3 +437,18 @@ func TestConcatPool(t *testing.T) {
 		}},
 	}, 0)
 }
+
+func TestMaxPoolWindowDilation(t *testing.T) {
+	testFuncOneInputDefaultBackend(t, "MaxPool(...).ChannelsFirst().Window(2).Strides(1).WindowDilations(2)",
+		func(g *Graph) (input, output *Node) {
+			input = Const(g, [][][]float32{{{1, 5, 2, 8, 3}}})
+			output = MaxPool(input).
+				ChannelsAxis(images.ChannelsFirst).
+				Window(2).
+				Strides(1).
+				WindowDilations(2).
+				NoPadding().
+				Done()
+			return
+		}, [][][]float32{{{2, 8, 3}}})
+}
