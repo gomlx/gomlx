@@ -3231,8 +3231,7 @@ func backendFusedSoftmax(x *Node, axis int) (
 type nodeInputsFusedTopK struct {
 	operand *Node
 	k       int
-	axis    int
-	largest bool
+	cfg     compute.FusedTopKConfig
 }
 
 // Type implements the interface NodeInputs.
@@ -3242,12 +3241,11 @@ func (ni *nodeInputsFusedTopK) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsFusedTopK) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], k=%v, axis=%v, largest=%v)",
+	return fmt.Sprintf("%s(operand=[#%d], k=%v, cfg=%+v)",
 		ni.Type(),
 		ni.operand.Id(),
 		ni.k,
-		ni.axis,
-		ni.largest,
+		ni.cfg,
 	)
 }
 
@@ -3257,22 +3255,21 @@ func (ni *nodeInputsFusedTopK) CloneWithInputs(originalNode *Node, newInputs ...
 	idx := 0
 	new_operand := newInputs[idx]
 	idx++
-	r0, _ := backendFusedTopK(new_operand, ni.k, ni.axis, ni.largest)
+	r0, _ := backendFusedTopK(new_operand, ni.k, ni.cfg)
 	return r0.inputNodes[0]
 }
 
 // backendFusedTopK is a Graph wrapper for the backend.Builder.FusedTopK method.
-func backendFusedTopK(operand *Node, k int, axis int, largest bool) (
+func backendFusedTopK(operand *Node, k int, cfg compute.FusedTopKConfig) (
 	values, indices *Node) {
 	inputNodes := []*Node{operand}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsFusedTopK{
 		operand: operand,
 		k:       k,
-		axis:    axis,
-		largest: largest,
+		cfg:     cfg,
 	}
-	v0, v1, err := g.currentFunc.backendFunc.FusedTopK(operand.outputOps[0], inputs.k, compute.FusedTopKConfig{Axis: inputs.axis, Smallest: !inputs.largest})
+	v0, v1, err := g.currentFunc.backendFunc.FusedTopK(operand.outputOps[0], inputs.k, inputs.cfg)
 	if err != nil {
 		panic(err)
 	}
@@ -4652,8 +4649,8 @@ func Neg(x *Node) (
 
 // nodeInputsNonZero holds the inputs used for the call to compute.NonZero.
 type nodeInputsNonZero struct {
-	operand       *Node
-	countAxisName string
+	operand *Node
+	cfg     compute.NonZeroConfig
 }
 
 // Type implements the interface NodeInputs.
@@ -4663,10 +4660,10 @@ func (ni *nodeInputsNonZero) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsNonZero) String() string {
-	return fmt.Sprintf("%s(operand=[#%d], countAxisName=%v)",
+	return fmt.Sprintf("%s(operand=[#%d], cfg=%+v)",
 		ni.Type(),
 		ni.operand.Id(),
-		ni.countAxisName,
+		ni.cfg,
 	)
 }
 
@@ -4676,22 +4673,19 @@ func (ni *nodeInputsNonZero) CloneWithInputs(originalNode *Node, newInputs ...*N
 	idx := 0
 	new_operand := newInputs[idx]
 	idx++
-	return NonZero(new_operand, ni.countAxisName)
+	return backendNonZero(new_operand, ni.cfg)
 }
 
-// NonZero returns row-major coordinates of nonzero elements as an int64
-// tensor [operand rank, count]. The data-dependent count dimension is named
-// countAxisName, which must be nonempty and unique to this result.
-// A scalar operand produces shape [0, 0] or [0, 1].
-func NonZero(operand *Node, countAxisName string) (
+// backendNonZero is a Graph wrapper for the backend.Builder.NonZero method.
+func backendNonZero(operand *Node, cfg compute.NonZeroConfig) (
 	node *Node) {
 	inputNodes := []*Node{operand}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsNonZero{
-		operand:       operand,
-		countAxisName: countAxisName,
+		operand: operand,
+		cfg:     cfg,
 	}
-	result, err := g.currentFunc.backendFunc.NonZero(operand.outputOps[0], compute.NonZeroConfig{CountAxisName: inputs.countAxisName, Transpose: true})
+	result, err := g.currentFunc.backendFunc.NonZero(operand.outputOps[0], inputs.cfg)
 	if err != nil {
 		panic(err)
 	}

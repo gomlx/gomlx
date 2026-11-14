@@ -7,6 +7,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -176,5 +177,67 @@ func TestFunction(t *testing.T) {
 		assert.Panics(t, func() {
 			_ = closureFn.Call(val)
 		})
+	})
+
+	t.Run("FunctionScopedConstants", func(t *testing.T) {
+		backend := testutil.BuildTestBackend()
+		if !backend.Capabilities().Functions {
+			t.Skipf("Backend %q does not support functions", backend.Name())
+		}
+		g := graph.NewGraph(backend, "FunctionScopedConstants")
+		defer g.Finalize()
+
+		sharedTensor := tensors.FromValue([]float32{10, 20})
+
+		// Cache scalar and tensor constants in main first.
+		mainScalar1 := graph.Scalar(g, dtypes.Float32, 3.5)
+		mainScalar2 := graph.Scalar(g, dtypes.Float32, 3.5)
+		require.Same(t, mainScalar1, mainScalar2)
+
+		mainTensor1 := graph.ConstCachedTensor(g, sharedTensor)
+		mainTensor2 := graph.ConstCachedTensor(g, sharedTensor)
+		require.Same(t, mainTensor1, mainTensor2)
+
+		// Create the same constants inside a top-level sub-function:
+		// they must get distinct nodes scoped to subFn without evicting main's cache.
+		var subScalar1, subScalar2, subTensor1, subTensor2 *graph.Node
+		subFn := graph.NewFunction(g, "sub_consts", func(g *graph.Graph) []*graph.Node {
+			x := graph.Parameter(g, "x", shapes.Make(dtypes.Float32, 2))
+			subScalar1 = graph.Scalar(g, dtypes.Float32, 3.5)
+			subScalar2 = graph.Scalar(g, dtypes.Float32, 3.5)
+			subTensor1 = graph.ConstCachedTensor(g, sharedTensor)
+			subTensor2 = graph.ConstCachedTensor(g, sharedTensor)
+			return []*graph.Node{graph.Add(graph.Mul(x, subScalar2), subTensor2)}
+		})
+		require.Same(t, subScalar1, subScalar2)
+		require.Same(t, subTensor1, subTensor2)
+		require.NotSame(t, mainScalar1, subScalar1)
+		require.NotSame(t, mainTensor1, subTensor1)
+
+		// Create the same constants inside a closure as well.
+		var closureScalar1, closureScalar2, closureTensor1, closureTensor2 *graph.Node
+		_ = graph.NewClosure(g, func(g *graph.Graph) []*graph.Node {
+			closureScalar1 = graph.Scalar(g, dtypes.Float32, 3.5)
+			closureScalar2 = graph.Scalar(g, dtypes.Float32, 3.5)
+			closureTensor1 = graph.ConstCachedTensor(g, sharedTensor)
+			closureTensor2 = graph.ConstCachedTensor(g, sharedTensor)
+			return []*graph.Node{graph.Add(closureTensor2, closureScalar2)}
+		})
+		require.Same(t, closureScalar1, closureScalar2)
+		require.Same(t, closureTensor1, closureTensor2)
+		require.NotSame(t, mainScalar1, closureScalar1)
+		require.NotSame(t, subScalar1, closureScalar1)
+
+		// Back in main: main's cached nodes must still be returned intact (not evicted).
+		require.Same(t, mainScalar1, graph.Scalar(g, dtypes.Float32, 3.5))
+		require.Same(t, mainTensor1, graph.ConstCachedTensor(g, sharedTensor))
+
+		// Verify end-to-end execution combining main constants and subFn call.
+		in := graph.Add(mainTensor1, mainScalar1) // [13.5, 23.5]
+		out := subFn.Call(in)[0]                  // [13.5*3.5 + 10, 23.5*3.5 + 20] = [57.25, 102.25]
+		require.NoError(t, g.Compile(out))
+		res := g.Run()[0]
+		defer res.FinalizeAll()
+		assert.Equal(t, []float32{57.25, 102.25}, res.Value())
 	})
 }

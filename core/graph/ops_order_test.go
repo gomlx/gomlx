@@ -188,3 +188,50 @@ func TestTopKMask_MultipleBatches(t *testing.T) {
 		-1,
 	)
 }
+
+func TestTopK_BottomK_Gradient(t *testing.T) {
+	for _, fusion := range []string{"true", "false"} {
+		t.Run("fusion="+fusion, func(t *testing.T) {
+			t.Setenv(FusionEnv, fusion)
+
+			// 1D TopK with weighted slots and duplicate extrema (ties break toward lower index).
+			graphtest.RunTestGraphFn(t, "TopK Gradient 1D with ties",
+				func(g *Graph) (inputs, outputs []*Node) {
+					x := Const(g, []float32{5, 2, 5, 9, 5})
+					weights := Const(g, []float32{10, 3, 1})
+					values, _ := TopK(x, 3, 0)
+					loss := ReduceAllSum(Mul(values, weights))
+					return []*Node{x}, Gradient(loss, x)
+				},
+				[]any{
+					// x = [5, 2, 5, 9, 5] -> top 3 values at indices [3, 0, 2] get weights [10, 3, 1].
+					[]float32{3, 0, 1, 10, 0},
+				},
+				0,
+			)
+
+			// 2D BottomK along axis 1.
+			graphtest.RunTestGraphFn(t, "BottomK Gradient 2D",
+				func(g *Graph) (inputs, outputs []*Node) {
+					x := Const(g, [][]float32{
+						{4, 1, 3, 1},
+						{8, 6, 2, 9},
+					})
+					weights := Const(g, [][]float32{{2, 5}, {7, 11}})
+					values, _ := BottomK(x, 2, 1)
+					loss := ReduceAllSum(Mul(values, weights))
+					return []*Node{x}, Gradient(loss, x)
+				},
+				[]any{
+					// Row 0: [4, 1, 3, 1] -> bottom 2 at indices [1, 3] get [2, 5] -> [0, 2, 0, 5]
+					// Row 1: [8, 6, 2, 9] -> bottom 2 at indices [2, 1] get [7, 11] -> [0, 11, 7, 0]
+					[][]float32{
+						{0, 2, 0, 5},
+						{0, 11, 7, 0},
+					},
+				},
+				0,
+			)
+		})
+	}
+}

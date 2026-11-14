@@ -131,13 +131,6 @@ type Graph struct {
 
 	traced bool
 
-	// scalars maintains a cache of scalar values already created in the current Graph for re-use.
-	scalars scalarCache
-
-	// tensorConstants maintains a cache of tensors that have been converted to a constant node in the graph
-	// to avoid creating duplicate nodes.
-	tensorConstants tensorConstCache
-
 	// aliasToNode allows retrieval or nodes by their aliases.
 	aliasToNode map[string]*Node
 
@@ -191,13 +184,11 @@ func NewGraph(backend compute.Backend, name string) *Graph {
 		name = fmt.Sprintf("graph_#%d", graphCount)
 	}
 	g := &Graph{
-		backend:         backend,
-		id:              graphCount,
-		name:            name,
-		scalars:         make(scalarCache),
-		tensorConstants: make(tensorConstCache),
-		aliasToNode:     make(map[string]*Node),
-		functions:       make(map[string]*Function),
+		backend:     backend,
+		id:          graphCount,
+		name:        name,
+		aliasToNode: make(map[string]*Node),
+		functions:   make(map[string]*Function),
 
 		distStrategy: distributed.None,
 		numDevices:   1,
@@ -331,6 +322,9 @@ func (g *Graph) Finalize() {
 		g.executable = nil
 	}
 	g.nodes = nil
+	g.mainFunc = nil
+	g.currentFunc = nil
+	g.functions = nil
 	g.name = ""
 	g.backend = nil
 }
@@ -845,16 +839,18 @@ func (g *Graph) LoggedNodes() (nodes []*Node) {
 // It keeps a cache for each dtype of the scalar.
 type scalarCache map[dtypes.DType]map[float64]*Node
 
-// getScalarConst either creates a scalar constant or returns a previously created returned
-// from the cache. It shouldn't be called directly by users, rather Scalar and Const use it.
+// getScalarConst either creates a scalar constant or returns a previously created one
+// from the current function's cache. It shouldn't be called directly by users, rather Scalar and Const use it.
 func (g *Graph) getScalarConst(dtype dtypes.DType, value float64) (output *Node) {
-	dtypeMap, found := g.scalars[dtype]
+	g.AssertBuilding()
+	f := g.currentFunc
+	dtypeMap, found := f.scalars[dtype]
 	if !found {
 		dtypeMap = make(map[float64]*Node)
-		g.scalars[dtype] = dtypeMap
+		f.scalars[dtype] = dtypeMap
 	}
 	output, found = dtypeMap[value]
-	if found && output.scope == g.currentFunc {
+	if found {
 		return output
 	}
 	output = Const(g, shapes.CastAsDType(value, dtype))
