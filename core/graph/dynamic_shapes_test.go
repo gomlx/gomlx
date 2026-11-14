@@ -721,3 +721,20 @@ func TestDynamicShapes(t *testing.T) {
 		})
 	})
 }
+
+func TestDynamicOpsStaticFallback(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		exec, err := NewExec(backend, func(x *Node) *Node {
+			flat := DynamicReshape(x, NamedInferredDim("batch_seq"), StaticDim(2))
+			bias := DynamicBroadcastInDim(Const(x.Graph(), []float32{10, 20}), []int{1}, StaticDim(4).WithName("batch_seq"), StaticDim(2))
+			idx := ConvertDType(DynamicIota(x.Graph(), dtypes.Int32, 0, StaticDim(4).WithName("batch_seq"), StaticDim(2)), dtypes.Float32)
+			return Add(Add(flat, bias), idx)
+		})
+		require.NoError(t, err)
+		defer exec.Finalize()
+
+		out, err := exec.Call([][][]float32{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}})
+		require.NoError(t, err)
+		assert.Equal(t, [][]float32{{11, 22}, {14, 25}, {17, 28}, {20, 31}}, out[0].Value())
+	})
+}

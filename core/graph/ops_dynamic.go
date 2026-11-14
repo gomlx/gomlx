@@ -200,7 +200,7 @@ func DynamicReshape(operand *Node, axisSpecs ...DimensionSpec) *Node {
 		allStatic := true
 		inferredIdx := -1
 		for i, spec := range axisSpecs {
-			if spec.IsDynamic() || (spec.axisName != "" && spec.axisName != shapes.AnonymousAxis) {
+			if spec.IsDynamic() {
 				allStatic = false
 				break
 			}
@@ -277,7 +277,7 @@ func DynamicBroadcastInDim(operand *Node, broadcastAxes []int, axisSpecs ...Dime
 		staticDims := make([]int, len(axisSpecs))
 		allStatic := true
 		for i, spec := range axisSpecs {
-			if !spec.IsStatic() || spec.axisName != "" {
+			if !spec.IsStatic() {
 				allStatic = false
 				break
 			}
@@ -299,7 +299,6 @@ func DynamicBroadcastInDim(operand *Node, broadcastAxes []int, axisSpecs ...Dime
 			name = spec.axisName
 			value = spec.dynamic.outputOps[0]
 		} else if spec.IsStatic() {
-			name = spec.axisName
 			static = spec.static
 		} else {
 			exceptions.Panicf("DynamicBroadcastInDim: axis %d requires a non-negative Static dimension or a dynamic *Node (inferred dimensions are not supported in broadcast; use DynamicBroadcastLike or DynamicDim(*Node))", i)
@@ -441,7 +440,7 @@ func DynamicIota(g *Graph, dtype dtypes.DType, iotaAxis int, axisSpecs ...Dimens
 		if spec.IsDynamic() {
 			allStatic = false
 			inputsToValidate = append(inputsToValidate, spec.dynamic)
-		} else if !spec.IsStatic() || spec.axisName != "" {
+		} else if !spec.IsStatic() {
 			allStatic = false
 		} else {
 			staticDims[i] = spec.static
@@ -466,7 +465,6 @@ func DynamicIota(g *Graph, dtype dtypes.DType, iotaAxis int, axisSpecs ...Dimens
 			name = spec.axisName
 			value = spec.dynamic.outputOps[0]
 		} else if spec.IsStatic() {
-			name = spec.axisName
 			static = spec.static
 		} else {
 			exceptions.Panicf("DynamicIota: axis %d requires a non-negative Static dimension or a dynamic *Node (inferred dimensions are not supported in iota; use DynamicDim(*Node))", i)
