@@ -291,6 +291,7 @@ func (t *Tensor) MutableFlatData(accessFn func(flat any)) error {
 
 func (t *Tensor) lockedMutableFlatData(accessFn func(flat any)) error {
 	if t.isShared {
+		t.version.Add(1)
 		accessFn(t.sharedFlat)
 		return nil
 	}
@@ -302,6 +303,7 @@ func (t *Tensor) lockedMutableFlatData(accessFn func(flat any)) error {
 	if err != nil {
 		return err
 	}
+	t.version.Add(1)
 	accessFn(t.local.flat)
 	return nil
 }

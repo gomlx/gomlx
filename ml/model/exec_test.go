@@ -789,6 +789,37 @@ func TestExecDonateStore(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, float32(N*0+K+3.0), out2[0].Value().([][]float32)[0][0])
 	})
+
+	t.Run("SharedBufferZeroCopyAndStandaloneReuse", func(t *testing.T) {
+		store := model.NewStore()
+		w := tensors.FromFlatDataAndDimensions([]float32{1, 2, 3, 4}, 2, 2)
+		require.NoError(t, w.ToDevice(simpleBackend, 0))
+		_, err := store.CreateVariable("/w", w)
+		require.NoError(t, err)
+
+		exec, err := model.NewExec(simpleBackend, store, func(scope *model.Scope, x *Node) *Node {
+			g := x.Graph()
+			wv := scope.VariableWithShape("w", shapes.Make(dtypes.Float32, 2, 2)).NodeValue(g)
+			return Add(x, wv)
+		})
+		require.NoError(t, err)
+		exec.DonateStore()
+		defer exec.Finalize()
+
+		// CompileStandalone g1 populates shared constant from donated device buffer, then g1 is finalized.
+		g1, err := exec.CompileStandalone(shapes.Make(dtypes.Float32, 2, 2))
+		require.NoError(t, err)
+		out1 := g1.Run(tensors.FromFlatDataAndDimensions([]float32{10, 10, 10, 10}, 2, 2))[0]
+		require.Equal(t, [][]float32{{11, 12}, {13, 14}}, out1.Value())
+		g1.Finalize()
+
+		// CompileStandalone g2 reuses the shared constant even after g1 was finalized.
+		g2, err := exec.CompileStandalone(shapes.Make(dtypes.Float32, 2, 2))
+		require.NoError(t, err)
+		defer g2.Finalize()
+		out2 := g2.Run(tensors.FromFlatDataAndDimensions([]float32{20, 20, 20, 20}, 2, 2))[0]
+		require.Equal(t, [][]float32{{21, 22}, {23, 24}}, out2.Value())
+	})
 }
 
 type recordingLoader struct {

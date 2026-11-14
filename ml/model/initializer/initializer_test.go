@@ -19,7 +19,7 @@ func TestBroadcastTensorToShape(t *testing.T) {
 		func(g *Graph) (inputs, outputs []*Node) {
 			t0 := tensors.FromValue([]float64{7.0, 11.0, 17.0})
 			t1 := tensors.FromScalar(3.0)
-			inputs = []*Node{ConstCachedTensor(g, t0), ConstCachedTensor(g, t1)}
+			inputs = []*Node{ConstTensor(g, t0), ConstTensor(g, t1)}
 			initFn0 := BroadcastTensorToShape(t0)
 			initFn1 := BroadcastTensorToShape(t1)
 			outputs = []*Node{

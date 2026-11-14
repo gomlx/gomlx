@@ -248,7 +248,7 @@ func (v *Variable) finalizeSharedConst() {
 		return
 	}
 	if v.sharedConstValue != nil {
-		graph.FinalizeConstantValue(v.sharedConstValue)
+		graph.InternalFinalizeConstantValue(v.sharedConstValue)
 		v.sharedConstValue = nil
 		v.sharedConstBackend = nil
 	}
@@ -675,18 +675,40 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		}
 		var constNode *Node
 		if canShareConst && v.sharedConstValue != nil && v.sharedConstBackend == backend {
-			constNode = graph.SharedConstant(g, v.sharedConstValue)
+			constNode = graph.InternalSharedConstant(g, v.sharedConstValue)
 		} else {
 			val, err := v.Value()
 			if err != nil {
 				return nil, errors.WithMessagef(err, "failed to get value of variable %q for graph Constant node", v.Path())
 			}
-			constNode = graph.ConstTensor(g, val)
+			var constCreatedViaDonate bool
+			if canShareConst && v.store != nil && v.store.donated {
+				// Transfer an existing on-device/shared buffer zero-copy, or upload local storage into
+				// an aligned backend buffer once before finalizing the Tensor container.
+				if buf, bufErr := val.DonateBuffer(backend, 0); bufErr == nil {
+					constNode = graph.InternalConstBuffer(g, buf, true)
+					constCreatedViaDonate = true
+				}
+			}
+			if !constCreatedViaDonate {
+				if v.store != nil && v.store.donated && val.IsOnAnyDevice() {
+					if valBackend, bErr := val.Backend(); bErr == nil && valBackend == backend {
+						if buf, bufErr := val.Buffer(backend, 0); bufErr == nil {
+							constNode = graph.InternalConstBuffer(g, buf, false)
+						}
+					}
+				}
+				if constNode == nil {
+					constNode = graph.ConstTensor(g, val)
+				}
+			}
 			if canShareConst {
-				v.sharedConstValue = constNode.BackendValue()
+				if outs := graph.InternalBackendOutputs(constNode); len(outs) == 1 {
+					v.sharedConstValue = outs[0]
+				}
 				v.sharedConstBackend = backend
 				if v.store != nil && v.store.donated {
-					// Immediately release the Tensor value on host/device; only the shared backend
+					// Immediately release any remaining Tensor storage on host/device; only the shared backend
 					// constant (or its packed cache) will be kept.
 					if v.value != nil {
 						_ = v.value.FinalizeAll()
