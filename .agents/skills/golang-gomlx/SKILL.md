@@ -165,10 +165,11 @@ exec.WithDynamicAxes(
 - **Iota & Generation**:
   - `DynamicIota(g, dtype, iotaAxis, specs...)`: Creates a sequence tensor with dynamic target dimensions.
   - `IotaLike(refNode, iotaAxis)`: Creates an `iota` matching `refNode`'s shape.
-- **Padding**:
+- **Padding & Sparse / Data-Dependent Ops**:
   - `DynamicPad(operand, fillVal, padSpecs...)`: Pads with dynamic or static padding amounts.
+  - `NonZero(operand, config...)`: Returns indices of non-zero elements with a data-dependent dynamic count dimension (available only on backends supporting dynamic shapes; prefer boolean masking with `NotEqual`/`Where` on static-shape backends).
 - **Polymorphic Structural Ops**:
-  - `ExpandAxes`, `InsertAxes`, `ExpandLeftToRank`, `Squeeze`, `Slice`, `Gather`, `Concatenate`, `Dot`, `Where`, `TopK`, `TopKMask` transparently handle both static and dynamic shapes.
+  - `ExpandAxes`, `InsertAxes`, `ExpandLeftToRank`, `Squeeze`, `Slice`, `Gather`, `ScatterUpdate`, `Convolve`, `Concatenate`, `Dot`, `Where`, `TopK`, `BottomK`, `TopKMask` transparently handle both static and dynamic shapes.
 
 #### 4. Writing Polymorphic Layers
 Write layers using `DimensionSpecFor`, `DimensionSize`, `DynamicReshape`, `BroadcastLike`, and `IotaLike`. These run with **zero overhead** on static graphs (falling back directly to static operations) while transparently supporting dynamic shapes when enabled.

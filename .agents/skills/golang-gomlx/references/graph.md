@@ -46,6 +46,7 @@ This table maps common functions from the `core/graph` package to their PyTorch 
 | `ReduceAllMin(x)` | Computes the minimum of all elements. | `torch.min(x)` |
 | `ReduceMin(x, axes...)` | Computes the minimum along the specified axes. | `torch.amin(x, dim=axes)` |
 | `ArgMax(x, axis)` | Returns the index of the maximum value along an axis. | `torch.argmax(x, dim=axis)` |
+| `TopK(x, k, axis)` / `BottomK(x, k, axis)` | Returns `(values, indices)` of the largest / smallest `k` elements along `axis` (differentiable w.r.t. `values`). | `torch.topk(x, k, dim=axis, largest=True/False)` |
 | `ReduceAndKeep(x, reduceFn, axes...)` | Reduces along axes but keeps the reduced dimensions (with size 1). | `torch.sum(x, dim=axes, keepdim=True)` (if reduceFn is sum) |
 | **Linear Algebra & NN Ops** | | |
 | `Dot(a, b).Product()` | Matrix multiplication (or dot product for 1D). Uses the `Dot` builder pattern. | `torch.matmul(a, b)` or `a @ b` |
@@ -98,3 +99,4 @@ This table maps common functions from the `core/graph` package to their PyTorch 
 | `DynamicIota(g, dtype, axis, specs...)` | Generates a sequence tensor with dynamic target dimensions. | `torch.arange(...)` |
 | `IotaLike(ref, axis)` | Generates a sequence tensor matching `ref` shape. | N/A |
 | `DynamicPad(x, fillVal, padSpecs...)` | Dynamic padding with runtime padding amounts. | `torch.nn.functional.pad(x, ...)` |
+| `NonZero(x, config...)` | Returns coordinates of non-zero elements (requires dynamic-shape backend; use boolean masking on static-shape backends). | `torch.nonzero(x)` |

@@ -82,6 +82,7 @@ const (
 	NodeTypeFusedScaledDotProductAttention
 	NodeTypeFusedScaledDotProductAttentionVJP
 	NodeTypeFusedSoftmax
+	NodeTypeFusedTopK
 	NodeTypeGather
 	NodeTypeGreaterOrEqual
 	NodeTypeGreaterOrEqualTotalOrder
@@ -107,6 +108,7 @@ const (
 	NodeTypeMin
 	NodeTypeMul
 	NodeTypeNeg
+	NodeTypeNonZero
 	NodeTypeNotEqual
 	NodeTypeNotEqualTotalOrder
 	NodeTypeOptimizationBarrier
@@ -3225,6 +3227,65 @@ func backendFusedSoftmax(x *Node, axis int) (
 	return
 }
 
+// nodeInputsFusedTopK holds the inputs used for the call to compute.FusedTopK.
+type nodeInputsFusedTopK struct {
+	operand *Node
+	k       int
+	cfg     compute.FusedTopKConfig
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsFusedTopK) Type() NodeType {
+	return NodeTypeFusedTopK
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsFusedTopK) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], k=%v, cfg=%+v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.k,
+		ni.cfg,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsFusedTopK) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	r0, _ := backendFusedTopK(new_operand, ni.k, ni.cfg)
+	return r0.inputNodes[0]
+}
+
+// backendFusedTopK is a Graph wrapper for the backend.Builder.FusedTopK method.
+func backendFusedTopK(operand *Node, k int, cfg compute.FusedTopKConfig) (
+	values, indices *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsFusedTopK{
+		operand: operand,
+		k:       k,
+		cfg:     cfg,
+	}
+	v0, v1, err := g.currentFunc.backendFunc.FusedTopK(operand.outputOps[0], inputs.k, inputs.cfg)
+	if err != nil {
+		panic(err)
+	}
+	node := &Node{
+		outputOps:    []compute.Value{v0, v1},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(v0)), mustNoError(g.builder.OpShape(v1))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	splitNodes := splitNode(node)
+	values, indices = splitNodes[0], splitNodes[1]
+	return
+}
+
 // nodeInputsGather holds the inputs used for the call to compute.Gather.
 type nodeInputsGather struct {
 	operand            *Node
@@ -4572,6 +4633,59 @@ func Neg(x *Node) (
 		x: x,
 	}
 	result, err := g.currentFunc.backendFunc.Neg(x.outputOps[0])
+	if err != nil {
+		panic(err)
+	}
+	node = &Node{
+		outputOps:    []compute.Value{result},
+		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
+		graph:        g,
+		inputs:       inputs,
+		inputNodes:   inputNodes,
+	}
+	g.registerNode(node)
+	return
+}
+
+// nodeInputsNonZero holds the inputs used for the call to compute.NonZero.
+type nodeInputsNonZero struct {
+	operand *Node
+	cfg     compute.NonZeroConfig
+}
+
+// Type implements the interface NodeInputs.
+func (ni *nodeInputsNonZero) Type() NodeType {
+	return NodeTypeNonZero
+}
+
+// String implements the interface NodeInputs.
+func (ni *nodeInputsNonZero) String() string {
+	return fmt.Sprintf("%s(operand=[#%d], cfg=%+v)",
+		ni.Type(),
+		ni.operand.Id(),
+		ni.cfg,
+	)
+}
+
+// CloneWithInputs implements the interface NodeInputs.
+func (ni *nodeInputsNonZero) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// Reconstruct inputs from newInputs
+	idx := 0
+	new_operand := newInputs[idx]
+	idx++
+	return backendNonZero(new_operand, ni.cfg)
+}
+
+// backendNonZero is a Graph wrapper for the backend.Builder.NonZero method.
+func backendNonZero(operand *Node, cfg compute.NonZeroConfig) (
+	node *Node) {
+	inputNodes := []*Node{operand}
+	g := validateBuildingGraphFromInputs(inputNodes...)
+	inputs := &nodeInputsNonZero{
+		operand: operand,
+		cfg:     cfg,
+	}
+	result, err := g.currentFunc.backendFunc.NonZero(operand.outputOps[0], inputs.cfg)
 	if err != nil {
 		panic(err)
 	}

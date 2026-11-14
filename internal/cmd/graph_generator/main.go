@@ -54,7 +54,7 @@ var (
 		"FusedActivation", "FusedActivationVJP", "FusedDense", "FusedDenseVJP",
 		"FusedLayerNorm", "FusedLayerNormVJP", "FusedSoftmax",
 		"FusedScaledDotProductAttention", "FusedScaledDotProductAttentionVJP",
-		"FusedAttentionQKVProjection",
+		"FusedAttentionQKVProjection", "FusedTopK",
 		"FusedQuantizedDense", "FusedQuantizedDenseVJP", "QuantizedEmbeddingLookup",
 
 		// Dynamic shape methods (see ops_dynamic.go):
@@ -63,6 +63,7 @@ var (
 		"DynamicBroadcastInDim",
 		"DynamicIota",
 		"DynamicPad",
+		"NonZero",
 	)
 
 	// methodsNotGenerated get a NodeType but no auto-generated wrapper
@@ -206,6 +207,12 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.BackendType = "compute." + pi.BackendType
 				pi.Format = "%+v"
 			case "CumSumOptions":
+				pi.BackendType = "compute." + pi.BackendType
+				pi.Format = "%+v"
+			case "FusedTopKConfig":
+				pi.BackendType = "compute." + pi.BackendType
+				pi.Format = "%+v"
+			case "NonZeroConfig":
 				pi.BackendType = "compute." + pi.BackendType
 				pi.Format = "%+v"
 			case "*Quantization":

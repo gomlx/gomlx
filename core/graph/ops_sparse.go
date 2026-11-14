@@ -420,11 +420,30 @@ func ScatterUpdate(operand, indices, updates *Node, sorted, unique bool) *Node {
 	}
 	g := operand.Graph()
 	dtype := operand.DType()
-	shape := operand.Shape()
+
+	// Anonymous dynamic axes ("?") never compare equal in Where(), even when derived from the same
+	// runtime tensor. Name any anonymous dynamic axes on operand upfront (preserving already-named
+	// dynamic axes such as "batch") so ZerosLike(operand) and updateMaskBool inherit matching names.
+	if operand.Shape().IsDynamic() {
+		specs := DimensionSpecsFor(operand)
+		hasAnonymous := false
+		for axis, dim := range operand.Shape().Dimensions {
+			name := operand.Shape().AxisName(axis)
+			if dim == shapes.DynamicDim && (name == "" || name == shapes.AnonymousAxis) {
+				specs[axis] = NamedDynamicDim(g.UniqueName("scatter_update_axis"), DimensionSize(operand, axis))
+				hasAnonymous = true
+			}
+		}
+		if hasAnonymous {
+			operand = DynamicReshape(operand, specs...)
+		}
+	}
 
 	zero := ScalarZero(g, dtype)
 	maskUpdates := OnesLike(updates)
-	updateMask := Scatter(indices, maskUpdates, shape, sorted, unique)
+	// Use ZerosLike(operand) + ScatterSum instead of Scatter(..., operand.Shape(), ...) because
+	// Zeros(g, shape) cannot broadcast a scalar to dynamic dimensions without a reference *Node.
+	updateMask := ScatterSum(ZerosLike(operand), indices, maskUpdates, sorted, unique)
 	updateMaskBool := ConvertDType(updateMask, dtypes.Bool)
 	operand = Where(updateMaskBool, zero, operand)
 	return ScatterSum(operand, indices, updates, sorted, unique)

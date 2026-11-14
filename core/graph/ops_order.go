@@ -64,7 +64,6 @@ func (ni *nodeInputsSort) CloneWithInputs(originalNode *Node, newInputs ...*Node
 	return node
 }
 
-
 // Sort sorts a single tensor along the specified axis.
 //
 // This is a simplified version of SortFunc that doesn't require a comparator closure.
@@ -273,43 +272,111 @@ func topKImpl(x *Node, k int, axis int, ascending bool) (values, indices *Node) 
 		exceptions.Panicf("TopK/BottomK: k=%d exceeds axis size %d", k, axisSize)
 	}
 
-	// Create indices tensor using IotaLike along the sort axis
-	// Indices will have Int32 dtype
-	indicesInput := ConvertDType(IotaLike(x, axis), dtypes.Int32)
+	outputs, _ := InternalFusedOpCallerMulti(
+		func() []*Node {
+			v, idx := BackendFusedTopK(x, k, compute.FusedTopKConfig{
+				Axis:     axis,
+				Smallest: ascending,
+			})
+			return []*Node{v, idx}
+		},
+		func() []*Node {
+			// Create indices tensor using IotaLike along the sort axis.
+			// Indices will have Int32 dtype.
+			indicesInput := ConvertDType(IotaLike(x, axis), dtypes.Int32)
 
-	// Create comparator that compares based on values
-	// StableHLO sort expects parameters in order: (lhs_0, rhs_0, lhs_1, rhs_1, ...)
-	// where input 0 is values and input 1 is indices
-	comparator := NewClosure(g, func(g *Graph) []*Node {
-		lhsVal := Parameter(g, "lhs_val", shapes.Make(dtype))
-		rhsVal := Parameter(g, "rhs_val", shapes.Make(dtype))
-		_ = Parameter(g, "lhs_idx", shapes.Make(dtypes.Int32))
-		_ = Parameter(g, "rhs_idx", shapes.Make(dtypes.Int32))
-		if ascending {
-			return []*Node{LessThan(lhsVal, rhsVal)}
+			// Create comparator that compares based on values.
+			// StableHLO sort expects parameters in order: (lhs_0, rhs_0, lhs_1, rhs_1, ...)
+			// where input 0 is values and input 1 is indices.
+			comparator := NewClosure(g, func(g *Graph) []*Node {
+				lhsVal := Parameter(g, "lhs_val", shapes.Make(dtype))
+				rhsVal := Parameter(g, "rhs_val", shapes.Make(dtype))
+				_ = Parameter(g, "lhs_idx", shapes.Make(dtypes.Int32))
+				_ = Parameter(g, "rhs_idx", shapes.Make(dtypes.Int32))
+				if ascending {
+					return []*Node{LessThan(lhsVal, rhsVal)}
+				}
+				return []*Node{GreaterThan(lhsVal, rhsVal)}
+			})
+
+			// Sort values and indices together.
+			sortedResults := SortFunc(comparator, axis, true, x, indicesInput)
+			sortedValues := sortedResults[0]
+			sortedIndices := sortedResults[1]
+
+			// Register VJP on the underlying Sort node so reverse-mode autodiff works
+			// identically on backends that decompose TopK/BottomK via SortFunc (e.g., XLA).
+			sortNode := sortedValues.inputNodes[0]
+			sortNode.customVJP = func(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
+				splitOutputs := splitNode(node)
+				return []*Node{scatterAlongAxis(node.inputNodes[0], splitOutputs[1], vjps[0], axis), nil}
+			}
+
+			// Slice the first K elements along the sort axis.
+			sliceSpecs := make([]SliceAxisSpec, rank)
+			for i := range rank {
+				if i == axis {
+					sliceSpecs[i] = AxisRange(0, k)
+				} else {
+					sliceSpecs[i] = AxisRange() // Full range
+				}
+			}
+
+			return []*Node{
+				Slice(sortedValues, sliceSpecs...),
+				Slice(sortedIndices, sliceSpecs...),
+			}
+		},
+		false, // useDecomposedAlternateVJP = false: FusedTopK has its own VJP, and decomposed SortFunc requires closures.
+	)
+	return outputs[0], outputs[1]
+}
+
+// scatterAlongAxis scatters updates into ZerosLike(operand) at positions given by indices along axis.
+// Used by fusedTopKVJP and decomposed TopK/BottomK VJP, where indices along axis are unique.
+func scatterAlongAxis(operand, indices, updates *Node, axis int) *Node {
+	g := operand.Graph()
+	rank := operand.Rank()
+	axis = MustAdjustAxis(axis, operand)
+
+	// If indices has any anonymous dynamic axes ("?"), name them consistently across
+	// indices and updates before stacking coordinates so Concatenate can unify axis names.
+	if indices.Shape().IsDynamic() {
+		specs := DimensionSpecsFor(indices)
+		hasAnonymous := false
+		for i, dim := range indices.Shape().Dimensions {
+			name := indices.Shape().AxisName(i)
+			if dim == shapes.DynamicDim && (name == "" || name == shapes.AnonymousAxis) {
+				specs[i] = NamedDynamicDim(g.UniqueName("topk_vjp_axis"), DimensionSize(indices, i))
+				hasAnonymous = true
+			}
 		}
-		return []*Node{GreaterThan(lhsVal, rhsVal)}
-	})
-
-	// Sort values and indices together
-	sortedResults := SortFunc(comparator, axis, true, x, indicesInput)
-	sortedValues := sortedResults[0]
-	sortedIndices := sortedResults[1]
-
-	// Slice the first K elements along the sort axis
-	sliceSpecs := make([]SliceAxisSpec, rank)
-	for i := 0; i < rank; i++ {
-		if i == axis {
-			sliceSpecs[i] = AxisRange(0, k)
-		} else {
-			sliceSpecs[i] = AxisRange() // Full range
+		if hasAnonymous {
+			indices = DynamicReshape(indices, specs...)
+			updates = DynamicReshape(updates, specs...)
 		}
 	}
 
-	values = Slice(sortedValues, sliceSpecs...)
-	indices = Slice(sortedIndices, sliceSpecs...)
+	coordParts := make([]*Node, rank)
+	for i := range rank {
+		if i == axis {
+			coordParts[i] = indices
+		} else {
+			coordParts[i] = ConvertDType(IotaLike(indices, i), indices.DType())
+		}
+	}
+	coords := Stack(coordParts, -1)
+	return ScatterSum(ZerosLike(operand), coords, updates, false, true)
+}
 
-	return values, indices
+// fusedTopKVJP is the registered VJP for NodeTypeFusedTopK.
+// It routes incoming gradients for the selected k values back to their original indices along cfg.Axis.
+func fusedTopKVJP(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
+	inputs := node.inputs.(*nodeInputsFusedTopK)
+	splitOutputs := splitNode(node)
+	indices := splitOutputs[1]
+	axis := MustAdjustAxis(inputs.cfg.Axis, inputs.operand)
+	return []*Node{scatterAlongAxis(inputs.operand, indices, vjps[0], axis)}
 }
 
 // TopKMask returns a boolean mask of the top-k elements along the specified axis.

@@ -526,6 +526,129 @@ func TestDynamicShapes(t *testing.T) {
 			assert.Equal(t, [][]int32{{1, 3}, {0, 2}}, out[1].Value())
 		})
 
+		t.Run("BottomK_And_TopK_Dynamic_Gradient", func(t *testing.T) {
+			exec, err := NewExec(backend, func(x *Node) (*Node, *Node) {
+				topVals, _ := TopK(x, 2, 1)
+				botVals, _ := BottomK(x, 2, 1)
+				weights := Const(x.Graph(), [][]float32{{2, 3}})
+				lossTop := ReduceAllSum(Mul(topVals, weights))
+				lossBot := ReduceAllSum(Mul(botVals, weights))
+				return Gradient(lossTop, x)[0], Gradient(lossBot, x)[0]
+			})
+			require.NoError(t, err)
+			exec.WithDynamicAxes([]string{"batch", ""})
+
+			xInput := [][]float32{{10, 40, 20, 30}, {80, 50, 70, 60}}
+			out, err := exec.Call(xInput)
+			require.NoError(t, err)
+			// TopK(2): row0=[40(1), 30(3)], row1=[80(0), 70(2)] -> grads with [2, 3]
+			assert.Equal(t, [][]float32{{0, 2, 0, 3}, {2, 0, 3, 0}}, out[0].Value())
+			// BottomK(2): row0=[10(0), 20(2)], row1=[50(1), 60(3)] -> grads with [2, 3]
+			assert.Equal(t, [][]float32{{2, 0, 3, 0}, {0, 2, 0, 3}}, out[1].Value())
+		})
+
+		t.Run("Convolve_DynamicPadSameStride", func(t *testing.T) {
+			exec := MustNewExec(backend, func(x, length *Node) *Node {
+				x = DynamicReshape(x, StaticDim(1), NamedDynamicDim("samples", length), StaticDim(1))
+				return Convolve(x, Const(x.Graph(), [][][]float32{{{1}}, {{1}}, {{1}}})).PadSame().Strides(2).Done()
+			})
+			defer exec.Finalize()
+
+			out := exec.MustExec1([]float32{1, 2, 3, 4, 5}, int64(5))
+			defer out.FinalizeAll()
+			assert.Equal(t, [][][]float32{{{3}, {9}, {9}}}, out.Value())
+		})
+
+		t.Run("ScatterUpdate_Dynamic", func(t *testing.T) {
+			t.Run("EmptyRuntimeUpdates", func(t *testing.T) {
+				exec := MustNewExec(backend, func(x, length *Node) *Node {
+					indices := DynamicIota(x.Graph(), dtypes.Int64, 0, NamedDynamicDim("updates", length))
+					updates := ConvertDType(indices, dtypes.Float32)
+					return ScatterUpdate(x, ExpandAxes(indices, -1), updates, true, true)
+				})
+				defer exec.Finalize()
+
+				out := exec.MustExec1([]float32{1, 2, 3}, int64(0))
+				defer out.FinalizeAll()
+				assert.Equal(t, []float32{1, 2, 3}, out.Value())
+			})
+
+			t.Run("PreservesNamedDynamicAxis", func(t *testing.T) {
+				g := NewGraph(backend, "scatter_named_axis")
+				defer g.Finalize()
+
+				x := Parameter(g, "x", shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim, 2}, []string{"batch", ""}))
+				indices := Const(g, [][]int64{{0}, {2}})
+				updates := Const(g, [][]float32{{90, 91}, {92, 93}})
+				updated := ScatterUpdate(x, indices, updates, true, true)
+				// Named dynamic axis "batch" must be preserved on the output (not overwritten).
+				assert.Equal(t, "batch", updated.Shape().AxisName(0))
+
+				gradX := Gradient(ReduceAllSum(updated), x)[0]
+				require.NoError(t, g.Compile(updated, gradX))
+
+				outs := g.Run([][]float32{{1, 2}, {3, 4}, {5, 6}})
+				for _, o := range outs {
+					defer o.FinalizeAll()
+				}
+				assert.Equal(t, [][]float32{{90, 91}, {3, 4}, {92, 93}}, outs[0].Value())
+				assert.Equal(t, [][]float32{{0, 0}, {1, 1}, {0, 0}}, outs[1].Value())
+			})
+
+			t.Run("AnonymousDynamicAxis", func(t *testing.T) {
+				g := NewGraph(backend, "scatter_anonymous_axis")
+				defer g.Finalize()
+
+				x := Parameter(g, "x", shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim}, []string{shapes.AnonymousAxis}))
+				indices := Const(g, [][]int64{{1}})
+				updates := Const(g, []float32{42})
+				updated := ScatterUpdate(x, indices, updates, true, true)
+				require.NoError(t, g.Compile(updated))
+
+				out := g.Run([]float32{10, 20, 30})[0]
+				defer out.FinalizeAll()
+				assert.Equal(t, []float32{10, 42, 30}, out.Value())
+			})
+		})
+
+		t.Run("NonZero", func(t *testing.T) {
+			if !backend.Capabilities().Operations[compute.OpTypeNonZero] {
+				t.Skipf("Backend %q does not support OpTypeNonZero", backend.Name())
+			}
+
+			t.Run("DefaultAndTranspose", func(t *testing.T) {
+				exec := MustNewExec(backend, func(x *Node) (*Node, *Node, *Node) {
+					coords := NonZero(x)
+					coordsTransposed := NonZero(x, &NonZeroConfig{
+						CountAxisName: "nz_count",
+						Transpose:     true,
+					})
+					// Verify zero-VJP registration on NonZero.
+					loss := ConvertDType(ReduceAllSum(coords), x.DType())
+					gradX := Gradient(loss, x)[0]
+					return coords, coordsTransposed, gradX
+				})
+				defer exec.Finalize()
+
+				outs := exec.MustExec([][]float32{{0, 5, 0}, {7, 0, -2}})
+				for _, o := range outs {
+					defer o.FinalizeAll()
+				}
+				assert.Equal(t, [][]int64{{0, 1}, {1, 0}, {1, 2}}, outs[0].Value())
+				assert.Equal(t, [][]int64{{0, 1, 1}, {1, 0, 2}}, outs[1].Value())
+				assert.Equal(t, [][]float32{{0, 0, 0}, {0, 0, 0}}, outs[2].Value())
+			})
+
+			t.Run("MultiConfigPanics", func(t *testing.T) {
+				g := NewGraph(backend, "nonzero_panic")
+				defer g.Finalize()
+				x := Const(g, []float32{1, 0, 2})
+				assert.Panics(t, func() {
+					_ = NonZero(x, &NonZeroConfig{}, &NonZeroConfig{})
+				})
+			})
+		})
+
 		t.Run("TopKMask_Dynamic", func(t *testing.T) {
 			exec, err := NewExec(backend, func(x *Node) *Node {
 				// x is [batch, 4] -> TopKMask(2, axis=1) -> [batch, 4]
@@ -549,6 +672,22 @@ func TestDynamicShapes(t *testing.T) {
 			assert.Nil(t, sStatic.Dynamic())
 			assert.Equal(t, "", sStatic.AxisName())
 			assert.Equal(t, "StaticDim(128)", sStatic.String())
+
+			sZero := StaticDim(0)
+			assert.True(t, sZero.IsStatic())
+			assert.False(t, sZero.IsDynamic())
+			assert.False(t, sZero.IsInferred())
+			assert.Equal(t, 0, sZero.Static())
+			assert.Equal(t, "StaticDim(0)", sZero.String())
+
+			// Verify ZerosLike and DynamicIota handle zero-sized static dimensions alongside dynamic axes.
+			gZero := NewGraph(backend, "test_zero_static_dim")
+			xZero := Parameter(gZero, "x", shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim, 0}, []string{"batch", ""}))
+			zZero := ZerosLike(xZero)
+			assert.Equal(t, []int{shapes.DynamicDim, 0}, zZero.Shape().Dimensions)
+			iotaZero := DynamicIota(gZero, dtypes.Int32, 0, NamedDynamicDim("batch", DimensionSize(xZero, 0)), StaticDim(0))
+			assert.Equal(t, []int{shapes.DynamicDim, 0}, iotaZero.Shape().Dimensions)
+			gZero.Finalize()
 
 			sNamedStatic := sStatic.WithName("channels")
 			assert.Equal(t, "channels", sNamedStatic.AxisName())
@@ -580,5 +719,22 @@ func TestDynamicShapes(t *testing.T) {
 			assert.Equal(t, "batch", sNamedDynamic.AxisName())
 			assert.Contains(t, sNamedDynamic.String(), "DynamicDim(\"batch\"")
 		})
+	})
+}
+
+func TestDynamicOpsStaticFallback(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		exec, err := NewExec(backend, func(x *Node) *Node {
+			flat := DynamicReshape(x, NamedInferredDim("batch_seq"), StaticDim(2))
+			bias := DynamicBroadcastInDim(Const(x.Graph(), []float32{10, 20}), []int{1}, StaticDim(4).WithName("batch_seq"), StaticDim(2))
+			idx := ConvertDType(DynamicIota(x.Graph(), dtypes.Int32, 0, StaticDim(4).WithName("batch_seq"), StaticDim(2)), dtypes.Float32)
+			return Add(Add(flat, bias), idx)
+		})
+		require.NoError(t, err)
+		defer exec.Finalize()
+
+		out, err := exec.Call([][][]float32{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}})
+		require.NoError(t, err)
+		assert.Equal(t, [][]float32{{11, 22}, {14, 25}, {17, 28}, {20, 31}}, out[0].Value())
 	})
 }

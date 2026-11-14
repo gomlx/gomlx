@@ -2,6 +2,13 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-11-14:
+  - `core/graph`:
+    - Added `NonZero` (`NonZeroConfig`) for extracting indices of non-zero elements on backends supporting dynamic shapes (`"go"`, `"onnx"`), with `zeroVJP` registered for reverse-mode autodiff.
+    - Added `BackendFusedTopK` (`FusedTopKConfig`), updated `TopK` and `BottomK` to dispatch via `InternalFusedOpCallerMulti` (honoring `GOMLX_FUSION` and avoiding eager `SortFunc` closure construction when fused execution succeeds), and implemented reverse-mode autodiff (VJP) for `TopK` and `BottomK` across both fused and decomposed paths.
+    - Moved `Scalar` and `ConstCachedTensor` caches from `Graph` onto `Function` so nested closures (`If`, `While`, `SortFunc`) maintain isolated per-function constant caches without leaking nodes across function scopes.
+    - Updated `ScatterUpdate` (preserving named dynamic axes while naming anonymous ones), `Convolve` (`PadSame` with strides > 1), `vjpForDefaultBroadcast`, and multi-output VJP zero-filling to support dynamic dimensions, and fixed `StaticDim(0)` handling in `DimensionSpec` (`IsStatic`, `IsInferred`, `InferredDim`, `NamedInferredDim`) for zero-length static dimensions.
+
 - 2026-11-13:
   - `ml/ggml`, `ml/nn`:
     - Added graph-level decomposed dequantization (`ggml.CanDecompose` and `ggml.Dequantize`) for all remaining GGML K-quant formats (`GGMLQ2_K`, `GGMLQ3_K`, `GGMLQ4_K`, `GGMLQ5_K`, and `GGMLQ6_K`), enabling GGUF K-quant models (`nn.QuantizedDense` and static-shape `nn.QuantizedGather`) to execute out-of-the-box on XLA (CPU/CUDA) and any other backend without native `OpTypeFusedQuantizedDense` support.
