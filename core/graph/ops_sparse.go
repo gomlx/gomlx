@@ -420,11 +420,12 @@ func ScatterUpdate(operand, indices, updates *Node, sorted, unique bool) *Node {
 	}
 	g := operand.Graph()
 	dtype := operand.DType()
-	shape := operand.Shape()
 
 	zero := ScalarZero(g, dtype)
 	maskUpdates := OnesLike(updates)
-	updateMask := Scatter(indices, maskUpdates, shape, sorted, unique)
+	// Use ZerosLike(operand) + ScatterSum instead of Scatter(..., operand.Shape(), ...) because
+	// Zeros(g, shape) cannot broadcast a scalar to dynamic dimensions without a reference *Node.
+	updateMask := ScatterSum(ZerosLike(operand), indices, maskUpdates, sorted, unique)
 	updateMaskBool := ConvertDType(updateMask, dtypes.Bool)
 	operand = Where(updateMaskBool, zero, operand)
 	return ScatterSum(operand, indices, updates, sorted, unique)

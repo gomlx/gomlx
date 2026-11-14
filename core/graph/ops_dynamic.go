@@ -1,3 +1,5 @@
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
 package graph
 
 import (
@@ -14,7 +16,7 @@ import (
 //
 // It can be created with one of:
 //   - StaticDim(int): the dimension is a constant known at graph building time.
-//   - DynamicDim(*Node): the dimension is given by the input node, and the resulting axis has an anonymous dynamic dimension.
+//   - DynamicDim(*Node): the dimension is given by the input node, and the resulting axis has a generated `#`-prefixed dynamic dimension name.
 //   - NamedDynamicDim(name, *Node): the dimension is given by the input node and is named.
 //   - InferredDim(): the dimension is automatically inferred to preserve total tensor size (can ONLY be used for at most one axis in DynamicReshape, and nowhere else).
 //   - NamedInferredDim(name): the dimension is automatically inferred and named (can ONLY be used for at most one axis in DynamicReshape, and nowhere else).
@@ -26,14 +28,14 @@ type DimensionSpec struct {
 	dynamic  *Node
 }
 
-// IsStatic returns true if the dimension is a constant known at graph building time.
-func (s DimensionSpec) IsStatic() bool { return s.dynamic == nil && s.static > 0 }
+// IsStatic returns true if the dimension is a constant known at graph building time (including 0).
+func (s DimensionSpec) IsStatic() bool { return s.dynamic == nil && s.static >= 0 }
 
 // IsDynamic returns true if the dimension is given by a dynamic *Node.
 func (s DimensionSpec) IsDynamic() bool { return s.dynamic != nil }
 
 // IsInferred returns true if the dimension is automatically inferred.
-func (s DimensionSpec) IsInferred() bool { return s.dynamic == nil && s.static <= 0 }
+func (s DimensionSpec) IsInferred() bool { return s.dynamic == nil && s.static < 0 }
 
 // Static returns the static dimension size, or shapes.DynamicDim (-1) if dynamic or inferred.
 func (s DimensionSpec) Static() int {
@@ -46,7 +48,7 @@ func (s DimensionSpec) Static() int {
 // Dynamic returns the *Node representing the dynamic dimension, or nil if static or inferred.
 func (s DimensionSpec) Dynamic() *Node { return s.dynamic }
 
-// AxisName returns the name associated with this dimension (or "" / shapes.AnonymousAxis).
+// AxisName returns the name associated with this dimension (or "" if unnamed).
 func (s DimensionSpec) AxisName() string { return s.axisName }
 
 // WithName returns a copy of the DimensionSpec with the specified axis name.
@@ -61,13 +63,13 @@ func (s DimensionSpec) Clone() DimensionSpec { return s }
 // String implements fmt.Stringer for nice debug and error printing.
 func (s DimensionSpec) String() string {
 	if s.IsDynamic() {
-		if s.axisName != "" && s.axisName != shapes.AnonymousAxis {
+		if s.axisName != "" && !shapes.IsGeneratedAxisName(s.axisName) {
 			return fmt.Sprintf("DynamicDim(%q, %s)", s.axisName, s.dynamic)
 		}
 		return fmt.Sprintf("DynamicDim(%s)", s.dynamic)
 	}
 	if s.IsInferred() {
-		if s.axisName != "" && s.axisName != shapes.AnonymousAxis {
+		if s.axisName != "" && !shapes.IsGeneratedAxisName(s.axisName) {
 			return fmt.Sprintf("InferredDim(%q)", s.axisName)
 		}
 		return "InferredDim()"
@@ -91,10 +93,18 @@ func StaticDim(dim int) DimensionSpec {
 }
 
 // DynamicDim specifies a dynamic dimension whose value is given by the input node.
+// It assigns a generated `#`-prefixed axis name tied to dim so tensors built from the same
+// dimension node share an axis name.
 //
 // Use this with DynamicReshape, DynamicBroadcastInDim, and DynamicIota.
 func DynamicDim(dim *Node) DimensionSpec {
-	return DimensionSpec{axisName: shapes.AnonymousAxis, dynamic: dim}
+	var name string
+	if dim != nil && dim.Graph() != nil {
+		name = fmt.Sprintf("#dim_g%d_n%d", dim.Graph().GraphId(), dim.Id())
+	} else {
+		name = shapes.UniqueAxisName("#dim")
+	}
+	return DimensionSpec{axisName: name, dynamic: dim}
 }
 
 // NamedDynamicDim specifies a dynamic dimension whose value is given by the input node and is named.
@@ -105,12 +115,13 @@ func NamedDynamicDim(name string, dim *Node) DimensionSpec {
 }
 
 // InferredDim specifies that the dimension of the axis is automatically inferred to preserve
-// the total size of the tensor.
+// the total size of the tensor. Each DynamicReshape call using an unnamed InferredDim mints
+// a fresh `#`-prefixed unique axis name.
 //
 // Note: Inferred dimensions can ONLY be used for at most one axis in DynamicReshape.
 // They cannot be used with DynamicBroadcast operations or DynamicIota.
 func InferredDim() DimensionSpec {
-	return DimensionSpec{axisName: shapes.AnonymousAxis}
+	return DimensionSpec{static: shapes.DynamicDim}
 }
 
 // NamedInferredDim specifies that the dimension of the axis is automatically inferred and named
@@ -119,7 +130,7 @@ func InferredDim() DimensionSpec {
 // Note: Inferred dimensions can ONLY be used for at most one axis in DynamicReshape.
 // They cannot be used with DynamicBroadcast operations or DynamicIota.
 func NamedInferredDim(name string) DimensionSpec {
-	return DimensionSpec{axisName: name}
+	return DimensionSpec{static: shapes.DynamicDim, axisName: name}
 }
 
 // DimensionSpecFor returns the DimensionSpec corresponding to the given axis of x.
@@ -170,7 +181,7 @@ func DimensionSize(x *Node, axis int) *Node {
 // Each axis can have its dimension specified in one of:
 //
 //   - StaticDim(dim): the dimension is a constant known at graph building time.
-//   - DynamicDim(dimNode): the dimension is given by the scalar node dimNode (anonymous dynamic axis).
+//   - DynamicDim(dimNode): the dimension is given by the scalar node dimNode (generated `#`-prefixed dynamic axis).
 //   - NamedDynamicDim(name, dimNode): the dimension is given by the scalar node dimNode and named.
 //   - InferredDim(): the dimension is automatically inferred from the total size of the operand.
 //   - NamedInferredDim(name): the dimension is automatically inferred and named.
@@ -198,14 +209,13 @@ func DynamicReshape(operand *Node, axisSpecs ...DimensionSpec) *Node {
 		allStatic := true
 		inferredIdx := -1
 		for i, spec := range axisSpecs {
-			if spec.dynamic != nil {
+			if spec.IsDynamic() {
 				allStatic = false
 				break
 			}
-			if spec.static > 0 {
+			if spec.IsStatic() {
 				staticDims[i] = spec.static
-			} else if spec.static == 0 {
-				// Inferred dimension spec (static == 0 and dynamic == nil)
+			} else if spec.IsInferred() {
 				if inferredIdx != -1 {
 					allStatic = false // More than one inferred dim
 					break
@@ -228,11 +238,17 @@ func DynamicReshape(operand *Node, axisSpecs ...DimensionSpec) *Node {
 		var static int
 		var value compute.Value
 
-		if spec.dynamic != nil {
+		if spec.IsDynamic() {
 			name = spec.axisName
+			if name == "" {
+				name = shapes.UniqueAxisName("#dim")
+			}
 			value = spec.dynamic.outputOps[0]
-		} else if spec.axisName != "" {
+		} else if spec.IsInferred() {
 			name = spec.axisName
+			if name == "" {
+				name = shapes.UniqueAxisName("#inferred")
+			}
 		} else {
 			static = spec.static
 		}
@@ -276,7 +292,7 @@ func DynamicBroadcastInDim(operand *Node, broadcastAxes []int, axisSpecs ...Dime
 		staticDims := make([]int, len(axisSpecs))
 		allStatic := true
 		for i, spec := range axisSpecs {
-			if spec.dynamic != nil || spec.static <= 0 {
+			if !spec.IsStatic() {
 				allStatic = false
 				break
 			}
@@ -294,14 +310,16 @@ func DynamicBroadcastInDim(operand *Node, broadcastAxes []int, axisSpecs ...Dime
 		var static int
 		var value compute.Value
 
-		if spec.dynamic != nil {
+		if spec.IsDynamic() {
 			name = spec.axisName
+			if name == "" {
+				name = shapes.UniqueAxisName("#dim")
+			}
 			value = spec.dynamic.outputOps[0]
-		} else if spec.static > 0 {
-			name = spec.axisName
+		} else if spec.IsStatic() {
 			static = spec.static
 		} else {
-			exceptions.Panicf("DynamicBroadcastInDim: axis %d requires a positive Static dimension or a dynamic *Node (inferred dimensions are not supported in broadcast; use DynamicBroadcastLike or DynamicDim(*Node))", i)
+			exceptions.Panicf("DynamicBroadcastInDim: axis %d requires a non-negative Static dimension or a dynamic *Node (inferred dimensions are not supported in broadcast; use DynamicBroadcastLike or DynamicDim(*Node))", i)
 		}
 
 		dimensions[i] = compute.DynamicDimensionSpec{
@@ -437,10 +455,10 @@ func DynamicIota(g *Graph, dtype dtypes.DType, iotaAxis int, axisSpecs ...Dimens
 	allStatic := true
 	staticDims := make([]int, len(axisSpecs))
 	for i, spec := range axisSpecs {
-		if spec.dynamic != nil {
+		if spec.IsDynamic() {
 			allStatic = false
 			inputsToValidate = append(inputsToValidate, spec.dynamic)
-		} else if spec.axisName != "" {
+		} else if !spec.IsStatic() {
 			allStatic = false
 		} else {
 			staticDims[i] = spec.static
@@ -461,14 +479,16 @@ func DynamicIota(g *Graph, dtype dtypes.DType, iotaAxis int, axisSpecs ...Dimens
 		var static int
 		var value compute.Value
 
-		if spec.dynamic != nil {
+		if spec.IsDynamic() {
 			name = spec.axisName
+			if name == "" {
+				name = shapes.UniqueAxisName("#dim")
+			}
 			value = spec.dynamic.outputOps[0]
-		} else if spec.static > 0 {
-			name = spec.axisName
+		} else if spec.IsStatic() {
 			static = spec.static
 		} else {
-			exceptions.Panicf("DynamicIota: axis %d requires a positive Static dimension or a dynamic *Node (inferred dimensions are not supported in iota; use DynamicDim(*Node))", i)
+			exceptions.Panicf("DynamicIota: axis %d requires a non-negative Static dimension or a dynamic *Node (inferred dimensions are not supported in iota; use DynamicDim(*Node))", i)
 		}
 
 		dimensions[i] = compute.DynamicDimensionSpec{
@@ -575,7 +595,39 @@ func DynamicPad(x, fillValue *Node, axesConfig ...DynamicPadAxisSpec) *Node {
 		}
 	}
 
-	node := backendDynamicPad(x, fillValue, dynConfigs...)
+		node := backendDynamicPad(x, fillValue, dynConfigs...)
 	node.inputNodes = inputNodes
 	return node
+}
+
+// NonZeroConfig configures NonZero's output shape and count-axis naming.
+// This is an alias to compute.NonZeroConfig.
+type NonZeroConfig = compute.NonZeroConfig
+
+// NonZero returns row-major coordinates of non-zero elements in operand as an Int64 tensor.
+//
+// By default (when config is omitted or Transpose is false), the returned tensor has shape
+// [count, operand.Rank()] (matching Gather/Scatter/IndicesForShape coordinate conventions).
+// When NonZeroConfig.Transpose is true, it returns coordinates shaped [operand.Rank(), count]
+// (matching ONNX NonZero).
+// For a scalar operand (rank 0), the non-count dimension has size 0 (producing shape [0, 0] or [1, 0],
+// or [0, 0] / [0, 1] when Transpose is true).
+//
+// Because the number of non-zero elements depends on runtime data values, the count dimension is a
+// data-dependent dynamic axis (named NonZeroConfig.CountAxisName, or an automatically generated unique
+// axis name if left empty).
+//
+// Note: NonZero is only available on backends that support data-dependent dynamic shapes (such as
+// the "go" and "onnx" backends). On static-shape backends (such as "xla"), prefer boolean masking
+// instead — for example, NotEqual(x, ScalarZero(g, x.DType())) combined with Where.
+func NonZero(operand *Node, config ...*NonZeroConfig) *Node {
+	_ = validateBuildingGraphFromInputs(operand)
+	if len(config) > 1 {
+		exceptions.Panicf("NonZero takes at most one NonZeroConfig, but %d were provided", len(config))
+	}
+	var cfg NonZeroConfig
+	if len(config) == 1 && config[0] != nil {
+		cfg = *config[0]
+	}
+	return backendNonZero(operand, cfg)
 }

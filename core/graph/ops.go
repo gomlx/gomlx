@@ -289,12 +289,12 @@ func FinalizeConstantValue(val compute.Value) {
 	}
 }
 
-// ConstCachedTensor returns a constant node for the tensor t.
-// If it's the first time the tensor is used in this graph, a new node is created.
-// Otherwise, a previously created node is reused.
+// ConstCachedTensor returns a constant node for the tensor t in the current function scope.
+// If it's the first time the tensor is used in the current function, a new node is created.
+// Otherwise, the previously created node in that function is reused.
 //
-// The caching of the tensor has the side effect of keeping the tensor alive (and its memory resources) util
-// the Graph itself is garbage collected. If this is a concern, use ConstTensor instead.
+// The caching of the tensor has the side effect of keeping the tensor alive (and its memory resources) until
+// the Graph is finalized or garbage collected. If this is a concern, use ConstTensor instead.
 //
 // TODO:this can be made default (ConstTensor) once weak references land into Go and the issue of keeping the
 // tensor alive is resolved.
@@ -303,12 +303,13 @@ func FinalizeConstantValue(val compute.Value) {
 // https://github.com/golang/go/issues/67552#issuecomment-2200755798
 func ConstCachedTensor(g *Graph, t *tensors.Tensor) *Node {
 	g.AssertBuilding()
-	node, found := g.tensorConstants[t]
+	f := g.currentFunc
+	node, found := f.tensorConstants[t]
 	if found {
 		return node
 	}
 	node = ConstTensor(g, t)
-	g.tensorConstants[t] = node
+	f.tensorConstants[t] = node
 	return node
 }
 

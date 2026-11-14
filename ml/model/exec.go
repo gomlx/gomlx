@@ -56,6 +56,10 @@ type Exec struct {
 	changedVars   map[graph.GraphId][]*Variable
 	muChangedVars sync.Mutex
 
+	// Model graph construction reads and updates shared Store state, including
+	// donated variables. Backend compilation and execution may still run concurrently.
+	muGraphBuild sync.Mutex
+
 	// isInitializeVariablesExec indicates this executor is being used to initialize variables.
 	// Initializing variables within the modelGraphFn would lead to an infinite recursion.
 	// This checks for that.
@@ -111,6 +115,9 @@ func NewExecCanonical(backend compute.Backend, store *Store, modelGraphFn Canoni
 // so it can behind the scenes update the variables to the user.
 func (e *Exec) buildGraphFn() graph.CanonicalExecGraphFn {
 	return func(g *graph.Graph, inputs []*graph.Node) []*graph.Node {
+		e.muGraphBuild.Lock()
+		defer e.muGraphBuild.Unlock()
+
 		// Initialize the graph parameters store for this graph.
 		g.AttachState(graphState{}, newGraphStore())
 

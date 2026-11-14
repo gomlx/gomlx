@@ -849,6 +849,13 @@ func BackendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV *Node, quer
 	return backendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
 }
 
+// BackendFusedTopK returns sorted values and Int32 indices of the k largest (or smallest
+// when cfg.Smallest is true) elements along cfg.Axis.
+// Internal: prefer graph.TopK or graph.BottomK which handle fallback and gradients.
+func BackendFusedTopK(operand *Node, k int, cfg compute.FusedTopKConfig) (values, indices *Node) {
+	return backendFusedTopK(operand, k, cfg)
+}
+
 // FusionEnv is the name of the environment variable that controls whether fused ops are used.
 // The default value is true.
 const FusionEnv = "GOMLX_FUSION"
@@ -913,19 +920,30 @@ func InternalFusedOpCaller(fused, decomposed func() *Node, useDecomposedAlternat
 }
 
 // InternalFusedOpCallerMulti is the multi-output counterpart of InternalFusedOpCaller.
-// It handles fused ops that return multiple outputs (e.g. FusedAttentionQKVProjection returning q, k, v).
+// It handles fused ops that return multiple outputs (e.g. FusedAttentionQKVProjection returning q, k, v,
+// or FusedTopK returning values, indices).
 //
-// Like InternalFusedOpCaller, the decomposed version is built first so it has lower
-// node indices than the fused nodes. When the fused call succeeds and useDecomposedAlternateVJP
-// is set, the decomposed outputs are stored as vjpAlternateOutputs on each individual
-// output node (which are split nodes under the hood) for reverse-mode autodiff.
-// This should be set to true if there is no corresponding fused VJP.
+// When useDecomposedAlternateVJP is true, the decomposed version is built first so it has lower
+// node indices than the fused nodes, and when the fused call succeeds the decomposed outputs are
+// stored as vjpAlternateOutputs on each individual output node for reverse-mode autodiff.
+// When useDecomposedAlternateVJP is false, decomposed is only invoked if fused returns ErrNotImplemented
+// (or if GOMLX_FUSION disables fused ops).
 //
 // The returned opFused indicates whether the fused operation was taken (true) or
 // fell back to decomposed (false).
 func InternalFusedOpCallerMulti(fused, decomposed func() []*Node, useDecomposedAlternateVJP bool) (outputs []*Node, opFused bool) {
-	decomposedOutputs := decomposed()
+	if enabled, err := envutil.ReadBool(FusionEnv, true); err != nil {
+		panic(err)
+	} else if !enabled {
+		return decomposed(), false
+	}
 
+	var decomposedOutputs []*Node
+	if useDecomposedAlternateVJP {
+		decomposedOutputs = decomposed()
+	}
+
+	klog.V(2).Info("Attempt to call multi-output fused op")
 	err := exceptions.TryCatch[error](func() {
 		outputs = fused()
 	})
@@ -934,16 +952,19 @@ func InternalFusedOpCallerMulti(fused, decomposed func() []*Node, useDecomposedA
 			if klog.V(2).Enabled() {
 				klog.Infof("InternalFusedOpCallerMulti(): failed to call fused op (not implemented). Falling back to decomposed op: %v", err)
 			}
+			if decomposedOutputs == nil {
+				decomposedOutputs = decomposed()
+			}
 			return decomposedOutputs, false
 		}
 		panic(err)
 	}
-	if len(outputs) != len(decomposedOutputs) {
-		exceptions.Panicf("InternalFusedOpCallerMulti: fused function returned %d outputs, but decomposed returned %d", len(outputs), len(decomposedOutputs))
-	}
 	klog.V(2).Info("InternalFusedOpCallerMulti(): Successfully called fused op.")
 
 	if useDecomposedAlternateVJP {
+		if len(outputs) != len(decomposedOutputs) {
+			exceptions.Panicf("InternalFusedOpCallerMulti: fused function returned %d outputs, but decomposed returned %d", len(outputs), len(decomposedOutputs))
+		}
 		for i, output := range outputs {
 			output.vjpAlternateOutputs = []*Node{decomposedOutputs[i]}
 		}

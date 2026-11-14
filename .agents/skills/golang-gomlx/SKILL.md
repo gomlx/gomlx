@@ -125,7 +125,7 @@ func EuclideanDistance(a, b *Node) *Node {
 - The Exec object will automatically recompile the graph, calling again the graph building function, if the shape of the
   inputs changes. It has a limited cache size for different shapes, and compiling a graph is orders of magnitude slower
   than executing it, so it's better to reuse the same input shapes where possible, using padding to fixed sizes.
-- For one-off compilation, `exec.CompileUncached(inputShapes...)` builds a fresh
+- For one-off compilation, `exec.CompileStandalone(inputShapes...)` builds a fresh
   graph with the current configuration. The caller takes onwership of the returned Graph (and must
   finalize it). It is used in `onnx.Save()` to save the compiled graph as an `.onnx` file.
 
@@ -152,6 +152,8 @@ exec.WithDynamicAxes(
 )
 ```
 
+Static axes use `""` (empty string). User-named axes (like `"batch"`) enforce matching runtime sizes across inputs at compile/execute time; for non-user-named dynamic dimensions that only need runtime compatibility checks, generate unique `#`-prefixed names via `shapes.UniqueAxisName(prefix)`.
+
 #### 3. Operations Supporting Dynamic Shapes
 - **Dimension Abstraction**:
   - `DimensionSpecFor(x, axis)`: Returns a `DimensionSpec` representing the dimension (static or dynamic with name).
@@ -169,10 +171,11 @@ exec.WithDynamicAxes(
 - **Iota & Generation**:
   - `DynamicIota(g, dtype, iotaAxis, specs...)`: Creates a sequence tensor with dynamic target dimensions.
   - `IotaLike(refNode, iotaAxis)`: Creates an `iota` matching `refNode`'s shape.
-- **Padding**:
+- **Padding & Sparse / Data-Dependent Ops**:
   - `DynamicPad(operand, fillVal, padSpecs...)`: Pads with dynamic or static padding amounts.
+  - `NonZero(operand, config...)`: Returns indices of non-zero elements with a data-dependent dynamic count dimension (available only on backends supporting dynamic shapes; prefer boolean masking with `NotEqual`/`Where` on static-shape backends).
 - **Polymorphic Structural Ops**:
-  - `ExpandAxes`, `InsertAxes`, `ExpandLeftToRank`, `Squeeze`, `Slice`, `Gather`, `Concatenate`, `Dot`, `Where`, `TopK`, `TopKMask` transparently handle both static and dynamic shapes.
+  - `ExpandAxes`, `InsertAxes`, `ExpandLeftToRank`, `Squeeze`, `Slice`, `Gather`, `ScatterUpdate`, `Convolve`, `Concatenate`, `Dot`, `Where`, `TopK`, `BottomK`, `TopKMask` transparently handle both static and dynamic shapes.
 
 #### 4. Writing Polymorphic Layers
 Write layers using `DimensionSpecFor`, `DimensionSize`, `DynamicReshape`, `BroadcastLike`, and `IotaLike`. These run with **zero overhead** on static graphs (falling back directly to static operations) while transparently supporting dynamic shapes when enabled.

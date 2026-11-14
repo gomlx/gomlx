@@ -42,6 +42,13 @@ type Function struct {
 	parameters            []*Node
 	parametersNames       []string
 	parameterNameToHandle map[string]ParameterHandle
+
+	// scalars maintains a cache of scalar values already created in this Function for re-use.
+	scalars scalarCache
+
+	// tensorConstants maintains a cache of tensors that have been converted to a constant node in this Function
+	// to avoid creating duplicate nodes.
+	tensorConstants tensorConstCache
 }
 
 // newMainFunc is called during the creation of a Graph.
@@ -53,6 +60,8 @@ func (g *Graph) newMainFunc() *Function {
 		parent:                nil,
 		returned:              false,
 		parameterNameToHandle: make(map[string]ParameterHandle),
+		scalars:               make(scalarCache),
+		tensorConstants:       make(tensorConstCache),
 	}
 	g.functions[MainName] = f
 	return f
@@ -260,6 +269,8 @@ func NewClosureWithSharding(g *Graph, funcDef func(g *Graph) ([]*Node, []*distri
 		name:                  "",
 		parent:                g.currentFunc,
 		parameterNameToHandle: make(map[string]ParameterHandle),
+		scalars:               make(scalarCache),
+		tensorConstants:       make(tensorConstCache),
 	}
 	var err error
 	f.backendFunc, err = g.builder.Main().Closure()
@@ -342,6 +353,8 @@ func NewFunctionWithSharding(g *Graph, name string, funcDef func(g *Graph) ([]*N
 		graph:                 g,
 		name:                  name,
 		parameterNameToHandle: make(map[string]ParameterHandle),
+		scalars:               make(scalarCache),
+		tensorConstants:       make(tensorConstCache),
 	}
 	var err error
 	f.backendFunc, err = g.builder.NewFunction(name)

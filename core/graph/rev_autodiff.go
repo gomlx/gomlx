@@ -173,9 +173,17 @@ func Gradient(output *Node, gradientNodes ...*Node) []*Node {
 			// * Except if using vjpAlternateOutputs, in which case we don't need the zeros, they
 			//   will be handled later in the when using the alternate path for VJP.
 			if len(node.vjpAlternateOutputs) == 0 {
+				var splitOutputs []*Node
 				for ii, shape := range node.outputShapes {
 					if rNode.VJPsForMultiOutputs[ii] == nil {
-						rNode.VJPsForMultiOutputs[ii] = Zeros(node.Graph(), shape)
+						if shape.IsDynamic() {
+							if splitOutputs == nil {
+								splitOutputs = splitNode(node)
+							}
+							rNode.VJPsForMultiOutputs[ii] = ZerosLike(splitOutputs[ii])
+						} else {
+							rNode.VJPsForMultiOutputs[ii] = Zeros(node.Graph(), shape)
+						}
 					}
 				}
 			}
@@ -440,6 +448,7 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeFusedLayerNorm:                 vjpForSingleOutput(fusedLayerNormVJP),
 	NodeTypeFusedActivation:                vjpForSingleOutput(fusedActivationVJP),
 	NodeTypeFusedScaledDotProductAttention: fusedScaledDotProductAttentionVJP,
+	NodeTypeFusedTopK:                      fusedTopKVJP,
 
 	// Bitwise/integer operations: we define a zero gradient to their inputs.
 	NodeTypeLogicalAnd: vjpForSingleOutput(zeroVJP),
@@ -488,6 +497,7 @@ var VJPRegistration = map[NodeType]VJP{
 	NodeTypeDynamicPad:            vjpForSingleOutput(dynamicPadVJP),
 	NodeTypeIota:                  vjpForSingleOutput(zeroVJP),
 	NodeTypeDynamicIota:           vjpForSingleOutput(zeroVJP),
+	NodeTypeNonZero:               vjpForSingleOutput(zeroVJP),
 	NodeTypeReverse:               vjpForSingleOutput(reverseVJP),
 	NodeTypeOptimizationBarrier:   vjpOptimizationBarrier,
 	NodeTypeSchedulingBarrier:     vjpForSingleOutput(vjpSchedulingBarrier),
@@ -521,20 +531,23 @@ func vjpForDefaultBroadcast(node, input, v *Node) *Node {
 		return ReduceAllSum(v)
 	}
 
-	// Reduce-sum on the dimensions it was broadcast during the sum. Search for all dimensions that
-	// are 1 in the input, and > 1 in the output.
+	// Reduce-sum on the dimensions it was broadcast during the op. Search for all dimensions that
+	// are 1 in the input and not 1 in the output (including dynamic dimensions, where dim == -1).
 	var reduceDims []int
 	for ii, dim := range input.Shape().Dimensions {
-		if dim == 1 && v.Shape().Dimensions[ii] > 1 {
+		if dim == 1 && v.Shape().Dimensions[ii] != 1 {
 			reduceDims = append(reduceDims, ii)
 		}
 	}
-	reduced := ReduceSum(v, reduceDims...)
+	reduced := v
+	if len(reduceDims) > 0 {
+		reduced = ReduceSum(v, reduceDims...)
+	}
 	// Since ReduceSum collapsed those reduced dimensions of now size 1, we need to reshape it back to the
 	// original input format.
 	var vjp *Node
 	err := TryCatch[error](func() {
-		vjp = ReshapeWithShape(reduced, input.Shape())
+		vjp = DynamicReshapeLike(reduced, input)
 	})
 	if err != nil {
 		err = errors.WithMessagef(err, "AutoGrad: calculating the AccumulatedVJP of a broadcast: v.Shape()=%s, input.Shape()=%s", v.Shape(), input.Shape())
