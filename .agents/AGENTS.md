@@ -38,6 +38,20 @@ The XLA backend only support static shapes (known in "graph building time"). Cur
   It is separated in its own top-level directory, to prevend UI packages dependencies to pure GoMLX.
 - `.github/workflows`: continuous integration, one file per platform. 
 
+## Related Repositories (including this one)
+
+- **[`github.com/gomlx/gomlx`](https://github.com/gomlx/gomlx)**: High-level ML framework in Go (tensors, layers, automatic differentiation, optimizers, model training loops). GoMLX delegates lower-level graph compilation and execution to a `compute.Backend`.
+- **[`github.com/gomlx/compute`](https://github.com/gomlx/compute)**: Foundational execution and backend abstraction interface (`compute.Backend`, `compute.Builder`, `compute.Function`, `compute.Executable`, `compute.Buffer`), shared `dtypes`, `shapes`, `shapeinference`, and backend compliance tests (`compute/support/backendtest`).
+  - It also includes the "go" backend: written in pure Go, portable (including WASM), optionally supporting SIMD.
+- **`github.com/gomlx/go-xla`**: Depends **only** on `github.com/gomlx/compute` (never on `github.com/gomlx/gomlx`, to avoid circular dependencies).
+- **`github.com/gomlx/compute-onnx`**: Implements a ONNX Runtime (ORT) based backend. Supports Dynamic Shapes. Depends **only** on `github.com/gomlx/compute`
+- **`github.com/gomlx/go-darwinml`**: Implements the "mps" (Apple's MPSGraph based) and "mlx" (Apple's MLX based) backends. Depends **only** on `github.com/gomlx/compute`.
+- **`github.com/gomlx/onnx-gomlx`**: Converts `.onnx` models to GoMLX models. 
+- **`github.com/gomlx/go-huggingface`**: Hugging Face models tools: download repo files, iterate over datasets, tokenizer implementations, model implementations (using GoMLX). Currently it supports only a subset of the models ( mainly LLMs for text generation and instruction following) but is expandable.
+
+When navigating the codebase of any of the related projects, read their .agents/AGENTS.md file to get more information about
+the structure of the codebase and their specific conventions.
+
 ## Coding Style In GoMLX
 
 ### Auto-generated code
@@ -65,16 +79,6 @@ The compiled and execution of the graphs later is parallelized and can be execut
 Files that mostly define graph building functions, by convention, should dot-import the 
 `github.com/gomlx/gomlx/core/graph` package: having `graph.` repeated everywhere makes the math harder to read.
 This is commonly the case for libraries under `ml/layers`.
-
-### PEFT (Parameter-Efficient Fine-Tuning) and Layer Hooks
-
-GoMLX uses an inverted lifecycle hook architecture for fine-tuning rather than modifying model definitions:
-- `ml/layers` defines `PostLinearHook` (`func(scope *model.Scope, input, output *Node) *Node`), registered with `layers.RegisterPostLinearHook(priority, hook)` and invoked in `layers.DenseWithLayout`, `fnn.Done()`, and `attention.MultiHeadAttention`.
-- `ml/layers/peft` automatically registers its hook in `init()`.
-- Users activate LoRA simply by importing `_ "github.com/gomlx/gomlx/ml/layers/peft"` and setting hyperparameters on `model.Store` or via `-set`:
-  - `peft_adapter`: adapter name (e.g. `"my_lora"`, creating variables under `<scope>/<adapter_name>/A,B`). If `"off"`, base weights are frozen without adding adapters.
-  - `peft_rank`: low-rank dimension $r$.
-  - `peft_target_modules`: comma-separated or slice of module name substrings to target (e.g. `"query,value"`). Unmatched linear projections are frozen without adding adapters.
 
 ### Testing
 
@@ -155,10 +159,13 @@ Normal code files are prefixed with the following copyright line:
 Auto-generated files don't need a copyright, but should include a comment with the tool use to generate them.
 
 
-### Keep AI Agent Files Up-to-date
+### Documentation & Git Workflow
 
-For every new feature, refactoring or API change, update `.agents/AGENTS.md` and the files 
-under `.agents/skills/golang-gomlx/` accordingly.
+- Record user-visible or API changes in `docs/CHANGELOG.md` (with `docs/CHANGELOG-pjrt.md` and `docs/CHANGELOG-stablehlo.md` kept as historical archives).
+- Keep `.agents/AGENTS.md` (symlinked from `GEMINI.md`) updated whenever architecture, conventions, or non-obvious behavior changes.
+- **Never `git commit` or `git push`** without explicit user instruction; leave changes uncommitted in the working tree for review.
+- When changing code, if not explicitly asked, always wait for the operator to review the changes before committing them.
+- For every new feature, refactoring or API change, update the files under `.agents/skills/golang-gomlx/` accordingly.
 
 ### Git Workflow
 
