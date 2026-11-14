@@ -526,9 +526,11 @@ func (e *Exec) Compile(inputShapes ...shapes.Shape) (*graph.Graph, error) {
 	return e.exec.Compile(inputShapes...)
 }
 
-// CompileUncached builds and compiles a fresh model graph with the current Store settings.
+// CompileStandalone builds and compiles a fresh model graph with the current Store settings.
 // The caller owns the returned graph and must call Graph.Finalize when finished.
-func (e *Exec) CompileUncached(inputShapes ...shapes.Shape) (*graph.Graph, error) {
+// When DonateStore is used, the returned graph must be finalized before this Exec:
+// Exec.Finalize releases the variable tensors referenced by the graph.
+func (e *Exec) CompileStandalone(inputShapes ...shapes.Shape) (*graph.Graph, error) {
 	if e.finalized.Load() {
 		return nil, errors.Wrapf(ErrExecFinalized, "model.Exec %q is finalized", e.Name())
 	}
@@ -537,7 +539,7 @@ func (e *Exec) CompileUncached(inputShapes ...shapes.Shape) (*graph.Graph, error
 	if e.finalized.Load() {
 		return nil, errors.Wrapf(ErrExecFinalized, "model.Exec %q is finalized", e.Name())
 	}
-	g, err := e.exec.CompileUncached(inputShapes...)
+	g, err := e.exec.CompileStandalone(inputShapes...)
 	if err != nil {
 		return nil, err
 	}

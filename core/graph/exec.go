@@ -649,9 +649,9 @@ func (e *Exec) Compile(inputShapes ...shapes.Shape) (*Graph, error) {
 	return entry.graph, nil
 }
 
-// CompileUncached builds and compiles a fresh graph with this executor's configuration.
+// CompileStandalone builds and compiles a fresh graph with this executor's configuration.
 // The caller owns the returned graph and must call Graph.Finalize when finished.
-func (e *Exec) CompileUncached(inputShapes ...shapes.Shape) (*Graph, error) {
+func (e *Exec) CompileStandalone(inputShapes ...shapes.Shape) (*Graph, error) {
 	if e.finalized.Load() {
 		return nil, errors.Wrapf(ErrExecFinalized, "Exec %q is finalized", e.Name())
 	}
@@ -666,7 +666,7 @@ func (e *Exec) CompileUncached(inputShapes ...shapes.Shape) (*Graph, error) {
 	}
 	entry, err := e.buildAndCompileGraph(templateShapes, -1)
 	if err != nil {
-		return nil, errors.WithMessagef(err, "failed during uncached graph construction/compilation")
+		return nil, errors.WithMessagef(err, "failed during standalone graph construction/compilation")
 	}
 	return entry.graph, nil
 }

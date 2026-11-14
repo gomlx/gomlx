@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExecCompileUncached(t *testing.T) {
+func TestExecCompileStandalone(t *testing.T) {
 	backend, err := gobackend.New("")
 	require.NoError(t, err)
 	defer backend.Finalize()
@@ -28,11 +28,11 @@ func TestExecCompileUncached(t *testing.T) {
 	cached, err := exec.Compile(shape)
 	require.NoError(t, err)
 	offset = 10
-	fresh, err := exec.CompileUncached(shape)
+	fresh, err := exec.CompileStandalone(shape)
 	require.NoError(t, err)
 	defer fresh.Finalize()
 	require.NotSame(t, cached, fresh)
-	another, err := exec.CompileUncached(shape)
+	another, err := exec.CompileStandalone(shape)
 	require.NoError(t, err)
 	defer another.Finalize()
 	require.NotSame(t, fresh, another)
@@ -44,6 +44,6 @@ func TestExecCompileUncached(t *testing.T) {
 	values := fresh.Run([]float32{1})
 	require.Equal(t, []float32{11}, values[0].Value())
 	require.NoError(t, values[0].FinalizeAll())
-	_, err = exec.CompileUncached(shape)
+	_, err = exec.CompileStandalone(shape)
 	require.ErrorIs(t, err, ErrExecFinalized)
 }

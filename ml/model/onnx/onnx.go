@@ -23,6 +23,8 @@ func IsONNX(backend compute.Backend) bool {
 }
 
 // Save exports the computation graph associated with the given model.Exec as an ONNX model to w.
+// The model variables must already be initialized, for example by loading trained weights
+// or executing the model. Saving a model with uninitialized variables fails.
 //
 // It temporary sets store.WithVariableAsConst(true) and backend.SetKeepModelProto(true) while compiling
 // the graph so that variable weights are embedded directly into the ONNX graph constants.
@@ -44,7 +46,7 @@ func Save(backend compute.Backend, exec *model.Exec, w io.Writer, inputShapes []
 	store.WithVariableAsConst(true)
 	defer store.WithVariableAsConst(prevVariablesAsConst)
 
-	g, err := exec.CompileUncached(inputShapes...)
+	g, err := exec.CompileStandalone(inputShapes...)
 	if err != nil {
 		return errors.Wrap(err, "failed to compile computation graph for ONNX export")
 	}
