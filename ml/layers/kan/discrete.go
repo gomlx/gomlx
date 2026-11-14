@@ -344,7 +344,7 @@ func (c *Config) discreteLayer(scope *model.Scope, x *Node, numOutputNodes int) 
 
 	} else {
 		// Fixed split points.
-		splitPoints = ConstCachedTensor(g, initialSplitPointsT)
+		splitPoints = ConstTensor(g, initialSplitPointsT)
 		splitPoints = ConvertDType(splitPoints, dtype)
 	}
 

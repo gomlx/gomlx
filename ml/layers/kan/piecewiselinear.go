@@ -199,7 +199,7 @@ func (c *Config) pwlLayer(scope *model.Scope, x *Node, numOutputNodes int) *Node
 
 	} else {
 		// Fixed split points.
-		splitPoints = ConstCachedTensor(g, initialSplitPointsT)
+		splitPoints = ConstTensor(g, initialSplitPointsT)
 		splitPoints = ConvertDType(splitPoints, dtype)
 		splitPoints = Reshape(splitPoints, 1, c.numControlPoints)
 	}
