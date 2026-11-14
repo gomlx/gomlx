@@ -335,27 +335,8 @@ func topKImpl(x *Node, k int, axis int, ascending bool) (values, indices *Node) 
 // scatterAlongAxis scatters updates into ZerosLike(operand) at positions given by indices along axis.
 // Used by fusedTopKVJP and decomposed TopK/BottomK VJP, where indices along axis are unique.
 func scatterAlongAxis(operand, indices, updates *Node, axis int) *Node {
-	g := operand.Graph()
 	rank := operand.Rank()
 	axis = MustAdjustAxis(axis, operand)
-
-	// If indices has any anonymous dynamic axes ("?"), name them consistently across
-	// indices and updates before stacking coordinates so Concatenate can unify axis names.
-	if indices.Shape().IsDynamic() {
-		specs := DimensionSpecsFor(indices)
-		hasAnonymous := false
-		for i, dim := range indices.Shape().Dimensions {
-			name := indices.Shape().AxisName(i)
-			if dim == shapes.DynamicDim && (name == "" || name == shapes.AnonymousAxis) {
-				specs[i] = NamedDynamicDim(g.UniqueName("topk_vjp_axis"), DimensionSize(indices, i))
-				hasAnonymous = true
-			}
-		}
-		if hasAnonymous {
-			indices = DynamicReshape(indices, specs...)
-			updates = DynamicReshape(updates, specs...)
-		}
-	}
 
 	coordParts := make([]*Node, rank)
 	for i := range rank {

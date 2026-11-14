@@ -4,6 +4,7 @@ It hasn't reached yet a 1.0 release yet (it is close), so instead we use every m
 
 - 2026-11-14:
   - `core/graph`:
+    - Replaced `shapes.AnonymousAxis` (`"?"`) in `DimensionSpec` (`DynamicDim`, `InferredDim`, `DynamicReshape`, `DynamicBroadcastInDim`, `DynamicIota`) with `#`-prefixed generated axis names (`#dim_g<id>_n<id>` / `shapes.UniqueAxisName`), and removed manual anonymous-axis renaming workarounds in `ScatterUpdate` and `TopK`/`BottomK` VJPs (`ops_dynamic.go`, `ops_sparse.go`, `ops_order.go`).
     - Added `NonZero` (`NonZeroConfig`) for extracting indices of non-zero elements on backends supporting dynamic shapes (`"go"`, `"onnx"`), with `zeroVJP` registered for reverse-mode autodiff.
     - Added `BackendFusedTopK` (`FusedTopKConfig`), updated `TopK` and `BottomK` to dispatch via `InternalFusedOpCallerMulti` (honoring `GOMLX_FUSION` and avoiding eager `SortFunc` closure construction when fused execution succeeds), and implemented reverse-mode autodiff (VJP) for `TopK` and `BottomK` across both fused and decomposed paths.
     - Moved `Scalar` and `ConstCachedTensor` caches from `Graph` onto `Function` so nested closures (`If`, `While`, `SortFunc`) maintain isolated per-function constant caches without leaking nodes across function scopes.

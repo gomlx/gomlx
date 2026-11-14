@@ -595,11 +595,11 @@ func TestDynamicShapes(t *testing.T) {
 				assert.Equal(t, [][]float32{{0, 0}, {1, 1}, {0, 0}}, outs[1].Value())
 			})
 
-			t.Run("AnonymousDynamicAxis", func(t *testing.T) {
-				g := NewGraph(backend, "scatter_anonymous_axis")
+			t.Run("GeneratedDynamicAxis", func(t *testing.T) {
+				g := NewGraph(backend, "scatter_generated_axis")
 				defer g.Finalize()
 
-				x := Parameter(g, "x", shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim}, []string{shapes.AnonymousAxis}))
+				x := Parameter(g, "x", shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim}, []string{shapes.UniqueAxisName("x")}))
 				indices := Const(g, [][]int64{{1}})
 				updates := Const(g, []float32{42})
 				updated := ScatterUpdate(x, indices, updates, true, true)
@@ -706,6 +706,7 @@ func TestDynamicShapes(t *testing.T) {
 			assert.Equal(t, "InferredDim(\"features\")", sNamedInferred.String())
 
 			g := NewGraph(backend, "test_spec")
+			defer g.Finalize()
 			dummyNode := Const(g, int32(42))
 			sDynamic := DynamicDim(dummyNode)
 			assert.False(t, sDynamic.IsStatic())
@@ -713,11 +714,72 @@ func TestDynamicShapes(t *testing.T) {
 			assert.False(t, sDynamic.IsInferred())
 			assert.Equal(t, dummyNode, sDynamic.Dynamic())
 			assert.Equal(t, shapes.DynamicDim, sDynamic.Static())
+			assert.True(t, shapes.IsGeneratedAxisName(sDynamic.AxisName()))
+			assert.Contains(t, sDynamic.String(), "DynamicDim(")
+			assert.NotContains(t, sDynamic.String(), sDynamic.AxisName())
 
 			sNamedDynamic := NamedDynamicDim("batch", dummyNode)
 			assert.True(t, sNamedDynamic.IsDynamic())
 			assert.Equal(t, "batch", sNamedDynamic.AxisName())
 			assert.Contains(t, sNamedDynamic.String(), "DynamicDim(\"batch\"")
+		})
+
+		t.Run("GeneratedAxis_SelfOps_ExecCache_AndRuntimeCheck", func(t *testing.T) {
+			// 1. Exec with generated axis name via WithDynamicAxes("#") or UniqueAxisName:
+			// x * (x + 1) works and reuses the compiled graph across calls with different sizes.
+			exec, err := NewExec(backend, func(x *Node) *Node {
+				return Mul(x, AddScalar(x, 1))
+			})
+			require.NoError(t, err)
+			defer exec.Finalize()
+			exec.WithDynamicAxes([]string{shapes.UniqueAxisName("batch")})
+
+			out1, err := exec.Call([]float32{2, 3, 4})
+			require.NoError(t, err)
+			assert.Equal(t, []float32{6, 12, 20}, out1[0].Value())
+			out1[0].FinalizeAll()
+
+			out2, err := exec.Call([]float32{1, 5})
+			require.NoError(t, err)
+			assert.Equal(t, []float32{2, 30}, out2[0].Value())
+			out2[0].FinalizeAll()
+
+			// 2. DynamicDim(n) reused across two DynamicIota calls shares the same axis name,
+			// and InferredDim() stored in a variable mints distinct generated axis names per reshape.
+			g := NewGraph(backend, "generated_axes_reuse")
+			defer g.Finalize()
+			a := Parameter(g, "a", shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim, 2}, []string{shapes.UniqueAxisName("a"), ""}))
+			b := Parameter(g, "b", shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim, 3}, []string{shapes.UniqueAxisName("b"), ""}))
+
+			inferred := InferredDim()
+			flatA := DynamicReshape(a, inferred)
+			flatB := DynamicReshape(b, inferred)
+			assert.NotEqual(t, flatA.Shape().AxisName(0), flatB.Shape().AxisName(0))
+
+			n := DimensionSize(a, 0)
+			iota1 := ConvertDType(DynamicIota(g, dtypes.Int32, 0, DynamicDim(n)), dtypes.Float32)
+			iota2 := ConvertDType(DynamicIota(g, dtypes.Int32, 0, DynamicDim(n)), dtypes.Float32)
+			assert.Equal(t, iota1.Shape().AxisName(0), iota2.Shape().AxisName(0))
+			sumIota := Add(iota1, iota2)
+
+			// 3. Distinct generated axes (#a_x vs #b_y) unify permissively at graph build time
+			// and check concrete dimensions at runtime.
+			sumFirstCol := Add(Slice(a, AxisRange(), AxisElem(0)), Slice(b, AxisRange(), AxisElem(0)))
+			require.NoError(t, g.Compile(flatA, flatB, sumIota, sumFirstCol))
+
+			outs := g.Run([][]float32{{1, 2}, {3, 4}, {5, 6}}, [][]float32{{10, 20, 30}, {40, 50, 60}, {70, 80, 90}})
+			for _, o := range outs {
+				defer o.FinalizeAll()
+			}
+			assert.Equal(t, []float32{1, 2, 3, 4, 5, 6}, outs[0].Value())
+			assert.Equal(t, []float32{10, 20, 30, 40, 50, 60, 70, 80, 90}, outs[1].Value())
+			assert.Equal(t, []float32{0, 2, 4}, outs[2].Value())
+			assert.Equal(t, [][]float32{{11}, {43}, {75}}, outs[3].Value())
+
+			// Mismatched concrete sizes for distinct generated axes fail at runtime.
+			assert.Panics(t, func() {
+				g.Run([][]float32{{1, 2}, {3, 4}}, [][]float32{{10, 20, 30}, {40, 50, 60}, {70, 80, 90}})
+			})
 		})
 	})
 }
