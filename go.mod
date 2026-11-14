@@ -9,7 +9,7 @@ require (
 	github.com/gomlx/bsplines v0.2.0
 	github.com/gomlx/compute v0.1.30-0.20261114210533-a1c976146ab6
 	github.com/gomlx/compute-onnx v0.1.30-0.20261114211452-91c374548e27
-	github.com/gomlx/go-darwinml v0.1.7-0.20261114211443-d29b0806c78d
+	github.com/gomlx/go-darwinml v0.1.7-0.20261114214802-f4ef1d471691
 	github.com/gomlx/go-xla v0.4.30-0.20261114211458-1b499b802bc8
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
