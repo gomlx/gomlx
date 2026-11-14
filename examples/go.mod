@@ -38,9 +38,9 @@ require (
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/gomlx/bsplines v0.2.0 // indirect
-	github.com/gomlx/compute-onnx v0.1.29-0.20261113153241-01549eb53201 // indirect
+	github.com/gomlx/compute-onnx v0.1.29-0.20261114121152-6972db68d645 // indirect
 	github.com/gomlx/exceptions v0.0.3 // indirect
-	github.com/gomlx/go-darwinml v0.1.6-0.20261113153455-55c08aa82071 // indirect
+	github.com/gomlx/go-darwinml v0.1.6-0.20261114121221-52e5a094efe8 // indirect
 	github.com/gomlx/go-xla v0.4.29-0.20261113153500-e17d4a21089e // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
