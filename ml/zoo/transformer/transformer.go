@@ -32,6 +32,7 @@ const (
 	ParamFFNDim      = "transformer_ffn_dim"
 	ParamMaxPosEmbed = "transformer_max_pos_embed"
 	ParamDType       = "transformer_dtype"
+	ParamNormDType   = "transformer_norm_dtype"
 	ParamDropout     = "transformer_dropout"
 
 	// ParamUseLayerNorm
@@ -118,6 +119,7 @@ type Model struct {
 	FFNDim               int             // Feed-forward hidden dimension
 	MaxPosEmbed          int             // Max positional embedding length
 	DType                dtypes.DType    // Data type
+	NormDType            dtypes.DType    // Expected dtype for normalization parameters; InvalidDType defaults to DType
 	Dropout              float64         // Dropout rate (0.0 = none)
 	UseBias              bool            // Use bias in dense layers
 	UseCausalMask        bool            // Use causal masking in attention layers
@@ -172,6 +174,7 @@ func New(scope *model.Scope) *Model {
 		FFNDim:                       0,
 		MaxPosEmbed:                  512,
 		DType:                        dtypes.Float32,
+		NormDType:                    dtypes.InvalidDType,
 		Dropout:                      0.0,
 		UseBias:                      true,
 		UseCausalMask:                true,
@@ -250,6 +253,14 @@ func New(scope *model.Scope) *Model {
 				panic(fmt.Sprintf("Invalid hyperparameter value %s=%q", ParamDType, dtypeStr))
 			}
 			m.DType = dtype
+		}
+		normDTypeStr := model.GetParamOr(scope, ParamNormDType, "")
+		if normDTypeStr != "" {
+			normDType, err := dtypes.DTypeString(normDTypeStr)
+			if err != nil || !normDType.IsFloat() {
+				panic(fmt.Sprintf("Invalid hyperparameter value %s=%q", ParamNormDType, normDTypeStr))
+			}
+			m.NormDType = normDType
 		}
 	}
 
@@ -372,6 +383,19 @@ func (m *Model) WithMaxPosEmbed(maxLen int) *Model {
 // WithDType sets data type.
 func (m *Model) WithDType(dtype dtypes.DType) *Model {
 	m.DType = dtype
+	return m
+}
+
+// WithNormDType sets the expected dtype for normalization variables (LayerNorm gain/offset and
+// RMSNorm scale). By default (dtypes.InvalidDType), normalization variables must match m.DType.
+// Setting an explicit float dtype (e.g., dtypes.Float32 for a half-precision transformer whose
+// checkpoint stores Float32 normalization parameters) enforces that dtype and converts it to the
+// normalization computation dtype inside the graph.
+func (m *Model) WithNormDType(dtype dtypes.DType) *Model {
+	if dtype != dtypes.InvalidDType && !dtype.IsFloat() {
+		exceptions.Panicf("WithNormDType requires a float dtype or InvalidDType, got %s", dtype)
+	}
+	m.NormDType = dtype
 	return m
 }
 
@@ -1112,7 +1136,7 @@ func (m *Model) normalize(scope *model.Scope, operand *Node, normType string) *N
 	}
 	switch normType {
 	case layers.NormalizationRMSNorm:
-		builder := norm.RMSNorm(scope, operand).WithEpsilon(m.NormEpsilon)
+		builder := norm.RMSNorm(scope, operand).WithEpsilon(m.NormEpsilon).WithDType(m.NormDType)
 		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
 			if m.RMSNormOffset != 0 {
 				builder = builder.WithScaleOffset(m.RMSNormOffset)
@@ -1120,8 +1144,11 @@ func (m *Model) normalize(scope *model.Scope, operand *Node, normType string) *N
 		}
 		return builder.Done()
 	case layers.NormalizationLayerNorm:
-		return norm.LayerNorm(scope, operand, -1).Epsilon(m.NormEpsilon).Done()
+		return norm.LayerNorm(scope, operand, -1).Epsilon(m.NormEpsilon).WithDType(m.NormDType).Done()
 	case layers.NormalizationDyT:
+		if m.NormDType != dtypes.InvalidDType && m.NormDType != operand.DType() {
+			exceptions.Panicf("NormDType=%s is not supported with DynamicTanh (expected %s)", m.NormDType, operand.DType())
+		}
 		return norm.DynamicTanh(scope, operand).WithAlpha(m.DyTAlpha).Done()
 	default:
 		exceptions.Panicf("unsupported normalization type: %q", normType)
@@ -1182,13 +1209,13 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x *Node
 
 	// Apply QK RMSNorm if Gemma 3 or Gemma 4
 	if m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
-		queryBuilder := norm.RMSNorm(mhaScope.Shared("query"), queryProjected).WithEpsilon(m.NormEpsilon).WithNormalizationAxes(-1)
+		queryBuilder := norm.RMSNorm(mhaScope.Shared("query"), queryProjected).WithEpsilon(m.NormEpsilon).WithNormalizationAxes(-1).WithDType(m.NormDType)
 		if m.RMSNormOffset != 0 {
 			queryBuilder = queryBuilder.WithScaleOffset(m.RMSNormOffset)
 		}
 		queryProjected = queryBuilder.Done()
 		if !isShared {
-			keyBuilder := norm.RMSNorm(mhaScope.Shared("key"), keyProjected).WithEpsilon(m.NormEpsilon).WithNormalizationAxes(-1)
+			keyBuilder := norm.RMSNorm(mhaScope.Shared("key"), keyProjected).WithEpsilon(m.NormEpsilon).WithNormalizationAxes(-1).WithDType(m.NormDType)
 			if m.RMSNormOffset != 0 {
 				keyBuilder = keyBuilder.WithScaleOffset(m.RMSNormOffset)
 			}
@@ -1343,7 +1370,7 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x *Node
 		pleGate = activation.Apply(m.Activation, pleGate) // act_fn (GELU)
 		pleGated := Mul(pleGate, perLayerInput)
 		pleProj := m.dense(layerScope.In("per_layer_projection"), pleGated, false, m.EmbedDim)
-		pleBuilder := norm.RMSNorm(layerScope.In("post_per_layer_input_norm"), pleProj).WithEpsilon(m.NormEpsilon)
+		pleBuilder := norm.RMSNorm(layerScope.In("post_per_layer_input_norm"), pleProj).WithEpsilon(m.NormEpsilon).WithDType(m.NormDType)
 		if m.RMSNormOffset != 0 {
 			pleBuilder = pleBuilder.WithScaleOffset(m.RMSNormOffset)
 		}

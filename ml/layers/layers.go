@@ -135,6 +135,12 @@ type DenseBuilder struct {
 // target scope already exists with quantization metadata (see [model.Variable.WithQuantization]),
 // [DenseBuilder.Done] automatically dispatches to [nn.QuantizedDense] without materializing
 // dequantized floating-point weights.
+//
+// Heterogeneous preloaded variable dtypes: if `"weights"` or `"biases"` already exists in `scope`
+// with a floating-point dtype different from `input.DType()`, [DenseBuilder.Done] currently casts it
+// via [ConvertDType] to `input.DType()`. This is kept intentionally so existing pre-trained models
+// with mixed parameter dtypes (e.g., Float16/quantized checkpoints paired with Float32 biases) can
+// load directly; future versions may tighten this behind explicit dtype configuration.
 func NewDense(scope *model.Scope, input *Node, outputDimensions ...int) *DenseBuilder {
 	if input.Rank() == 0 {
 		Panicf("input for layers.NewDense needs to have rank >= 1, got %s", input.Shape())
@@ -242,6 +248,8 @@ func (b *DenseBuilder) Done() *Node {
 
 	var biasNode *Node
 	if b.useBias {
+		// Reuse and convert preloaded float biases with differing dtypes so checkpoints with
+		// heterogeneous parameter dtypes (e.g. Float32 biases in Float16 models) load seamlessly.
 		if existingBias := scope.GetVariable("biases"); existingBias != nil {
 			biasNode = existingBias.NodeValue(g)
 			if biasNode.DType().IsFloat() && biasNode.DType() != inputShape.DType {
@@ -279,6 +287,8 @@ func (b *DenseBuilder) Done() *Node {
 		res = nn.QuantizedDense(b.input, weights, biasNode, qCfg, fusedAct)
 
 	case existingWeights != nil && existingWeights.DType().IsFloat() && existingWeights.DType() != inputShape.DType:
+		// Intentionally accept and cast mismatched preloaded float weights so existing checkpoints
+		// with mixed dtypes continue to work (may be tightened later behind explicit configuration).
 		if reg != nil {
 			reg(g, existingWeights)
 		}
@@ -337,6 +347,12 @@ func (b *DenseBuilder) Done() *Node {
 //
 // The output has rank one larger than the input, with the last dimension the same as
 // the embedding dimension.
+//
+// If an `"embeddings"` variable already exists in `scope` with quantization metadata or a
+// different dtype from `dtype`, it is converted to `dtype` after gathering. This is kept
+// intentionally so existing checkpoints with heterogeneous parameter dtypes (e.g., Float32
+// token-type embeddings alongside Float16 transformer weights) can load directly; future
+// versions may tighten this behind explicit dtype configuration.
 func Embedding(scope *model.Scope, input *Node, dtype dtypes.DType, vocabSize, dimension int, indicesAreSorted ...bool) *Node {
 	inputShape := input.Shape()
 	if !inputShape.DType.IsInt() {

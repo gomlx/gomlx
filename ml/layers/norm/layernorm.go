@@ -11,7 +11,7 @@ import (
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
 	"github.com/gomlx/gomlx/ml/nn"
-	"github.com/pkg/errors"
+	"github.com/gomlx/gomlx/support/exceptions"
 )
 
 // LayerNormBuilder is a helper to build a layer normalization computation. Create it with LayerNorm,
@@ -25,6 +25,7 @@ type LayerNormBuilder struct {
 	center, gain       bool
 	scaleNormalization bool
 	regularizer        regularizer.Regularizer
+	varDType           dtypes.DType
 	normalizationDType dtypes.DType
 }
 
@@ -107,7 +108,8 @@ func LayerNorm(scope *model.Scope, x *Node, normalizingAxes ...int) *LayerNormBu
 		center:             model.GetParamOr(scope, ParamLayerNormCenter, true),
 		gain:               model.GetParamOr(scope, ParamLayerNormLearnedGain, true),
 		scaleNormalization: model.GetParamOr(scope, ParamLayerNormRescale, true),
-		normalizationDType: x.DType(),
+		varDType:           dtypes.InvalidDType,
+		normalizationDType: resolveNormalizationDType(scope, ParamLayerNormNormalizationDType, x.DType()),
 	}
 
 	// Create default regularizer.
@@ -118,20 +120,6 @@ func LayerNorm(scope *model.Scope, x *Node, normalizingAxes ...int) *LayerNormBu
 	// Convert negative axes to their actual value.
 	for ii := range builder.normalizingAxes {
 		builder.normalizingAxes[ii] = MustAdjustAxis(builder.normalizingAxes[ii], x)
-	}
-
-	// Add default dtype for normalization.
-	normDTypeStr := model.GetParamOr(scope, ParamLayerNormNormalizationDType, "")
-	if normDTypeStr == "" {
-		if x.DType() == dtypes.Float16 || x.DType() == dtypes.BFloat16 {
-			builder.normalizationDType = dtypes.Float32
-		}
-	} else {
-		var err error
-		builder.normalizationDType, err = dtypes.DTypeString(normDTypeStr)
-		if err != nil {
-			panic(errors.WithMessagef(err, "Invalid dtype configured for hyperparameter %q", ParamLayerNormNormalizationDType))
-		}
 	}
 	return builder
 }
@@ -180,6 +168,34 @@ func (builder *LayerNormBuilder) Mask(mask *Node) *LayerNormBuilder {
 	return builder
 }
 
+// WithDType sets the dtype expected for the learned variables ("gain" and "offset").
+//
+// By default (or when set to dtypes.InvalidDType), variables use the input's dtype and any
+// pre-existing variable in the store must match it (panicking on dtype mismatch).
+// Setting a float dtype here explicitly allows variables with that dtype (e.g., Float32 parameters
+// with Float16 activations), converting them to the normalization dtype inside the graph while still
+// panicking if a pre-existing variable in the store does not match the requested dtype.
+func (builder *LayerNormBuilder) WithDType(dtype dtypes.DType) *LayerNormBuilder {
+	if dtype != dtypes.InvalidDType && !dtype.IsFloat() {
+		exceptions.Panicf("LayerNorm.WithDType requires a float dtype or InvalidDType, got %s", dtype)
+	}
+	builder.varDType = dtype
+	return builder
+}
+
+// WithNormalizationDType sets the dtype used for computing mean, variance, and scaling.
+//
+// By default, 16-bit floats (Float16, BFloat16) are promoted to Float32 for numerical stability,
+// and other dtypes normalize in the input's dtype. This can also be configured via
+// [ParamLayerNormNormalizationDType].
+func (builder *LayerNormBuilder) WithNormalizationDType(dtype dtypes.DType) *LayerNormBuilder {
+	if !dtype.IsFloat() {
+		exceptions.Panicf("LayerNorm.WithNormalizationDType requires a float dtype, got %s", dtype)
+	}
+	builder.normalizationDType = dtype
+	return builder
+}
+
 // Done finishes configuring the LayerNorm and generates the graph computation to normalize the input.
 func (builder *LayerNormBuilder) Done() *Node {
 	x := builder.x
@@ -211,9 +227,12 @@ func (builder *LayerNormBuilder) createVariables() (gamma, beta *Node) {
 	x := builder.x
 	g := x.Graph()
 
-	normShape := shapes.Make(x.DType(), xslices.Map(builder.normalizingAxes, func(axis int) int {
-		return x.Shape().Dimensions[axis]
-	})...)
+	normShape := shapes.Make(
+		resolveVariableDType(builder.varDType, x.DType()),
+		xslices.Map(builder.normalizingAxes, func(axis int) int {
+			return x.Shape().Dimensions[axis]
+		})...,
+	)
 	broadcastNormShape := x.Shape().Clone()
 	for ii := range broadcastNormShape.Dimensions {
 		broadcastNormShape.Dimensions[ii] = 1

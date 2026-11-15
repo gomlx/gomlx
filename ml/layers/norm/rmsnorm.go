@@ -6,22 +6,34 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
+	"github.com/gomlx/gomlx/support/exceptions"
 )
+
+// ParamRMSNormNormalizationDType is the hyperparameter name for the dtype to use when doing
+// RMS normalization.
+//
+// Low precision dtypes (Float16, BFloat16) can overflow when squaring values or lose precision
+// in reductions. The default (empty string) uses Float32 when the input dtype is Float16 or
+// BFloat16, and the input dtype otherwise.
+var ParamRMSNormNormalizationDType = "rms_norm_dtype"
 
 // RMSNormBuilder holds the configuration for RMSNorm.
 // Once finished configuring, call RMSNormBuilder.Done()
 type RMSNormBuilder struct {
-	scope             *model.Scope
-	operand           *Node
-	useScale          bool
-	scaleOffset       float64
-	normalizationAxes []int
-	epsilon           float64
+	scope              *model.Scope
+	operand            *Node
+	useScale           bool
+	scaleOffset        float64
+	normalizationAxes  []int
+	epsilon            float64
+	varDType           dtypes.DType
+	normalizationDType dtypes.DType
 }
 
 // RMSNorm starts the configuration of an RMS normalization operation,
@@ -37,11 +49,13 @@ type RMSNormBuilder struct {
 // Call RMSNormBuilder.Done when you finished the configuration.
 func RMSNorm(scope *model.Scope, operand *Node) *RMSNormBuilder {
 	return &RMSNormBuilder{
-		scope:             scope,
-		operand:           operand,
-		useScale:          true,
-		normalizationAxes: []int{-1},
-		epsilon:           1e-6,
+		scope:              scope,
+		operand:            operand,
+		useScale:           true,
+		normalizationAxes:  []int{-1},
+		epsilon:            1e-6,
+		varDType:           dtypes.InvalidDType,
+		normalizationDType: resolveNormalizationDType(scope, ParamRMSNormNormalizationDType, operand.DType()),
 	}
 }
 
@@ -71,15 +85,43 @@ func (rms *RMSNormBuilder) WithNormalizationAxes(axes ...int) *RMSNormBuilder {
 	return rms
 }
 
+// WithDType sets the dtype expected for the learned "scale" variable.
+//
+// By default (or when set to dtypes.InvalidDType), the variable uses the operand's dtype and any
+// pre-existing variable in the store must match it (panicking on dtype mismatch).
+// Setting a float dtype here explicitly allows variables with that dtype (e.g., Float32 scale
+// with Float16 operands), converting it to the normalization dtype inside the graph while still
+// panicking if a pre-existing variable in the store does not match the requested dtype.
+func (rms *RMSNormBuilder) WithDType(dtype dtypes.DType) *RMSNormBuilder {
+	if dtype != dtypes.InvalidDType && !dtype.IsFloat() {
+		exceptions.Panicf("RMSNorm.WithDType requires a float dtype or InvalidDType, got %s", dtype)
+	}
+	rms.varDType = dtype
+	return rms
+}
+
+// WithNormalizationDType sets the dtype used for computing the root mean square and scaling.
+//
+// By default, 16-bit floats (Float16, BFloat16) are promoted to Float32 for numerical stability,
+// and other dtypes normalize in the operand's dtype. This can also be configured via
+// [ParamRMSNormNormalizationDType].
+func (rms *RMSNormBuilder) WithNormalizationDType(dtype dtypes.DType) *RMSNormBuilder {
+	if !dtype.IsFloat() {
+		exceptions.Panicf("RMSNorm.WithNormalizationDType requires a float dtype, got %s", dtype)
+	}
+	rms.normalizationDType = dtype
+	return rms
+}
+
 // Done uses the current configuration to perform RMSNorm.
 // It returns the normalized operand.
 func (rms *RMSNormBuilder) Done() *Node {
 	scope := rms.scope.In("rms_norm")
-	x := rms.operand
+	origDType := rms.operand.DType()
+	x := ConvertDType(rms.operand, rms.normalizationDType)
 	g := x.Graph()
 	shape := x.Shape()
 	rank := x.Rank()
-	dtype := x.DType()
 
 	x2 := Square(x)
 	rmsX := ReduceAndKeep(x2, ReduceMean, rms.normalizationAxes...)
@@ -93,9 +135,9 @@ func (rms *RMSNormBuilder) Done() *Node {
 		normAxes := xslices.Map(rms.normalizationAxes, func(axis int) int { return MustAdjustAxis(axis, x) })
 		sort.Ints(normAxes)
 		dims := xslices.Map(normAxes, func(axis int) int { return shape.Dim(axis) })
-		scaleShape := shapes.Make(dtype, dims...)
+		scaleShape := shapes.Make(resolveVariableDType(rms.varDType, origDType), dims...)
 		scaleVar := scope.WithInitializer(initializer.One).VariableWithShape("scale", scaleShape)
-		scale := scaleVar.NodeValue(g)
+		scale := ConvertDType(scaleVar.NodeValue(g), rms.normalizationDType)
 		if rms.scaleOffset != 0 {
 			scale = AddScalar(scale, rms.scaleOffset)
 		}
@@ -108,5 +150,5 @@ func (rms *RMSNormBuilder) Done() *Node {
 		scale = Reshape(scale, scaleToXShape...)
 		x = Mul(x, scale)
 	}
-	return x
+	return ConvertDType(x, origDType)
 }
