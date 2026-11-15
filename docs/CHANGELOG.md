@@ -2,6 +2,15 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-11-15:
+  - `ml/layers/norm`:
+    - Added `WithDType(dtypes.DType)` and `WithNormalizationDType(dtypes.DType)` to `LayerNormBuilder` (`layernorm.go`) and `RMSNormBuilder` (`rmsnorm.go`), along with `ParamRMSNormNormalizationDType` (`"rms_norm_dtype"`). By default variables require the input's dtype (panicking on mismatch), while setting `WithDType(d)` explicitly enforces variables of dtype `d` (e.g., `Float32` parameters in `Float16`/`BFloat16` models) and casts them to `normalizationDType` inside the graph.
+    - Updated `RMSNorm` to default `normalizationDType` to `Float32` for `Float16` and `BFloat16` operands (preventing `Float16` overflow in `Square` and precision loss in reductions/scaling) and convert the final normalized output back to the operand's dtype.
+  - `ml/zoo/transformer`:
+    - Added `Model.NormDType` / `Model.WithNormDType(dtypes.DType)` and `ParamNormDType` (`"transformer_norm_dtype"`) (`transformer.go`). Normalization parameters (`LayerNorm` and `RMSNorm`) continue to require `m.DType` by default (catching unexpected store dtype mismatches), unless `WithNormDType` explicitly requests another dtype (e.g., `Float32`).
+  - `ml/layers`:
+    - Documented on `NewDense` and `Embedding` (`layers.go`) why preloaded floating-point variables with differing dtypes are currently auto-converted (compatibility with existing checkpoints/GGUFs containing heterogeneous dtypes).
+
 - 2026-11-14:
   - `core/graph`, `core/tensors`, `ml/model`:
     - Made `ConstTensor` (`core/graph/ops.go`) cache constant nodes per `Function` automatically using `weak.Pointer[tensors.Tensor]` + `runtime.AddCleanup` and a monotonic `Tensor.Version()` counter (`core/tensors/tensor.go`, bumped on `MutableFlatData`, `CopyFrom`, and `FinalizeAll`), so tensors are still garbage collected and mutations/finalization automatically invalidate stale cache entries; deprecated `ConstCachedTensor` as a forwarding alias to `ConstTensor` and updated internal GoMLX call sites.

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
@@ -85,4 +87,96 @@ func TestLayerNorm(t *testing.T) {
 		},
 		[][]float32{{-5, 5, 0}, {-5, 5, 0}, {-25, 0, 25}, {0, 0, 0}},
 	)
+}
+
+func TestLayerNormDType(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+
+	t.Run("Float16DefaultVars", func(t *testing.T) {
+		store := model.NewStore()
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, input *Node) *Node {
+			return LayerNorm(scope, input, -1).Epsilon(0).Done()
+		})
+		in := [][]float16.Float16{float16.FromFloat32s(0, 10), float16.FromFloat32s(20, 30)}
+		out := exec.MustCall(in)[0]
+		require.Equal(t, dtypes.Float16, out.DType())
+		require.Equal(t, dtypes.Float16, store.GetVariable("/layer_normalization/gain").DType())
+		require.Equal(t, dtypes.Float16, store.GetVariable("/layer_normalization/offset").DType())
+
+		got := out.Value().([][]float16.Float16)
+		require.InDelta(t, -1.0, float64(got[0][0].Float32()), 1e-2)
+		require.InDelta(t, 1.0, float64(got[0][1].Float32()), 1e-2)
+		require.InDelta(t, -1.0, float64(got[1][0].Float32()), 1e-2)
+		require.InDelta(t, 1.0, float64(got[1][1].Float32()), 1e-2)
+	})
+
+	t.Run("UnexpectedStoreDTypeMismatchPanics", func(t *testing.T) {
+		store := model.NewStore()
+		store.RootScope().In("layer_normalization").VariableWithShape("gain", shapes.Make(dtypes.Float32, 2))
+		store.RootScope().In("layer_normalization").VariableWithShape("offset", shapes.Make(dtypes.Float32, 2))
+
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, input *Node) *Node {
+			return LayerNorm(scope, input, -1).Done()
+		})
+		in := [][]float16.Float16{float16.FromFloat32s(0, 10)}
+		require.Panics(t, func() { exec.MustCall(in) })
+	})
+
+	t.Run("Float16ExplicitWithDTypeFloat32", func(t *testing.T) {
+		store := model.NewStore()
+		gainVar := store.RootScope().In("layer_normalization").VariableWithShape("gain", shapes.Make(dtypes.Float32, 2))
+		require.NoError(t, gainVar.SetValue(tensors.FromValue([]float32{2.0, 3.0})))
+		offsetVar := store.RootScope().In("layer_normalization").VariableWithShape("offset", shapes.Make(dtypes.Float32, 2))
+		require.NoError(t, offsetVar.SetValue(tensors.FromValue([]float32{0.5, -0.5})))
+
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, input *Node) *Node {
+			return LayerNorm(scope, input, -1).Epsilon(0).WithDType(dtypes.Float32).Done()
+		})
+		in := [][]float16.Float16{float16.FromFloat32s(0, 10)}
+		out := exec.MustCall(in)[0]
+		require.Equal(t, dtypes.Float16, out.DType())
+		require.Equal(t, dtypes.Float32, store.GetVariable("/layer_normalization/gain").DType())
+		require.Equal(t, dtypes.Float32, store.GetVariable("/layer_normalization/offset").DType())
+
+		got := out.Value().([][]float16.Float16)
+		// [-1*2 + 0.5, 1*3 - 0.5] = [-1.5, 2.5]
+		require.InDelta(t, -1.5, float64(got[0][0].Float32()), 1e-2)
+		require.InDelta(t, 2.5, float64(got[0][1].Float32()), 1e-2)
+	})
+
+	t.Run("ExplicitWithDType", func(t *testing.T) {
+		store := model.NewStore()
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, input *Node) *Node {
+			return LayerNorm(scope, input, -1).WithDType(dtypes.Float32).Done()
+		})
+		in := [][]float16.Float16{float16.FromFloat32s(0, 10)}
+		out := exec.MustCall(in)[0]
+		require.Equal(t, dtypes.Float16, out.DType())
+		require.Equal(t, dtypes.Float32, store.GetVariable("/layer_normalization/gain").DType())
+		require.Equal(t, dtypes.Float32, store.GetVariable("/layer_normalization/offset").DType())
+	})
+
+	t.Run("ExplicitWithDTypeMismatchPanics", func(t *testing.T) {
+		store := model.NewStore()
+		store.RootScope().In("layer_normalization").VariableWithShape("gain", shapes.Make(dtypes.Float32, 2))
+		store.RootScope().In("layer_normalization").VariableWithShape("offset", shapes.Make(dtypes.Float32, 2))
+
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, input *Node) *Node {
+			return LayerNorm(scope, input, -1).WithDType(dtypes.Float16).Done()
+		})
+		in := [][]float16.Float16{float16.FromFloat32s(0, 10)}
+		require.Panics(t, func() { exec.MustCall(in) })
+	})
+
+	t.Run("ExistingVarShapeMismatchPanics", func(t *testing.T) {
+		store := model.NewStore()
+		store.RootScope().In("layer_normalization").VariableWithShape("gain", shapes.Make(dtypes.Float32, 4))
+		store.RootScope().In("layer_normalization").VariableWithShape("offset", shapes.Make(dtypes.Float32, 4))
+
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, input *Node) *Node {
+			return LayerNorm(scope, input, -1).Done()
+		})
+		in := [][]float16.Float16{float16.FromFloat32s(0, 10)}
+		require.Panics(t, func() { exec.MustCall(in) })
+	})
 }

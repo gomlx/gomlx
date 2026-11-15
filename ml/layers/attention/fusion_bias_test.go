@@ -240,9 +240,7 @@ func TestAttentionBiasFusedParity(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify the fused bias op actually engaged, so the parity is meaningful and not a silent fallback.
-		hasFwd, hasBwd := HasFusedSDPA(g)
-		require.True(t, hasFwd, "fused bias arm must use FusedScaledDotProductAttention (not fall back to decomposed)")
-		require.True(t, hasBwd, "fused bias arm must use FusedScaledDotProductAttentionVJP in the backward")
+		requireFusedSDPAUsage(t, backend, g, true, "fused bias")
 
 		require.Equal(t, []int{B, S, H * D}, out[0].Shape().Dimensions, "fused bias output shape must be [B, S, H*D]")
 		require.LessOrEqual(t, float64(tensors.ToScalar[float32](out[1])), 0.06,
@@ -312,11 +310,9 @@ func TestAttentionBiasFusedParityMatrix(t *testing.T) {
 
 				out, g, err := exec.CallWithGraph(q, k, v, bias)
 				require.NoError(t, err)
-				hasFwd, hasBwd := HasFusedSDPA(g)
-				require.True(t, hasFwd, "fused bias must engage in forward for %s", tc.name)
+				requireFusedSDPAUsage(t, backend, g, !tc.fwdOnly, tc.name)
 				require.LessOrEqual(t, float64(tensors.ToScalar[float32](out[0])), 0.06, "forward rel err (%s)", tc.name)
 				if !tc.fwdOnly {
-					require.True(t, hasBwd, "fused bias must engage in backward for %s", tc.name)
 					require.LessOrEqual(t, float64(tensors.ToScalar[float32](out[1])), 0.06, "backward rel err (%s)", tc.name)
 				}
 			})

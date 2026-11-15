@@ -158,9 +158,7 @@ func TestFusionFallbackParity(t *testing.T) {
 		// For backends supporting BFloat16 fused attention, check that it was issued:
 		if backendSupportsFusionForBFloat16(backend) {
 			fmt.Printf("\t- Backend %q: checking that fused attention was used.\n", backend.Description())
-			hasForward, hasBackward := HasFusedSDPA(g)
-			require.True(t, hasForward, "Expected FusedScaledDotProductAttention to be used in forward pass")
-			require.True(t, hasBackward, "Expected FusedScaledDotProductAttentionVJP to be used in backward pass")
+			requireFusedSDPAUsage(t, backend, g, true, "")
 		}
 
 		// Fused kernels and fallback decomposed both run in bf16, so use a loose tolerance.
@@ -204,9 +202,7 @@ func TestFusionGQAParity(t *testing.T) {
 		// For backends supporting BFloat16 fused attention, check that it was issued:
 		if backendSupportsFusionForBFloat16(backend) {
 			fmt.Printf("\t- Backend %q: checking that fused attention was used.\n", backend.Description())
-			hasForward, hasBackward := HasFusedSDPA(g)
-			require.True(t, hasForward, "Expected FusedScaledDotProductAttention to be used in forward pass")
-			require.True(t, hasBackward, "Expected FusedScaledDotProductAttentionVJP to be used in backward pass")
+			requireFusedSDPAUsage(t, backend, g, true, "")
 		}
 
 		tol := 0.06
@@ -254,9 +250,7 @@ func TestFusionParity(t *testing.T) {
 				})
 				out, g, err := exec.CallWithGraph(q, k, v)
 				require.NoError(t, err)
-				hasForward, hasBackward := HasFusedSDPA(g)
-				require.True(t, hasForward, "Expected FusedScaledDotProductAttention to be used in forward pass")
-				require.True(t, hasBackward, "Expected FusedScaledDotProductAttentionVJP to be used in backward pass")
+				requireFusedSDPAUsage(t, backend, g, true, "")
 				tol := []float64{0.03, 0.06, 0.06, 0.06}
 				for i, name := range []string{"output", "dQ", "dK", "dV"} {
 					rel := float64(tensors.ToScalar[float32](out[i]))
@@ -680,4 +674,20 @@ func HasFusedSDPA(g *Graph) (hasForward, hasBackward bool) {
 	hasForward = strings.Contains(str, "FusedScaledDotProductAttention(")
 	hasBackward = strings.Contains(str, "FusedScaledDotProductAttentionVJP(")
 	return
+}
+
+// requireFusedSDPAUsage verifies that FusedScaledDotProductAttention was used in the forward pass,
+// and that FusedScaledDotProductAttentionVJP was used when wantBackward is true and the backend
+// implements OpTypeFusedScaledDotProductAttentionVJP (otherwise Core falls back to decomposed VJP).
+func requireFusedSDPAUsage(t *testing.T, backend compute.Backend, g *Graph, wantBackward bool, ctx string) {
+	t.Helper()
+	hasForward, hasBackward := HasFusedSDPA(g)
+	suffix := ""
+	if ctx != "" {
+		suffix = " (" + ctx + ")"
+	}
+	require.True(t, hasForward, "Expected FusedScaledDotProductAttention to be used in forward pass%s", suffix)
+	if wantBackward && backend.Capabilities().Operations[compute.OpTypeFusedScaledDotProductAttentionVJP] {
+		require.True(t, hasBackward, "Expected FusedScaledDotProductAttentionVJP to be used in backward pass%s", suffix)
+	}
 }

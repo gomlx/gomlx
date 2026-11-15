@@ -399,3 +399,108 @@ func TestTransformerBatchSizes(t *testing.T) {
 		})
 	}
 }
+
+func TestHalfPrecisionMixedVariables(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+
+	t.Run("UnexpectedNormDTypeMismatchPanics", func(t *testing.T) {
+		store := model.NewStore()
+		// Pre-populate final LayerNorm variables in Float32 while model expects Float16 norms by default.
+		finalLNScope := store.RootScope().In("final_norm").In("layer_normalization")
+		finalLNScope.VariableWithShape("gain", shapes.Make(dtypes.Float32, 32))
+		finalLNScope.VariableWithShape("offset", shapes.Make(dtypes.Float32, 32))
+
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+			m := New(scope).
+				WithVocabSize(64).
+				WithEmbedDim(32).
+				WithNumLayers(1).
+				WithNumHeads(2).
+				WithHeadDim(16).
+				WithFFNDim(64).
+				WithMaxPosEmbed(16).
+				WithDType(dtypes.Float16).
+				WithNormalization(layers.NormalizationLayerNorm).
+				WithFinalNormalization(layers.NormalizationLayerNorm)
+			return m.Logits(tokens, CallOptions{})
+		})
+		require.Panics(t, func() { exec.MustCall([][]int32{{1, 2, 3, 4}}) })
+	})
+
+	t.Run("UnexpectedLayerScalarDTypeMismatchPanics", func(t *testing.T) {
+		store := model.NewStore()
+		store.RootScope().In("layer_0").VariableWithShape("layer_scalar", shapes.Make(dtypes.Float32, 1))
+
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+			m := New(scope).
+				WithArchitecture(ArchitectureGemma4).
+				WithVocabSize(64).
+				WithEmbedDim(32).
+				WithNumLayers(1).
+				WithNumHeads(2).
+				WithHeadDim(16).
+				WithFFNDim(64).
+				WithRoPE(10000).
+				WithDType(dtypes.Float16).
+				WithNormDType(dtypes.Float32).
+				WithHiddenSizePerLayerInput(16).
+				WithVocabSizePerLayerInput(64)
+			return m.Logits(tokens, CallOptions{})
+		})
+		require.Panics(t, func() { exec.MustCall([][]int32{{1, 2, 3, 4}}) })
+	})
+
+	t.Run("Float16WithExplicitNormDTypeFloat32LayerNorm", func(t *testing.T) {
+		store := model.NewStore()
+		finalLNScope := store.RootScope().In("final_norm").In("layer_normalization")
+		finalLNScope.VariableWithShape("gain", shapes.Make(dtypes.Float32, 32))
+		finalLNScope.VariableWithShape("offset", shapes.Make(dtypes.Float32, 32))
+
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+			m := New(scope).
+				WithVocabSize(64).
+				WithEmbedDim(32).
+				WithNumLayers(1).
+				WithNumHeads(2).
+				WithHeadDim(16).
+				WithFFNDim(64).
+				WithMaxPosEmbed(16).
+				WithDType(dtypes.Float16).
+				WithNormDType(dtypes.Float32).
+				WithNormalization(layers.NormalizationLayerNorm).
+				WithFinalNormalization(layers.NormalizationLayerNorm)
+			return m.Logits(tokens, CallOptions{})
+		})
+		out := exec.MustCall([][]int32{{1, 2, 3, 4}})[0]
+		require.Equal(t, dtypes.Float16, out.DType())
+		require.Equal(t, []int{1, 4, 64}, out.Shape().Dimensions)
+		require.Equal(t, dtypes.Float32, store.GetVariable("/final_norm/layer_normalization/gain").DType())
+		require.Equal(t, dtypes.Float32, store.GetVariable("/layer_0/norm1/layer_normalization/gain").DType())
+	})
+
+	t.Run("Float16WithExplicitNormDTypeParamRMSNorm", func(t *testing.T) {
+		store := model.NewStore()
+		store.SetParam(model.ScopeSeparator+ParamNormDType, "float32")
+		store.RootScope().In("final_norm").In("rms_norm").VariableWithShape("scale", shapes.Make(dtypes.Float32, 32))
+
+		exec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+			m := New(scope).
+				WithVocabSize(64).
+				WithEmbedDim(32).
+				WithNumLayers(1).
+				WithNumHeads(2).
+				WithHeadDim(16).
+				WithFFNDim(64).
+				WithRoPE(10000).
+				WithDType(dtypes.Float16).
+				WithNormalization(layers.NormalizationRMSNorm).
+				WithFinalNormalization(layers.NormalizationRMSNorm)
+			return m.Logits(tokens, CallOptions{})
+		})
+		out := exec.MustCall([][]int32{{1, 2, 3, 4}})[0]
+		require.Equal(t, dtypes.Float16, out.DType())
+		require.Equal(t, []int{1, 4, 64}, out.Shape().Dimensions)
+		require.Equal(t, dtypes.Float32, store.GetVariable("/final_norm/rms_norm/scale").DType())
+		require.Equal(t, dtypes.Float32, store.GetVariable("/layer_0/norm1/rms_norm/scale").DType())
+	})
+}
