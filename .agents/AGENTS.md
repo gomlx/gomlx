@@ -106,11 +106,11 @@ the executor (`Exec` object) when possible.
 `graph.Exec.CompileStandalone` and `model.Exec.CompileStandalone` build a fresh graph with the current
 configuration for one-off operations such as ONNX export. The caller owns and finalizes that graph.
 
-Also, currently GoMLX doesn't support dynamic shapes. That means each different input shape will trigger a different
-compilation. If a program needs different shapes, consider using powers of 2 (or see
-`github.com/gomlx/compute/support.TwoBitBucketLen`) shapes, and pad accordingly. The `compute.Backend` API already
-support dynamic shapes, but only the Go backend (`github.com/gomlx/compute/gobackend`) partially implements it for now.
-We plan to add support for dynamic shapes (input shaped dependent) soon in GoMLX.
+Dynamic shapes are supported on backends with `Capabilities.DynamicShapes` (such as `"go"` and `"onnx"`, configured via `Exec.WithDynamicAxes(...)` / `WithDynamicAxesSpecs(...)`). On static-shape backends like `"xla"`, each distinct input shape triggers a JIT compilation — use bucketing (powers of 2 or `github.com/gomlx/compute/support.TwoBitBucketLen`) and padding when shapes vary on `"xla"`.
+
+When working with dynamic shapes:
+- **Implicit binary broadcasting (`Add`, `Mul`, `Where`, etc.) is compile-time only**: Only scalar operands or axes that are **statically `1`** broadcast implicitly (including `1 -> 0` producing `0`). Pairing a dynamic dimension with a non-`1` static dimension (e.g. `["batch", "#features"]` and `["batch", 12]`) fails at graph-build time: use `DynamicReshape` to explicitly assert a static dimension, or `DynamicBroadcastInDim` / `BroadcastLike` / `BroadcastToShape` to request runtime `1`-or-match broadcasting.
+- **`DynamicBroadcastInDim` static narrowing**: Mapping a non-`1` static operand dimension (`0` or `>= 2`) to a dynamic target `DimensionSpec` narrows the inferred output axis to that static value while validating the runtime target size.
 
 
 ### Error Handling

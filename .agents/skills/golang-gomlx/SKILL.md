@@ -164,7 +164,8 @@ Static axes use `""` (empty string). User-named axes (like `"batch"`) enforce ma
   - `DynamicReshapeLike(operand, refNode)` / `ReshapeLike(operand, refNode)`: Reshapes operand to match the shape of `refNode`.
   - `Reshape(operand, dims...)` / `ReshapeWithShape(operand, shape)`: Automatically delegates to dynamic reshape if operand has dynamic dimensions.
 - **Broadcasting**:
-  - `DynamicBroadcastInDim(operand, broadcastAxes, specs...)`: Low-level broadcast to target `DimensionSpec`s.
+  - **Implicit broadcasting (`Add`, `Mul`, `Where`, etc.) is strictly compile-time**: Only scalar operands or axes that are **statically `1`** broadcast implicitly (including `1 -> 0` -> `0`). Dynamic axes never implicitly broadcast at runtime if their concrete size happens to be `1`, and pairing a dynamic axis with a non-`1` static dimension (e.g. `["batch", "#feat"]` with `["batch", 12]`) fails at graph-build time — use `DynamicReshape` to assert the static dimension or `DynamicBroadcastInDim` / `BroadcastToShape` for explicit runtime `1`-or-match broadcasting.
+  - `DynamicBroadcastInDim(operand, broadcastAxes, specs...)`: Low-level broadcast to target `DimensionSpec`s (supports runtime `1`-or-match from dynamic operand axes, and narrows non-`1` static operand axes mapped to dynamic specs).
   - `DynamicBroadcastLike(operand, refNode)` / `BroadcastLike(operand, refNode)`: Broadcasts to match `refNode` (static or dynamic).
   - `BroadcastToShape(operand, shape)` / `DynamicBroadcastToShape(operand, shape)`: Broadcasts to target shape (static or dynamic).
   - `BroadcastPrefix(operand, targetRank)`: Adds leading singleton axes and broadcasts to target rank.

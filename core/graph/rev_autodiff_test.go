@@ -463,6 +463,16 @@ func TestGradientBroadcastInDim(t *testing.T) {
 			output = Mul(output, OnePlus(IotaFull(g, output.Shape())))
 			return output, []*Node{input}
 		}, []any{[]float32{3, 7}})
+
+	testGradients(t, "broadcast 1 -> 0: binary Add and BroadcastToDims",
+		func(g *Graph) (output *Node, nodesForGrad []*Node) {
+			bias := Const(g, [][]float32{{1, 2, 3}})
+			empty := Zeros(g, shapes.Make(dtypes.Float32, 0, 3))
+			sum := Add(bias, empty)
+			bcast := BroadcastToDims(bias, 0, 3)
+			output = ReduceAllSum(Add(sum, bcast))
+			return output, []*Node{bias}
+		}, []any{[][]float32{{0, 0, 0}}})
 }
 
 // TestGradientTranspose makes sure it gets the reverse transpose correct.

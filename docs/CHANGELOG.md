@@ -2,6 +2,11 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-11-16:
+  - `core/graph`:
+    - Updated `ExpandAndBroadcast` (`ops.go`), `BroadcastToShape` / `DynamicBroadcastToShape` (`ops.go`, `ops_dynamic.go`), and `internal/cmd/graph_generator` (excluding `ConstantFromBuffer`) to align with `compute`'s `1 -> 0` broadcasting, strict compile-time binary broadcasting rules, and `DynamicBroadcastInDim` static narrowing + runtime `1`-or-match broadcasting.
+    - Fixed `dynamicBroadcastInDimVJP` (`rev_autodiff.go`) when a dynamic operand axis maps to a static or differently named dynamic output axis (handling both runtime `1` reduction and runtime match pass-through via `If` or closure-free `ScatterSum` fallback, including `1 -> 0` empty broadcasts).
+
 - 2026-11-15:
   - `ml/layers/norm`:
     - Added `WithDType(dtypes.DType)` and `WithNormalizationDType(dtypes.DType)` to `LayerNormBuilder` (`layernorm.go`) and `RMSNormBuilder` (`rmsnorm.go`), along with `ParamRMSNormNormalizationDType` (`"rms_norm_dtype"`). By default variables require the input's dtype (panicking on mismatch), while setting `WithDType(d)` explicitly enforces variables of dtype `d` (e.g., `Float32` parameters in `Float16`/`BFloat16` models) and casts them to `normalizationDType` inside the graph.
