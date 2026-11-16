@@ -1259,30 +1259,108 @@ func dynamicBroadcastInDimVJP(node, v *Node, _ shapes.Shape) []*Node {
 			operand.Shape(), params.broadcastAxes)
 	}
 
-	axesPreserved := make([]bool, outShape.Rank())
+	// Classify output axes:
+	//  - Unmapped output axes (newly inserted) and static-1 operand axes (inDim == 1 && outDim != 1) are always reduced.
+	//  - Dynamic operand axes mapped to a static target axis or a different dynamic axis name may either broadcast (when
+	//    concrete inDim == 1) or match (when concrete inDim == outDim) at runtime, so their reduction is conditional.
+	mappedInputAxis := make([]int, outShape.Rank())
+	for i := range mappedInputAxis {
+		mappedInputAxis[i] = -1
+	}
 	for inputAxis, outputAxis := range params.broadcastAxes {
+		mappedInputAxis[outputAxis] = inputAxis
+	}
+
+	alwaysReduceOutputAxes := make([]int, 0, outShape.Rank())
+	var reinsertStatic1InputAxes []int
+	var runtimeMaybeBcastInputAxes []int
+
+	for outputAxis := range outShape.Rank() {
+		inputAxis := mappedInputAxis[outputAxis]
+		if inputAxis < 0 {
+			alwaysReduceOutputAxes = append(alwaysReduceOutputAxes, outputAxis)
+			continue
+		}
 		inDim := operand.Shape().Dimensions[inputAxis]
 		outDim := outShape.Dimensions[outputAxis]
-		if inDim == outDim {
-			if inDim == shapes.DynamicDim {
-				if operand.Shape().AxisName(inputAxis) == outShape.AxisName(outputAxis) {
-					axesPreserved[outputAxis] = true
-				}
-			} else {
-				axesPreserved[outputAxis] = true
-			}
+		switch {
+		case inDim == 1 && outDim != 1:
+			alwaysReduceOutputAxes = append(alwaysReduceOutputAxes, outputAxis)
+			reinsertStatic1InputAxes = append(reinsertStatic1InputAxes, inputAxis)
+		case inDim == shapes.DynamicDim && (outDim != shapes.DynamicDim || operand.Shape().AxisName(inputAxis) != outShape.AxisName(outputAxis)):
+			runtimeMaybeBcastInputAxes = append(runtimeMaybeBcastInputAxes, inputAxis)
 		}
 	}
-	axesToReduce := make([]int, 0, outShape.Rank())
-	for axis, preserved := range axesPreserved {
-		if !preserved {
-			axesToReduce = append(axesToReduce, axis)
-		}
-	}
+
 	gradWrtOperand := v
-	if len(axesToReduce) > 0 {
-		gradWrtOperand = ReduceSum(v, axesToReduce...)
+	if len(alwaysReduceOutputAxes) > 0 {
+		gradWrtOperand = ReduceSum(v, alwaysReduceOutputAxes...)
 	}
+
+	if len(runtimeMaybeBcastInputAxes) == 0 {
+		if !gradWrtOperand.Shape().Equal(operand.Shape()) {
+			gradWrtOperand = DynamicReshapeLike(gradWrtOperand, operand)
+		}
+		vjps := make([]*Node, len(node.inputNodes))
+		vjps[0] = gradWrtOperand
+		return vjps
+	}
+
+	// Restore rank to operand.Rank() by re-inserting size-1 axes at static-1 broadcast positions.
+	if operand.Rank() == 1 && gradWrtOperand.IsScalar() {
+		gradWrtOperand = Reshape(gradWrtOperand, 1)
+	} else if len(reinsertStatic1InputAxes) > 0 {
+		gradWrtOperand = ExpandAxes(gradWrtOperand, reinsertStatic1InputAxes...)
+	}
+
+	g := operand.Graph()
+	caps := g.Backend().Capabilities()
+	supportsIf := caps.Functions && caps.Operations[compute.OpTypeIf]
+
+	for _, ax := range runtimeMaybeBcastInputAxes {
+		curGrad := gradWrtOperand
+		inSize := DimensionSize(operand, ax)
+		one := ScalarOne(g, inSize.DType())
+		targetSpecs := DimensionSpecsFor(curGrad)
+		targetSpecs[ax] = DimensionSpecFor(operand, ax)
+
+		if supportsIf {
+			pred := Equal(inSize, one)
+			trueFn := NewClosure(g, func(g *Graph) []*Node {
+				red := ReduceSum(curGrad, ax)
+				if curGrad.Rank() > 1 {
+					red = ExpandAxes(red, ax)
+				} else {
+					red = Reshape(red, 1)
+				}
+				return []*Node{DynamicReshape(red, targetSpecs...)}
+			})
+			falseFn := NewClosure(g, func(g *Graph) []*Node {
+				return []*Node{DynamicReshape(curGrad, targetSpecs...)}
+			})
+			gradWrtOperand = If(pred, trueFn, falseFn)[0]
+		} else {
+			// Closure-free fallback (e.g. ONNX backend): scatter-sum along axis ax with indices
+			// clamped to max(inSize - 1, 0), which sums all slices into index 0 when inSize == 1
+			// and maps index j -> j when inSize == outDim (and leaves zeros when outDim == 0).
+			work := curGrad
+			permSpecs := slices.Clone(targetSpecs)
+			if ax != 0 {
+				work = Transpose(work, ax, 0)
+				permSpecs[0], permSpecs[ax] = permSpecs[ax], permSpecs[0]
+			}
+			zeros := DynamicBroadcastInDim(ScalarZero(g, work.DType()), nil, permSpecs...)
+			iotaIdx := DynamicIota(g, inSize.DType(), 0, DimensionSpecFor(work, 0))
+			maxIdx := Max(Sub(inSize, one), ScalarZero(g, inSize.DType()))
+			clampedIdx := ExpandAxes(Min(iotaIdx, maxIdx), -1)
+			scattered := ScatterSum(zeros, clampedIdx, work, false, false)
+			if ax != 0 {
+				scattered = Transpose(scattered, ax, 0)
+			}
+			gradWrtOperand = scattered
+		}
+	}
+
 	if !gradWrtOperand.Shape().Equal(operand.Shape()) {
 		gradWrtOperand = DynamicReshapeLike(gradWrtOperand, operand)
 	}

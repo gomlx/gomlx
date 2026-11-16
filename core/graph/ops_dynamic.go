@@ -361,12 +361,14 @@ func DynamicBroadcastLike(operand, reference *Node, broadcastAxes ...int) *Node 
 // Dimensions of x must either match the corresponding dimension in shape, or they must be 1, in which case they are broadcast.
 //
 // Dynamic shape rules for target axes:
-//  1. Preserved dynamic axis: If operand x at axis i is already dynamic (shapes.DynamicDim),
-//     the dynamic size is taken directly from x (DynamicDimensionSize(x, i)). The target dynamic axis must have a compatible name (or empty).
+//  1. Dynamic operand axis: If operand x at axis i is dynamic (shapes.DynamicDim) and shape[i] is dynamic,
+//     the dynamic size is taken directly from x (DimensionSize(x, i)) and axis names must be compatible.
+//     If shape[i] is static (>= 0), x's dynamic axis is broadcast/validated to shape[i] at runtime (must be 1 or shape[i]).
 //  2. Broadcast 1 -> Dynamic: Broadcasting dimension 1 to a dynamic dimension is not supported by DynamicBroadcastToShape,
 //     because no reference tensor is available to provide the runtime dynamic size. Use BroadcastLike or DynamicBroadcastLike
 //     with a reference node instead, or DynamicBroadcastInDim with explicit DimensionSpec(*Node) values.
-//  3. Static dimension > 1 to Dynamic: An exception is raised.
+//  3. Static dimension != 1 to Dynamic: Narrowed to x's static dimension (if axis names are compatible), since a non-1
+//     static dimension cannot broadcast to any other size.
 //
 // If neither shape nor x is dynamic, it delegates to BroadcastToShape.
 // Conversely, BroadcastToShape delegates to DynamicBroadcastToShape if shape or x is dynamic.
@@ -389,11 +391,7 @@ func DynamicBroadcastToShape(x *Node, shape shapes.Shape) *Node {
 		if targetDim != shapes.DynamicDim {
 			if i < xShape.Rank() {
 				xDim := xShape.Dimensions[i]
-				if xDim == shapes.DynamicDim {
-					exceptions.Panicf("DynamicBroadcastToShape: cannot broadcast dynamic axis %d (%q) of %s to static dimension %d",
-						i, xShape.AxisName(i), xShape, targetDim)
-				}
-				if xDim != targetDim && xDim != 1 {
+				if xDim != shapes.DynamicDim && xDim != targetDim && xDim != 1 {
 					exceptions.Panicf("DynamicBroadcastToShape: incompatible dimensions at axis %d: x has %d, target has %d (shapes %s vs %s)",
 						i, xDim, targetDim, xShape, shape)
 				}
@@ -413,9 +411,11 @@ func DynamicBroadcastToShape(x *Node, shape shapes.Shape) *Node {
 				// Rule 2: Cannot broadcast dimension 1 to dynamic without reference node.
 				exceptions.Panicf("DynamicBroadcastToShape: cannot broadcast axis %d (dimension 1) to dynamic dimension (use BroadcastLike, DynamicBroadcastLike, or DynamicBroadcastInDim with a reference *Node instead)", i)
 			} else {
-				// Rule 3: Static dimension > 1 to Dynamic.
-				exceptions.Panicf("DynamicBroadcastToShape: cannot broadcast static dimension %d (> 1) at axis %d of %s to dynamic target dimension",
-					xShape.Dimensions[i], i, xShape)
+				// Rule 3: Static dimension != 1 narrowed to x's static dimension.
+				if xShape.AxisName(i) != "" && !shapes.AxisNamesCompatible(xShape.AxisName(i), targetName) {
+					exceptions.Panicf("DynamicBroadcastToShape: incompatible axis names at axis %d: %q vs %q", i, xShape.AxisName(i), targetName)
+				}
+				specs[i] = StaticDim(xShape.Dimensions[i])
 			}
 		}
 	}

@@ -781,6 +781,54 @@ func TestDynamicShapes(t *testing.T) {
 				g.Run([][]float32{{1, 2}, {3, 4}}, [][]float32{{10, 20, 30}, {40, 50, 60}, {70, 80, 90}})
 			})
 		})
+
+		t.Run("Runtime1OrMatchBroadcastAndGradient", func(t *testing.T) {
+			// Dynamic [#n, 3] broadcast to static [2, 3] via BroadcastToShape / ExpandAndBroadcast / DynamicBroadcastInDim,
+			// verifying both forward execution and reverse-mode VJP for #n=1 (broadcast) and #n=2 (match), as well as 1->0.
+			execGrad, err := NewExec(backend, func(x *Node) (*Node, *Node) {
+				bcast := BroadcastToShape(x, shapes.Make(dtypes.Float32, 2, 3))
+				weights := Const(x.Graph(), [][]float32{{1, 2, 3}, {10, 20, 30}})
+				loss := ReduceAllSum(Mul(bcast, weights))
+				gx := Gradient(loss, x)[0]
+				return bcast, gx
+			})
+			require.NoError(t, err)
+			defer execGrad.Finalize()
+			execGrad.WithDynamicAxes([]string{shapes.UniqueAxisName("n"), ""})
+
+			// #n = 1 -> broadcasts [1, 3] to [2, 3]; grad sums over axis 0 -> [[11, 22, 33]].
+			outs1, err := execGrad.Call([][]float32{{5, 6, 7}})
+			require.NoError(t, err)
+			assert.Equal(t, [][]float32{{5, 6, 7}, {5, 6, 7}}, outs1[0].Value())
+			assert.Equal(t, [][]float32{{11, 22, 33}}, outs1[1].Value())
+
+			// #n = 2 -> matches [2, 3] without broadcasting; grad passes weights through -> [[1, 2, 3], [10, 20, 30]].
+			outs2, err := execGrad.Call([][]float32{{1, 2, 3}, {4, 5, 6}})
+			require.NoError(t, err)
+			assert.Equal(t, [][]float32{{1, 2, 3}, {4, 5, 6}}, outs2[0].Value())
+			assert.Equal(t, [][]float32{{1, 2, 3}, {10, 20, 30}}, outs2[1].Value())
+
+			// Static narrowing: [1, 3] broadcast to runtime [d0, d1] narrows axis 1 to static 3, including d0 = 0 (1 -> 0).
+			execNarrow, err := NewExec(backend, func(bias, d0, d1 *Node) (*Node, *Node) {
+				bcast := DynamicBroadcastInDim(bias, []int{0, 1}, DynamicDim(d0), DynamicDim(d1))
+				assert.Equal(t, 3, bcast.Shape().Dimensions[1])
+				loss := ReduceAllSum(Mul(bcast, Scalar(bias.Graph(), dtypes.Float32, 2.0)))
+				gBias := Gradient(loss, bias)[0]
+				return bcast, gBias
+			})
+			require.NoError(t, err)
+			defer execNarrow.Finalize()
+
+			outsZero, err := execNarrow.Call([][]float32{{4, 5, 6}}, int64(0), int64(3))
+			require.NoError(t, err)
+			assert.Equal(t, []int{0, 3}, outsZero[0].Shape().Dimensions)
+			assert.Equal(t, [][]float32{{0, 0, 0}}, outsZero[1].Value())
+
+			outsThree, err := execNarrow.Call([][]float32{{4, 5, 6}}, int64(3), int64(3))
+			require.NoError(t, err)
+			assert.Equal(t, []int{3, 3}, outsThree[0].Shape().Dimensions)
+			assert.Equal(t, [][]float32{{6, 6, 6}}, outsThree[1].Value())
+		})
 	})
 }
 

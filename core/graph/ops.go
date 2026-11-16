@@ -687,7 +687,11 @@ func ExpandAndBroadcast(x *Node, newDimensions []int, expandedAxes []int) (outpu
 					"but the value of newDimensions[%d]=%d does not match the value in x.Shape().Dimensions[%d]=%d",
 					newDimensions, x.Shape(), axis, dim, axisInX, x.Shape().Dimensions[axisInX])
 			}
-			if xDim == shapes.DynamicDim {
+			if dim == shapes.DynamicDim {
+				if xDim != shapes.DynamicDim {
+					exceptions.Panicf("ExpandAndBroadcast: cannot broadcast static dimension %d at x axis %d (%s) to unnamed dynamic dimension (-1) at output axis %d; use BroadcastLike or DynamicBroadcastInDim",
+						xDim, axisInX, x.Shape(), axis)
+				}
 				specs[axis] = DimensionSpecFor(x, axisInX)
 			} else {
 				specs[axis] = StaticDim(dim)
@@ -711,12 +715,14 @@ func BroadcastLike(operand, reference *Node, broadcastAxes ...int) *Node {
 // Dimensions of x must either match the corresponding dimension in shape, or they must be 1, in which case they are broadcast.
 //
 // Dynamic shape rules for target axes:
-//  1. Preserved dynamic axis: If operand x at axis i is already dynamic (shapes.DynamicDim),
+//  1. Preserved dynamic axis: If operand x at axis i is already dynamic (shapes.DynamicDim) and shape[i] is dynamic,
 //     the dynamic size is taken directly from x (DimensionSize(x, i)). The target dynamic axis must have a compatible name (or empty).
+//     If shape[i] is static (>= 0), x's dynamic axis is broadcast/validated to shape[i] at runtime (must be 1 or shape[i]).
 //  2. Broadcast 1 -> Dynamic: Broadcasting dimension 1 to a dynamic dimension is not supported by BroadcastToShape,
 //     because no reference tensor is available to provide the runtime dynamic size. Use BroadcastLike or DynamicBroadcastLike
 //     with a reference node instead, or DynamicBroadcastInDim with explicit DimensionSpec(*Node) values.
-//  3. Static dimension > 1 to Dynamic: An exception is raised.
+//  3. Static dimension != 1 to Dynamic: Narrowed to x's static dimension (since a non-1 static dimension cannot broadcast
+//     to a different size).
 //
 // It works as expected if x is a scalar.
 //

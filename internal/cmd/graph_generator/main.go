@@ -88,7 +88,7 @@ var (
 		"Name", "Builder", "Compile", "OpShape",
 		"DeviceAssignment", "DistributedSPMD", "DistributedAutoSharding",
 		"Main", "NewFunction", "Return", "Closure", "Parent",
-		"Call", "If", "Sort", "While", "Shape")
+		"Call", "If", "Sort", "While", "Shape", "ConstantFromBuffer")
 
 	// methodsNoGradient will add a stop gradient to the node.
 	methodsNoGradient = sets.MakeWith(
