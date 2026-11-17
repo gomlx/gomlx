@@ -7,7 +7,6 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/sets"
 )
@@ -509,15 +508,19 @@ func genericScatter(operand, indices, updates *Node, sorted, unique bool, fn sca
 	// Check shapes compatibility.
 	indicesRank := indices.Rank()
 	indexedRank := indices.Shape().Dimensions[indicesRank-1]
+	if indexedRank == shapes.DynamicDim {
+		Panicf("scatter operations require the last dimension of indices (indexed rank) to be static, instead got shape %s",
+			indices.Shape())
+	}
 	updatesRank := updates.Rank()
-	if updatesRank < indicesRank-1 || !xslices.DeepSliceCmp(updates.Shape().Dimensions[:indicesRank-1], indices.Shape().Dimensions[:indicesRank-1], xslices.EqualAny[int]) {
+	if updatesRank < indicesRank-1 || !scatterDimsCompatible(updates.Shape(), 0, indices.Shape(), 0, indicesRank-1) {
 		Panicf("updates rank prefix (shapes=%s) must match the first n-1 dimensions of the indices (shapes=%s)",
 			updates.Shape(), indices.Shape())
 	}
 	slicesRank := updatesRank - (indicesRank - 1)
 	slicesDims := updates.Shape().Dimensions[indicesRank-1:]
 	operandRank := operand.Shape().Rank()
-	if operandRank != indexedRank+slicesRank || !xslices.DeepSliceCmp(operand.Shape().Dimensions[indexedRank:], slicesDims, xslices.EqualAny[int]) {
+	if operandRank != indexedRank+slicesRank || !scatterDimsCompatible(operand.Shape(), indexedRank, updates.Shape(), indicesRank-1, slicesRank) {
 		Panicf("operand shapes (%s) has to be a combination of the indexed rank (%d, the last dimension of indices shapes %s) and "+
 			"the slices coming from updates (the last %d dimensions %v of the updates, shaped %s)",
 			operand.Shape(), indexedRank, indices.Shape(), slicesRank, slicesDims, updates.Shape())
@@ -538,6 +541,28 @@ func genericScatter(operand, indices, updates *Node, sorted, unique bool, fn sca
 	}
 	return fn(operand, indices, updates, indicesRank-1, updateWindowsAxes, insertedWindowsAxes, scatterAxesToOperandAxes,
 		sorted, unique)
+}
+
+// scatterDimsCompatible checks whether length consecutive dimensions starting at offset1 in s1
+// and offset2 in s2 are compatible, allowing dynamic dimensions (shapes.DynamicDim) to match
+// static dimensions or dynamic dimensions with compatible axis names.
+func scatterDimsCompatible(s1 shapes.Shape, offset1 int, s2 shapes.Shape, offset2 int, length int) bool {
+	for i := range length {
+		a1 := offset1 + i
+		a2 := offset2 + i
+		d1 := s1.Dimensions[a1]
+		d2 := s2.Dimensions[a2]
+		if d1 != shapes.DynamicDim && d2 != shapes.DynamicDim {
+			if d1 != d2 {
+				return false
+			}
+			continue
+		}
+		if !shapes.AxisNamesCompatible(s1.AxisName(a1), s2.AxisName(a2)) {
+			return false
+		}
+	}
+	return true
 }
 
 // scatterSumVJP generates the adjoint gradient term for a ScatterSum node.

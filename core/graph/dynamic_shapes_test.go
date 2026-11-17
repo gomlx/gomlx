@@ -609,6 +609,56 @@ func TestDynamicShapes(t *testing.T) {
 				defer out.FinalizeAll()
 				assert.Equal(t, []float32{10, 42, 30}, out.Value())
 			})
+
+			t.Run("MixedStaticAndGeneratedDynamicDims", func(t *testing.T) {
+				g := NewGraph(backend, "scatter_mixed_static_generated")
+				defer g.Finalize()
+
+				x := Parameter(g, "x", shapes.Make(dtypes.Float32, 3, 2, 4))
+				indices := Parameter(g, "indices", shapes.MakeDynamic(dtypes.Int64, []int{shapes.DynamicDim, 2, 2}, []string{shapes.UniqueAxisName("idx"), "", ""}))
+				updates := Parameter(g, "updates", shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim, shapes.DynamicDim, shapes.DynamicDim}, []string{shapes.UniqueAxisName("u0"), shapes.UniqueAxisName("u1"), shapes.UniqueAxisName("u2")}))
+				updated := ScatterSum(x, indices, updates, false, false)
+				require.NoError(t, g.Compile(updated))
+
+				inX := make([][][]float32, 3)
+				for i := range inX {
+					inX[i] = make([][]float32, 2)
+					for j := range inX[i] {
+						inX[i][j] = make([]float32, 4)
+					}
+				}
+				inIdx := [][][]int64{{{0, 1}, {2, 0}}}
+				inUpd := [][][]float32{{{1, 2, 3, 4}, {5, 6, 7, 8}}}
+				out := g.Run(inX, inIdx, inUpd)[0]
+				defer out.FinalizeAll()
+
+				want := [][][]float32{
+					{{0, 0, 0, 0}, {1, 2, 3, 4}},
+					{{0, 0, 0, 0}, {0, 0, 0, 0}},
+					{{5, 6, 7, 8}, {0, 0, 0, 0}},
+				}
+				assert.Equal(t, want, out.Value())
+			})
+
+			t.Run("IncompatibleNamedDynamicAxesPanic", func(t *testing.T) {
+				g := NewGraph(backend, "scatter_incompatible_named_axes")
+				defer g.Finalize()
+
+				x := Parameter(g, "x", shapes.Make(dtypes.Float32, 4, 2))
+				indices := Parameter(g, "indices", shapes.MakeDynamic(dtypes.Int64, []int{shapes.DynamicDim, 1}, []string{"batch_a", ""}))
+				updates := Parameter(g, "updates", shapes.MakeDynamic(dtypes.Float32, []int{shapes.DynamicDim, 2}, []string{"batch_b", ""}))
+				assert.Panics(t, func() {
+					_ = ScatterSum(x, indices, updates, false, false)
+				})
+
+				// Also panic when slice axis names are incompatible.
+				x2 := Parameter(g, "x2", shapes.MakeDynamic(dtypes.Float32, []int{4, shapes.DynamicDim}, []string{"", "feat_a"}))
+				indices2 := Parameter(g, "indices2", shapes.Make(dtypes.Int64, 2, 1))
+				updates2 := Parameter(g, "updates2", shapes.MakeDynamic(dtypes.Float32, []int{2, shapes.DynamicDim}, []string{"", "feat_b"}))
+				assert.Panics(t, func() {
+					_ = ScatterSum(x2, indices2, updates2, false, false)
+				})
+			})
 		})
 
 		t.Run("NonZero", func(t *testing.T) {
