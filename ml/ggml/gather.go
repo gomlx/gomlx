@@ -8,7 +8,7 @@ import (
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
-// EmbeddingLookupDecomposed performs a quantized embedding lookup using graph-level dequantization.
+// GatherDecomposed performs a quantized embedding lookup using graph-level dequantization.
 //
 // It gathers raw Uint8 rows from the quantized table, then dequantizes only the
 // selected rows to Float32.
@@ -19,10 +19,10 @@ import (
 //   - ggmlType: the GGML block format (e.g. Q4_0, Q8_0, IQ4_NL, Q4_K, Q6_K).
 //
 // Output: Float32 tensor with shape [batch..., K] where K is the logical embedding dimension.
-func EmbeddingLookupDecomposed(table, indices *Node, ggmlType compute.GGMLQuantType) *Node {
+func GatherDecomposed(table, indices *Node, ggmlType compute.GGMLQuantType) *Node {
 	indicesShape := indices.Shape()
 	if indicesShape.IsDynamic() {
-		exceptions.Panicf("ggml.EmbeddingLookupDecomposed does not support dynamic indices shape %s (requires fused QuantizedEmbeddingLookup backend support)", indicesShape)
+		exceptions.Panicf("ggml.GatherDecomposed does not support dynamic indices shape %s (requires fused QuantizedGather backend support)", indicesShape)
 	}
 	tableShape := table.Shape()
 	bytesPerRow := tableShape.Dimensions[1]

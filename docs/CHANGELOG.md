@@ -2,6 +2,16 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-11-17:
+  - `go.mod`:
+    - Updated `github.com/gomlx/compute`, `github.com/gomlx/go-xla`, `github.com/gomlx/compute-onnx`, and `github.com/gomlx/go-darwinml` to the latest `main` commits with `FusedOps.QuantizedGather`.
+  - `core/graph`, `ml/nn`, `ml/ggml`, `ml/layers`:
+    - Renamed `BackendQuantizedEmbeddingLookup` / `NodeTypeQuantizedEmbeddingLookup` (`core/graph/fused_ops.go`, `internal/cmd/graph_generator`) to `BackendQuantizedGather` / `NodeTypeQuantizedGather`, allowing `tq == nil` and tracking `Scale`/`ZeroPoint` graph node dependencies via `appendNodes`/`cloneFromInputs`.
+    - Renamed `ggml.EmbeddingLookupDecomposed` (`ml/ggml/gather.go`) to `ggml.GatherDecomposed`.
+    - Documented on `graph.Gather` (`core/graph/ops_sparse.go`) and `graph.Slice` (`core/graph/ops.go`) that packed sub-byte dtypes are not supported directly (use `nn.QuantizedGather` or `Bitcast` to `Uint8` / `ConvertDType` first).
+    - Extended `nn.QuantizedGather` (`ml/nn/quantized_gather.go`) to support `quant == nil` (sub-byte / 8-bit lossless row gather unpacking to `Int8` / `Uint8`), `QuantLinear` (`Int2`, `Uint2`, `Int4`, `Uint4`, `Int8`, `Uint8` with optional `ZeroPoint`, `Float32`/`Float16`/`BFloat16` scales, and dynamic `indices`), and `QuantNF4`, with decomposed fallbacks that bitcast byte-aligned sub-byte tables to `Uint8` before `Gather` so only gathered rows are unpacked.
+    - Updated `layers.Embedding` (`ml/layers/layers.go`) to dispatch sub-byte embedding variables (without quantization metadata) to `nn.QuantizedGather`, producing `Int8`/`Uint8` output (converting further only when a non-sub-byte `dtype` is requested).
+
 - 2026-11-16:
   - `core/graph`:
     - Updated `ExpandAndBroadcast` (`ops.go`), `BroadcastToShape` / `DynamicBroadcastToShape` (`ops.go`, `ops_dynamic.go`), and `internal/cmd/graph_generator` (excluding `ConstantFromBuffer`) to align with `compute`'s `1 -> 0` broadcasting, strict compile-time binary broadcasting rules, and `DynamicBroadcastInDim` static narrowing + runtime `1`-or-match broadcasting.

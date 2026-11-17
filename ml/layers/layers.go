@@ -333,8 +333,12 @@ func (b *DenseBuilder) Done() *Node {
 // each of dimension values -- so a [vocabSize, dimension] variable table.
 //
 // If the "embeddings" variable in `scope` already exists with quantization metadata
-// (see [model.Variable.WithQuantization]), it automatically dispatches to [nn.QuantizedGather]
-// to dequantize only the selected token rows on-the-fly.
+// (see [model.Variable.WithQuantization]) or has a packed sub-byte dtype (Int2, Uint2, Int4, Uint4),
+// it automatically dispatches to [nn.QuantizedGather] to unpack/dequantize only the selected token
+// rows on-the-fly. When the variable has a sub-byte dtype without quantization metadata (or `dtype`
+// itself is sub-byte), [nn.QuantizedGather] unpacks the gathered rows to Int8 (signed) or Uint8
+// (unsigned) as the output dtype (converting further only if `dtype` is a non-sub-byte dtype such
+// as Float32).
 //
 // It then converts each integer value of the input to an embedding of the given dimension size.
 // The input must have an integer dtype, and the last dimension must be of size 1. If it's not
@@ -349,10 +353,11 @@ func (b *DenseBuilder) Done() *Node {
 // the embedding dimension.
 //
 // If an `"embeddings"` variable already exists in `scope` with quantization metadata or a
-// different dtype from `dtype`, it is converted to `dtype` after gathering. This is kept
-// intentionally so existing checkpoints with heterogeneous parameter dtypes (e.g., Float32
-// token-type embeddings alongside Float16 transformer weights) can load directly; future
-// versions may tighten this behind explicit dtype configuration.
+// different dtype from `dtype`, it is converted to `dtype` after gathering (unless `dtype` is
+// sub-byte, in which case the unpacked Int8/Uint8 output from [nn.QuantizedGather] is returned).
+// This is kept intentionally so existing checkpoints with heterogeneous parameter dtypes
+// (e.g., Float32 token-type embeddings alongside Float16 transformer weights) can load directly;
+// future versions may tighten this behind explicit dtype configuration.
 func Embedding(scope *model.Scope, input *Node, dtype dtypes.DType, vocabSize, dimension int, indicesAreSorted ...bool) *Node {
 	inputShape := input.Shape()
 	if !inputShape.DType.IsInt() {
@@ -365,9 +370,13 @@ func Embedding(scope *model.Scope, input *Node, dtype dtypes.DType, vocabSize, d
 	}
 	g := input.Graph()
 	if existing := scope.GetVariable("embeddings"); existing != nil {
-		if existing.Quantization() != nil {
-			res := nn.QuantizedGather(existing.NodeValue(g), input, existing.Quantization().ToGraph(g))
-			if res.DType() != dtype {
+		if existing.Quantization() != nil || existing.DType().IsPacked() {
+			var quant *Quantization
+			if existing.Quantization() != nil {
+				quant = existing.Quantization().ToGraph(g)
+			}
+			res := nn.QuantizedGather(existing.NodeValue(g), input, quant)
+			if dtype != dtypes.InvalidDType && !dtype.IsPacked() && res.DType() != dtype {
 				res = ConvertDType(res, dtype)
 			}
 			return res
@@ -378,6 +387,9 @@ func Embedding(scope *model.Scope, input *Node, dtype dtypes.DType, vocabSize, d
 		}
 	}
 	embeddingTable := scope.VariableWithShape("embeddings", shapes.Make(dtype, vocabSize, dimension))
+	if dtype.IsPacked() {
+		return nn.QuantizedGather(embeddingTable.NodeValue(g), input, nil)
+	}
 	return Gather(embeddingTable.NodeValue(g), input, indicesAreSorted...)
 }
 

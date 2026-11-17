@@ -8,6 +8,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -150,4 +151,40 @@ func TestFNNWithQuantizedVariables(t *testing.T) {
 	require.NoError(t, err)
 	// After hidden + ReLU: [2, 0, 0, ...] -> output: [3*2 + (-1)*0, 0*2 + 2*0] = [6, 0]
 	assert.InDeltaSlice(t, []float32{6.0, 0.0}, got, 1e-2)
+}
+
+func TestEmbeddingWithSubByteVariable(t *testing.T) {
+	backend := graphtest.BuildTestBackend()
+	if !backend.Capabilities().DTypes[dtypes.Int2] {
+		t.Skipf("Backend %q does not support Int2", backend.Name())
+	}
+
+	// Int2[2, 4] packed into Uint8[2, 1]:
+	// Row 0: {0, 1, -2, -1} -> 0xE4
+	// Row 1: {-1, 0, 1, -2} -> 0x93
+	tInt2, err := tensors.FromRaw(backend, 0, shapes.Make(dtypes.Int2, 2, 4), []byte{0xE4, 0x93})
+	require.NoError(t, err)
+
+	store := model.NewStore()
+	store.RootScope().In("emb").VariableWithValue("embeddings", tInt2)
+
+	// Calling layers.Embedding with sub-byte dtype outputs Int8 directly.
+	execInt8 := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+		return layers.Embedding(scope.In("emb"), tokens, dtypes.Int2, 2, 4)
+	})
+	defer execInt8.Finalize()
+	gotInt8 := execInt8.MustExec1([]int32{1, 0})
+	defer gotInt8.FinalizeAll()
+	require.Equal(t, dtypes.Int8, gotInt8.DType())
+	assert.Equal(t, [][]int8{{-1, 0, 1, -2}, {0, 1, -2, -1}}, gotInt8.Value())
+
+	// Calling layers.Embedding with Float32 converts the unpacked Int8 output to Float32.
+	execF32 := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+		return layers.Embedding(scope.In("emb"), tokens, dtypes.Float32, 2, 4)
+	})
+	defer execF32.Finalize()
+	gotF32 := execF32.MustExec1([]int32{1, 0})
+	defer gotF32.FinalizeAll()
+	require.Equal(t, dtypes.Float32, gotF32.DType())
+	assert.Equal(t, [][]float32{{-1, 0, 1, -2}, {0, 1, -2, -1}}, gotF32.Value())
 }

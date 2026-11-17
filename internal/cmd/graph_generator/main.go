@@ -55,7 +55,7 @@ var (
 		"FusedLayerNorm", "FusedLayerNormVJP", "FusedSoftmax",
 		"FusedScaledDotProductAttention", "FusedScaledDotProductAttentionVJP",
 		"FusedAttentionQKVProjection", "FusedTopK",
-		"FusedQuantizedDense", "FusedQuantizedDenseVJP", "QuantizedEmbeddingLookup",
+		"FusedQuantizedDense", "FusedQuantizedDenseVJP", "QuantizedGather",
 
 		// Dynamic shape methods (see ops_dynamic.go):
 		"DynamicDimensionSize",
@@ -69,7 +69,7 @@ var (
 	// methodsNotGenerated get a NodeType but no auto-generated wrapper
 	// (hand-written implementations).
 	methodsNotGenerated = sets.MakeWith(
-		"Constant", "Parameter", "FusedQuantizedDense", "FusedQuantizedDenseVJP", "QuantizedEmbeddingLookup", "FusedDenseVJP", "FusedLayerNormVJP")
+		"Constant", "Parameter", "FusedQuantizedDense", "FusedQuantizedDenseVJP", "QuantizedGather", "FusedDenseVJP", "FusedLayerNormVJP")
 
 	// nillableParams lists Value parameters that can be nil (passed as *Node).
 	// Key format: "MethodName.paramName"
