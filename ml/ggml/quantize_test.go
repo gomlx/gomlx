@@ -277,11 +277,11 @@ func TestDequantize_KQuants(t *testing.T) {
 			}
 		}
 
-		// Compute reference float32 values using gobackend's native QuantizedEmbeddingLookup kernel.
+		// Compute reference float32 values using gobackend's native QuantizedGather kernel.
 		refTensor := MustExecOnce(goBackend, func(g *Graph) *Node {
 			table := Const(g, rows)
 			indices := Const(g, [][]int32{{0}, {1}})
-			return BackendQuantizedEmbeddingLookup(table, indices, &Quantization{
+			return BackendQuantizedGather(table, indices, &Quantization{
 				Scheme:   compute.QuantGGML,
 				GGMLType: tc.ggmlType,
 			})

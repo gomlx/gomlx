@@ -97,6 +97,9 @@ func NormalizeIndices(data, indices *Node, axis int) *Node {
 //
 // In the case above params shapes is interpreted as [i_1=3, s_1=3], and indices shapes is
 // [o_1=2, N=1]. The output shapes is [o_1=2, s_1=3].
+//
+// Note: Packed sub-byte dtypes (Int4, Int2, Int1, Uint4, Uint2, Uint1) are not supported by Gather;
+// use nn.QuantizedGather (in package github.com/gomlx/gomlx/ml/nn) or Bitcast to Uint8 / ConvertDType first.
 func Gather(params, indices *Node, indicesAreSorted ...bool) *Node {
 	_ = validateBuildingGraphFromInputs(params, indices)
 	if params.IsScalar() {

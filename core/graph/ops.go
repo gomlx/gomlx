@@ -1600,6 +1600,9 @@ func AxisElem(index int) SliceAxisSpec {
 //
 // - For `x = {{1, 2, 3}, {4, 5, 6}}`:
 //   - `Slice(x, AxisRange().Stride(2), AxisRange(-1)) = {{3}}`  // Take every 2nd row (so only the 1st here), the last column.
+//
+// Note: Packed sub-byte dtypes (Int4, Int2, Int1, Uint4, Uint2, Uint1) are not supported by Slice;
+// Bitcast to Uint8 or ConvertDType first.
 func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	rank := x.Rank()

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/compute/dtypes/float16"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -205,11 +207,11 @@ func TestQuantizedGather_Q5_0_And_Dynamic(t *testing.T) {
 			return []*Node{table}, []*Node{y}
 		}, []any{[][]float32{wantRow1, wantRow0}}, 1e-4)
 
-		if !backend.Capabilities().Operations[compute.OpTypeQuantizedEmbeddingLookup] {
+		if !backend.Capabilities().Operations[compute.OpTypeQuantizedGather] {
 			return
 		}
 
-		// Dynamic [batch, seq, 1] execution on backends with fused QuantizedEmbeddingLookup.
+		// Dynamic [batch, seq, 1] execution on backends with fused QuantizedGather.
 		var sawDynamic bool
 		exec := MustNewExec(backend, func(indices *Node) *Node {
 			sawDynamic = indices.Shape().IsDynamic()
@@ -233,5 +235,217 @@ func TestQuantizedGather_Q5_0_And_Dynamic(t *testing.T) {
 		assert.InDeltaSlice(t, wantRow1, gotFlat[32:64], 1e-4)
 		assert.InDeltaSlice(t, wantRow1, gotFlat[64:96], 1e-4)
 		assert.InDeltaSlice(t, wantRow0, gotFlat[96:128], 1e-4)
+	})
+}
+
+func TestQuantizedGather_Linear_And_NF4(t *testing.T) {
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		t.Run("NilQuant_Int8", func(t *testing.T) {
+			tableData := [][]int8{{1, -2, 3}, {-4, 5, -6}}
+			for _, fusion := range []string{"true", "false"} {
+				t.Run("fusion="+fusion, func(t *testing.T) {
+					t.Setenv(FusionEnv, fusion)
+					graphtest.RunTestGraphFnWithBackend(t, "int8", backend, func(g *Graph) ([]*Node, []*Node) {
+						table := Const(g, tableData)
+						y := nn.QuantizedGather(table, Const(g, [][]int32{{1}, {0}}), nil)
+						return []*Node{table}, []*Node{y}
+					}, []any{[][]int8{{-4, 5, -6}, {1, -2, 3}}}, 0)
+				})
+			}
+		})
+
+		// Uint8 / Int8 block-linear tests run on every official backend (including XLA/ONNX via decomposed fallback).
+		t.Run("Int8_NonDivisibleBlock_Dynamic", func(t *testing.T) {
+			tableData := [][]int8{
+				{2, 3, 4, 5, 6, 7},
+				{3, 4, 5, 6, 7, 8},
+			}
+			scalesData := [][]float32{
+				{0.5, 2.0},
+				{1.5, 0.25},
+			}
+			zpData := [][]int8{
+				{1, 2},
+				{3, 4},
+			}
+			want0 := []float32{0.5, 1.0, 1.5, 2.0, 8.0, 10.0}
+			want1 := []float32{0.0, 1.5, 3.0, 4.5, 0.75, 1.0}
+
+			for _, fusion := range []string{"true", "false"} {
+				t.Run("fusion="+fusion, func(t *testing.T) {
+					t.Setenv(FusionEnv, fusion)
+					graphtest.RunTestGraphFnWithBackend(t, "static", backend, func(g *Graph) ([]*Node, []*Node) {
+						table := Const(g, tableData)
+						scales := Const(g, scalesData)
+						zp := Const(g, zpData)
+						indices := Const(g, [][][]int32{{{1}, {0}}})
+						y := nn.QuantizedGather(table, indices, &Quantization{
+							Scheme:    compute.QuantLinear,
+							Scale:     scales,
+							ZeroPoint: zp,
+							BlockAxis: 1,
+							BlockSize: 4,
+						})
+						return []*Node{table}, []*Node{y}
+					}, []any{[][][]float32{{want1, want0}}}, 1e-5)
+
+					if !backend.Capabilities().DynamicAxes {
+						return
+					}
+					exec := MustNewExec(backend, func(indices *Node) *Node {
+						g := indices.Graph()
+						return nn.QuantizedGather(Const(g, tableData), indices, &Quantization{
+							Scheme:    compute.QuantLinear,
+							Scale:     Const(g, scalesData),
+							ZeroPoint: Const(g, zpData),
+							BlockAxis: 1,
+							BlockSize: 4,
+						})
+					}).WithDynamicAxes([]string{"batch", "seq", ""})
+					defer exec.Finalize()
+
+					got := exec.MustExec1([][][]int32{{{1}, {0}}})
+					defer got.FinalizeAll()
+					vals := got.Value().([][][]float32)
+					assert.InDeltaSlice(t, want1, vals[0][0], 1e-5)
+					assert.InDeltaSlice(t, want0, vals[0][1], 1e-5)
+				})
+			}
+		})
+
+		if !backend.Capabilities().DTypes[dtypes.Uint4] {
+			return
+		}
+
+		// Sub-byte Uint4 / Int2 / Uint2 tests (both fused and GOMLX_FUSION=false decomposed).
+		t.Run("NilQuant_Int2_Dynamic", func(t *testing.T) {
+			// Signed 2-bit values [-2, -1, 0, 1] packed 4 per byte.
+			// Row 0: {0, 1, -2, -1} -> 0b11_10_01_00 = 0xE4
+			// Row 1: {-1, 0, 1, -2} -> 0b10_01_00_11 = 0x93
+			packedW := [][]uint8{{0xE4}, {0x93}}
+			want0 := []int8{0, 1, -2, -1}
+			want1 := []int8{-1, 0, 1, -2}
+
+			for _, fusion := range []string{"true", "false"} {
+				t.Run("fusion="+fusion, func(t *testing.T) {
+					t.Setenv(FusionEnv, fusion)
+					exec := MustNewExec(backend, func(indices *Node) *Node {
+						g := indices.Graph()
+						w := Reshape(Bitcast(Const(g, packedW), dtypes.Int2), 2, 4)
+						return nn.QuantizedGather(w, indices, nil)
+					}).WithDynamicAxes([]string{"batch", "seq", ""})
+					defer exec.Finalize()
+
+					got := exec.MustExec1([][][]int32{{{1}, {0}}})
+					defer got.FinalizeAll()
+					require.Equal(t, dtypes.Int8, got.DType())
+					vals := got.Value().([][][]int8)
+					assert.Equal(t, want1, vals[0][0])
+					assert.Equal(t, want0, vals[0][1])
+				})
+			}
+		})
+
+		t.Run("NilQuant_Uint4_NonByteAligned", func(t *testing.T) {
+			// K=3 (not divisible by 2): [2, 3] reshaped from packed Uint8 [2, 2] via Slice after ConvertDType.
+			packedW := [][]uint8{
+				{0x32, 0x05}, // {2, 3, 5, 0}
+				{0x76, 0x09}, // {6, 7, 9, 0}
+			}
+			for _, fusion := range []string{"true", "false"} {
+				t.Run("fusion="+fusion, func(t *testing.T) {
+					t.Setenv(FusionEnv, fusion)
+					graphtest.RunTestGraphFnWithBackend(t, "non_aligned", backend, func(g *Graph) ([]*Node, []*Node) {
+						w := Reshape(Bitcast(Const(g, packedW), dtypes.Uint4), 2, 4)
+						y := nn.QuantizedGather(w, Const(g, [][]int32{{1}, {0}}), nil)
+						return []*Node{w}, []*Node{y}
+					}, []any{[][]uint8{{6, 7, 9, 0}, {2, 3, 5, 0}}}, 0)
+				})
+			}
+		})
+
+		t.Run("Uint4_BlockLinear_Float16Scale", func(t *testing.T) {
+			packedW := [][]uint8{
+				{0x32, 0x54, 0x76, 0x98}, // {2,3,4,5,6,7,8,9}
+				{0x43, 0x65, 0x87, 0xA9}, // {3,4,5,6,7,8,9,10}
+			}
+			packedZP := [][]uint8{
+				{0x21}, // {1, 2}
+				{0x43}, // {3, 4}
+			}
+			scalesData := [][]float16.Float16{
+				{float16.FromFloat32(0.5), float16.FromFloat32(2.0)},
+				{float16.FromFloat32(1.5), float16.FromFloat32(0.25)},
+			}
+			want0 := []float32{0.5, 1, 1.5, 2, 8, 10, 12, 14}
+			want1 := []float32{0, 1.5, 3, 4.5, 0.75, 1, 1.25, 1.5}
+
+			for _, fusion := range []string{"true", "false"} {
+				t.Run("fusion="+fusion, func(t *testing.T) {
+					t.Setenv(FusionEnv, fusion)
+					exec := MustNewExec(backend, func(indices *Node) *Node {
+						g := indices.Graph()
+						w := Reshape(Bitcast(Const(g, packedW), dtypes.Uint4), 2, 8)
+						zp := Reshape(Bitcast(Const(g, packedZP), dtypes.Uint4), 2, 2)
+						return nn.QuantizedGather(w, indices, &Quantization{
+							Scheme:    compute.QuantLinear,
+							Scale:     Const(g, scalesData),
+							ZeroPoint: zp,
+							BlockAxis: 1,
+							BlockSize: 4,
+						})
+					}).WithDynamicAxes([]string{"batch", "seq", ""})
+					defer exec.Finalize()
+
+					got := exec.MustExec1([][][]int64{{{1}, {0}}})
+					defer got.FinalizeAll()
+					require.Equal(t, dtypes.Float16, got.DType())
+					raw := got.Value().([][][]float16.Float16)
+					got0 := make([]float32, 8)
+					got1 := make([]float32, 8)
+					for i := range 8 {
+						got1[i] = raw[0][0][i].Float32()
+						got0[i] = raw[0][1][i].Float32()
+					}
+					assert.InDeltaSlice(t, want1, got1, 1e-3)
+					assert.InDeltaSlice(t, want0, got0, 1e-3)
+				})
+			}
+		})
+
+		t.Run("NF4_Uint4", func(t *testing.T) {
+			packedW := [][]uint8{
+				{0x70, 0x3F}, // {0, 7, 15, 3}
+				{0xA2, 0xE5}, // {2, 10, 5, 14}
+			}
+			scalesData := [][]float32{{0.5, 2.0}, {1.0, 0.25}}
+			want0 := []float32{
+				compute.NF4LookupTable[0] * 0.5,
+				compute.NF4LookupTable[7] * 0.5,
+				compute.NF4LookupTable[15] * 2.0,
+				compute.NF4LookupTable[3] * 2.0,
+			}
+			want1 := []float32{
+				compute.NF4LookupTable[2] * 1.0,
+				compute.NF4LookupTable[10] * 1.0,
+				compute.NF4LookupTable[5] * 0.25,
+				compute.NF4LookupTable[14] * 0.25,
+			}
+			for _, fusion := range []string{"true", "false"} {
+				t.Run("fusion="+fusion, func(t *testing.T) {
+					t.Setenv(FusionEnv, fusion)
+					graphtest.RunTestGraphFnWithBackend(t, "nf4", backend, func(g *Graph) ([]*Node, []*Node) {
+						w := Reshape(Bitcast(Const(g, packedW), dtypes.Uint4), 2, 4)
+						y := nn.QuantizedGather(w, Const(g, [][]int32{{1}, {0}}), &Quantization{
+							Scheme:    compute.QuantNF4,
+							Scale:     Const(g, scalesData),
+							BlockAxis: 1,
+							BlockSize: 2,
+						})
+						return []*Node{w}, []*Node{y}
+					}, []any{[][]float32{want1, want0}}, 1e-5)
+				})
+			}
+		})
 	})
 }

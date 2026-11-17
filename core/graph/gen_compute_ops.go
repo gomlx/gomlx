@@ -115,7 +115,7 @@ const (
 	NodeTypePad
 	NodeTypeParameter
 	NodeTypePow
-	NodeTypeQuantizedEmbeddingLookup
+	NodeTypeQuantizedGather
 	NodeTypeRNGBitGenerator
 	NodeTypeReal
 	NodeTypeReduceBitwiseAnd

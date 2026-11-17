@@ -779,56 +779,60 @@ func fusedQuantizedDenseVJP(node *Node, vjp *Node, _ shapes.Shape) []*Node {
 	return vjps
 }
 
-// nodeInputsQuantizedEmbeddingLookup holds the inputs used for the call to compute.QuantizedEmbeddingLookup.
+// nodeInputsQuantizedGather holds the inputs used for the call to compute.QuantizedGather.
 // Hand-written (not generated) to match the pattern of BackendFusedQuantizedDense: it accepts
 // a graph-level *Quantization and converts it to compute.Quantization via toBackend().
-type nodeInputsQuantizedEmbeddingLookup struct {
-	data    *Node
+type nodeInputsQuantizedGather struct {
+	x       *Node
 	indices *Node
 	tq      *Quantization
 }
 
 // Type implements the interface NodeInputs.
-func (ni *nodeInputsQuantizedEmbeddingLookup) Type() NodeType {
-	return NodeTypeQuantizedEmbeddingLookup
+func (ni *nodeInputsQuantizedGather) Type() NodeType {
+	return NodeTypeQuantizedGather
 }
 
 // String implements the interface NodeInputs.
-func (ni *nodeInputsQuantizedEmbeddingLookup) String() string {
-	return fmt.Sprintf("%s(data=[#%d], indices=[#%d], scheme=%s, ggmlType=%s)",
+func (ni *nodeInputsQuantizedGather) String() string {
+	return fmt.Sprintf("%s(x=[#%d], indices=[#%d], tq=%s)",
 		ni.Type(),
-		ni.data.Id(),
+		ni.x.Id(),
 		ni.indices.Id(),
-		ni.tq.Scheme,
-		ni.tq.GGMLType,
+		ni.tq,
 	)
 }
 
 // CloneWithInputs implements the interface NodeInputs.
-func (ni *nodeInputsQuantizedEmbeddingLookup) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
-	// inputNodes ordering from BackendQuantizedEmbeddingLookup is: [data, indices]
-	return BackendQuantizedEmbeddingLookup(newInputs[0], newInputs[1], ni.tq)
+func (ni *nodeInputsQuantizedGather) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+	// inputNodes ordering from BackendQuantizedGather is: [x, indices, tq.Scale?, tq.ZeroPoint?]
+	idx := 2
+	newTQ := ni.tq.cloneFromInputs(newInputs, &idx)
+	return BackendQuantizedGather(newInputs[0], newInputs[1], newTQ)
 }
 
-// BackendQuantizedEmbeddingLookup performs a quantized embedding lookup (row gather)
-// with on-the-fly dequantization.
+// BackendQuantizedGather performs a quantized row gather (embedding lookup) with on-the-fly
+// unpacking / dequantization.
 // Internal: prefer nn.QuantizedGather which handles fallback and gradients.
-func BackendQuantizedEmbeddingLookup(data, indices *Node, tq *Quantization) *Node {
-	if tq == nil {
-		exceptions.Panicf("BackendQuantizedEmbeddingLookup: tq must not be nil")
+func BackendQuantizedGather(x, indices *Node, tq *Quantization) *Node {
+	if tq != nil && tq.Scale == nil && tq.Scheme != compute.QuantGGML {
+		exceptions.Panicf("BackendQuantizedGather: Scale must not be nil for scheme %s", tq.Scheme)
 	}
 
-	inputNodes := []*Node{data, indices}
+	inputNodes := []*Node{x, indices}
+	inputNodes = tq.appendNodes(inputNodes)
 	g := validateBuildingGraphFromInputs(inputNodes...)
 
-	inputs := &nodeInputsQuantizedEmbeddingLookup{
-		data:    data,
+	idx := 2
+	clonedTQ := tq.cloneFromInputs(inputNodes, &idx)
+	inputs := &nodeInputsQuantizedGather{
+		x:       x,
 		indices: indices,
-		tq:      tq,
+		tq:      clonedTQ,
 	}
 
-	result, err := g.currentFunc.backendFunc.QuantizedEmbeddingLookup(
-		data.outputOps[0], indices.outputOps[0], tq.toBackend())
+	result, err := g.currentFunc.backendFunc.QuantizedGather(
+		x.outputOps[0], indices.outputOps[0], clonedTQ.toBackend())
 	if err != nil {
 		panic(err)
 	}
