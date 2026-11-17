@@ -314,7 +314,7 @@ func BenchmarkScatter(b *testing.B) {
 	}
 	slices.Sort(indices)
 	indicesT := tensors.FromValue(indices)
-	rngStateT := must1(RNGStateFromSeed(42))
+	rngStateT := must1(RNGStateFromSeed(RNGPhilox, 42))
 
 	for _, sorted := range []bool{true, false} {
 		for _, unique := range []bool{true, false} {
@@ -336,8 +336,8 @@ func BenchmarkScatter(b *testing.B) {
 			for _, dtype := range []dtypes.DType{dtypes.Float64, dtypes.Float32, dtypes.Float16} { //
 				// Create random values tensor shaped [BatchSize, EmbeddingSize] of the given dtype.
 				results := MustNewExec(backend, func(rngState *Node) (state, value *Node) {
-					_, state = RandomNormal(rngState, shapes.Make(dtype, NumEntries, EmbeddingSize))
-					_, value = RandomNormal(rngState, shapes.Make(dtype, BatchSize, EmbeddingSize))
+					_, state = RandomNormal(RNGPhilox, rngState, shapes.Make(dtype, NumEntries, EmbeddingSize))
+					_, value = RandomNormal(RNGPhilox, rngState, shapes.Make(dtype, BatchSize, EmbeddingSize))
 					return
 				}).MustCall(rngStateT)
 				stateT, valuesT := results[0], results[1]

@@ -5001,8 +5001,9 @@ func Pow(lhs *Node, rhs *Node) (
 
 // nodeInputsRNGBitGenerator holds the inputs used for the call to compute.RNGBitGenerator.
 type nodeInputsRNGBitGenerator struct {
-	state *Node
-	shape shapes.Shape
+	state     *Node
+	shape     shapes.Shape
+	algorithm compute.RNGAlgorithm
 }
 
 // Type implements the interface NodeInputs.
@@ -5012,10 +5013,11 @@ func (ni *nodeInputsRNGBitGenerator) Type() NodeType {
 
 // String implements the interface NodeInputs.
 func (ni *nodeInputsRNGBitGenerator) String() string {
-	return fmt.Sprintf("%s(state=[#%d], shape=%v)",
+	return fmt.Sprintf("%s(state=[#%d], shape=%v, algorithm=%s)",
 		ni.Type(),
 		ni.state.Id(),
 		ni.shape,
+		ni.algorithm,
 	)
 }
 
@@ -5025,20 +5027,21 @@ func (ni *nodeInputsRNGBitGenerator) CloneWithInputs(originalNode *Node, newInpu
 	idx := 0
 	new_state := newInputs[idx]
 	idx++
-	r0, _ := backendRNGBitGenerator(new_state, ni.shape)
+	r0, _ := backendRNGBitGenerator(new_state, ni.shape, ni.algorithm)
 	return r0.inputNodes[0]
 }
 
 // backendRNGBitGenerator is a Graph wrapper for the backend.Builder.RNGBitGenerator method.
-func backendRNGBitGenerator(state *Node, shape shapes.Shape) (
+func backendRNGBitGenerator(state *Node, shape shapes.Shape, algorithm compute.RNGAlgorithm) (
 	newState, values *Node) {
 	inputNodes := []*Node{state}
 	g := validateBuildingGraphFromInputs(inputNodes...)
 	inputs := &nodeInputsRNGBitGenerator{
-		state: state,
-		shape: shape,
+		state:     state,
+		shape:     shape,
+		algorithm: algorithm,
 	}
-	v0, v1, err := g.currentFunc.backendFunc.RNGBitGenerator(state.outputOps[0], inputs.shape)
+	v0, v1, err := g.currentFunc.backendFunc.RNGBitGenerator(state.outputOps[0], inputs.shape, inputs.algorithm)
 	if err != nil {
 		panic(err)
 	}

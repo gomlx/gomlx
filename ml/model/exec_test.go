@@ -296,7 +296,7 @@ func TestAutoSharding(t *testing.T) {
 		store := model.NewStore()
 		store.SetParam(model.ParamInitialSeed, int64(42))
 		e, err := model.NewExec(backend, store, func(scope *model.Scope, g *Graph) *Node {
-			return scope.Store().GetVariable(model.RNGStateVariableName).NodeValue(g)
+			return scope.Store().RNGStateVariable(g).NodeValue(g)
 		})
 		require.NoError(t, err)
 		replicatedSpec := distributed.NewReplicatedShardingSpec(meshFor2)
