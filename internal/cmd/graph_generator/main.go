@@ -209,6 +209,9 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			case "CumSumOptions":
 				pi.BackendType = "compute." + pi.BackendType
 				pi.Format = "%+v"
+			case "RNGAlgorithm":
+				pi.BackendType = "compute." + pi.BackendType
+				pi.Format = "%s"
 			case "FusedTopKConfig":
 				pi.BackendType = "compute." + pi.BackendType
 				pi.Format = "%+v"

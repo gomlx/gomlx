@@ -4,6 +4,7 @@ package model
 
 import (
 	"iter"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -58,6 +59,17 @@ type Store struct {
 	// Variable values are converted into shared backend constants and their host/device Tensor
 	// copies in the Store are finalized.
 	donated bool
+
+	// Lazy per-algorithm RNG state tracking.
+	rngSeed        int64
+	hasRNGSeed     bool
+	rngRandomReset bool
+	rngStateVars   map[string]rngVarSpec
+}
+
+type rngVarSpec struct {
+	algo    compute.RNGAlgorithm
+	backend compute.Backend
 }
 
 // Loader can be implemented by any library providing loading of variables for
@@ -140,6 +152,12 @@ func (s *Store) Clone() (*Store, error) {
 	newStore.defaultShardingSpec = s.defaultShardingSpec
 	newStore.loader = s.loader
 	newStore.variablesAsConst = s.variablesAsConst
+	newStore.rngSeed = s.rngSeed
+	newStore.hasRNGSeed = s.hasRNGSeed
+	newStore.rngRandomReset = s.rngRandomReset
+	if s.rngStateVars != nil {
+		newStore.rngStateVars = maps.Clone(s.rngStateVars)
+	}
 
 	for _, v := range s.variables {
 		_, err := v.CloneToStore(newStore)

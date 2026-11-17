@@ -5,6 +5,7 @@ package graph_test
 import (
 	"fmt"
 	"math"
+	"reflect"
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
@@ -14,6 +15,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/support/testutil"
+	"github.com/stretchr/testify/require"
 
 	"testing"
 )
@@ -31,11 +33,11 @@ func testRandomUniform[T interface {
 	}
 	graphtest.RunTestGraphFnWithBackend(t, testName, backend,
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
-			state := RNGStateFromSeedForGraph(g, 42)
+			state := RNGStateFromSeedForGraph(g, RNGDefault, 42)
 			shape := shapes.Make(dtype, 100, 5000) // 500k / 1 million numbers (for complex numbers).
 			var r, sample *Node
-			state, r = RandomUniform(state, shape)
-			state, sample = RandomUniform(state, shapes.Make(dtype, 10))
+			state, r = RandomUniform(RNGDefault, state, shape)
+			state, sample = RandomUniform(RNGDefault, state, shapes.Make(dtype, 10))
 			inputs = append(inputs, sample)
 			sample = ConvertDType(sample, dtypes.Float32)
 			inputs = append(inputs, sample)
@@ -98,9 +100,9 @@ func testRandomNormal[T interface {
 	}
 	graphtest.RunTestGraphFnWithBackend(t, testName, backend,
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
-			state := Const(g, must1(RNGStateFromSeed(42)))
+			state := Const(g, must1(RNGStateFromSeed(RNGPhilox, 42)))
 			shape := shapes.Make(dtype, 100, 10000) // 1 million numbers.
-			_, r := RandomNormal(state, shape)
+			_, r := RandomNormal(RNGPhilox, state, shape)
 			if dtype == dtypes.Float16 || dtype == dtypes.BFloat16 {
 				// 1M examples will overflow float16 resolution, so we convert to F32 to calculate the mean.
 				r = ConvertDType(r, dtypes.Float32)
@@ -142,14 +144,14 @@ func testRandomIntN[T interface {
 	}
 	graphtest.RunTestGraphFnWithBackend(t, testName, backend,
 		func(g *Graph) (inputs []*Node, outputs []*Node) {
-			state := Const(g, must1(RNGStateFromSeed(42)))
+			state := Const(g, must1(RNGStateFromSeed(RNGPhilox, 42)))
 			shape := shapes.Make(dtype, 100, 10000) // 1 million numbers.
 			var r *Node
 			if useStatic {
-				state, r = RandomIntN(state, T(13), shape)
+				state, r = RandomIntN(RNGPhilox, state, T(13), shape)
 			} else {
 				// Notice that the dtype of N shouldn't really matter, as long as it is an integer.
-				state, r = RandomIntN(state, Const(g, int32(13)), shape)
+				state, r = RandomIntN(RNGPhilox, state, Const(g, int32(13)), shape)
 			}
 			var maxRatio, minRatio, totalCount *Node
 			for ii := range 13 {
@@ -204,8 +206,8 @@ func TestMultiOutputs(t *testing.T) {
 	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
 		_, err := MustNewExec(backend, func(x *Node) *Node {
 			g := x.Graph()
-			rngState := Const(g, must1(RNGStateFromSeed(42)))
-			rngState, ws := RandomNormal(rngState, x.Shape())
+			rngState := Const(g, must1(RNGStateFromSeed(RNGPhilox, 42)))
+			rngState, ws := RandomNormal(RNGPhilox, rngState, x.Shape())
 			fmt.Printf("Graph:\n%s\n", g)
 			return ws // Add(x, ws)
 		}).Call(0.0)
@@ -213,5 +215,76 @@ func TestMultiOutputs(t *testing.T) {
 			fmt.Printf("Error: %+v\n", err)
 			t.Fail()
 		}
+	})
+}
+
+func TestRNGBitGeneratorAlgorithmsAndFallback(t *testing.T) {
+	goBackend := testutil.GetOfficialBackend("go")
+
+	// RNGState / RNGStateFromSeed without backend reject RNGDefault.
+	_, err := RNGStateFromSeed(RNGDefault, 42)
+	require.Error(t, err)
+	_, err = RNGState(RNGDefault)
+	require.Error(t, err)
+
+	// Verify every counter-based explicit algorithm produces identical results across
+	// all official backends (both native and GoMLX decomposed graph fallback).
+	algos := []RNGAlgorithm{RNGPhilox, RNGThreeFry, RNGSplitMix64, RNGChaCha8}
+	for _, algo := range algos {
+		t.Run(algo.String(), func(t *testing.T) {
+			refOuts := MustNewExec(goBackend, func(g *Graph) (*Node, *Node, *Node) {
+				s0 := RNGStateFromSeedForGraph(g, algo, 123)
+				s1, bits32 := RNGBitGenerator(algo, s0, shapes.Make(dtypes.Uint32, 7))
+				s2, uni := RandomUniform(algo, s1, shapes.Make(dtypes.Float32, 5))
+				return s2, bits32, uni
+			}).MustCall()
+
+			testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+				gotOuts := MustNewExec(backend, func(g *Graph) (*Node, *Node, *Node) {
+					s0 := RNGStateFromSeedForGraph(g, algo, 123)
+					s1, bits32 := RNGBitGenerator(algo, s0, shapes.Make(dtypes.Uint32, 7))
+					s2, uni := RandomUniform(algo, s1, shapes.Make(dtypes.Float32, 5))
+					return s2, bits32, uni
+				}).MustCall()
+
+				require.Truef(t, reflect.DeepEqual(refOuts[0].Value(), gotOuts[0].Value()),
+					"%s on %s: final state mismatch: got %v, want %v", algo, backend.Name(), gotOuts[0].Value(), refOuts[0].Value())
+				require.Truef(t, reflect.DeepEqual(refOuts[1].Value(), gotOuts[1].Value()),
+					"%s on %s: bits32 mismatch: got %v, want %v", algo, backend.Name(), gotOuts[1].Value(), refOuts[1].Value())
+				require.Truef(t, reflect.DeepEqual(refOuts[2].Value(), gotOuts[2].Value()),
+					"%s on %s: uniform mismatch: got %v, want %v", algo, backend.Name(), gotOuts[2].Value(), refOuts[2].Value())
+			})
+		})
+	}
+
+	// Verify passing an untagged [2]uint64 state as an Exec Parameter works unambiguously
+	// across ThreeFry, SplitMix64, and PCG because algo is explicit.
+	for _, algo := range []RNGAlgorithm{RNGThreeFry, RNGSplitMix64, RNGPCG} {
+		if !goBackend.Capabilities().SupportsRNG(algo) {
+			continue
+		}
+		t.Run("ExecParam_"+algo.String(), func(t *testing.T) {
+			initState, err := RNGStateFromSeed(algo, 77)
+			require.NoError(t, err)
+			outs := MustNewExec(goBackend, func(state *Node) (*Node, *Node) {
+				return RandomUniform(algo, state, shapes.Make(dtypes.Float32, 4))
+			}).MustCall(initState)
+			require.Equal(t, shapes.Make(dtypes.Float32, 4), outs[1].Shape())
+		})
+	}
+
+	// Verify RNGStateSplit and RNGStateFromSeedForBackend(RNGDefault) on all official backends.
+	testutil.TestOfficialBackends(t, func(t *testing.T, backend compute.Backend) {
+		t.Run("RNGStateSplit_"+backend.Name(), func(t *testing.T) {
+			initState, err := RNGStateFromSeedForBackend(backend, RNGDefault, 99)
+			require.NoError(t, err)
+			outs := MustNewExec(backend, func(state *Node) (*Node, *Node, *Node) {
+				s1, s2 := RNGStateSplit(RNGDefault, state)
+				_, v1 := RandomUniform(RNGDefault, s1, shapes.Make(dtypes.Float32, 8))
+				_, v2 := RandomUniform(RNGDefault, s2, shapes.Make(dtypes.Float32, 8))
+				return s1, v1, v2
+			}).MustCall(initState)
+			require.NotEqual(t, outs[1].Value(), outs[2].Value())
+		})
 	})
 }

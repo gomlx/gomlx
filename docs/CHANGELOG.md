@@ -3,6 +3,15 @@
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
 - 2026-11-17:
+  - `core/graph`, `ml/model`:
+    - Redesigned `RNGBitGenerator` and `Random*` APIs for portable `compute.RNGAlgorithm` support (`core/graph/{ops_random,ops_random_fallback,rng_seed_*}.go`, `internal/cmd/graph_generator`):
+      - Exported `RNGAlgorithm` aliases (`RNGDefault`, `RNGPhilox`, `RNGThreeFry`, `RNGSplitMix64`, `RNGPCG`, `RNGChaCha8`), `RNGStateForBackend`, and `RNGStateFromSeedForBackend`.
+      - Updated `core/graph` RNG functions (`RNGState`, `RNGStateFromSeed`, `RNGStateForBackend`, `RNGStateFromSeedForBackend`, `RNGStateForGraph`, `RNGStateFromSeedForGraph`, `RNGBitGenerator`, `RNGStateSplit`, `RandomUniform`, `RandomNormal`, `RandomIntN`) to take a required `algo RNGAlgorithm` parameter (placed before `seed`/`rngState`); `RNGState`/`RNGStateFromSeed` reject `RNGDefault` with an error, while backend/graph helpers accept `RNGDefault`.
+      - Added automatic pure-graph decomposed fallbacks (`ops_random_fallback.go`) for counter-based algorithms (`RNGPhilox`, `RNGThreeFry`, `RNGSplitMix64`, `RNGChaCha8`) whenever a backend returns `compute.ErrNotImplemented`.
+      - Updated `RandomUniform` to use exact IEEE-754 significand-width bit shifts (`>> 11` for `Float64`, `>> 8` for `Float32`) instead of `Abs`/`MinScalar` workarounds.
+    - Updated `ml/model.Store` (`ml/model/{random,store}.go`) to maintain per-algorithm internal state variables (`#rngState_<algo>` or `#rngState_default_<backend>`), configured via `ParamRNGAlgorithm` / `SetRNGAlgorithm` / `WithRNGAlgorithm`, with lazy seeding before any backend exists and automatic `.ToLocal()` migration when switching backends on a shared algorithm.
+  - `go.mod`:
+    - Updated `github.com/gomlx/compute`, `github.com/gomlx/go-xla`, `github.com/gomlx/compute-onnx`, and `github.com/gomlx/go-darwinml` to the latest `main` commits with `compute.RNGAlgorithm` support.
   - `core/graph`:
     - Fixed `genericScatter` (`ops_sparse.go`) shape compatibility checks for `ScatterSum`/`ScatterMax`/`ScatterMin`/`ScatterUpdate` with dynamic shapes: allow `shapes.DynamicDim` dimensions to match static or compatible dynamic dimensions (`shapes.AxisNamesCompatible`) on both `updates`/`indices` prefix axes and `operand`/`updates` slice axes, and validate that the last dimension of `indices` (`indexedRank`) is static; added dynamic scatter tests (`dynamic_shapes_test.go`).
   - `core/graph`, `ml/model`, `ml/nn`, `ml/layers`:

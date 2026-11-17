@@ -78,7 +78,7 @@ func TestRelu(t *testing.T) {
 
 					// Random inputs and rotations:
 					// - Inputs has extra batch dimensions (1, 1, 1), we are also testing that they are preserved.
-					input := scope.RandomUniform(g, testShape)
+					input := scope.RandomNormal(g, testShape)
 					roll := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 					pitch := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
 					yaw := MulScalar(scope.RandomUniform(g, shapes.Make(dtypes.Float64)), pi2)
