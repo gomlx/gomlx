@@ -3,6 +3,9 @@
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
 - 2026-11-17:
+  - `core/graph`, `ml/model`, `ml/nn`, `ml/layers`:
+    - Added `Quantization.PackedDType` (`core/graph/fused_ops.go`, `ml/model/variable.go`, `ml/nn/quantized_dense.go`) and explicit `compute.QuantNone` scheme support (`core/graph/fused_ops.go`, `ml/nn/quantized_gather.go`) so packed `Uint8` tables with sub-byte semantics (`Int2`, `Uint2`, `Int4`, `Uint4`) work across all backends in `nn.QuantizedGather` (gathering packed `Uint8` rows before unpacking in the decomposed path) for `QuantNone`, `QuantLinear`, and `QuantNF4`.
+    - Updated `layers.Embedding` (`ml/layers/layers.go`) to store newly created sub-byte embedding tables packed in `Uint8` with `&model.Quantization{Scheme: compute.QuantNone, PackedDType: dtype}` when the backend lacks native sub-byte dtype support.
   - `go.mod`:
     - Updated `github.com/gomlx/compute`, `github.com/gomlx/go-xla`, `github.com/gomlx/compute-onnx`, and `github.com/gomlx/go-darwinml` to the latest `main` commits with `FusedOps.QuantizedGather`.
   - `core/graph`, `ml/nn`, `ml/ggml`, `ml/layers`:

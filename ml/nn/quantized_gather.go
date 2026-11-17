@@ -22,17 +22,20 @@ import (
 // (Int2, Uint2, Int4, Uint4), which graph.Gather does not support directly.
 //
 // Supported modes:
-//   - quant == nil: gathers rows from Int2/Uint2/Int4/Uint4 (or Int8/Uint8) tables and unpacks
-//     them losslessly to Int8 (for signed Int2/Int4/Int8) or Uint8 (for unsigned Uint2/Uint4/Uint8).
+//   - quant == nil or QuantNone: gathers rows from Int2/Uint2/Int4/Uint4 (or Int8/Uint8) tables
+//     and unpacks them losslessly to Int8 (for signed Int2/Int4/Int8) or Uint8 (for unsigned
+//     Uint2/Uint4/Uint8). If PackedDType is set, table may be stored bit-packed in Uint8 with
+//     shape [vocabSize, K / ValuesPerStorageUnit] and logical dtype PackedDType.
 //     Supports both static and dynamic batch dimensions on any backend.
 //   - QuantGGML: table is [vocabSize, bytesPerRow] Uint8 with native GGML block layout;
 //     output is Float32. Static batch dimensions fall back to ggml.GatherDecomposed;
 //     dynamic batch dimensions require a backend with OpTypeQuantizedGather (e.g. "go").
-//   - QuantLinear: table is [vocabSize, K] Int2/Uint2/Int4/Uint4/Int8/Uint8 with Scale
-//     (Float32/Float16/BFloat16) and optional ZeroPoint; output matches Scale's DType.
+//   - QuantLinear: table is [vocabSize, K] Int2/Uint2/Int4/Uint4/Int8/Uint8 (or [vocabSize, K/vpb]
+//     Uint8 when PackedDType is set) with Scale (Float32/Float16/BFloat16) and optional ZeroPoint;
+//     output matches Scale's DType. Note that PackedDType does not apply to ZeroPoint.
 //     Supports both static and dynamic batch dimensions on any backend.
-//   - QuantNF4: table is [vocabSize, K] Int4/Uint4/Int8/Uint8 with Scale
-//     (Float32/Float16/BFloat16); output matches Scale's DType.
+//   - QuantNF4: table is [vocabSize, K] Int4/Uint4/Int8/Uint8 (or [vocabSize, K/2] Uint8 when
+//     PackedDType is set) with Scale (Float32/Float16/BFloat16); output matches Scale's DType.
 //
 // Parameters:
 //   - table: quantized or sub-byte table (rank 2).
@@ -44,9 +47,9 @@ import (
 func QuantizedGather(table, indices *Node, quant *Quantization) *Node {
 	var decomposed func() *Node
 	switch {
-	case quant == nil:
+	case quant == nil, quant.Scheme == compute.QuantNone:
 		decomposed = func() *Node {
-			return quantizedGatherUnpackedDecomposed(table, indices)
+			return quantizedGatherUnpackedDecomposed(table, indices, quant)
 		}
 	case quant.Scheme == compute.QuantGGML:
 		decomposed = func() *Node {
@@ -82,12 +85,17 @@ func QuantizedGather(table, indices *Node, quant *Quantization) *Node {
 	return BackendQuantizedGather(table, indices, quant)
 }
 
-func quantizedGatherUnpackedDecomposed(table, indices *Node) *Node {
-	info, err := shapeinference.QuantizedGatherWithInfo(table.Shape(), indices.Shape(), nil)
+func quantizedGatherUnpackedDecomposed(table, indices *Node, quant *Quantization) *Node {
+	info, err := shapeinference.QuantizedGatherWithInfo(
+		table.Shape(), indices.Shape(), quantizationToShapes(quant))
 	if err != nil {
 		panic(err)
 	}
-	gathered := gatherQuantizedRows(table, indices, info.K, info.OutputShape.DType)
+	var packedDT dtypes.DType
+	if quant != nil {
+		packedDT = quant.PackedDType
+	}
+	gathered := gatherQuantizedRows(table, indices, packedDT, info.K, info.OutputShape.DType)
 	if gathered.DType() != info.OutputShape.DType {
 		return ConvertDType(gathered, info.OutputShape.DType)
 	}
@@ -104,7 +112,7 @@ func quantizedGatherLinearOrNF4Decomposed(table, indices *Node, quant *Quantizat
 	g := table.Graph()
 	vocabSize := table.Shape().Dimensions[0]
 	K := info.K
-	gathered := gatherQuantizedRows(table, indices, K, dtypes.Float32)
+	gathered := gatherQuantizedRows(table, indices, quant.PackedDType, K, dtypes.Float32)
 
 	var dequant *Node
 	switch quant.Scheme {
@@ -132,11 +140,17 @@ func quantizedGatherLinearOrNF4Decomposed(table, indices *Node, quant *Quantizat
 }
 
 // gatherQuantizedRows gathers rows along axis 0 from a 2D [rows, cols] tensor.
-// For packed sub-byte types (Int2/Uint2/Int4/Uint4) whose row width is byte-aligned,
+// When packedDType is set on a Uint8 table, it gathers the packed Uint8 rows first and unpacks
+// only the selected rows in portable integer ops (no sub-byte DType or Bitcast required).
+// For native packed sub-byte types (Int2/Uint2/Int4/Uint4) whose row width is byte-aligned,
 // it bitcasts to Uint8 before gathering so only the gathered rows are unpacked.
 // When cols is not byte-aligned, it converts table to fallbackDType before gathering.
-func gatherQuantizedRows(table, indices *Node, cols int, fallbackDType dtypes.DType) *Node {
+func gatherQuantizedRows(table, indices *Node, packedDType dtypes.DType, cols int, fallbackDType dtypes.DType) *Node {
 	dt := table.DType()
+	if dt == dtypes.Uint8 && packedDType != dtypes.InvalidDType && packedDType.IsPacked() {
+		gatheredU8 := Gather(table, indices)
+		return unpackPackedUint8Rows(gatheredU8, packedDType, indices, cols)
+	}
 	if !dt.IsPacked() {
 		return Gather(table, indices)
 	}
@@ -150,6 +164,39 @@ func gatherQuantizedRows(table, indices *Node, cols int, fallbackDType dtypes.DT
 	gatheredTyped := Bitcast(gatheredU8, dt)
 	specs := append(slices.Clone(DimensionSpecsFor(indices)[:indices.Rank()-1]), StaticDim(cols))
 	return DynamicReshape(gatheredTyped, specs...)
+}
+
+// unpackPackedUint8Rows unpacks gathered [batch..., cols/vpb] Uint8 rows with logical sub-byte
+// dtype subDT into [batch..., cols] Int8 (signed) or Uint8 (unsigned) using low-bits-first order.
+func unpackPackedUint8Rows(gatheredU8 *Node, subDT dtypes.DType, indices *Node, cols int) *Node {
+	g := gatheredU8.Graph()
+	vpb := subDT.ValuesPerStorageUnit()
+	bits := 8 / vpb
+	x := ConvertDType(gatheredU8, dtypes.Int32)
+	mask := Scalar(g, dtypes.Int32, int32((1<<bits)-1))
+	isSigned := subDT.IsInt() && !subDT.IsUnsigned()
+	var signBit *Node
+	if isSigned {
+		signBit = Scalar(g, dtypes.Int32, int32(1<<(bits-1)))
+	}
+	parts := make([]*Node, vpb)
+	for i := range parts {
+		part := x
+		if i > 0 {
+			part = BitwiseShiftRightLogicalScalar(x, i*bits)
+		}
+		part = BitwiseAnd(part, mask)
+		if isSigned {
+			part = Sub(BitwiseXor(part, signBit), signBit)
+		}
+		parts[i] = ExpandAxes(part, -1)
+	}
+	specs := append(slices.Clone(DimensionSpecsFor(indices)[:indices.Rank()-1]), StaticDim(cols))
+	unpacked := DynamicReshape(Concatenate(parts, -1), specs...)
+	if isSigned {
+		return ConvertDType(unpacked, dtypes.Int8)
+	}
+	return ConvertDType(unpacked, dtypes.Uint8)
 }
 
 func gatherOrExpandEmbeddingParam(
@@ -190,7 +237,7 @@ func gatherOrExpandEmbeddingParam(
 		gatherIndices = DivScalar(indices, layout.RowBlockSize)
 	}
 
-	gathered := ConvertDType(gatherQuantizedRows(p2d, gatherIndices, layout.NumColBlocks, dtypes.Float32), dtypes.Float32)
+	gathered := ConvertDType(gatherQuantizedRows(p2d, gatherIndices, dtypes.InvalidDType, layout.NumColBlocks, dtypes.Float32), dtypes.Float32)
 	if layout.ColBlockSize == K || layout.ColBlockSize == 1 {
 		// NumColBlocks == 1 broadcasts across K; ColBlockSize == 1 means NumColBlocks == K.
 		return gathered
