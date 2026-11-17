@@ -188,3 +188,46 @@ func TestEmbeddingWithSubByteVariable(t *testing.T) {
 	require.Equal(t, dtypes.Float32, gotF32.DType())
 	assert.Equal(t, [][]float32{{-1, 0, 1, -2}, {0, 1, -2, -1}}, gotF32.Value())
 }
+
+func TestEmbeddingPackedUint8Fallback(t *testing.T) {
+	// Packed Uint8[2, 1] table with logical Int2[2, 4] values via WithQuantization:
+	// Row 0: {0, 1, -2, -1} -> 0xE4
+	// Row 1: {-1, 0, 1, -2} -> 0x93
+	store := model.NewStore()
+	store.RootScope().In("emb").
+		VariableWithValue("embeddings", [][]uint8{{0xE4}, {0x93}}).
+		WithQuantization(&model.Quantization{
+			Scheme:      compute.QuantNone,
+			PackedDType: dtypes.Int2,
+		})
+
+	backend := graphtest.BuildTestBackend()
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+		return layers.Embedding(scope.In("emb"), tokens, dtypes.Int2, 2, 4)
+	})
+	defer exec.Finalize()
+	got := exec.MustExec1([]int32{1, 0})
+	defer got.FinalizeAll()
+	require.Equal(t, dtypes.Int8, got.DType())
+	assert.Equal(t, [][]int8{{-1, 0, 1, -2}, {0, 1, -2, -1}}, got.Value())
+
+	// Creating a new sub-byte Embedding variable allocates packed Uint8 + QuantNone/PackedDType
+	// automatically when the backend lacks native sub-byte DType support.
+	newStore := model.NewStore()
+	execNew := model.MustNewExec(backend, newStore, func(scope *model.Scope, tokens *Node) *Node {
+		return layers.Embedding(scope.In("new_emb"), tokens, dtypes.Uint4, 3, 4)
+	})
+	defer execNew.Finalize()
+	gotNew := execNew.MustExec1([][]int32{{1, 0}})
+	defer gotNew.FinalizeAll()
+	require.Equal(t, dtypes.Uint8, gotNew.DType())
+	assert.Equal(t, []int{1, 2, 4}, gotNew.Shape().Dimensions)
+	embVar := newStore.RootScope().In("new_emb").GetVariable("embeddings")
+	require.NotNil(t, embVar)
+	if !backend.Capabilities().DTypes[dtypes.Uint4] {
+		require.Equal(t, dtypes.Uint8, embVar.DType())
+		require.NotNil(t, embVar.Quantization())
+		assert.Equal(t, compute.QuantNone, embVar.Quantization().Scheme)
+		assert.Equal(t, dtypes.Uint4, embVar.Quantization().PackedDType)
+	}
+}

@@ -75,7 +75,7 @@ type Variable struct {
 // when building computation graphs (for example, GGML block-quantized weights from GGUF
 // or linear/NF4 quantized weights with companion scale/zero-point variables).
 type Quantization struct {
-	// Scheme selects the quantization family (QuantLinear, QuantNF4, QuantGGML).
+	// Scheme selects the quantization family (QuantNone, QuantLinear, QuantNF4, QuantGGML).
 	Scheme compute.QuantizationScheme
 
 	// GGMLType specifies the block format when Scheme == compute.QuantGGML.
@@ -91,8 +91,13 @@ type Quantization struct {
 	BlockAxis int
 	BlockSize int
 
-	// QuantizedDType optionally specifies the logical sub-byte dtype when packed in Uint8.
+	// QuantizedDType optionally specifies the target quantized output dtype (Int8 or Uint8)
+	// when used as OutputQuantization.
 	QuantizedDType dtypes.DType
+
+	// PackedDType optionally specifies the logical sub-byte dtype (Int2, Uint2, Int4, or Uint4)
+	// when the variable is stored bit-packed in Uint8.
+	PackedDType dtypes.DType
 }
 
 // ToGraph converts the variable-level Quantization metadata into a graph.Quantization
@@ -107,6 +112,7 @@ func (q *Quantization) ToGraph(g *Graph) *graph.Quantization {
 		BlockAxis:      q.BlockAxis,
 		BlockSize:      q.BlockSize,
 		QuantizedDType: q.QuantizedDType,
+		PackedDType:    q.PackedDType,
 	}
 	if q.Scale != nil {
 		gq.Scale = q.Scale.NodeValue(g)

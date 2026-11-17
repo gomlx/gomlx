@@ -31,7 +31,7 @@ import (
 //     (XQuantization == nil), float ZeroPoint values are subtracted directly in Float32 without integer rounding.
 //   - Scalar [] / [1] and 1D [N] Scale/ZeroPoint nodes can be passed directly without [K, NumBlocks] broadcasts.
 type Quantization struct {
-	// Scheme: QuantLinear, QuantNF4, or QuantGGML.
+	// Scheme: QuantNone, QuantLinear, QuantNF4, or QuantGGML.
 	Scheme compute.QuantizationScheme
 
 	// Scale is the multiplicative scale factor (Float32 / Float16 / BFloat16).
@@ -39,12 +39,12 @@ type Quantization struct {
 	//   - Scalar [] or [1]: per-tensor scale.
 	//   - 1D [D_other]: per-channel scale along the non-contracting axis (e.g. [N] for weights, [M] for x).
 	//   - 2D [ceil(D0/BlockSize), D1] when BlockAxis == 0, or [D0, ceil(D1/BlockSize)] when BlockAxis == 1.
-	// Nil for QuantGGML (scales are embedded in the blocks).
+	// Nil for QuantNone and QuantGGML (scales are embedded in the blocks).
 	Scale *Node
 
 	// ZeroPoint is the optional zero-point subtracted BEFORE multiplying by Scale (only for QuantLinear).
 	// Must be broadcast-compatible with Scale's shape. Nil means symmetric quantization (zero_point = 0).
-	// Unused for QuantGGML and QuantNF4.
+	// Unused for QuantNone, QuantGGML, and QuantNF4.
 	ZeroPoint *Node
 
 	// BlockAxis is the axis of the quantized tensor partitioned into blocks of size BlockSize
@@ -63,6 +63,10 @@ type Quantization struct {
 	// QuantizedDType optionally specifies the target quantized output dtype (Int8 or Uint8)
 	// when used as OutputQuantization and ZeroPoint is nil or float.
 	QuantizedDType dtypes.DType
+
+	// PackedDType optionally specifies the logical sub-byte integer dtype (Int2, Uint2, Int4, or Uint4)
+	// when the primary quantized tensor is stored bit-packed in Uint8 (shape [vocabSize, K/vpb]).
+	PackedDType dtypes.DType
 }
 
 // toBackend converts the graph-level Quantization to a compute.Quantization
@@ -77,6 +81,7 @@ func (q *Quantization) toBackend() *compute.Quantization {
 		BlockSize:      q.BlockSize,
 		GGMLType:       q.GGMLType,
 		QuantizedDType: q.QuantizedDType,
+		PackedDType:    q.PackedDType,
 	}
 	if q.Scale != nil {
 		bq.Scale = q.Scale.outputOps[0]
@@ -120,8 +125,8 @@ func (q *Quantization) String() string {
 	if q == nil {
 		return "nil"
 	}
-	return fmt.Sprintf("{Scheme:%s Scale:%s ZeroPoint:%s BlockAxis:%d BlockSize:%d GGMLType:%s QuantizedDType:%s}",
-		q.Scheme, strNillableNode(q.Scale), strNillableNode(q.ZeroPoint), q.BlockAxis, q.BlockSize, q.GGMLType, q.QuantizedDType)
+	return fmt.Sprintf("{Scheme:%s Scale:%s ZeroPoint:%s BlockAxis:%d BlockSize:%d GGMLType:%s QuantizedDType:%s PackedDType:%s}",
+		q.Scheme, strNillableNode(q.Scale), strNillableNode(q.ZeroPoint), q.BlockAxis, q.BlockSize, q.GGMLType, q.QuantizedDType, q.PackedDType)
 }
 
 // QuantizedDenseConfig holds configuration and quantization metadata for BackendFusedQuantizedDense,
@@ -815,7 +820,7 @@ func (ni *nodeInputsQuantizedGather) CloneWithInputs(originalNode *Node, newInpu
 // unpacking / dequantization.
 // Internal: prefer nn.QuantizedGather which handles fallback and gradients.
 func BackendQuantizedGather(x, indices *Node, tq *Quantization) *Node {
-	if tq != nil && tq.Scale == nil && tq.Scheme != compute.QuantGGML {
+	if tq != nil && tq.Scale == nil && tq.Scheme != compute.QuantGGML && tq.Scheme != compute.QuantNone {
 		exceptions.Panicf("BackendQuantizedGather: Scale must not be nil for scheme %s", tq.Scheme)
 	}
 

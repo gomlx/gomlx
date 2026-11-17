@@ -147,6 +147,7 @@ func quantizationToShapes(q *Quantization) *shapeinference.QuantizationShapes {
 		BlockSize:      q.BlockSize,
 		GGMLType:       q.GGMLType,
 		QuantizedDType: q.QuantizedDType,
+		PackedDType:    q.PackedDType,
 	}
 	if q.Scale != nil {
 		qs.Scale = q.Scale.Shape()

@@ -335,10 +335,17 @@ func (b *DenseBuilder) Done() *Node {
 // If the "embeddings" variable in `scope` already exists with quantization metadata
 // (see [model.Variable.WithQuantization]) or has a packed sub-byte dtype (Int2, Uint2, Int4, Uint4),
 // it automatically dispatches to [nn.QuantizedGather] to unpack/dequantize only the selected token
-// rows on-the-fly. When the variable has a sub-byte dtype without quantization metadata (or `dtype`
-// itself is sub-byte), [nn.QuantizedGather] unpacks the gathered rows to Int8 (signed) or Uint8
-// (unsigned) as the output dtype (converting further only if `dtype` is a non-sub-byte dtype such
-// as Float32).
+// rows on-the-fly. When the variable has a sub-byte dtype (or uses packed Uint8 storage with
+// PackedDType on backends without native sub-byte DTypes) without scale/dequantization metadata,
+// [nn.QuantizedGather] unpacks the gathered rows to Int8 (signed) or Uint8 (unsigned) as the
+// output dtype (converting further only if `dtype` is a non-sub-byte dtype such as Float32).
+//
+// When creating a new "embeddings" variable with a sub-byte `dtype` (`Int2`, `Uint2`, `Int4`, `Uint4`)
+// on a backend that does not advertise support for `dtype` in `Capabilities().DTypes`, `Embedding`
+// stores the variable bit-packed in `Uint8` with shape `[vocabSize, dimension/ValuesPerStorageUnit]`
+// (requiring `dimension` to be a multiple of `ValuesPerStorageUnit`) and attaches
+// `&model.Quantization{Scheme: compute.QuantNone, PackedDType: dtype}` so [nn.QuantizedGather]
+// still gathers and unpacks only the requested rows.
 //
 // It then converts each integer value of the input to an embedding of the given dimension size.
 // The input must have an integer dtype, and the last dimension must be of size 1. If it's not
@@ -386,10 +393,25 @@ func Embedding(scope *model.Scope, input *Node, dtype dtypes.DType, vocabSize, d
 			return ConvertDType(res, dtype)
 		}
 	}
-	embeddingTable := scope.VariableWithShape("embeddings", shapes.Make(dtype, vocabSize, dimension))
 	if dtype.IsPacked() {
-		return nn.QuantizedGather(embeddingTable.NodeValue(g), input, nil)
+		backend := g.Backend()
+		if backend != nil && !backend.Capabilities().DTypes[dtype] {
+			vpb := dtype.ValuesPerStorageUnit()
+			if dimension%vpb != 0 {
+				Panicf("Embedding: sub-byte dtype %s on backend %q (which does not support %s) requires dimension (%d) to be divisible by %d",
+					dtype, backend.Name(), dtype, dimension, vpb)
+			}
+			embeddingTable := scope.VariableWithShape("embeddings", shapes.Make(dtypes.Uint8, vocabSize, dimension/vpb)).
+				WithQuantization(&model.Quantization{
+					Scheme:      compute.QuantNone,
+					PackedDType: dtype,
+				})
+			return nn.QuantizedGather(embeddingTable.NodeValue(g), input, embeddingTable.Quantization().ToGraph(g))
+		}
+		embeddingTable := scope.VariableWithShape("embeddings", shapes.Make(dtype, vocabSize, dimension))
+		return nn.QuantizedGather(embeddingTable.NodeValue(g), input, &Quantization{Scheme: compute.QuantNone})
 	}
+	embeddingTable := scope.VariableWithShape("embeddings", shapes.Make(dtype, vocabSize, dimension))
 	return Gather(embeddingTable.NodeValue(g), input, indicesAreSorted...)
 }
 
