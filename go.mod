@@ -7,10 +7,10 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/erkkah/margaid v0.3.0
 	github.com/gomlx/bsplines v0.2.0
-	github.com/gomlx/compute v0.1.31-0.20261117092918-cc5241a459d5
-	github.com/gomlx/compute-onnx v0.1.31-0.20261117072214-c05a54da5738
-	github.com/gomlx/go-darwinml v0.1.8-0.20261117072231-d3d395c9bfad
-	github.com/gomlx/go-xla v0.4.31-0.20261117071839-c863cf45a190
+	github.com/gomlx/compute v0.1.31-0.20261117105406-e9568581fb4c
+	github.com/gomlx/compute-onnx v0.1.31-0.20261117105755-ddab20349894
+	github.com/gomlx/go-darwinml v0.1.8-0.20261117105800-feb37d05242a
+	github.com/gomlx/go-xla v0.4.31-0.20261117105804-7650c7bbac6b
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.5
