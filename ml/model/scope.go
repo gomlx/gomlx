@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/core/autodiff"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/internal/scoped"
 	. "github.com/gomlx/gomlx/support/exceptions"
@@ -472,5 +472,5 @@ func (s *Scope) BuildTrainableVariablesGradientsGraph(loss *Node) []*Node {
 			trainableVars = append(trainableVars, v.NodeValue(g))
 		}
 	}
-	return graph.Gradient(loss, trainableVars...)
+	return autodiff.Gradient(loss, trainableVars...)
 }

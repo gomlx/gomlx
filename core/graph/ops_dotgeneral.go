@@ -7,8 +7,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
-	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/compute/support/xslices"
+	"github.com/gomlx/gomlx/internal/graphimpl"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/sets"
 	"github.com/pkg/errors"
@@ -140,8 +139,8 @@ func (b *DotBuilder) General(
 
 	var output *Node
 	err := exceptions.TryCatch[error](func() {
-		output = backendDotGeneral(b.lhs, lhsContractingAxes, lhsBatchAxes, b.rhs, rhsContractingAxes, rhsBatchAxes,
-			b.config)
+		output = wrapNode(graphimpl.BackendDotGeneral(unwrapNode(b.lhs), lhsContractingAxes, lhsBatchAxes, unwrapNode(b.rhs), rhsContractingAxes, rhsBatchAxes,
+			b.config))
 	})
 	if err == nil {
 		return output
@@ -151,9 +150,9 @@ func (b *DotBuilder) General(
 	}
 
 	lhs, rhs := b.lhs, b.rhs
-	output = backendDotGeneral(
-		lhs, lhsContractingAxes, lhsBatchAxes, rhs, rhsContractingAxes, rhsBatchAxes,
-		b.config)
+	output = wrapNode(graphimpl.BackendDotGeneral(
+		unwrapNode(lhs), lhsContractingAxes, lhsBatchAxes, unwrapNode(rhs), rhsContractingAxes, rhsBatchAxes,
+		b.config))
 	return output
 }
 
@@ -653,143 +652,4 @@ func (b *DotBuilder) EinsumAxes(contractingAxes, batchAxes [][2]int) (output *No
 
 	// Execute DotGeneral with parameters.
 	return b.General(lhsContractingAxes, lhsBatchAxes, rhsContractingAxes, rhsBatchAxes)
-}
-
-// crossAxes list all axes not included in contracting or batch: these are the dimensions that DotGeneral
-// will do a "cross" (combine all variations for the lhs and rhs, effectively concatenating the dimensions).
-func dotCrossAxes(input *Node, contractingAxes, batchAxes []int) (crossAxes []int) {
-	rank := input.Rank()
-	used := make([]bool, rank)
-	for _, axis := range contractingAxes {
-		used[axis] = true
-	}
-	for _, axis := range batchAxes {
-		used[axis] = true
-	}
-
-	crossAxes = make([]int, 0, rank-len(contractingAxes)-len(batchAxes))
-	for ii := range used {
-		if !used[ii] {
-			crossAxes = append(crossAxes, ii)
-		}
-	}
-	return
-}
-
-// dotGeneralVJP generates the gradient with respect to the lhs (left-hand-side) and rhs (right-hand-side) operands.
-func dotGeneralVJP(node, v *Node, _ shapes.Shape) []*Node {
-	params := node.inputs.(*nodeInputsDotGeneral)
-	lhs, rhs := params.lhs, params.rhs
-	lhsCrossAxes := dotCrossAxes(lhs, params.lhsContractingAxes, params.lhsBatchAxes)
-	rhsCrossAxes := dotCrossAxes(rhs, params.rhsContractingAxes, params.rhsBatchAxes)
-
-	// Identify in which DType to do the calculations:
-	// 1. If AccumulatorDType is given, use it.
-	// 2. If OutputDType is given, use it (assumed higher precision than input).
-	// 3. Else use v.DType() (which should be the output type of the forward operation).
-	computationDType := v.DType()
-	if params.config.AccumulatorDType != dtypes.InvalidDType {
-		computationDType = params.config.AccumulatorDType
-	} else if params.config.OutputDType != dtypes.InvalidDType {
-		computationDType = params.config.OutputDType
-	}
-
-	// Gradient with respect to lhs:
-	gradFn := func(thisInput *Node, thisBatchAxes, thisContractingAxes, thisCrossAxes []int, thisCrossesFirst bool,
-		otherInput *Node, otherBatchAxes, otherContractingAxes, otherCrossAxes []int) *Node {
-		_ = thisInput
-		// Axes counts:
-		numBatchAxes := len(thisBatchAxes)             // == len(otherBatchAxes)
-		numContractionAxes := len(thisContractingAxes) // == len(otherContractingAxes)
-
-		// Build the gradient w.r.t. "this" by contracting the "other" operand's cross (free) axes against
-		// the matching axes of v. When "other" has cross axes (the common matmul case), express it as a
-		// DotGeneral so XLA lowers it to a tensor-core gemm: the mathematically identical broadcast-Mul +
-		// ReduceSum (the else branch, the original implementation) is otherwise left by XLA as a CUDA-core
-		// reduction for weight-gradient shapes (small output, large reduced axis), ~18x slower. The else
-		// branch still handles the cases a DotGeneral cannot (no cross axes, e.g. a vector dot product).
-		// Both branches yield [batch_dims..., this_cross_dims..., contracted_dims...], so the transpose-
-		// back below is unchanged.
-		var thisVJP *Node
-		if len(otherCrossAxes) > 0 {
-			vv := v
-			if vv.DType() != computationDType {
-				vv = ConvertDType(vv, computationDType)
-			}
-			oo := otherInput
-			if oo.DType() != computationDType {
-				oo = ConvertDType(oo, computationDType)
-			}
-			// v's layout is [batch_dims..., lhs_cross_dims..., rhs_cross_dims...]; the axes matching
-			// "other"'s cross axes start after the batch axes (and after "this"'s cross axes when those
-			// come first in v, i.e. when "this" is the lhs).
-			vOtherCrossStart := numBatchAxes
-			if thisCrossesFirst {
-				vOtherCrossStart += len(thisCrossAxes)
-			}
-			thisVJP = DotGeneral(
-				vv, xslices.Iota(vOtherCrossStart, len(otherCrossAxes)), xslices.Iota(0, numBatchAxes),
-				oo, otherCrossAxes, otherBatchAxes)
-		} else {
-			// No "other" cross axes to contract: the gradient is a plain broadcast-multiply (no reduction).
-			thisVJP = v
-			if thisVJP.DType() != computationDType {
-				thisVJP = ConvertDType(thisVJP, computationDType)
-			}
-			if numContractionAxes > 0 {
-				thisVJP = InsertAxes(thisVJP, xslices.SliceWithValue(numContractionAxes, -1)...)
-			}
-			otherProjected := otherInput
-			if otherProjected.DType() != computationDType {
-				otherProjected = ConvertDType(otherProjected, computationDType)
-			}
-			otherRank := otherProjected.Rank()
-			permutations := make([]int, 0, otherRank)
-			permutations = append(permutations, otherBatchAxes...)
-			permutations = append(permutations, otherCrossAxes...)
-			permutations = append(permutations, otherContractingAxes...)
-			changed := false
-			for ii, axis := range permutations {
-				if ii != axis {
-					changed = true
-				}
-			}
-			if changed {
-				otherProjected = TransposeAllAxes(otherProjected, permutations...)
-			}
-			if len(thisCrossAxes) > 0 {
-				pos := numBatchAxes
-				if !thisCrossesFirst {
-					pos += len(otherCrossAxes)
-				}
-				otherProjected = InsertAxes(otherProjected, xslices.SliceWithValue(len(thisCrossAxes), pos)...)
-			}
-			thisVJP = Mul(thisVJP, otherProjected)
-		}
-
-		// * Transpose thisVJP axes back to its inputNodes.
-		thisRank := thisVJP.Rank()
-		{
-			permutation := make([]int, thisRank)
-			for ii, axis := range thisBatchAxes {
-				permutation[axis] = ii
-			}
-			for ii, axis := range thisCrossAxes {
-				permutation[axis] = ii + numBatchAxes
-			}
-			for ii, axis := range thisContractingAxes {
-				permutation[axis] = ii + numBatchAxes + len(thisCrossAxes)
-			}
-			thisVJP = TransposeAllAxes(thisVJP, permutation...)
-		}
-		if thisVJP.DType() != thisInput.DType() {
-			thisVJP = ConvertDType(thisVJP, thisInput.DType())
-		}
-		return thisVJP
-	}
-
-	return []*Node{
-		gradFn(lhs, params.lhsBatchAxes, params.lhsContractingAxes, lhsCrossAxes, true, rhs, params.rhsBatchAxes, params.rhsContractingAxes, rhsCrossAxes),  // grad wrt lhs
-		gradFn(rhs, params.rhsBatchAxes, params.rhsContractingAxes, rhsCrossAxes, false, lhs, params.lhsBatchAxes, params.lhsContractingAxes, lhsCrossAxes), // grad wrt rhs
-	}
 }

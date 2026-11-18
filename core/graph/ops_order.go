@@ -6,63 +6,9 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/internal/graphimpl"
 	"github.com/gomlx/gomlx/support/exceptions"
-	"github.com/pkg/errors"
 )
-
-const NodeTypeSort NodeType = 1001
-
-// nodeInputsSort holds the inputs for a Sort operation.
-type nodeInputsSort struct {
-	comparator *Function
-	axis       int
-	isStable   bool
-	inputs     []*Node
-}
-
-// Type implements NodeInputs.
-func (ni *nodeInputsSort) Type() NodeType { return NodeTypeSort }
-
-// String implements NodeInputs.
-func (ni *nodeInputsSort) String() string {
-	return "Sort"
-}
-
-// CloneWithInputs implements the interface NodeInputs.
-func (ni *nodeInputsSort) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
-	g := originalNode.Graph()
-	// Convert inputs to backend values
-	inputValues := make([]compute.Value, len(newInputs))
-	for i, input := range newInputs {
-		inputValues[i] = input.outputOps[0]
-	}
-	results, err := g.currentFunc.backendFunc.Sort(ni.comparator.backendFunc, ni.axis, ni.isStable, inputValues...)
-	if err != nil {
-		panic(errors.WithMessagef(err, "SortFunc operation failed"))
-	}
-	newNi := &nodeInputsSort{
-		comparator: ni.comparator,
-		axis:       ni.axis,
-		isStable:   ni.isStable,
-		inputs:     newInputs,
-	}
-	outputShapes := make([]shapes.Shape, len(results))
-	outputOps := make([]compute.Value, len(results))
-	for i, res := range results {
-		outputShapes[i] = mustNoError(g.builder.OpShape(res))
-		outputOps[i] = res
-	}
-	node := &Node{
-		graph:        g,
-		outputOps:    outputOps,
-		outputShapes: outputShapes,
-		inputs:       newNi,
-		inputNodes:   newInputs,
-		scope:        g.currentFunc,
-	}
-	g.registerNode(node)
-	return node
-}
 
 // Sort sorts a single tensor along the specified axis.
 //
@@ -81,11 +27,10 @@ func (ni *nodeInputsSort) CloneWithInputs(originalNode *Node, newInputs ...*Node
 //	x := Const(g, []float32{5, 2, 8, 1, 9, 3})
 //	sorted := Sort(x, 0, true)  // Returns [1, 2, 3, 5, 8, 9]
 func Sort(input *Node, axis int, ascending bool) *Node {
-	g := input.graph
-	g.AssertBuilding()
+	g := validateBuildingGraphFromInputs(input)
 	dtype := input.Shape().DType
 
-	// Create a simple comparator closure
+	// Create a simple comparator closure.
 	comparator := NewClosure(g, func(g *Graph) []*Node {
 		lhs := Parameter(g, "lhs", shapes.Make(dtype))
 		rhs := Parameter(g, "rhs", shapes.Make(dtype))
@@ -137,68 +82,7 @@ func Sort(input *Node, axis int, ascending bool) *Node {
 //
 // Returns the sorted tensors in the same order as inputs.
 func SortFunc(comparator *Function, axis int, isStable bool, inputs ...*Node) []*Node {
-	if len(inputs) == 0 {
-		exceptions.Panicf("SortFunc requires at least one input tensor")
-	}
-	if comparator == nil {
-		exceptions.Panicf("SortFunc requires a comparator function")
-	}
-	if !comparator.IsClosure() {
-		exceptions.Panicf("SortFunc comparator must be a closure (created with NewClosure)")
-	}
-
-	g := inputs[0].graph
-	g.AssertBuilding()
-	validateBuildingGraphFromInputs(inputs...)
-
-	// Verify all inputs have the same dimensions (dtype can differ)
-	shape := inputs[0].Shape()
-	for i, input := range inputs[1:] {
-		if !input.Shape().EqualDimensions(shape) {
-			exceptions.Panicf("SortFunc: all inputs must have the same dimensions, input 0 has %s, input %d has %s",
-				shape, i+1, input.Shape())
-		}
-	}
-	axis = MustAdjustAxis(axis, inputs[0])
-
-	// Convert inputs to backend values
-	inputValues := make([]compute.Value, len(inputs))
-	for i, input := range inputs {
-		inputValues[i] = input.outputOps[0]
-	}
-
-	// Call backend Sort
-	results, err := g.currentFunc.backendFunc.Sort(comparator.backendFunc, axis, isStable, inputValues...)
-	if err != nil {
-		panic(errors.WithMessagef(err, "SortFunc operation failed"))
-	}
-
-	// Create output nodes
-	ni := &nodeInputsSort{
-		comparator: comparator,
-		axis:       axis,
-		isStable:   isStable,
-		inputs:     inputs,
-	}
-
-	outputShapes := make([]shapes.Shape, len(results))
-	outputOps := make([]compute.Value, len(results))
-	for i, res := range results {
-		outputShapes[i] = mustNoError(g.builder.OpShape(res))
-		outputOps[i] = res
-	}
-
-	node := &Node{
-		graph:        g,
-		outputOps:    outputOps,
-		outputShapes: outputShapes,
-		inputs:       ni,
-		inputNodes:   inputs,
-		scope:        g.currentFunc,
-	}
-	g.registerNode(node)
-
-	return splitNode(node)
+	return wrapNodes(graphimpl.SortFunc(unwrapFunction(comparator), axis, isStable, unwrapNodes(inputs)...))
 }
 
 // TopK returns the top K largest elements and their indices along the specified axis.
@@ -255,8 +139,8 @@ func BottomK(x *Node, k int, axis int) (values, indices *Node) {
 
 // topKImpl is the shared implementation for TopK and BottomK.
 func topKImpl(x *Node, k int, axis int, ascending bool) (values, indices *Node) {
-	g := x.graph
-	g.AssertBuilding()
+	g := x.Graph()
+	g.impl.AssertBuilding()
 
 	shape := x.Shape()
 	rank := x.Rank()
@@ -272,15 +156,15 @@ func topKImpl(x *Node, k int, axis int, ascending bool) (values, indices *Node) 
 		exceptions.Panicf("TopK/BottomK: k=%d exceeds axis size %d", k, axisSize)
 	}
 
-	outputs, _ := InternalFusedOpCallerMulti(
-		func() []*Node {
-			v, idx := BackendFusedTopK(x, k, compute.FusedTopKConfig{
+	outputs, _ := graphimpl.FusedOpCallerMulti(
+		func() []*graphimpl.NodeImpl {
+			v, idx := graphimpl.BackendFusedTopK(unwrapNode(x), k, compute.FusedTopKConfig{
 				Axis:     axis,
 				Smallest: ascending,
 			})
-			return []*Node{v, idx}
+			return []*graphimpl.NodeImpl{v, idx}
 		},
-		func() []*Node {
+		func() []*graphimpl.NodeImpl {
 			// Create indices tensor using IotaLike along the sort axis.
 			// Indices will have Int32 dtype.
 			indicesInput := ConvertDType(IotaLike(x, axis), dtypes.Int32)
@@ -306,11 +190,14 @@ func topKImpl(x *Node, k int, axis int, ascending bool) (values, indices *Node) 
 
 			// Register VJP on the underlying Sort node so reverse-mode autodiff works
 			// identically on backends that decompose TopK/BottomK via SortFunc (e.g., XLA).
-			sortNode := sortedValues.inputNodes[0]
-			sortNode.customVJP = func(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
-				splitOutputs := splitNode(node)
-				return []*Node{scatterAlongAxis(node.inputNodes[0], splitOutputs[1], vjps[0], axis), nil}
-			}
+			sortNode := sortedValues.impl.Inputs()[0]
+			sortNode.SetCustomVJP(func(node *graphimpl.NodeImpl, vjps []*graphimpl.NodeImpl, _ shapes.Shape) []*graphimpl.NodeImpl {
+				splitOutputs := wrapNodes(graphimpl.SplitNode(node))
+				return []*graphimpl.NodeImpl{
+					unwrapNode(scatterAlongAxis(wrapNode(node.Inputs()[0]), splitOutputs[1], wrapNode(vjps[0]), axis)),
+					nil,
+				}
+			})
 
 			// Slice the first K elements along the sort axis.
 			sliceSpecs := make([]SliceAxisSpec, rank)
@@ -322,18 +209,19 @@ func topKImpl(x *Node, k int, axis int, ascending bool) (values, indices *Node) 
 				}
 			}
 
-			return []*Node{
+			return unwrapNodes([]*Node{
 				Slice(sortedValues, sliceSpecs...),
 				Slice(sortedIndices, sliceSpecs...),
-			}
+			})
 		},
 		false, // useDecomposedAlternateVJP = false: FusedTopK has its own VJP, and decomposed SortFunc requires closures.
 	)
-	return outputs[0], outputs[1]
+	wrapped := wrapNodes(outputs)
+	return wrapped[0], wrapped[1]
 }
 
 // scatterAlongAxis scatters updates into ZerosLike(operand) at positions given by indices along axis.
-// Used by fusedTopKVJP and decomposed TopK/BottomK VJP, where indices along axis are unique.
+// Used by decomposed TopK/BottomK VJP, where indices along axis are unique.
 func scatterAlongAxis(operand, indices, updates *Node, axis int) *Node {
 	rank := operand.Rank()
 	axis = MustAdjustAxis(axis, operand)
@@ -348,16 +236,6 @@ func scatterAlongAxis(operand, indices, updates *Node, axis int) *Node {
 	}
 	coords := Stack(coordParts, -1)
 	return ScatterSum(ZerosLike(operand), coords, updates, false, true)
-}
-
-// fusedTopKVJP is the registered VJP for NodeTypeFusedTopK.
-// It routes incoming gradients for the selected k values back to their original indices along cfg.Axis.
-func fusedTopKVJP(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
-	inputs := node.inputs.(*nodeInputsFusedTopK)
-	splitOutputs := splitNode(node)
-	indices := splitOutputs[1]
-	axis := MustAdjustAxis(inputs.cfg.Axis, inputs.operand)
-	return []*Node{scatterAlongAxis(inputs.operand, indices, vjps[0], axis)}
 }
 
 // TopKMask returns a boolean mask of the top-k elements along the specified axis.
@@ -381,8 +259,8 @@ func fusedTopKVJP(node *Node, vjps []*Node, _ shapes.Shape) []*Node {
 //	mask := TopKMask(x, 3, 0)
 //	// mask = [false, false, false, false, true, true, false, true]
 func TopKMask(x *Node, k int, axis int) *Node {
-	g := x.graph
-	g.AssertBuilding()
+	g := x.Graph()
+	g.impl.AssertBuilding()
 
 	shape := x.Shape()
 	axis = MustAdjustAxis(axis, x)

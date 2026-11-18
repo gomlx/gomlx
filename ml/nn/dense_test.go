@@ -8,6 +8,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/support/xslices"
 	_ "github.com/gomlx/gomlx/backends/default"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/ml/layers/activation"
@@ -25,7 +26,7 @@ func TestDense(t *testing.T) {
 				bias := Const(g, []float32{3, 4})
 				y := nn.Dense(x, w, bias, compute.DenseLayoutInputOutputs)
 				loss := ReduceAllSum(y)
-				grads := Gradient(loss, x, w, bias)
+				grads := autodiff.Gradient(loss, x, w, bias)
 				return []*Node{x, w, bias}, append([]*Node{loss}, grads...)
 			}, []any{
 				float32(10.0),
@@ -49,7 +50,7 @@ func TestDense(t *testing.T) {
 				// d(loss)/dbias = [1, 0]
 				y := nn.Dense(x, w, bias, compute.DenseLayoutInputOutputs, activation.TypeRelu)
 				loss := ReduceAllSum(y)
-				grads := Gradient(loss, x, w, bias)
+				grads := autodiff.Gradient(loss, x, w, bias)
 				return []*Node{x, w, bias}, append([]*Node{loss}, grads...)
 			}, []any{
 				float32(1.0),
@@ -68,7 +69,7 @@ func TestDense(t *testing.T) {
 				// Gelu([1, 0]) ≈ [0.8413447, 0]
 				y := nn.Dense(x, w, bias, compute.DenseLayoutInputOutputs, activation.TypeGelu)
 				loss := ReduceAllSum(y)
-				grads := Gradient(loss, x, w, bias)
+				grads := autodiff.Gradient(loss, x, w, bias)
 				return []*Node{x, w, bias}, append([]*Node{loss}, grads...)
 			}, []any{
 				float32(0.8413447),
@@ -84,7 +85,7 @@ func TestDense(t *testing.T) {
 				w := Const(g, [][]float32{{1, 0}, {0, 1}})
 				y := nn.Dense(x, w, nil, compute.DenseLayoutInputOutputs)
 				loss := ReduceAllSum(y)
-				grads := Gradient(loss, x, w)
+				grads := autodiff.Gradient(loss, x, w)
 				return []*Node{x, w}, append([]*Node{loss}, grads...)
 			}, []any{
 				float32(3.0),

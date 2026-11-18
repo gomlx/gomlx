@@ -1,4 +1,6 @@
-package graph
+// Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
+
+package graphimpl
 
 import (
 	"testing"
@@ -9,24 +11,24 @@ import (
 func TestInnermostFunction(t *testing.T) {
 	// We use a nil backend and builder because we are only testing the scope logic,
 	// which doesn't depend on the backend for this unit test.
-	g := &Graph{name: "test_graph"}
-	g.mainFunc = &Function{name: "main", graph: g}
+	g := &GraphImpl{name: "test_graph"}
+	g.mainFunc = &FunctionImpl{name: "main", graph: g}
 	g.currentFunc = g.mainFunc
 
 	// Create a hierarchy of functions
 	// main -> sub1 -> sub2
-	sub1 := &Function{name: "sub1", parent: g.mainFunc, graph: g}
-	sub2 := &Function{name: "sub2", parent: sub1, graph: g}
+	sub1 := &FunctionImpl{name: "sub1", parent: g.mainFunc, graph: g}
+	sub2 := &FunctionImpl{name: "sub2", parent: sub1, graph: g}
 
 	// disjoint function
 	// main -> other1
-	other1 := &Function{name: "other1", parent: g.mainFunc, graph: g}
+	other1 := &FunctionImpl{name: "other1", parent: g.mainFunc, graph: g}
 
-	createNode := func(scope *Function) *Node {
+	createNode := func(scope *FunctionImpl) *NodeImpl {
 		if scope == nil {
 			scope = g.mainFunc
 		}
-		return &Node{graph: g, scope: scope}
+		return &NodeImpl{graph: g, scope: scope}
 	}
 
 	t.Run("Empty inputs", func(t *testing.T) {
@@ -37,7 +39,7 @@ func TestInnermostFunction(t *testing.T) {
 
 	t.Run("Single input main scope", func(t *testing.T) {
 		n1 := createNode(g.mainFunc)
-		scope, err := innermostFunction([]*Node{n1})
+		scope, err := innermostFunction([]*NodeImpl{n1})
 		assert.NoError(t, err)
 		assert.Equal(t, g.mainFunc, scope)
 	})
@@ -48,17 +50,17 @@ func TestInnermostFunction(t *testing.T) {
 		nSub2 := createNode(sub2)
 
 		// inputs: [main, sub1] -> deepest is sub1
-		scope, err := innermostFunction([]*Node{nMain, nSub1})
+		scope, err := innermostFunction([]*NodeImpl{nMain, nSub1})
 		assert.NoError(t, err)
 		assert.Equal(t, sub1, scope)
 
 		// inputs: [sub1, main] -> deepest is sub1 (order shouldn't matter)
-		scope, err = innermostFunction([]*Node{nSub1, nMain})
+		scope, err = innermostFunction([]*NodeImpl{nSub1, nMain})
 		assert.NoError(t, err)
 		assert.Equal(t, sub1, scope)
 
 		// inputs: [main, sub2, sub1] -> deepest is sub2
-		scope, err = innermostFunction([]*Node{nMain, nSub2, nSub1})
+		scope, err = innermostFunction([]*NodeImpl{nMain, nSub2, nSub1})
 		assert.NoError(t, err)
 		assert.Equal(t, sub2, scope)
 	})
@@ -68,19 +70,19 @@ func TestInnermostFunction(t *testing.T) {
 		nOther1 := createNode(other1)
 
 		// inputs: [sub1, other1] -> disjoint
-		_, err := innermostFunction([]*Node{nSub1, nOther1})
+		_, err := innermostFunction([]*NodeImpl{nSub1, nOther1})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "incompatible scopes")
 	})
 
 	t.Run("Nil node or scope", func(t *testing.T) {
 		n1 := createNode(g.mainFunc)
-		_, err := innermostFunction([]*Node{n1, nil})
+		_, err := innermostFunction([]*NodeImpl{n1, nil})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "is nil")
 
-		nNoScope := &Node{graph: g, scope: nil}
-		_, err = innermostFunction([]*Node{n1, nNoScope})
+		nNoScope := &NodeImpl{graph: g, scope: nil}
+		_, err = innermostFunction([]*NodeImpl{n1, nNoScope})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "nil scope")
 	})

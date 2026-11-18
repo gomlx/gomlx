@@ -16,9 +16,11 @@ import (
 	"github.com/gomlx/compute/dtypes/gotype"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/internal/graphimpl"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
@@ -165,9 +167,9 @@ func TestConstant(t *testing.T) {
 		g := NewGraph(backend, "")
 		var collected atomic.Bool
 		func() {
-			// Use > MinConstValueSizeToKeep elements so nodeInputs does not retain a clone, and
+			// Use > graphimpl.MinConstValueSizeToKeep elements so nodeInputs does not retain a clone, and
 			// register a cleanup on the ephemeral tensor to verify GC reclaims it while g is alive.
-			ephemeral := tensors.FromFlatDataAndDimensions(make([]float32, MinConstValueSizeToKeep+4), MinConstValueSizeToKeep+4)
+			ephemeral := tensors.FromFlatDataAndDimensions(make([]float32, graphimpl.MinConstValueSizeToKeep+4), graphimpl.MinConstValueSizeToKeep+4)
 			runtime.AddCleanup(ephemeral, func(done *atomic.Bool) {
 				done.Store(true)
 			}, &collected)
@@ -180,29 +182,6 @@ func TestConstant(t *testing.T) {
 		}
 		require.True(t, collected.Load(), "expected weak constant cache to allow tensor GC while Graph is alive")
 		g.Finalize()
-	}
-}
-
-func TestInternalConstBuffer(t *testing.T) {
-	backend := testutil.BuildTestBackend()
-	shape := shapes.Make(dtypes.Float32, 2, 2)
-
-	for _, donate := range []bool{false, true} {
-		g := NewGraph(backend, "")
-		buf, err := backend.BufferFromFlatData(0, []float32{1, 2, 3, 4}, shape)
-		require.NoError(t, err)
-		c := InternalConstBuffer(g, buf, donate)
-		p := Parameter(g, "x", shape)
-		out := Add(c, p)
-		require.NoError(t, g.Compile(out))
-
-		in := tensors.FromFlatDataAndDimensions([]float32{10, 20, 30, 40}, 2, 2)
-		got := g.Run(in)[0]
-		require.Equal(t, [][]float32{{11, 22}, {33, 44}}, got.Value())
-		g.Finalize()
-		if !donate {
-			require.NoError(t, buf.Finalize())
-		}
 	}
 }
 
@@ -361,10 +340,12 @@ func TestParameter(t *testing.T) {
 		err := g.Compile(g.LastNode())
 		require.NoError(t, err)
 
-		// Tests for various parameters.
+		// Tests for GetParam and positional execution.
+		require.Same(t, x, g.GetParam("x"))
+		require.Same(t, y, g.GetParam("y"))
 		for xV := float32(0); xV < 3; xV += 1 {
 			for yV := float32(0); yV < 3; yV += 1 {
-				gotTensor := g.RunWithMap(ParamsMap{x: xV, y: yV})[0]
+				gotTensor := g.Run(xV, yV)[0]
 				got := tensors.ToScalar[float32](gotTensor)
 				if got != xV+yV {
 					fmt.Printf("%s\n", g)
@@ -1113,7 +1094,7 @@ func TestPad(t *testing.T) {
 				padded := Pad(x, zero, PadAxis{Start: -1, End: -1})
 				weights := Const(g, []float32{2, 3, 4})
 				loss := ReduceAllSum(Mul(padded, weights))
-				gradX := Gradient(loss, x)[0]
+				gradX := autodiff.Gradient(loss, x)[0]
 				inputs = []*Node{x, zero}
 				outputs = []*Node{
 					padded,
@@ -1272,63 +1253,6 @@ func TestTranspose(t *testing.T) {
 			output = Transpose(input, 1, 2)
 			return
 		}, [][][]float32{{{0, 4}, {1, 5}, {2, 6}, {3, 7}}, {{8, 12}, {9, 13}, {10, 14}, {11, 15}}, {{16, 20}, {17, 21}, {18, 22}, {19, 23}}})
-}
-
-func TestInternalBatchNormForInference(t *testing.T) {
-	testFuncOneInputDefaultBackend(t, "BatchNormInference()",
-		func(g *Graph) (input, output *Node) {
-			input = Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on the batch axis.
-			scale := Const(g, []float32{1.0, 2.0, 3.0})
-			offset := Const(g, []float32{10.0, 100.0, 1000.0})
-			mean := Const(g, []float32{0.5, 0.5, 1.0})
-			variance := Const(g, []float32{1.0, 1.0, 10.0})
-			output = InternalBatchNormForInference(input, scale, offset, mean, variance, 1e-7, -1)
-			return
-		}, [][]float32{
-			{9.5, 99, 999.05133},
-			{10.5, 101, 1000},
-			{11.5, 103, 1000.94867},
-			{12.5, 105, 1001.8974},
-			{13.5, 107, 1002.84607},
-			{14.5, 109, 1003.79474},
-			{15.5, 111, 1004.7434},
-		})
-}
-
-func TestInternalBatchNormForTraining(t *testing.T) {
-	graphtest.RunTestGraphFn(t, "BatchNormInference()",
-		func(g *Graph) (inputs, outputs []*Node) {
-			input := Iota(g, MakeShape(dtypes.Float32, 7, 3), 0) // Values from 0.0 to 6.0 on the batch axis.
-			inputs = []*Node{input}
-			scale := Const(g, []float32{1.0, 2.0, 3.0})
-			offset := Const(g, []float32{10.0, 100.0, 1000.0})
-			normalized, batchMean, batchVariance := InternalBatchNormForTraining(input, scale, offset, 1e-7, -1)
-			normalized2 := InternalBatchNormForInference(input, scale, offset, batchMean, batchVariance, 1e-7, -1)
-			outputs = []*Node{normalized, normalized2, batchMean, batchVariance}
-
-			return
-		}, []any{
-			[][]float32{
-				{8.5, 97, 995.5},
-				{9, 98, 997},
-				{9.5, 99, 998.5},
-				{10, 100, 1000},
-				{10.5, 101, 1001.5},
-				{11, 102, 1003},
-				{11.5, 103, 1004.5},
-			},
-			[][]float32{
-				{8.5, 97, 995.5},
-				{9, 98, 997},
-				{9.5, 99, 998.5},
-				{10, 100, 1000},
-				{10.5, 101, 1001.5},
-				{11, 102, 1003},
-				{11.5, 103, 1004.5},
-			},
-			[]float32{3, 3, 3}, // Mean = (0+1+2+3+4+5+6) / 7 = 3
-			[]float32{4, 4, 4}, // ReduceVariance = (9+4+1+0+1+4+9) / 7 = 4
-		}, 1e-4)
 }
 
 func TestExpandAxes(t *testing.T) {

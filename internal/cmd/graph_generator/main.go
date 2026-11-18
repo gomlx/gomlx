@@ -19,11 +19,17 @@ import (
 	"k8s.io/klog/v2"
 )
 
+var flagPublic = flag.Bool("public", false, "Generate thin public wrappers in core/graph instead of internal/graphimpl.")
+
 func main() {
 	klog.InitFlags(nil)
 	flag.Parse()
 	klog.V(1).Info("graph_generator:")
 	methods := buildMethodInfo()
+	if *flagPublic {
+		GeneratePublicOps(methods)
+		return
+	}
 	GenerateBackendOps(methods)
 }
 
@@ -114,11 +120,13 @@ func buildMethodInfo() (methods []*MethodInfo) {
 		}
 		methods = append(methods, mi)
 		if !mi.Exported {
-			mi.GraphName = "backend" + name
+			mi.GraphName = "Backend" + name
 		}
 		for _, param := range raw.Parameters {
+			fieldName := strings.ToUpper(param.Name[:1]) + param.Name[1:]
 			pi := &ParameterInfo{
 				Name:        param.Name,
+				FieldName:   fieldName,
 				BackendType: param.Type,
 				Printable:   true,
 				IsVariadic:  strings.HasPrefix(param.Type, "..."),
@@ -127,44 +135,50 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			switch pi.BackendType {
 			case "Value":
 				pi.BackendType = "compute.Value"
-				pi.GraphType = "*Node"
+				pi.GraphType = "*NodeImpl"
+				pi.PublicType = "*Node"
+				pi.PublicArg = fmt.Sprintf("unwrapNode(%s)", param.Name)
 				if nillableParams.Has(name + "." + param.Name) {
 					pi.IsNillable = true
 					mi.NillableInputs = append(mi.NillableInputs, param.Name)
 					pi.ConvertStatement = fmt.Sprintf("%sVal", param.Name)
 					pi.Format = "%s"
-					pi.FormatValue = fmt.Sprintf("strNillableNode(ni.%s)", param.Name)
+					pi.FormatValue = fmt.Sprintf("strNillableNode(ni.%s)", fieldName)
 				} else {
 					pi.ConvertStatement = fmt.Sprintf("%s.outputOps[0]", param.Name)
 					mi.OpInputs = append(mi.OpInputs, param.Name)
 					pi.Format = "[#%d]"
-					pi.FormatValue = fmt.Sprintf("ni.%s.Id()", param.Name)
+					pi.FormatValue = fmt.Sprintf("ni.%s.Id()", fieldName)
 				}
 			case "...Value":
 				pi.BackendType = "...compute.Value"
-				pi.GraphType = "...*Node"
+				pi.GraphType = "...*NodeImpl"
+				pi.PublicType = "...*Node"
+				pi.PublicArg = fmt.Sprintf("unwrapNodes(%s)...", param.Name)
 				mi.OpInputSlices = append(mi.OpInputSlices, param.Name)
-				pi.NodeInputType = "[]*Node"
+				pi.NodeInputType = "[]*NodeImpl"
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
 				pi.ConvertStatement = fmt.Sprintf(
-					"xslices.Map(%s, func(node *Node) compute.Value { return node.outputOps[0] })...", param.Name)
+					"xslices.Map(%s, func(node *NodeImpl) compute.Value { return node.outputOps[0] })...", param.Name)
 				pi.Format = "[#%s]"
 				pi.FormatValue = fmt.Sprintf(
-					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
-					param.Name,
+					`strings.Join(xslices.Map(ni.%s, func (node *NodeImpl) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
+					fieldName,
 				)
 			case "[]Value":
 				pi.BackendType = "[]compute.Value"
-				pi.GraphType = "[]*Node"
+				pi.GraphType = "[]*NodeImpl"
+				pi.PublicType = "[]*Node"
+				pi.PublicArg = fmt.Sprintf("unwrapNodes(%s)", param.Name)
 				mi.OpInputSlices = append(mi.OpInputSlices, param.Name)
-				pi.NodeInputType = "[]*Node"
+				pi.NodeInputType = "[]*NodeImpl"
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
 				pi.ConvertStatement = fmt.Sprintf(
-					"xslices.Map(%s, func(node *Node) compute.Value { return node.outputOps[0] })", param.Name)
+					"xslices.Map(%s, func(node *NodeImpl) compute.Value { return node.outputOps[0] })", param.Name)
 				pi.Format = "[#%s]"
 				pi.FormatValue = fmt.Sprintf(
-					`strings.Join(xslices.Map(ni.%s, func (node *Node) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
-					param.Name,
+					`strings.Join(xslices.Map(ni.%s, func (node *NodeImpl) string { return fmt.Sprintf("#%%d", node.Id()) }), ", ")`,
+					fieldName,
 				)
 			case "ConvolveAxesConfig":
 				pi.BackendType = "compute." + pi.BackendType
@@ -177,7 +191,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.BackendType = "...compute." + pi.BackendType[3:]
 				pi.NodeInputType = "[]" + pi.BackendType[3:]
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
-				pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
+				pi.ConvertStatement = fmt.Sprintf("inputs.%s...", fieldName)
 				pi.Format = "%+v"
 			case "FFTType":
 				pi.BackendType = "compute." + pi.BackendType
@@ -231,7 +245,7 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.BackendType = "...compute." + pi.BackendType[3:]
 				pi.NodeInputType = "[]" + pi.BackendType[3:]
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
-				pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
+				pi.ConvertStatement = fmt.Sprintf("inputs.%s...", fieldName)
 				pi.Format = "%+v"
 			case "DynamicPadAxis":
 				pi.BackendType = "compute." + pi.BackendType
@@ -240,14 +254,14 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.BackendType = "...compute." + pi.BackendType[3:]
 				pi.NodeInputType = "[]" + pi.BackendType[3:]
 				pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
-				pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
+				pi.ConvertStatement = fmt.Sprintf("inputs.%s...", fieldName)
 				pi.Format = "%+v"
 			default:
 				switch {
 				case strings.HasPrefix(pi.BackendType, "..."):
 					pi.NodeInputType = "[]" + pi.BackendType[3:]
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
-					pi.ConvertStatement = fmt.Sprintf("inputs.%s...", param.Name)
+					pi.ConvertStatement = fmt.Sprintf("inputs.%s...", fieldName)
 				case strings.HasPrefix(pi.BackendType, "[]"):
 					pi.CopyStatement = fmt.Sprintf("slices.Clone(%s)", param.Name)
 				case strings.HasPrefix(pi.BackendType, "func"):
@@ -259,6 +273,15 @@ func buildMethodInfo() (methods []*MethodInfo) {
 			if pi.GraphType == "" {
 				pi.GraphType = pi.BackendType
 			}
+			if pi.PublicType == "" {
+				pi.PublicType = pi.GraphType
+			}
+			if pi.PublicArg == "" {
+				pi.PublicArg = pi.Name
+				if pi.IsVariadic {
+					pi.PublicArg += "..."
+				}
+			}
 			if pi.NodeInputType == "" {
 				pi.NodeInputType = pi.GraphType
 			}
@@ -266,13 +289,13 @@ func buildMethodInfo() (methods []*MethodInfo) {
 				pi.CopyStatement = pi.Name
 			}
 			if pi.ConvertStatement == "" {
-				pi.ConvertStatement = "inputs." + pi.Name
+				pi.ConvertStatement = "inputs." + fieldName
 			}
 			if pi.Format == "" {
 				pi.Format = "%v"
 			}
 			if pi.FormatValue == "" {
-				pi.FormatValue = "ni." + pi.Name
+				pi.FormatValue = "ni." + fieldName
 			}
 			mi.HasGraph = len(mi.OpInputSlices) == 0 && len(mi.OpInputs) == 0 && len(mi.NillableInputs) == 0
 		}
@@ -329,8 +352,9 @@ type MethodInfo struct {
 
 // ParameterInfo represents one parameter only.
 type ParameterInfo struct {
-	Name                                  string
+	Name, FieldName                       string
 	BackendType, GraphType, NodeInputType string
+	PublicType, PublicArg                 string
 	CopyStatement, ConvertStatement       string
 	Format, FormatValue                   string
 	Printable                             bool
@@ -340,13 +364,14 @@ type ParameterInfo struct {
 
 const (
 	computeOpsFile = "gen_compute_ops.go"
+	publicOpsFile  = "gen_public_ops.go"
 )
 
 var (
 	backendOpsTemplate = template.Must(template.New(computeOpsFile).Parse(`
-/***** File generated by ./cmd/graphs_codegen, based on compute.Builder interface. Don't edit it directly. *****/
+/***** File generated by ./internal/cmd/graph_generator, based on compute.Builder interface. Don't edit it directly. *****/
 
-package graph
+package graphimpl
 
 import (
 	"fmt"
@@ -359,8 +384,8 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 )
 
-// strNillableNode formats a nillable *Node for display.
-func strNillableNode(n *Node) string {
+// strNillableNode formats a nillable *NodeImpl for display.
+func strNillableNode(n *NodeImpl) string {
 	if n == nil {
 		return "nil"
 	}
@@ -381,20 +406,20 @@ const (
 
 {{- if not .Excluded}}
 
-// nodeInputs{{.BackendName}} holds the inputs used for the call to compute.{{.BackendName}}.
-type nodeInputs{{.BackendName}} struct {
+// NodeInputs{{.BackendName}} holds the inputs used for the call to compute.{{.BackendName}}.
+type NodeInputs{{.BackendName}} struct {
 	{{- range .Inputs}}
-	{{.Name}} {{.NodeInputType}}
+	{{.FieldName}} {{.NodeInputType}}
 	{{- end}}
 }
 
 // Type implements the interface NodeInputs.
-func (ni *nodeInputs{{.BackendName}}) Type() NodeType {
+func (ni *NodeInputs{{.BackendName}}) Type() NodeType {
 	return NodeType{{.BackendName}}
 }
 
 // String implements the interface NodeInputs.
-func (ni *nodeInputs{{.BackendName}}) String() string {
+func (ni *NodeInputs{{.BackendName}}) String() string {
 	return fmt.Sprintf("%s(
 {{- range $index, $input := .Inputs -}}
 	{{- if $input.Printable -}}
@@ -412,17 +437,17 @@ func (ni *nodeInputs{{.BackendName}}) String() string {
 }
 
 // CloneWithInputs implements the interface NodeInputs.
-func (ni *nodeInputs{{.BackendName}}) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
+func (ni *NodeInputs{{.BackendName}}) CloneWithInputs(originalNode *NodeImpl, newInputs ...*NodeImpl) *NodeImpl {
 	{{if .HasGraph -}}
-	return {{.GraphName}}(originalNode.Graph(), {{range .Inputs}}ni.{{.Name}}{{if .IsVariadic}}...{{end}}, {{end}})
+	return {{.GraphName}}(originalNode.Graph(), {{range .Inputs}}ni.{{.FieldName}}{{if .IsVariadic}}...{{end}}, {{end}})
 	{{- else -}}
 	// Reconstruct inputs from newInputs
 	idx := 0
 	{{- range .Inputs}}
-	{{- if eq .GraphType "*Node"}}
+	{{- if eq .GraphType "*NodeImpl"}}
 		{{- if .IsNillable}}
-		var new_{{.Name}} *Node
-		if ni.{{.Name}} != nil {
+		var new_{{.Name}} *NodeImpl
+		if ni.{{.FieldName}} != nil {
 			new_{{.Name}} = newInputs[idx]
 			idx++
 		}
@@ -430,29 +455,29 @@ func (ni *nodeInputs{{.BackendName}}) CloneWithInputs(originalNode *Node, newInp
 		new_{{.Name}} := newInputs[idx]
 		idx++
 		{{- end}}
-	{{- else if or (eq .GraphType "[]*Node") (eq .GraphType "...*Node") (eq .NodeInputType "[]*Node")}}
-		new_{{.Name}} := newInputs[idx : idx+len(ni.{{.Name}})]
-		idx += len(ni.{{.Name}})
+	{{- else if or (eq .GraphType "[]*NodeImpl") (eq .GraphType "...*NodeImpl") (eq .NodeInputType "[]*NodeImpl")}}
+		new_{{.Name}} := newInputs[idx : idx+len(ni.{{.FieldName}})]
+		idx += len(ni.{{.FieldName}})
 	{{- end}}
 	{{- end}}
 	{{- if .HasMultipleOutputs}}
-	{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{if eq $ii 0}}r0{{else}}_{{end}}{{end}} := {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*Node") (eq .GraphType "[]*Node") (eq .GraphType "...*Node") (eq .NodeInputType "[]*Node")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.Name}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
+	{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{if eq $ii 0}}r0{{else}}_{{end}}{{end}} := {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*NodeImpl") (eq .GraphType "[]*NodeImpl") (eq .GraphType "...*NodeImpl") (eq .NodeInputType "[]*NodeImpl")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.FieldName}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
 	return r0.inputNodes[0]
 	{{- else if .HasTrailingSlice}}
-	r0{{range $ii, $name := .ScalarOutputNames}}{{if $ii}}, _{{end}}{{end}}, _ := {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*Node") (eq .GraphType "[]*Node") (eq .GraphType "...*Node") (eq .NodeInputType "[]*Node")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.Name}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
+	r0{{range $ii, $name := .ScalarOutputNames}}{{if $ii}}, _{{end}}{{end}}, _ := {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*NodeImpl") (eq .GraphType "[]*NodeImpl") (eq .GraphType "...*NodeImpl") (eq .NodeInputType "[]*NodeImpl")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.FieldName}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
 	return r0.inputNodes[0]
 	{{- else if .IsOutputSlice}}
-	r := {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*Node") (eq .GraphType "[]*Node") (eq .GraphType "...*Node") (eq .NodeInputType "[]*Node")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.Name}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
+	r := {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*NodeImpl") (eq .GraphType "[]*NodeImpl") (eq .GraphType "...*NodeImpl") (eq .NodeInputType "[]*NodeImpl")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.FieldName}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
 	return r[0].inputNodes[0]
 	{{- else}}
-	return {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*Node") (eq .GraphType "[]*Node") (eq .GraphType "...*Node") (eq .NodeInputType "[]*Node")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.Name}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
+	return {{.GraphName}}({{range .Inputs}}{{if or (eq .GraphType "*NodeImpl") (eq .GraphType "[]*NodeImpl") (eq .GraphType "...*NodeImpl") (eq .NodeInputType "[]*NodeImpl")}}new_{{.Name}}{{if .IsVariadic}}...{{end}}{{else}}ni.{{.FieldName}}{{if .IsVariadic}}...{{end}}{{end}}, {{end}})
 	{{- end}}
 	{{- end}}
 }
 
 
 {{- if not .Exported}}
-// {{.GraphName}} is a Graph wrapper for the backend.Builder.{{.BackendName}} method.
+// {{.GraphName}} is an internal GraphImpl wrapper for the compute.Function.{{.BackendName}} method.
 {{- else}}
 {{- range .Comments}}
 {{.}}
@@ -460,16 +485,16 @@ func (ni *nodeInputs{{.BackendName}}) CloneWithInputs(originalNode *Node, newInp
 {{- end}}
 func {{/*
 
-Inputs:  */}}{{.GraphName}}({{if .HasGraph}}g *Graph, {{end}}{{range .Inputs}}{{.Name}} {{.GraphType}}, {{end}}) (
+Inputs:  */}}{{.GraphName}}({{if .HasGraph}}g *GraphImpl, {{end}}{{range .Inputs}}{{.Name}} {{.GraphType}}, {{end}}) (
 {{- /* Outputs: */}}
 {{- if .HasMultipleOutputs}}
-{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} *Node
+{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} *NodeImpl
 {{- else if .HasTrailingSlice}}
-{{range .ScalarOutputNames}}{{.}} *Node, {{end}}{{.SliceOutputName}} []*Node
+{{range .ScalarOutputNames}}{{.}} *NodeImpl, {{end}}{{.SliceOutputName}} []*NodeImpl
 {{- else if .IsOutputSlice}}
-[]*Node
+[]*NodeImpl
 {{- else}}
-node *Node
+node *NodeImpl
 {{- end}})
 {{- /*
 
@@ -477,7 +502,7 @@ Body: */}}{
 {{- if .HasGraph}}
 	g.AssertBuilding()
 {{- else}}
-	inputNodes := []*Node{ {{range .OpInputs}}{{.}}, {{end}} }
+	inputNodes := []*NodeImpl{ {{range .OpInputs}}{{.}}, {{end}} }
 {{- range .OpInputSlices}}
 	inputNodes = append(inputNodes, {{.}}...)
 {{- end}}
@@ -486,11 +511,11 @@ Body: */}}{
 		inputNodes = append(inputNodes, {{.}})
 	}
 {{- end}}
-	g := validateBuildingGraphFromInputs(inputNodes...)
+	g := ValidateBuildingGraphFromInputs(inputNodes...)
 {{- end}}
-	inputs := &nodeInputs{{.BackendName}}{
+	inputs := &NodeInputs{{.BackendName}}{
 {{- range .Inputs}}
-		{{.Name}}: {{.CopyStatement}},
+		{{.FieldName}}: {{.CopyStatement}},
 {{- end}}
 	}
 {{- range .Inputs}}{{- if .IsNillable}}
@@ -510,7 +535,7 @@ Convert result(s) to node(s):
 	if err != nil {
 		panic(err)
 	}
-	node := &Node{
+	node := &NodeImpl{
 		outputOps: []compute.Value{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} },
 		outputShapes: []shapes.Shape{ {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}mustNoError(g.builder.OpShape(v{{$ii}})){{end}} },
 {{- else if .HasTrailingSlice}}
@@ -520,7 +545,7 @@ Convert result(s) to node(s):
 		panic(err)
 	}
 	outputOps := append([]compute.Value{ {{range $ii, $name := .ScalarOutputNames}}{{if $ii}}, {{end}}v{{$ii}}{{end}} }, vTrailing...)
-	node := &Node{
+	node := &NodeImpl{
 		outputOps: outputOps,
 		outputShapes: xslices.Map(outputOps,
 			func (op compute.Value) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
@@ -530,7 +555,7 @@ Convert result(s) to node(s):
 	if err != nil {
 		panic(err)
 	}
-	node := &Node{
+	node := &NodeImpl{
 		outputOps: results,
 		outputShapes: xslices.Map(results,
 			func (op compute.Value) shapes.Shape { return mustNoError(g.builder.OpShape(op)) }),
@@ -540,7 +565,7 @@ Convert result(s) to node(s):
 	if err != nil {
 		panic(err)
 	}
-	node = &Node{
+	node = &NodeImpl{
 		outputOps: []compute.Value{result},
 		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
 {{- end}}
@@ -561,23 +586,147 @@ Convert result(s) to node(s):
 If multiple-outputs, split resulting node into its separate parts:
 */}}
 {{- if .HasMultipleOutputs}}
-	splitNodes := splitNode(node)
+	splitNodes := SplitNode(node)
 	{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} = {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}splitNodes[{{$ii}}]{{end}}
 	return
 {{- else if .HasTrailingSlice}}
-	splitNodes := splitNode(node)
+	splitNodes := SplitNode(node)
 	{{range $ii, $name := .ScalarOutputNames}}{{$name}} = splitNodes[{{$ii}}]
 	{{end}}{{.SliceOutputName}} = splitNodes[{{len .ScalarOutputNames}}:]
 	return
 {{- else if .IsOutputSlice}}
-	return splitNode(node)
+	return SplitNode(node)
 {{- else}}
 	return
 {{- end}}
 }
 {{end}}{{end}}
 `))
+
+	publicOpsTemplate = template.Must(template.New(publicOpsFile).Parse(`
+/***** File generated by ./internal/cmd/graph_generator -public, based on compute.Builder interface. Don't edit it directly. *****/
+
+package graph
+
+import (
+{{- if .UseCompute}}
+	"github.com/gomlx/compute"
+{{- end}}
+{{- if .UseDTypes}}
+	"github.com/gomlx/compute/dtypes"
+{{- end}}
+{{- if .UseShapes}}
+	"github.com/gomlx/compute/shapes"
+{{- end}}
+	"github.com/gomlx/gomlx/internal/graphimpl"
 )
+
+// NodeType identifies the operation performed by a Node.
+type NodeType = graphimpl.NodeType
+
+const (
+	NodeTypeInvalid   NodeType = graphimpl.NodeTypeInvalid
+	NodeTypeSplitNode NodeType = graphimpl.NodeTypeSplitNode
+{{- range .AllMethods}}
+	NodeType{{.BackendName}} NodeType = graphimpl.NodeType{{.BackendName}}
+{{- end}}
+	NodeTypeCall  NodeType = graphimpl.NodeTypeCall
+	NodeTypeSort  NodeType = graphimpl.NodeTypeSort
+	NodeTypeWhile NodeType = graphimpl.NodeTypeWhile
+	NodeTypeIf    NodeType = graphimpl.NodeTypeIf
+)
+
+// NodeTypeString retrieves an enum value from its string representation.
+func NodeTypeString(s string) (NodeType, error) {
+	return graphimpl.NodeTypeString(s)
+}
+
+// NodeTypeValues returns all values of NodeType.
+func NodeTypeValues() []NodeType {
+	return graphimpl.NodeTypeValues()
+}
+
+// NodeTypeStrings returns all string representations of NodeType.
+func NodeTypeStrings() []string {
+	return graphimpl.NodeTypeStrings()
+}
+{{range .ExportedMethods}}
+{{- range .Comments}}
+{{.}}
+{{- end}}
+func {{.GraphName}}({{if .HasGraph}}g *Graph, {{end}}{{range .Inputs}}{{.Name}} {{.PublicType}}, {{end}}) (
+{{- if .HasMultipleOutputs}}
+{{- range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}{{$name}}{{end}} *Node
+{{- else if .HasTrailingSlice}}
+{{- range .ScalarOutputNames}}{{.}} *Node, {{end}}{{.SliceOutputName}} []*Node
+{{- else if .IsOutputSlice}}
+[]*Node
+{{- else}}
+*Node
+{{- end}}) {
+{{- $callArgs := ""}}
+{{- if .HasMultipleOutputs}}
+	{{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}r{{$ii}}{{end}} := graphimpl.{{.GraphName}}({{if .HasGraph}}unwrapGraph(g), {{end}}{{range .Inputs}}{{.PublicArg}}, {{end}})
+	return {{range $ii, $name := .OutputNames}}{{if $ii}}, {{end}}wrapNode(r{{$ii}}){{end}}
+{{- else if .HasTrailingSlice}}
+	{{range $ii, $name := .ScalarOutputNames}}r{{$ii}}, {{end}}rTrailing := graphimpl.{{.GraphName}}({{if .HasGraph}}unwrapGraph(g), {{end}}{{range .Inputs}}{{.PublicArg}}, {{end}})
+	return {{range $ii, $name := .ScalarOutputNames}}wrapNode(r{{$ii}}), {{end}}wrapNodes(rTrailing)
+{{- else if .IsOutputSlice}}
+	return wrapNodes(graphimpl.{{.GraphName}}({{if .HasGraph}}unwrapGraph(g), {{end}}{{range .Inputs}}{{.PublicArg}}, {{end}}))
+{{- else}}
+	return wrapNode(graphimpl.{{.GraphName}}({{if .HasGraph}}unwrapGraph(g), {{end}}{{range .Inputs}}{{.PublicArg}}, {{end}}))
+{{- end}}
+}
+{{end}}
+`))
+)
+
+// GeneratePublicOps generates core/graph/gen_public_ops.go containing NodeType re-exports and
+// thin wrappers for only the exported backend ops.
+func GeneratePublicOps(methods []*MethodInfo) {
+	slices.SortFunc(methods, func(a, b *MethodInfo) int { return strings.Compare(a.BackendName, b.BackendName) })
+	var exported []*MethodInfo
+	var useCompute, useDTypes, useShapes bool
+	for _, m := range methods {
+		if m.Exported && !m.Excluded {
+			exported = append(exported, m)
+			for _, p := range m.Inputs {
+				if strings.Contains(p.PublicType, "compute.") {
+					useCompute = true
+				}
+				if strings.Contains(p.PublicType, "dtypes.") {
+					useDTypes = true
+				}
+				if strings.Contains(p.PublicType, "shapes.") {
+					useShapes = true
+				}
+			}
+		}
+	}
+	data := struct {
+		AllMethods      []*MethodInfo
+		ExportedMethods []*MethodInfo
+		UseCompute      bool
+		UseDTypes       bool
+		UseShapes       bool
+	}{
+		AllMethods:      methods,
+		ExportedMethods: exported,
+		UseCompute:      useCompute,
+		UseDTypes:       useDTypes,
+		UseShapes:       useShapes,
+	}
+
+	curDir := must.M1(os.Getwd())
+	fileName := path.Join(curDir, publicOpsFile)
+	f := must.M1(os.Create(fileName))
+	must.M(publicOpsTemplate.Execute(f, data))
+	must.M(f.Close())
+	cmd := exec.Command("go", "fmt", fileName)
+	klog.V(1).Infof("\t%s\n", cmd)
+	must.M(cmd.Run())
+	fmt.Printf("✅ graph_generator -public:\tsuccessfully generated %s\n", fileName)
+}
 
 // GenerateBackendOps generates the list of NodeType and the default implementation of ops to all compute.Builder
 // interface methods and corresponding NodeInputs* struct.
@@ -589,6 +738,7 @@ func GenerateBackendOps(methods []*MethodInfo) {
 	fileName := path.Join(curDir, computeOpsFile)
 	f := must.M1(os.Create(fileName))
 	must.M(backendOpsTemplate.Execute(f, methods))
+	must.M(f.Close())
 	cmd := exec.Command("go", "fmt", fileName)
 	klog.V(1).Infof("\t%s\n", cmd)
 	must.M(cmd.Run())

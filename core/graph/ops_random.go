@@ -12,6 +12,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/internal/graphimpl"
 	"github.com/gomlx/gomlx/support/exceptions"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
@@ -246,7 +247,8 @@ func RNGBitGenerator(algo RNGAlgorithm, rngState *Node, shape shapes.Shape) (new
 	resolved := g.Backend().Capabilities().ResolveRNGAlgorithm(algo)
 	var err error
 	err = exceptions.TryCatch[error](func() {
-		newRNGState, values = backendRNGBitGenerator(rngState, shape, resolved)
+		stateImpl, valImpl := graphimpl.BackendRNGBitGenerator(unwrapNode(rngState), shape, resolved)
+		newRNGState, values = wrapNode(stateImpl), wrapNode(valImpl)
 	})
 	if err != nil {
 		if compute.IsNotImplemented(err) && resolved.IsCounterBased() {

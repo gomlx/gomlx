@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/envutil"
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/ml/ggml"
 	"github.com/gomlx/gomlx/ml/layers/activation"
 	. "github.com/gomlx/gomlx/support/exceptions"
@@ -103,8 +104,8 @@ func QuantizedDense(
 	if hasFusedVJP && cfg.Activation.Type.VJPRequiresInput() {
 		noActCfg := cfg
 		noActCfg.Activation = compute.ActivationConfig{Type: compute.ActivationNone}
-		denseOut, _ := InternalFusedOpCaller(
-			func() *Node { return BackendFusedQuantizedDense(x, weight, bias, noActCfg) },
+		denseOut, _ := graphbridge.FusedOpCaller(
+			func() *Node { return graphbridge.FusedQuantizedDense(x, weight, bias, noActCfg) },
 			func() *Node { return quantizedDenseDecomposed(x, weight, bias, noActCfg) },
 			false,
 		)
@@ -114,8 +115,8 @@ func QuantizedDense(
 	// Only attach vjpAlternateOutputs when the operation is differentiable (weight-only float x/y),
 	// the backend lacks FusedQuantizedDenseVJP, and a decomposed fallback exists for the scheme.
 	useAlternateVJP := isWeightOnlyFloat && !hasFusedVJP && canDecomposeConfig(cfg)
-	res, _ := InternalFusedOpCaller(
-		func() *Node { return BackendFusedQuantizedDense(x, weight, bias, cfg) },
+	res, _ := graphbridge.FusedOpCaller(
+		func() *Node { return graphbridge.FusedQuantizedDense(x, weight, bias, cfg) },
 		decomposed,
 		useAlternateVJP,
 	)

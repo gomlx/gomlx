@@ -8,6 +8,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,8 +20,8 @@ func TestFunction(t *testing.T) {
 	t.Run("IsMain", func(t *testing.T) {
 		g := graph.NewGraph(backend, t.Name())
 		_ = graph.Parameter(g, "x", shapes.Make(dtypes.F32))
-		assert.True(t, g.IsMainFunc())
-		assert.True(t, g.CurrentFunc().IsMain())
+		assert.True(t, graphbridge.GraphImpl(g).IsMainFunc())
+		assert.True(t, graphbridge.Function(graphbridge.GraphImpl(g).CurrentFunc()).IsMain())
 		g.Finalize()
 	})
 
@@ -170,7 +171,7 @@ func TestFunction(t *testing.T) {
 		assert.Equal(t, "", closureFn.Name())
 		// Expected path depends on how many layers. CurrentFunc is Main. So Path should be "main/closure".
 		assert.Equal(t, "main/closure", closureFn.Path())
-		assert.True(t, g.CurrentFunc().IsAncestorOf(closureFn))
+		assert.True(t, graphbridge.Function(graphbridge.GraphImpl(g).CurrentFunc()).IsAncestorOf(closureFn))
 
 		// Closures are not callable.
 		val := graph.Const(g, float32(21)) // 21 * 2 = 42

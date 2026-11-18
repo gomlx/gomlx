@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/support/humanize"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
@@ -52,7 +53,7 @@ func attentionStep(numSteps int, useFusion bool, qHeads, kvHeads int, scale floa
 			v = unflat(out, v)
 		}
 		out = ConvertDType(out, dtypes.Float32)
-		g := Gradient(ReduceAllSum(out), qIn, kIn, vIn)
+		g := autodiff.Gradient(ReduceAllSum(out), qIn, kIn, vIn)
 		sum := Add(Add(ReduceAllSum(g[0]), ReduceAllSum(g[1])), ReduceAllSum(g[2]))
 		return sum
 	}

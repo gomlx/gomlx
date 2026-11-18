@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/model"
@@ -88,7 +89,7 @@ func TestDense(t *testing.T) {
 		biasesVar := store.GetVariable("/dense/biases")
 
 		// Generate the gradients with respect to everything (inputs and variables).
-		gradients := Gradient(sum, inputNode, weightsVar.NodeValue(g), biasesVar.NodeValue(g))
+		gradients := autodiff.Gradient(sum, inputNode, weightsVar.NodeValue(g), biasesVar.NodeValue(g))
 		return append([]*Node{sum, output}, gradients...)
 	})
 

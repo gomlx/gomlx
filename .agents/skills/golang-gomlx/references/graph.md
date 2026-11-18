@@ -84,8 +84,8 @@ This table maps common functions from the `core/graph` package to their PyTorch 
 | `If(pred, trueBranch, falseBranch)` | Conditional execution inside the graph. `trueBranch` and `falseBranch` are `*Function` instances (e.g. from `NewClosure`). | `torch.cond(pred, trueBranch, falseBranch)` |
 | `While(cond, body, initialState...)` | Loop execution inside the graph. `cond` and `body` are `*Function` instances. | `torch.while_loop` equivalent / native Python `while` |
 | `NewClosure(g, func)` | Creates a `*Function` representing a sub-graph computation, used for `If` and `While`. | N/A (Tracing/JIT captures Python functions directly in PyTorch) |
-| **Autograd / Differentiation** | | |
-| `Gradient(output, gradientNodes...)` | Computes the gradients of `output` with respect to the given `gradientNodes`. | `torch.autograd.grad(output, gradientNodes)` |
+| **Autograd / Differentiation** (`core/autodiff`, `core/graph`) | | |
+| `autodiff.Gradient(output, gradientNodes...)` | Computes the gradients of `output` with respect to the given `gradientNodes` (`github.com/gomlx/gomlx/core/autodiff`). | `torch.autograd.grad(output, gradientNodes)` |
 | `StopGradient(x)` | Prevents gradients from flowing through `x` during backpropagation. | `x.detach()` |
 | **Dynamic Shapes Operations** | | |
 | `DimensionSize(x, axis)` | Returns scalar node with the dimension size (typically `Int64`, or backend's `DynamicDimDType`). | `x.size(dim)` (as tensor/symbol) |

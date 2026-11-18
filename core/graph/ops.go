@@ -3,7 +3,6 @@
 package graph
 
 import (
-	"fmt"
 	"slices"
 
 	"github.com/gomlx/compute"
@@ -12,6 +11,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/internal/graphimpl"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/sets"
 	"github.com/pkg/errors"
@@ -25,43 +25,12 @@ import (
 // This is an alias to compute.PadAxis.
 type PadAxis = compute.PadAxis
 
-// nodeInputsParameter holds the inputs used for the call to compute.Parameter.
-type nodeInputsParameter struct {
-	name     string
-	shape    shapes.Shape
-	sharding *distributed.ShardingSpec
-	handle   ParameterHandle
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsParameter) Type() NodeType {
-	return NodeTypeParameter
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsParameter) String() string {
-	return fmt.Sprintf("%s(name=%q, shape=%s)", ni.Type(), ni.name, ni.shape)
-}
-
-// CloneWithInputs implements the interface NodeInputs.
-func (ni *nodeInputsParameter) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
-	return originalNode
-}
-
-// mustNoError converts an error to a panic.
-func mustNoError[T any](v T, err error) T {
-	if err != nil {
-		panic(err)
-	}
-	return v
-}
-
 // Parameter registers an input parameter for a computation Graph (e.g: a feature used as input).
 //
 // When created they get a handle (a plain index) but they can also be accessed
 // It can be used in two different ways: as a Node when building the Graph, so when defining a
 // function that uses the parameter, or as the key in the map of the inputNodes when executing
-// the computation Graph (see Backend.RunWithMap).
+// the computation Graph (see Graph.RunWithBuffers).
 func Parameter(g *Graph, name string, shape shapes.Shape) (node *Node) {
 	return ShardedParameter(g, name, shape, nil)
 }
@@ -70,160 +39,7 @@ func Parameter(g *Graph, name string, shape shapes.Shape) (node *Node) {
 // specification of how this input is going to be fed across devices.
 // This is used for distributed computations -- see Graph.SetAutoSharding.
 func ShardedParameter(g *Graph, name string, shape shapes.Shape, sharding *distributed.ShardingSpec) (node *Node) {
-	g.AssertBuilding()
-	if sharding != nil && g.distStrategy == distributed.None {
-		exceptions.Panicf(
-			"cannot set sharding spec for parameter %q in graph %q when distributed strategy is %q",
-			name, g.name, g.distStrategy,
-		)
-	}
-	if sharding != nil && slices.Index(g.deviceMeshes, sharding.Mesh) == -1 {
-		exceptions.Panicf(
-			"sharding spec for parameter %q in graph %q specifies mesh %q that was not registered with the "+
-				"Graph -- all meshes used in sharding specifications must be declared in the Graph upfront when "+
-				"configuring AutoSharding",
-			name, g.name, sharding.Mesh,
-		)
-	}
-	handle := ParameterHandle(len(g.currentFunc.parameters))
-	if name == "" {
-		name = fmt.Sprintf("parameter_#%d", handle)
-	}
-	if _, ok := g.currentFunc.parameterNameToHandle[name]; ok {
-		exceptions.Panicf("requested parameter with name %q for graph %q already exists", name, g.name)
-	}
-	nodeInputs := &nodeInputsParameter{
-		name:     name,
-		shape:    shape,
-		sharding: sharding, // it can be nil.
-		handle:   handle,
-	}
-	result, err := g.currentFunc.backendFunc.Parameter(nodeInputs.name, nodeInputs.shape, sharding.ToBackendsSpec())
-	if err != nil {
-		panic(errors.WithMessagef(err, "failed to create parameter %q", name))
-	}
-	node = &Node{
-		graph:        g,
-		outputOps:    []compute.Value{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
-		inputs:       nodeInputs,
-	}
-	g.registerNode(node)
-	g.currentFunc.parameters = append(g.currentFunc.parameters, node)
-	g.currentFunc.parameterNameToHandle[name] = handle
-	return
-}
-
-// nodeInputsSplitNode holds the inputs used for the call to compute.Parameter.
-type nodeInputsSplitNode struct {
-	multiOutputNode *Node
-	index           int
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsSplitNode) Type() NodeType {
-	return NodeTypeSplitNode
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsSplitNode) String() string {
-	return fmt.Sprintf("%s(multiOutputNode=[#%d], index=%d)", ni.Type(), ni.multiOutputNode.Id(), ni.index)
-}
-
-// CloneWithInputs implements the interface NodeInputs.
-func (ni *nodeInputsSplitNode) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
-	newMultiOutputNode := newInputs[0]
-	g := newMultiOutputNode.Graph()
-	inputs := &nodeInputsSplitNode{
-		multiOutputNode: newMultiOutputNode,
-		index:           ni.index,
-	}
-	node := &Node{
-		outputOps:    []compute.Value{newMultiOutputNode.outputOps[ni.index]},
-		outputShapes: []shapes.Shape{newMultiOutputNode.outputShapes[ni.index]},
-		graph:        g,
-		inputs:       inputs,
-		inputNodes:   []*Node{newMultiOutputNode},
-	}
-	g.registerNode(node)
-	return node
-}
-
-// splitNode splits a Node that has multiple outputs into multiple nodes with one output only.
-// Internal only: users should only need to handle nodes with one output, so any method that returns many outputs
-// must call splitNode before returning to the user.
-func splitNode(multiOutputNode *Node) (splitNodes []*Node) {
-	if multiOutputNode.NumOutputs() == 1 {
-		// Identity: no need to split.
-		// This happens when an operation returns a slice of outputs, but the slice contains only one element.
-		return []*Node{multiOutputNode}
-	}
-	if multiOutputNode.NumOutputs() == 0 {
-		exceptions.Panicf("splitNode expects at least one node as input -- got %d outputs",
-			multiOutputNode.NumOutputs())
-	}
-	g := multiOutputNode.Graph()
-	g.AssertBuilding()
-	splitNodes = make([]*Node, 0, multiOutputNode.NumOutputs())
-	for ii, op := range multiOutputNode.outputOps {
-		inputs := &nodeInputsSplitNode{
-			multiOutputNode: multiOutputNode,
-			index:           ii,
-		}
-		inputNodes := []*Node{multiOutputNode}
-		node := &Node{
-			outputOps:    []compute.Value{op},
-			outputShapes: []shapes.Shape{multiOutputNode.outputShapes[ii]},
-			graph:        g,
-			inputs:       inputs,
-			inputNodes:   inputNodes,
-		}
-		g.registerNode(node)
-		splitNodes = append(splitNodes, node)
-	}
-	return
-}
-
-// MinConstValueSizeToKeep defines a size below which constant values (see Const, ConstTensor) are kept in the Node/Graph
-// for printing/debugging purposes
-//
-// If set to 0, no value is kept.
-var MinConstValueSizeToKeep = 32
-
-// nodeInputsConstant holds the inputs used for the call to compute.Parameter.
-type nodeInputsConstant struct {
-	shape  shapes.Shape
-	tensor *tensors.Tensor // Only saved for values < MinConstValueSizeToKeep
-}
-
-// Type implements the interface NodeInputs.
-func (ni *nodeInputsConstant) Type() NodeType {
-	return NodeTypeConstant
-}
-
-// String implements the interface NodeInputs.
-func (ni *nodeInputsConstant) String() string {
-	if ni.tensor == nil {
-		return fmt.Sprintf("%s(%s)", ni.Type(), ni.shape)
-	} else {
-		return fmt.Sprintf("%s(%s: %v)", ni.Type(), ni.shape, ni.tensor.Value())
-	}
-}
-
-// CloneWithInputs implements the interface NodeInputs.
-func (ni *nodeInputsConstant) CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node {
-	return originalNode
-}
-
-func newConstantNode(g *Graph, result compute.Value, nodeInputs *nodeInputsConstant) *Node {
-	node := &Node{
-		graph:        g,
-		outputOps:    []compute.Value{result},
-		outputShapes: []shapes.Shape{mustNoError(g.builder.OpShape(result))},
-		inputs:       nodeInputs,
-	}
-	g.registerNode(node)
-	return node
+	return wrapNode(graphimpl.ShardedParameter(unwrapGraph(g), name, shape, sharding))
 }
 
 // ConstTensor returns a constant node for the tensor t in the current function scope.
@@ -236,41 +52,7 @@ func newConstantNode(g *Graph, result compute.Value, nodeInputs *nodeInputsConst
 // The value of t is copied into the graph. For very large tensors that change frequently or should be moved
 // rather than copied, see ConstDonatedTensor or pass them as side inputs / variables (see context package).
 func ConstTensor(g *Graph, t *tensors.Tensor) (node *Node) {
-	g.AssertBuilding()
-	f := g.currentFunc
-	if cached := f.tensorConstants.get(t); cached != nil {
-		return cached
-	}
-	version := t.Version()
-	node = constTensorUncached(g, t)
-	if t != nil && t.Version() == version {
-		f.tensorConstants.set(t, node, version)
-	}
-	return node
-}
-
-func constTensorUncached(g *Graph, t *tensors.Tensor) *Node {
-	g.AssertBuilding()
-	nodeInputs := &nodeInputsConstant{
-		shape: t.Shape(),
-	}
-	if t.Size() < MinConstValueSizeToKeep {
-		var err error
-		nodeInputs.tensor, err = t.LocalClone()
-		if err != nil {
-			panic(errors.WithMessagef(err,
-				"ConstTensor failed to create a local clone of the tensor in the graph"))
-		}
-	}
-	var result compute.Value
-	var err error
-	t.MustConstFlatData(func(flat any) {
-		result, err = g.currentFunc.backendFunc.Constant(flat, nodeInputs.shape.Dimensions...)
-	})
-	if err != nil {
-		panic(errors.WithMessagef(err, "ConstTensor failed to create a constant in the backend"))
-	}
-	return newConstantNode(g, result, nodeInputs)
+	return wrapNode(graphimpl.ConstTensor(unwrapGraph(g), t))
 }
 
 // ConstDonatedTensor returns a newly created constant node for t and transfers ownership of
@@ -282,102 +64,7 @@ func constTensorUncached(g *Graph, t *tensors.Tensor) *Node {
 //
 // After ConstDonatedTensor returns, t is invalid (as via t.FinalizeAll()) and must not be used.
 func ConstDonatedTensor(g *Graph, t *tensors.Tensor) *Node {
-	g.AssertBuilding()
-	if err := t.CheckValid(); err != nil {
-		panic(errors.WithMessagef(err, "ConstDonatedTensor received invalid tensor"))
-	}
-	var node *Node
-	if t.IsOnAnyDevice() {
-		if tBackend, err := t.Backend(); err == nil && tBackend == g.Backend() {
-			buf, err := t.DonateBuffer(g.Backend(), 0)
-			if err != nil {
-				panic(errors.WithMessagef(err, "ConstDonatedTensor failed to donate buffer from tensor"))
-			}
-			node = InternalConstBuffer(g, buf, true)
-		}
-	}
-	if node == nil {
-		node = constTensorUncached(g, t)
-	}
-	if err := t.FinalizeAll(); err != nil {
-		panic(errors.WithMessagef(err, "ConstDonatedTensor failed to finalize donated tensor"))
-	}
-	return node
-}
-
-// InternalConstBuffer returns a newly created constant node backed by buf.
-//
-// WARNING: This is an internal GoMLX API exposed for packages like `ml/model` and
-// zero-copy tensor donation helpers. End-users building standard computation graphs
-// should use ConstTensor (or Const) instead.
-//
-// If donate is true, ownership of buf is transferred to the graph/backend (the caller must
-// not use buf afterwards). If donate is false, buf must remain valid and unmodified for the
-// lifetime of any executable built from this graph.
-//
-// Backends that do not implement ConstantFromBuffer natively fall back to reading buf's flat
-// data and calling Constant.
-func InternalConstBuffer(g *Graph, buf compute.Buffer, donate bool) *Node {
-	g.AssertBuilding()
-	if buf == nil {
-		exceptions.Panicf("InternalConstBuffer received nil buffer")
-	}
-	if buf.Backend() != nil && buf.Backend() != g.Backend() {
-		exceptions.Panicf("InternalConstBuffer received buffer from backend %q, but graph is on backend %q",
-			buf.Backend().Name(), g.Backend().Name())
-	}
-	shape, err := buf.Shape()
-	if err != nil {
-		panic(errors.WithMessagef(err, "InternalConstBuffer failed to get buffer shape"))
-	}
-	result, err := g.currentFunc.backendFunc.ConstantFromBuffer(buf, donate)
-	if err != nil && compute.IsNotImplemented(err) {
-		var flat any
-		if shape.IsZeroSize() {
-			flat = dtypes.MakeAnySlice(shape.DType, 0)
-		} else {
-			flat = dtypes.MakeAnySlice(shape.DType, shape.Size())
-			if toFlatErr := buf.ToFlatData(flat); toFlatErr != nil {
-				panic(errors.WithMessagef(toFlatErr, "InternalConstBuffer fallback failed to transfer buffer data"))
-			}
-		}
-		result, err = g.currentFunc.backendFunc.Constant(flat, shape.Dimensions...)
-		if err == nil && donate {
-			_ = buf.Finalize()
-		}
-	}
-	if err != nil {
-		panic(errors.WithMessagef(err, "InternalConstBuffer failed to create a constant in the backend"))
-	}
-	return newConstantNode(g, result, &nodeInputsConstant{shape: shape})
-}
-
-// InternalSharedConstant creates a Constant node in g reusing a backend constant compute.Value
-// created in another graph on the same backend (requires Backend.Capabilities().SharedConstants).
-//
-// WARNING: This is an internal GoMLX API exposed specifically for packages like `ml/model`
-// (e.g. Exec.DonateStore). End-users should use ConstTensor instead.
-func InternalSharedConstant(g *Graph, val compute.Value) *Node {
-	g.AssertBuilding()
-	shape := mustNoError(g.builder.OpShape(val))
-	nodeInputs := &nodeInputsConstant{
-		shape: shape,
-	}
-	return newConstantNode(g, val, nodeInputs)
-}
-
-// InternalFinalizeConstantValue releases backend resources held by a shared constant compute.Value
-// if the backend value implements Finalize().
-//
-// WARNING: This is an internal GoMLX API exposed specifically for packages like `ml/model`.
-// End-users should use ConstTensor instead.
-func InternalFinalizeConstantValue(val compute.Value) {
-	if val == nil {
-		return
-	}
-	if finalizer, ok := val.(interface{ Finalize() }); ok {
-		finalizer.Finalize()
-	}
+	return wrapNode(graphimpl.ConstDonatedTensor(unwrapGraph(g), t))
 }
 
 // ConstCachedTensor returns a constant node for the tensor t in the current function scope.
@@ -406,8 +93,7 @@ func Const(g *Graph, x any) *Node {
 	if t, ok := x.(*tensors.Tensor); ok {
 		return ConstTensor(g, t)
 	}
-	t := tensors.MustFromAnyValue(x)
-	return constTensorUncached(g, t)
+	return wrapNode(graphimpl.Const(unwrapGraph(g), x))
 }
 
 // ConstAsDType creates a constant of the given DType. It adds the convenience
@@ -459,9 +145,7 @@ func Infinity(g *Graph, dtype dtypes.DType, sign int) *Node {
 //
 // No new XLA outputOps is created, so there are no costs to the computation execution speed.
 func StopGradient(x *Node) *Node {
-	n := Identity(x)
-	n.stopGradient = true
-	return n
+	return wrapNode(graphimpl.StopGradient(unwrapNode(x)))
 }
 
 // IdentityWithCustomGradient returns x unchanged, but sets a custom gradient function to be applied when
@@ -472,9 +156,9 @@ func StopGradient(x *Node) *Node {
 // and we should return the updated `v`, that is, the customized gradient with respect to `x`.
 func IdentityWithCustomGradient(x *Node, gradientFn func(x, v *Node) *Node) *Node {
 	n := Identity(x)
-	n.customVJP = func(node *Node, vjpForOutputs []*Node, _ shapes.Shape) []*Node {
-		return []*Node{gradientFn(node, vjpForOutputs[0])}
-	}
+	n.impl.SetCustomVJP(func(node *graphimpl.NodeImpl, vjpForOutputs []*graphimpl.NodeImpl, _ shapes.Shape) []*graphimpl.NodeImpl {
+		return []*graphimpl.NodeImpl{unwrapNode(gradientFn(wrapNode(node), wrapNode(vjpForOutputs[0])))}
+	})
 	return n
 }
 
@@ -488,7 +172,7 @@ func Iota(g *Graph, shape shapes.Shape, iotaAxis int) *Node {
 		exceptions.Panicf("cannot Iota a scalar shape, shape=%s", shape)
 	}
 	adjustedAxis := MustAdjustAxis(iotaAxis, shape)
-	return backendIota(g, shape, adjustedAxis)
+	return wrapNode(graphimpl.BackendIota(unwrapGraph(g), shape, adjustedAxis))
 }
 
 // IotaFull creates a constant of the given shape with increasing numbers for all values.
@@ -515,33 +199,7 @@ func IotaLike(reference *Node, iotaAxis int) *Node {
 // It panics with a corresponding error message in case of issues.
 // Otherwise, it returns the Graph common to all inputNodes.
 func validateBuildingGraphFromInputs(inputs ...*Node) (g *Graph) {
-	if len(inputs) == 0 {
-		exceptions.Panicf("no input nodes provided, at least one is required")
-	}
-
-	// Checks that all inputNodes are of the same graph.
-	for ii, n := range inputs {
-		if err := exceptions.TryCatch[error](n.AssertValid); err != nil {
-			panic(errors.WithMessagef(err, "invalid input[%d]", ii))
-		}
-		if n.NumOutputs() != 1 {
-			exceptions.Panicf(
-				"input[%d](%s) has multiple-outputs, it has to be split with selectOutput calls first",
-				ii,
-				n,
-			)
-		}
-		if g == nil {
-			g = n.Graph()
-			g.AssertBuilding()
-		} else {
-			if n.Graph() != g {
-				exceptions.Panicf("combining nodes from different graphs not allowed: "+
-					"input[0] graph is %q, input[%d] graph is %q", g.Name(), ii, n.Graph().Name())
-			}
-		}
-	}
-	return
+	return wrapGraph(graphimpl.ValidateBuildingGraphFromInputs(unwrapNodes(inputs)...))
 }
 
 // Log1P is an alias to Log1p. It returns log(1+x).
@@ -553,8 +211,8 @@ func Sigmoid(x *Node) *Node { return Logistic(x) }
 // Sign returns element-wise +1, +/-0 or -1 depending on the sign of x. It returns NaN if the input is NaN.
 // The gradient of Sign is assumed to be zero everywhere.
 func Sign(x *Node) *Node {
-	y := backendSign(x)
-	y.stopGradient = true
+	y := wrapNode(graphimpl.BackendSign(unwrapNode(x)))
+	y.impl.SetStopGradient(true)
 	return y
 }
 
@@ -574,7 +232,7 @@ func Floor(x *Node) *Node {
 	if x.DType().IsInt() {
 		return Identity(x)
 	}
-	return backendFloor(x)
+	return wrapNode(graphimpl.BackendFloor(unwrapNode(x)))
 }
 
 // Ceil returns the ceil of x, i.e., the smallest integer greater than or equal to x.
@@ -583,7 +241,7 @@ func Ceil(x *Node) *Node {
 	if x.DType().IsInt() {
 		return Identity(x)
 	}
-	return backendCeil(x)
+	return wrapNode(graphimpl.BackendCeil(unwrapNode(x)))
 }
 
 // BroadcastPrefix adds dimensions to an array by duplicating the data in the array.
@@ -771,15 +429,15 @@ func BroadcastToShape(x *Node, shape shapes.Shape) *Node {
 	}
 	var node *Node
 	if xShape.IsScalar() {
-		node = backendBroadcastInDim(x, outShape, nil)
+		node = wrapNode(graphimpl.BackendBroadcastInDim(unwrapNode(x), outShape, nil))
 	} else {
 		broadcastDims := make([]int, xShape.Rank())
 		for ii := range xShape.Rank() {
 			broadcastDims[ii] = ii
 		}
-		node = backendBroadcastInDim(x, outShape, broadcastDims)
+		node = wrapNode(graphimpl.BackendBroadcastInDim(unwrapNode(x), outShape, broadcastDims))
 	}
-	node.outputShapes[0] = outShape
+	node.impl.SetOutputShape(0, outShape)
 	return node
 }
 
@@ -858,7 +516,7 @@ func Where(condition, onTrue, onFalse *Node) *Node {
 		condition = InsertAxes(condition, xslices.SliceWithValue(extraAxes, -1)...)
 	}
 
-	return backendWhere(condition, onTrue, onFalse)
+	return wrapNode(graphimpl.BackendWhere(unwrapNode(condition), unwrapNode(onTrue), unwrapNode(onFalse)))
 }
 
 // Reshape x to the given dimensions. Total size cannot change. One dimension can be left as -1,
@@ -936,7 +594,7 @@ func Reshape(x *Node, dimensions ...int) *Node {
 				newSize, dimensions, totalSize, x.Shape().Dimensions)
 		}
 	}
-	return backendReshape(x, dimensions...)
+	return wrapNode(graphimpl.BackendReshape(unwrapNode(x), dimensions...))
 }
 
 // dynamicSizesEqual returns true if two shapes have the same total size,
@@ -1013,7 +671,7 @@ func ReshapeWithShape(x *Node, shape shapes.Shape) *Node {
 		}
 		return DynamicReshape(x, specs...)
 	}
-	return backendReshape(x, shape.Dimensions...)
+	return wrapNode(graphimpl.BackendReshape(unwrapNode(x), shape.Dimensions...))
 }
 
 // ReshapeLike reshapes operand to have the same shape as reference.
@@ -1213,7 +871,7 @@ func ArgMax(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 		dtype = outputDType[0]
 	}
 	axis = MustAdjustAxis(axis, x)
-	return backendArgMinMax(x, axis, dtype, false)
+	return wrapNode(graphimpl.BackendArgMinMax(unwrapNode(x), axis, dtype, false))
 }
 
 // ArgMin returns the index of the smallest element across the given axis.
@@ -1231,7 +889,7 @@ func ArgMin(x *Node, axis int, outputDType ...dtypes.DType) (output *Node) {
 		dtype = outputDType[0]
 	}
 	axis = MustAdjustAxis(axis, x)
-	return backendArgMinMax(x, axis, dtype, true)
+	return wrapNode(graphimpl.BackendArgMinMax(unwrapNode(x), axis, dtype, true))
 }
 
 // adjustAxesToRank not-inplace, it returns an adjusted copy of the given `axesWithNegatives`.
@@ -1269,7 +927,7 @@ func adjustAxesToRankAndSort(rank int, axesWithNegatives []int, paramName string
 func ReduceSum(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
-	return backendReduceSum(x, axes...)
+	return wrapNode(graphimpl.BackendReduceSum(unwrapNode(x), axes...))
 }
 
 // ReduceAllSum reduces all dimensions to a scalar by summing.
@@ -1359,7 +1017,7 @@ func MaskedReduceMean(x, mask *Node, reduceAxes ...int) *Node {
 	denominator := ConvertDType(mask, x.DType())
 	denominator = ReduceSum(denominator, reduceAxes...)
 	denominator = Max(denominator, OnesLike(denominator))
-	denominator.stopGradient = true
+	denominator.impl.SetStopGradient(true)
 	return Div(sum, denominator)
 }
 
@@ -1377,7 +1035,7 @@ func MaskedReduceAllMean(x, mask *Node) *Node {
 func ReduceMultiply(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
-	return backendReduceProduct(x, axes...)
+	return wrapNode(graphimpl.BackendReduceProduct(unwrapNode(x), axes...))
 }
 
 // ReduceAllMultiply reduces all dimensions to a scalar by multiplying.
@@ -1393,7 +1051,7 @@ func ReduceAllMultiply(x *Node) *Node {
 func ReduceMax(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
-	return backendReduceMax(x, axes...)
+	return wrapNode(graphimpl.BackendReduceMax(unwrapNode(x), axes...))
 }
 
 // ReduceAllMax reduces all dimensions to a scalar by taking the max.
@@ -1433,7 +1091,7 @@ func MaskedReduceAllMax(x, mask *Node) *Node {
 func ReduceMin(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
-	return backendReduceMin(x, axes...)
+	return wrapNode(graphimpl.BackendReduceMin(unwrapNode(x), axes...))
 }
 
 // ReduceAllMin reduces all dimensions to a scalar by taking the min.
@@ -1666,7 +1324,7 @@ func Slice(x *Node, axesSpec ...SliceAxisSpec) *Node {
 			strides[ii] = axesSpec[ii].StrideValue
 		}
 	}
-	return backendSlice(x, starts, limits, strides)
+	return wrapNode(graphimpl.BackendSlice(unwrapNode(x), starts, limits, strides))
 }
 
 // SliceAxis is similar to Slice, but take a slice of one axis only, and preserve all others.
@@ -1774,7 +1432,7 @@ func Concatenate(operands []*Node, axis int) *Node {
 			}
 		}
 	}
-	return backendConcatenate(adjustedAxis, operands...)
+	return wrapNode(graphimpl.BackendConcatenate(adjustedAxis, unwrapNodes(operands)...))
 }
 
 // Stack puts together many values (*Node) with the exact same shape by creating a new axis and concatenating them.
@@ -1788,35 +1446,6 @@ func Stack(operands []*Node, axis int) *Node {
 	return Concatenate(operands, axis)
 }
 
-// concatenateVJP implements a VJP function for the ConcatenateNode operation.
-func concatenateVJP(node, v *Node, _ shapes.Shape) []*Node {
-	vjps := make([]*Node, 0, len(node.inputNodes))
-	params := node.inputs.(*nodeInputsConcatenate)
-	concatAxis := params.axis
-	shape := node.Shape()
-
-	// Set starts and limits for slices that are shared among all concatenated inputNodes.
-	starts, limits := make([]int, shape.Rank()), make([]int, shape.Rank())
-	ranges := make([]SliceAxisSpec, shape.Rank())
-	for dim := 0; dim < shape.Rank(); dim++ {
-		if dim == concatAxis {
-			continue
-		}
-		ranges[dim] = AxisRange()
-		starts[dim], limits[dim] = 0, shape.Dimensions[dim]
-	}
-
-	// Take slice for each concatenated input.
-	concatDimStart := 0
-	for _, input := range node.inputNodes {
-		concatDimEnd := concatDimStart + input.Shape().Dimensions[concatAxis]
-		ranges[concatAxis] = AxisRange(concatDimStart, concatDimEnd)
-		concatDimStart = concatDimEnd
-		vjps = append(vjps, Slice(v, ranges...))
-	}
-	return vjps
-}
-
 // Reverse returns x with the values for the given dimensions reversed, that is,
 // the value indexed at `i` will be swapped with the value at indexed `(dimension_size - 1 - i)`.
 // The shape remains the same.
@@ -1826,7 +1455,7 @@ func Reverse(x *Node, axes ...int) *Node {
 	for ii, axis := range adjustedAxes {
 		adjustedAxes[ii] = MustAdjustAxis(axis, x)
 	}
-	return backendReverse(x, adjustedAxes...)
+	return wrapNode(graphimpl.BackendReverse(unwrapNode(x), adjustedAxes...))
 }
 
 // ConvertDType of x to dtype.
@@ -1835,7 +1464,7 @@ func ConvertDType(x *Node, dtype dtypes.DType) (node *Node) {
 	if x.DType() == dtype {
 		return x
 	}
-	return backendConvertDType(x, dtype)
+	return wrapNode(graphimpl.BackendConvertDType(unwrapNode(x), dtype))
 }
 
 // Transpose returns x with the axes axisA and axisB transposed.
@@ -1882,7 +1511,7 @@ func TransposeAllAxes(x *Node, permutations ...int) *Node {
 			exceptions.Panicf("in TransposeAllAxes(x, %v), id %d appears more than once", permutations, idx)
 		}
 	}
-	return backendTranspose(x, permutations...)
+	return wrapNode(graphimpl.BackendTranspose(unwrapNode(x), permutations...))
 }
 
 // TransposeAllDims is a deprecated alias to TransposeAllAxes.
@@ -1892,94 +1521,16 @@ func TransposeAllDims(x *Node, permutations ...int) *Node {
 	return TransposeAllAxes(x, permutations...)
 }
 
-// InternalBatchNormForTraining is a wrapper to the backend function.
-// Don't use this directly, instead use layers.BatchNormalization.
-func InternalBatchNormForTraining(
-	operand *Node,
-	scale *Node,
-	offset *Node,
-	epsilon float32,
-	axis int,
-) (normalized, batchMean, batchVariance *Node) {
-	_ = validateBuildingGraphFromInputs(operand, scale, offset)
-	dtype := operand.DType()
-	if scale.DType() != dtype || offset.DType() != dtype {
-		exceptions.Panicf(
-			"InternalBatchNormForTraining: operand (%s), scale (%s) and offset (%s) must all have the same DType",
-			operand.Shape(),
-			scale.Shape(),
-			offset.Shape(),
-		)
-	}
-	axis = MustAdjustAxis(axis, operand)
-	return backendBatchNormForTraining(operand, scale, offset, epsilon, axis)
-}
-
-// InternalBatchNormForInference is a wrapper to the backend function.
-// Don't use this directly, instead use layers.BatchNormalization.
-func InternalBatchNormForInference(
-	operand *Node,
-	scale *Node,
-	offset *Node,
-	mean *Node,
-	variance *Node,
-	epsilon float32,
-	axis int,
-) (node *Node) {
-	_ = validateBuildingGraphFromInputs(operand, scale, offset, mean, variance)
-	dtype := operand.DType()
-	if scale.DType() != dtype || offset.DType() != dtype {
-		exceptions.Panicf(
-			"InternalBatchNormForInference: operand (%s), scale (%s) and offset (%s) must all have the same DType",
-			operand.Shape(),
-			scale.Shape(),
-			offset.Shape(),
-		)
-	}
-	axis = MustAdjustAxis(axis, operand)
-	return backendBatchNormForInference(operand, scale, offset, mean, variance, epsilon, axis)
-}
-
-// InternalBatchNormGradient is a wrapper to the backend function.
-// Don't use this directly, instead use layers.BatchNormalization.
-func InternalBatchNormGradient(
-	operand *Node,
-	scale *Node,
-	mean *Node,
-	variance *Node,
-	gradOutput *Node,
-	epsilon float32,
-	axis int,
-) (gradOperand, gradScale, gradOffset *Node) {
-	_ = validateBuildingGraphFromInputs(operand, scale, mean, variance)
-	dtype := operand.DType()
-	if scale.DType() != dtype || mean.DType() != dtype || variance.DType() != dtype {
-		exceptions.Panicf(
-			"InternalBatchNormForInference: operand (%s), scale (%s), mean (%s) and variance (%s) must all have the same DType",
-			operand.Shape(),
-			scale.Shape(),
-			mean.Shape(),
-			variance.DType(),
-		)
-	}
-	axis = MustAdjustAxis(axis, operand)
-	return backendBatchNormGradient(operand, scale, mean, variance, gradOutput, epsilon, axis)
-}
-
 // OptimizationBarrier creates an optimization barrier for a single node.
 // It returns a new Node that is mathematically equal to the input operand,
 // but prevents the compiler from optimizing across the barrier.
 func OptimizationBarrier(operand *Node) *Node {
-	outs := backendOptimizationBarrier(operand)
-	return outs[0]
+	return wrapNode(graphimpl.OptimizationBarrier(unwrapNode(operand)))
 }
 
 // OptimizationBarriers creates an optimization barrier for multiple nodes.
 // It returns a slice of Nodes that are mathematically equal to the input operands,
 // but prevents the compiler from optimizing across the barrier.
 func OptimizationBarriers(operands ...*Node) []*Node {
-	if len(operands) == 0 {
-		return nil
-	}
-	return backendOptimizationBarrier(operands...)
+	return wrapNodes(graphimpl.OptimizationBarriers(unwrapNodes(operands)...))
 }

@@ -39,8 +39,8 @@ import (
 // GenerateNoise generates random noise that can be used to generate images.
 func GenerateNoise(cfg *diffusion.Config, numImages int) *tensors.Tensor {
 	return MustExecOnce(cfg.Backend, func(g *Graph) *Node {
-		state := RNGStateForGraph(g)
-		_, noise := RandomNormal(state, shapes.Make(cfg.DType, numImages, cfg.ImageSize, cfg.ImageSize, 3))
+		state := RNGStateForGraph(g, RNGDefault)
+		_, noise := RandomNormal(RNGDefault, state, shapes.Make(cfg.DType, numImages, cfg.ImageSize, cfg.ImageSize, 3))
 		return noise
 	})
 }
@@ -545,8 +545,8 @@ func GenerateImagesOfAllFlowerTypes(cfg *diffusion.Config, numDiffusionSteps int
 	_ = cfg.Store.ResetRNGState()
 	imageSize := cfg.ImageSize
 	noise := MustExecOnce(cfg.Backend, func(g *Graph) *Node {
-		state := RNGStateForGraph(g)
-		_, noise := RandomNormal(state, shapes.Make(cfg.DType, 1, imageSize, imageSize, 3))
+		state := RNGStateForGraph(g, RNGDefault)
+		_, noise := RandomNormal(RNGDefault, state, shapes.Make(cfg.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise
 	})

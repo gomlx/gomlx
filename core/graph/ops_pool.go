@@ -10,8 +10,8 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors/images"
+	"github.com/gomlx/gomlx/internal/graphimpl"
 	. "github.com/gomlx/gomlx/support/exceptions"
-	"github.com/gomlx/gomlx/support/sets"
 )
 
 // This file contains all parts of the {Max|Sum|Prod}Pool implementation.
@@ -376,8 +376,8 @@ func (pool *PoolBuilder) Done() *Node {
 		}
 	}
 
-	pooled := BackendReduceWindow(pool.x, pool.reductionType,
-		windowDimensions, strides, nil, windowDilations, paddings)
+	pooled := wrapNode(graphimpl.BackendReduceWindow(unwrapNode(pool.x), pool.reductionType,
+		windowDimensions, strides, nil, windowDilations, paddings))
 
 	// Take the mean.
 	if pool.isMean && pool.reductionType == compute.ReduceOpSum {
@@ -408,166 +408,11 @@ func takeMeanOfContributions(x, pooledSum *Node, channelsAxis int, windowDimensi
 		shapeNoBatchOrChannels.AxisNames[0] = ""
 		shapeNoBatchOrChannels.AxisNames[channelsAxis] = ""
 	}
-	ones := Ones(x.graph, shapeNoBatchOrChannels)
-	pooledOnes := BackendReduceWindow(ones, compute.ReduceOpSum,
-		windowDimensions, strides, nil, windowDilations, paddings)
+	ones := Ones(x.Graph(), shapeNoBatchOrChannels)
+	pooledOnes := wrapNode(graphimpl.BackendReduceWindow(unwrapNode(ones), compute.ReduceOpSum,
+		windowDimensions, strides, nil, windowDilations, paddings))
 	pooledOnes = StopGradient(pooledOnes)
 	return Div(pooledSum, pooledOnes)
-}
-
-// BackendReduceWindow provides direct access to the backend operator.
-//
-// This is exposed to allow testing, but you probably should avoid using it directly
-// and instead use the pool operations (MaxPool, MinPool, SumPool and MeanPool), which allow
-// almost the same flexibility.
-func BackendReduceWindow(x *Node, reductionType ReduceOpType, windowDimensions, strides, inputDilations, windowDilations []int, paddings [][2]int) *Node {
-	_ = validateBuildingGraphFromInputs(x)
-	rank := x.Rank()
-	if len(windowDimensions) != rank {
-		Panicf("windowDimensions (length %d) must have the same length as the rank of x (rank %d)", len(windowDimensions), rank)
-	}
-	if len(strides) != 0 && len(strides) != rank {
-		Panicf("strides (length %d) if given must have the same length as the rank of x (rank %d)", len(strides), rank)
-	}
-	if len(inputDilations) > 0 && len(inputDilations) != rank {
-		Panicf("inputDilations (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
-	}
-	if len(windowDilations) > 0 && len(windowDilations) != rank {
-		Panicf("windowDilations (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
-	}
-	if len(paddings) > 0 && len(paddings) != rank {
-		Panicf("paddings (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
-	}
-	return backendReduceWindow(x, reductionType, windowDimensions, strides, inputDilations, windowDilations, paddings)
-}
-
-// checkedSelectAndScatter selects (largest) the element (according to reduceOp) from a window and scatter to those positions
-// the value from the source. It's used to calculate the gradient of a MaxPool.
-func checkedSelectAndScatter(x, source *Node, reduceOp ReduceOpType, windowDimensions, strides []int, paddings [][2]int) *Node {
-	_ = validateBuildingGraphFromInputs(x, source)
-	rank := x.Rank()
-	if len(windowDimensions) != rank {
-		Panicf("windowSizes (length %d) must have same length as rank of input x (rank %d)", len(windowDimensions), rank)
-	}
-	if len(strides) != rank {
-		Panicf("strides (length %d) must have same length as rank of input x (rank %d)", len(strides), rank)
-	}
-	if len(paddings) > 0 && len(paddings) != rank {
-		Panicf("paddings (length %d) if given must have same length as rank of input x (rank %d)", len(paddings), rank)
-	}
-
-	switch reduceOp {
-	case compute.ReduceOpMax:
-		return backendSelectAndScatterMax(x, source, windowDimensions, strides, paddings)
-	case compute.ReduceOpMin:
-		return backendSelectAndScatterMin(x, source, windowDimensions, strides, paddings)
-	default:
-		Panicf("SelectAndScatter not defined for original reduce operation %s", reduceOp)
-		panic(nil) // Disable lint warning.
-	}
-}
-
-var vjpReductionTypes = sets.MakeWith(compute.ReduceOpMax, compute.ReduceOpMin, compute.ReduceOpSum)
-
-// reduceWindowVJP calculates v*d(reduceWindow(x))/{dx, d_kernel).
-func reduceWindowVJP(node, v *Node, _ shapes.Shape) []*Node {
-	// Recover parameters from serialized node.
-	params := node.inputs.(*nodeInputsReduceWindow)
-	if !vjpReductionTypes.Has(params.reductionType) {
-		Panicf("ReduceWindow gradient only defined for the operations %q, instead got %q", vjpReductionTypes, params.reductionType)
-	}
-
-	if len(params.inputDilations) > 0 || len(params.windowDilations) > 0 {
-		Panicf("gradient of ReduceWindow with base or window dilations is not defined")
-	}
-	var vjpX *Node
-	switch params.reductionType {
-	case compute.ReduceOpMax, compute.ReduceOpMin:
-		vjpX = checkedSelectAndScatter(params.input, v, params.reductionType, params.windowDimensions, params.strides, params.paddings)
-	case compute.ReduceOpSum:
-		vjpX = dilateConvolveToMatchSumPooling(params.input, v, params.windowDimensions, params.strides, params.paddings)
-	default:
-		Panicf("ReduceWindow gradient not defined for reduction %q, pls create an issue in github if you need this", params.reductionType)
-	}
-	return []*Node{vjpX}
-}
-
-// dilateConvolveToMatchSumPooling convolves the `backProp` to match `x`.
-//
-// Since the convolution would be with a kernel filled with ones, we instead use `graph.Pad` and BackendReduceWindow instead.
-func dilateConvolveToMatchSumPooling(x, backProp *Node, windowDimensions, strides []int, paddings [][2]int) *Node {
-	g := validateBuildingGraphFromInputs(x, backProp)
-	dtype := x.DType()
-	rank := x.Rank()
-	//dims := x.Shape().Dimensions
-
-	if len(windowDimensions) != rank {
-		Panicf("windowSizes (length %d) must have the same length as the rank of x (rank %d)", len(windowDimensions), rank)
-	}
-	if len(strides) != rank {
-		Panicf("strides (length %d) must have the same length as the rank of x (rank %d)", len(strides), rank)
-	}
-	if len(paddings) > 0 && len(paddings) != rank {
-		Panicf("paddings (length %d) if given must have the same length as the rank of x (rank %d)", len(paddings), rank)
-	}
-
-	// Configure the padding needed to expand the backprop back to its original size.
-	padConfig := make([]PadAxis, rank)
-	for axis := range padConfig {
-		conf := &padConfig[axis]
-
-		// pad due to strides and window sizes: this reconstructs what was used from
-		// the original dimension -- some may be padding ... but some padding (not used) may
-		// not be included.
-		conf.Interior = strides[axis] - 1
-		conf.Start = windowDimensions[axis] / 2 // Notice that we switch the long/short half from start/end.
-		conf.End = (windowDimensions[axis] - 1) / 2
-	}
-	// expanded should have the same spatial dimensions as the original input,
-	// but with zeros filled in between.
-	zero := ScalarZero(g, dtype)
-	expanded := Pad(backProp, zero, padConfig...)
-
-	// For each position on expanded, just sum the values that reach it.
-	padSame := make([][2]int, rank) // pad to preserve expanded shapes.
-	for axis := range padSame {
-		windowSize := windowDimensions[axis]    // for this axis.
-		padSame[axis][0] = (windowSize - 1) / 2 // For even-sized kernels, the padding is asymmetric.
-		padSame[axis][1] = windowSize / 2
-	}
-	stridesOne := xslices.SliceWithValue(rank, 1)
-	expanded = BackendReduceWindow(expanded, compute.ReduceOpSum, windowDimensions, stridesOne, nil, nil, padSame)
-
-	// We may need to trim the extra padding used originally, since we don't want to re-generate
-	// the original padding. We many also need to pad extra, in case not everything from the input tensor
-	// was used in the output.
-	//
-	// Care has to be taken because we only want to take out padding that was effectively used
-	// and not padding that didn't have any effect.
-	// E.g.: input=[1, 3, 1], window=3, padding=[0, 500], stride=1000 -> in this case none of the padding was used.
-	var requiresAdjustment bool
-	for axis := range padConfig {
-		conf := &padConfig[axis]
-		*conf = PadAxis{}
-
-		amountToAdjust := x.Shape().Dimensions[axis] - expanded.Shape().Dimensions[axis] // It may be negative.
-		paddingStart := 0
-		if len(paddings) > 0 {
-			paddingStart = paddings[axis][0]
-		}
-		conf.Start = -paddingStart             // Padding on the start is always used and needs trimming.
-		conf.End = amountToAdjust - conf.Start // Reminder of adjustment goes to the end of the spatial axis.
-		if conf.Start != 0 || conf.End != 0 {
-			requiresAdjustment = true
-		}
-	}
-	var grad *Node
-	if requiresAdjustment {
-		grad = Pad(expanded, zero, padConfig...)
-	} else {
-		grad = expanded
-	}
-	return grad
 }
 
 func (pool *PoolBuilder) doConcat() *Node {

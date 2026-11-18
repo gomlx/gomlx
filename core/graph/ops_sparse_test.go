@@ -11,6 +11,7 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -385,7 +386,7 @@ func TestScatterSumGradient(t *testing.T) {
 		mask := Const(g, []bool{true, false, false, true, true})
 		loss := MaskedReduceSum(scattered, mask)
 		//return []*Node{scattered, loss}
-		return append(Gradient(loss, operand, updates), scattered, loss)
+		return append(autodiff.Gradient(loss, operand, updates), scattered, loss)
 	}, operand, indices, updates)
 	if err != nil {
 		t.Fatalf("exec failed: %+v", err)
@@ -437,7 +438,7 @@ func TestScatterMaxGradient(t *testing.T) {
 		mask := Const(g, []bool{true, false, false, true, true})
 		loss := MaskedReduceSum(scattered, mask)
 		//return []*Node{scattered, loss}
-		return append(Gradient(loss, operand, updates), scattered, loss)
+		return append(autodiff.Gradient(loss, operand, updates), scattered, loss)
 	}, operand, indices, updates)
 
 	fmt.Printf("gradOperand=%s\n", outputs[0].GoStr())
@@ -486,7 +487,7 @@ func TestScatterMinGradient(t *testing.T) {
 		mask := Const(g, []bool{true, false, false, true, true})
 		loss := MaskedReduceSum(scattered, mask)
 		//return []*Node{scattered, loss}
-		return append(Gradient(loss, operand, updates), scattered, loss)
+		return append(autodiff.Gradient(loss, operand, updates), scattered, loss)
 	}, operand, indices, updates)
 
 	fmt.Printf("gradOperand=%s\n", outputs[0].GoStr())

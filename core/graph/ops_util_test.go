@@ -12,6 +12,7 @@ import (
 	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/support/testutil"
@@ -748,10 +749,10 @@ func TestCumMax(t *testing.T) {
 			yReverse := CumMax(x, 0, &CumSumOptions{Reverse: true})
 			yExclRev := CumMax(x, 0, &CumSumOptions{Exclusive: true, Reverse: true})
 
-			gradDefault := Gradient(ReduceAllSum(yDefault), x)[0]
-			gradExclusive := Gradient(ReduceAllSum(yExclusive), x)[0]
-			gradReverse := Gradient(ReduceAllSum(yReverse), x)[0]
-			gradExclRev := Gradient(ReduceAllSum(yExclRev), x)[0]
+			gradDefault := autodiff.Gradient(ReduceAllSum(yDefault), x)[0]
+			gradExclusive := autodiff.Gradient(ReduceAllSum(yExclusive), x)[0]
+			gradReverse := autodiff.Gradient(ReduceAllSum(yReverse), x)[0]
+			gradExclRev := autodiff.Gradient(ReduceAllSum(yExclRev), x)[0]
 
 			outputs = []*Node{gradDefault, gradExclusive, gradReverse, gradExclRev}
 			return
@@ -842,10 +843,10 @@ func TestCumSum(t *testing.T) {
 			yReverse := CumSum(x, 0, &CumSumOptions{Reverse: true})
 			yExclRev := CumSum(x, 0, &CumSumOptions{Exclusive: true, Reverse: true})
 
-			gradDefault := Gradient(ReduceAllSum(yDefault), x)[0]
-			gradExclusive := Gradient(ReduceAllSum(yExclusive), x)[0]
-			gradReverse := Gradient(ReduceAllSum(yReverse), x)[0]
-			gradExclRev := Gradient(ReduceAllSum(yExclRev), x)[0]
+			gradDefault := autodiff.Gradient(ReduceAllSum(yDefault), x)[0]
+			gradExclusive := autodiff.Gradient(ReduceAllSum(yExclusive), x)[0]
+			gradReverse := autodiff.Gradient(ReduceAllSum(yReverse), x)[0]
+			gradExclRev := autodiff.Gradient(ReduceAllSum(yExclRev), x)[0]
 
 			outputs = []*Node{gradDefault, gradExclusive, gradReverse, gradExclRev}
 			return
@@ -1005,7 +1006,7 @@ func TestL2Normalize(t *testing.T) {
 				Const(g, [][]float32{{3, 4}, {0, 0}}),
 			}
 			normalized := L2Normalize(inputs[0], -1)
-			grad := Gradient(ReduceAllSum(normalized), inputs[0])[0]
+			grad := autodiff.Gradient(ReduceAllSum(normalized), inputs[0])[0]
 			outputs = []*Node{
 				normalized,
 				grad,

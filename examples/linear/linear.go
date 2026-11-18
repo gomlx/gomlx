@@ -36,12 +36,12 @@ const (
 // attempt to learn.
 func initCoefficients(backend compute.Backend, numVariables int) (coefficients, bias *tensors.Tensor) {
 	e := MustNewExec(backend, func(g *Graph) (coefficients, bias *Node) {
-		rngState := RNGStateForGraph(g)
-		rngState, coefficients = RandomNormal(rngState, shapes.Make(dtypes.Float64, numVariables))
+		rngState := RNGStateForGraph(g, RNGDefault)
+		rngState, coefficients = RandomNormal(RNGDefault, rngState, shapes.Make(dtypes.Float64, numVariables))
 		coefficients = AddScalar(
 			MulScalar(coefficients, CoefficientSigma),
 			CoefficientMu)
-		rngState, bias = RandomNormal(rngState, shapes.Make(dtypes.Float64))
+		rngState, bias = RandomNormal(RNGDefault, rngState, shapes.Make(dtypes.Float64))
 		bias = AddScalar(MulScalar(bias, BiasSigma), BiasMu)
 		return
 	})
@@ -61,8 +61,8 @@ func buildExamples(
 		numFeatures := coef.Shape().Dimensions[0]
 
 		// Random inputs (observations).
-		rngState := RNGStateForGraph(g)
-		rngState, inputs = RandomNormal(rngState, shapes.Make(dtypes.Float64, numExamples, numFeatures))
+		rngState := RNGStateForGraph(g, RNGDefault)
+		rngState, inputs = RandomNormal(RNGDefault, rngState, shapes.Make(dtypes.Float64, numExamples, numFeatures))
 		coef = InsertAxes(coef, 0)
 
 		// Calculate perfect labels.
@@ -71,7 +71,7 @@ func buildExamples(
 		if noise > 0 {
 			// Add some noise to the labels.
 			var noiseVector *Node
-			rngState, noiseVector = RandomNormal(rngState, labels.Shape())
+			rngState, noiseVector = RandomNormal(RNGDefault, rngState, labels.Shape())
 			noiseVector = MulScalar(noiseVector, noise)
 			labels = Add(labels, noiseVector)
 		}

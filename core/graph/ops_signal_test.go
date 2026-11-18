@@ -12,6 +12,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -104,7 +105,7 @@ func TestGradientFFT(t *testing.T) {
 			argmax := ArgMax(Abs(fft), -1)
 			inv := InverseFFT(fft)
 			diff := ReduceAllSum(Abs(Sub(inv, x)))
-			grad := Gradient(output, x)[0]
+			grad := autodiff.Gradient(output, x)[0]
 			return []*Node{x}, []*Node{output, argmax, diff, grad}
 		}, []any{
 			11.0,
@@ -141,7 +142,7 @@ func TestGradientFFT(t *testing.T) {
 			argmax := ArgMax(Abs(fft), -1)
 			inv := InverseFFT(fft)
 			diff := Abs(ReduceAllSum(Sub(inv, x)))
-			grad := Gradient(diff, fft)[0]
+			grad := autodiff.Gradient(diff, fft)[0]
 			return []*Node{x}, []*Node{sumFft, argmax, diff, grad}
 		}, []any{
 			11.0, int32(1), 0.0,

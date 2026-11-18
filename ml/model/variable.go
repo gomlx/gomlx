@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -254,7 +255,7 @@ func (v *Variable) finalizeSharedConst() {
 		return
 	}
 	if v.sharedConstValue != nil {
-		graph.InternalFinalizeConstantValue(v.sharedConstValue)
+		graphbridge.FinalizeConstantValue(v.sharedConstValue)
 		v.sharedConstValue = nil
 		v.sharedConstBackend = nil
 	}
@@ -681,7 +682,7 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 		}
 		var constNode *Node
 		if canShareConst && v.sharedConstValue != nil && v.sharedConstBackend == backend {
-			constNode = graph.InternalSharedConstant(g, v.sharedConstValue)
+			constNode = graphbridge.SharedConstant(g, v.sharedConstValue)
 		} else {
 			val, err := v.Value()
 			if err != nil {
@@ -692,7 +693,7 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 				// Transfer an existing on-device/shared buffer zero-copy, or upload local storage into
 				// an aligned backend buffer once before finalizing the Tensor container.
 				if buf, bufErr := val.DonateBuffer(backend, 0); bufErr == nil {
-					constNode = graph.InternalConstBuffer(g, buf, true)
+					constNode = graphbridge.ConstBuffer(g, buf, true)
 					constCreatedViaDonate = true
 				}
 			}
@@ -700,7 +701,7 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 				if v.store != nil && v.store.donated && val.IsOnAnyDevice() {
 					if valBackend, bErr := val.Backend(); bErr == nil && valBackend == backend {
 						if buf, bufErr := val.Buffer(backend, 0); bufErr == nil {
-							constNode = graph.InternalConstBuffer(g, buf, false)
+							constNode = graphbridge.ConstBuffer(g, buf, false)
 						}
 					}
 				}
@@ -709,7 +710,7 @@ func (v *Variable) paramNode(g *Graph) (*Node, error) {
 				}
 			}
 			if canShareConst {
-				if outs := graph.InternalBackendOutputs(constNode); len(outs) == 1 {
+				if outs := graphbridge.BackendOutputs(constNode); len(outs) == 1 {
 					v.sharedConstValue = outs[0]
 				}
 				v.sharedConstBackend = backend

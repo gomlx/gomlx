@@ -11,6 +11,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/ml/ggml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -281,7 +282,7 @@ func TestDequantize_KQuants(t *testing.T) {
 		refTensor := MustExecOnce(goBackend, func(g *Graph) *Node {
 			table := Const(g, rows)
 			indices := Const(g, [][]int32{{0}, {1}})
-			return BackendQuantizedGather(table, indices, &Quantization{
+			return graphbridge.QuantizedGather(table, indices, &Quantization{
 				Scheme:   compute.QuantGGML,
 				GGMLType: tc.ggmlType,
 			})

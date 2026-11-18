@@ -2,6 +2,14 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-11-18:
+  - `core/graph`, `core/autodiff`, `internal/graphimpl`, `internal/graphbridge`:
+    - Reworked `core/graph` to hide low-level engine internals (`Internal*`, `Backend*` ops, `NodeInputs*`, `ParamsMap`, `RunWithMap`, `NodeXlaHandle`, `CloneWithInputs`, `AttachState`/`State`, `Executable`, `MinConstValueSizeToKeep`) from the public `core/graph` API while adding `Graph.GetParam(name string) *Node`.
+    - Extracted the underlying engine types (`GraphImpl`, `NodeImpl`, `FunctionImpl`, `ExecImpl`), `gen_compute_ops.go`, and `fused_ops.go` into `internal/graphimpl`, updated `internal/cmd/graph_generator` to generate `gen_public_ops.go` in `core/graph` (`-public`) alongside `gen_compute_ops.go` in `internal/graphimpl`, and added `internal/graphbridge` for typed internal conversions and fused/internal ops used by `ml/*` and `core/autodiff`.
+    - Extracted reverse-mode automatic differentiation (`Gradient`, `VJPRegistration`, `SingleOutputVJP`, all operation VJPs, and checkpoint rematerialization) into `github.com/gomlx/gomlx/core/autodiff`; updated `ml/model` (`Scope.BuildTrainableVariablesGradientsGraph`), `ml/train` (blank import), examples, and tests accordingly, while keeping a temporary deprecated `graph.Gradient` stop-gap wired via `graphimpl.GradientHook`.
+  - `ml/nn`, `ml/layers/attention`:
+    - Added stateless `nn.FusedScaledDotProductAttention` (`FusedSDPAConfig`) in `ml/nn/sdpa.go`, delegating fused-eligible attention in `ml/layers/attention` and external callers (such as `onnx-gomlx`) through it.
+
 - 2026-11-17:
   - `core/graph`, `ml/model`:
     - Redesigned `RNGBitGenerator` and `Random*` APIs for portable `compute.RNGAlgorithm` support (`core/graph/{ops_random,ops_random_fallback,rng_seed_*}.go`, `internal/cmd/graph_generator`):

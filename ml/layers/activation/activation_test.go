@@ -8,6 +8,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/support/xslices"
 	_ "github.com/gomlx/gomlx/backends/default"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/support/testutil"
@@ -149,7 +150,7 @@ func TestActivationGradients(t *testing.T) {
 				x := Const(g, []float32{-2.0, 3.0})
 				y := Relu(x)
 				loss := ReduceAllSum(y)
-				grad := Gradient(loss, x)[0]
+				grad := autodiff.Gradient(loss, x)[0]
 				return []*Node{x}, []*Node{loss, grad}
 			}, []any{
 				float32(3.0),
@@ -162,7 +163,7 @@ func TestActivationGradients(t *testing.T) {
 				x := Const(g, []float32{0.0, 1.0})
 				y := Gelu(x)
 				loss := ReduceAllSum(y)
-				grad := Gradient(loss, x)[0]
+				grad := autodiff.Gradient(loss, x)[0]
 				return []*Node{x}, []*Node{loss, grad}
 			}, []any{
 				float32(0.8413447),
@@ -175,7 +176,7 @@ func TestActivationGradients(t *testing.T) {
 				x := Const(g, []float32{0.0})
 				y := Swish(x)
 				loss := ReduceAllSum(y)
-				grad := Gradient(loss, x)[0]
+				grad := autodiff.Gradient(loss, x)[0]
 				return []*Node{x}, []*Node{loss, grad}
 			}, []any{
 				float32(0.0),

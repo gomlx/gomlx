@@ -14,6 +14,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/internal/scoped"
 	"github.com/gomlx/gomlx/support/exceptions"
 	. "github.com/gomlx/gomlx/support/exceptions"
@@ -504,7 +505,7 @@ func GetStore(g graph.GraphProvider) *Store {
 	if gr == nil {
 		return nil
 	}
-	state := gr.State(storeLink{})
+	state := graphbridge.State(gr, storeLink{})
 	if state == nil {
 		return nil
 	}
@@ -515,7 +516,7 @@ func GetStore(g graph.GraphProvider) *Store {
 // One doesn't need to do this usually, as it is taken care by the [model.Exec] executor.
 // But if you are building the graph "manually", you can use this.
 func SetStore(g graph.GraphProvider, store *Store) {
-	g.Graph().AttachState(storeLink{}, store)
+	graphbridge.AttachState(g.Graph(), storeLink{}, store)
 }
 
 // graphState holds the state associate with this specific graph, in the form a `graphStore`.
@@ -574,10 +575,10 @@ func newGraphStore() *graphStore {
 // getGraphStore returns the graphStore attached to the graph.
 // If none exists, it automatically creates and attaches one.
 func getGraphStore(g *Graph) *graphStore {
-	state := g.State(graphState{})
+	state := graphbridge.State(g, graphState{})
 	if state == nil {
 		gs := newGraphStore()
-		g.AttachState(graphState{}, gs)
+		graphbridge.AttachState(g, graphState{}, gs)
 		return gs
 	}
 	return state.(*graphStore)
@@ -585,7 +586,7 @@ func getGraphStore(g *Graph) *graphStore {
 
 // setGraphStore attaches a graphStore to the graph.
 func setGraphStore(g *Graph, gs *graphStore) {
-	g.AttachState(graphState{}, gs)
+	graphbridge.AttachState(g, graphState{}, gs)
 }
 
 // GetGraphParam returns the value for the given param key for the given graph,

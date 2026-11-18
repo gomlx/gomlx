@@ -376,8 +376,8 @@ func (c *Config) GenerateImagesOfAllFlowerTypes(numDiffusionSteps int) (predicte
 	_ = c.Store.ResetRNGState()
 	imageSize := c.ImageSize
 	noise := MustNewExec(c.Backend, func(g *Graph) *Node {
-		state := RNGStateForGraph(g)
-		_, noise := RandomNormal(state, shapes.Make(c.DType, 1, imageSize, imageSize, 3))
+		state := RNGStateForGraph(g, RNGDefault)
+		_, noise := RandomNormal(RNGDefault, state, shapes.Make(c.DType, 1, imageSize, imageSize, 3))
 		noise = BroadcastToDims(noise, numImages, imageSize, imageSize, 3)
 		return noise
 	}).MustCall1()
@@ -465,8 +465,8 @@ func (g *ImagesGenerator) Generate() (batchedImages *tensors.Tensor) {
 // GenerateNoise generates random noise that can be used to generate images.
 func (c *Config) GenerateNoise(numImages int) *tensors.Tensor {
 	return MustNewExec(c.Backend, func(g *Graph) *Node {
-		state := RNGStateForGraph(g)
-		_, noise := RandomNormal(state, shapes.Make(c.DType, numImages, c.ImageSize, c.ImageSize, 3))
+		state := RNGStateForGraph(g, RNGDefault)
+		_, noise := RandomNormal(RNGDefault, state, shapes.Make(c.DType, numImages, c.ImageSize, c.ImageSize, 3))
 		return noise
 	}).MustExec1()
 }

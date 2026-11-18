@@ -8,8 +8,10 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/testutil"
@@ -29,11 +31,11 @@ func backendSupportsBiasedFusion(backend compute.Backend) bool {
 		exec := MustNewExec(backend, func(qn, bn *Node) *Node {
 			round := func(n *Node) *Node { return ConvertDType(n, dtypes.BFloat16) }
 			cfg := &compute.ScaledDotProductAttentionConfig{
-				Bias:   InternalBackendOutputs(round(bn))[0],
+				Bias:   graphbridge.BackendOutputs(round(bn))[0],
 				Scale:  scale,
 				Causal: false,
 			}
-			fused, _ := BackendFusedScaledDotProductAttention(
+			fused, _ := graphbridge.FusedScaledDotProductAttention(
 				round(qn), round(qn), round(qn),
 				compute.AttentionAxesLayoutBSHD, cfg)
 			return ConvertDType(ReduceAllSum(fused), dtypes.Float32)
@@ -220,8 +222,8 @@ func TestAttentionBiasFusedParity(t *testing.T) {
 			fusedBwdOut, _ := Core(qProj, kProj, vProj, LayoutBSHD, CoreOptions{Scale: scale, AttentionBias: biasIn})
 			refBwdOut, _ := Core(qProj, kProj, vProj, LayoutBSHD, CoreOptions{Scale: scale, AttentionBias: biasIn, DisableFusion: true})
 			// Gradients are w.r.t. bf16 qProj, so cast to f32 before the metric (ToScalar wants f32).
-			dqFused := ConvertDType(Gradient(ReduceAllSum(ConvertDType(fusedBwdOut, dtypes.Float32)), qProj)[0], dtypes.Float32)
-			dqRef := ConvertDType(Gradient(ReduceAllSum(ConvertDType(refBwdOut, dtypes.Float32)), qProj)[0], dtypes.Float32)
+			dqFused := ConvertDType(autodiff.Gradient(ReduceAllSum(ConvertDType(fusedBwdOut, dtypes.Float32)), qProj)[0], dtypes.Float32)
+			dqRef := ConvertDType(autodiff.Gradient(ReduceAllSum(ConvertDType(refBwdOut, dtypes.Float32)), qProj)[0], dtypes.Float32)
 			relBwd := Div(ReduceAllMax(Abs(Sub(dqFused, dqRef))), AddScalar(ReduceAllMax(Abs(dqRef)), 1e-6))
 
 			// Forward parity through the builder, sharing projection weights.
@@ -302,8 +304,8 @@ func TestAttentionBiasFusedParityMatrix(t *testing.T) {
 					if tc.fwdOnly {
 						return []*Node{relFwd}
 					}
-					dqF := ConvertDType(Gradient(ReduceAllSum(fF32), qc)[0], dtypes.Float32)
-					dqR := ConvertDType(Gradient(ReduceAllSum(rF32), qc)[0], dtypes.Float32)
+					dqF := ConvertDType(autodiff.Gradient(ReduceAllSum(fF32), qc)[0], dtypes.Float32)
+					dqR := ConvertDType(autodiff.Gradient(ReduceAllSum(rF32), qc)[0], dtypes.Float32)
 					relBwd := Div(ReduceAllMax(Abs(Sub(dqF, dqR))), AddScalar(ReduceAllMax(Abs(dqR)), 1e-6))
 					return []*Node{relFwd, relBwd}
 				})

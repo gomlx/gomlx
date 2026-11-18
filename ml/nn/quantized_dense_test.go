@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/float16"
 	"github.com/gomlx/compute/gobackend"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
@@ -628,7 +629,7 @@ func TestQuantizedDense_FusedVJP(t *testing.T) {
 					weights := AddScalar(Iota(g, y.Shape(), 1), 1.0)
 					_ = outDim
 					loss := ReduceAllSum(Mul(y, weights))
-					return Gradient(loss, x, b)
+					return autodiff.Gradient(loss, x, b)
 				}
 
 				t.Setenv(FusionEnv, "1")
@@ -699,7 +700,7 @@ func TestQuantizedDense_FusedVJP(t *testing.T) {
 				WeightLayout: compute.DenseLayoutOutputsInput,
 			}, activation.TypeSilu)
 			loss := ReduceAllSum(Mul(y, Const(g, [][]float32{{1.5, -0.75}})))
-			return Gradient(loss, x, b)
+			return autodiff.Gradient(loss, x, b)
 		}
 
 		t.Setenv(FusionEnv, "1")
