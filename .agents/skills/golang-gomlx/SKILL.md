@@ -54,9 +54,10 @@ go get -u github.com/gomlx/compute
     slice of integers). Shapes are strictly checked during graph building. GoMLX supports **dynamic shapes** (input-shape
     conditioned dimensions), where variable axes are set as indeterminate (`shapes.DynamicDim` == -1) and optionally named
     (`shapes.MakeDynamic(...)`).
-- Computation Graph (`github.com/gomlx/gomlx/core/graph`): The `Graph` object is the container for computation nodes.
+- Computation Graph (`github.com/gomlx/gomlx/core/graph`) & Autodiff (`github.com/gomlx/gomlx/core/autodiff`): The `Graph` object is the container for computation nodes.
   - Computations are built (by a Go function) using `*Node` objects. Each node represents an operation or a value, and
-    it always contains a reference to the graph it belongs to (`Node.Graph()`).
+    it always contains a reference to the graph it belongs to (`Node.Graph()`), and parameters can be looked up by name via `g.GetParam(name)`.
+  - Reverse-mode automatic differentiation is provided by `autodiff.Gradient(loss, targets...)` in `github.com/gomlx/gomlx/core/autodiff`.
   - The graph building phase is separate from the execution phase. You build the graph first, and then execute it (there
     is a JIT-compilation that happens in between automatically, handled by the `graph.Exec` / `model.Exec` object).
   - Executor: (`graph.Exec` or `model.Exec`) takes a graph-building function, JIT-compiles it, and provides methods to

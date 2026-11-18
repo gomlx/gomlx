@@ -3,25 +3,19 @@
 package graph
 
 import (
-	"fmt"
-	"strings"
-
-	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
-	"github.com/gomlx/compute/support/humanize"
-	"github.com/gomlx/compute/support/xslices"
-	"github.com/gomlx/gomlx/support/exceptions"
+	"github.com/gomlx/gomlx/internal/graphimpl"
 )
 
-const (
-	MaxSizeToPrint = 5
-)
+const MaxSizeToPrint = graphimpl.MaxSizeToPrint
+
+// VJP is a vector-jacobian product (reverse-mode automatic differentiation) function for a Node.
+type VJP func(node *Node, vjpOutputs []*Node, outputShape shapes.Shape) []*Node
 
 // Node represents the result of an operation in the computation graph, and can be used as input to further operations.
 //
-// Internally, it keeps tracks of all parameters used for the computation: this is later used for auto-differentiation
-// (see Gradient).
+// Internally, it keeps tracks of all parameters used for the computation: this is later used for auto-differentiation.
 //
 // It also stores meta-information: see Node.SetLogged, Node.StopGradient.
 //
@@ -30,74 +24,48 @@ const (
 //
 // Node.String allows for a pretty-printing of node. To see the full graph with all nodes, use Graph.String.
 type Node struct {
-	graph        *Graph
-	scope        *Function
-	id           NodeId // id within graph.
-	outputShapes []shapes.Shape
-	outputOps    []compute.Value
-
-	// inputNodes are the edges of the computation graph.
-	// Notice that other static inputs to the node are registered in inputs
-	inputNodes []*Node
-
-	// inputs need to be
-	inputs NodeInputs
-
-	// alias is a name by which the Node be referred in the Graph.
-	alias string
-
-	// logMessage is set if node is marked for logging.
-	logMessage string
-
-	// stopGradient is set if no gradient is supposed to pass through.
-	stopGradient bool
-
-	// customVJP can be set for a custom reverse gradient definition for the function.
-	// Usually, defined for a NoOp operation.
-	customVJP VJP
-
-	// vjpAlternateOutputs holds decomposed versions of this node's computation built from
-	// primitive ops. During reverse-mode autodiff, the VJP is computed from these alternate
-	// outputs instead of the fused node, so no hand-written VJPs are needed for fused ops
-	// -- even though one can create a customVJP for a fused-op, if one wants.
-	//
-	// For single-output fused ops this is a 1-element slice; for multi-output fused ops
-	// (e.g. FusedAttentionQKVProjection) each element corresponds to one split output's
-	// decomposed equivalent.
-	vjpAlternateOutputs []*Node
-
-	// Flags used for gradient checkpointing (rematerialization blocks):
-	//
-	// isCheckpointed indicates that this node's forward activation is saved in memory
-	// and acts as a firewall boundary during backward propagation. The recursive rematerialization
-	// generator (getRematerialization) will stop crawling backward when it hits an isCheckpointed node.
-	// It is set to true by both Node.Checkpoint() and Node.StopCheckpoint().
-	//
-	// needsRematerialization is a contagious flag set to true during graph building
-	// if any of the node's inputs have needsRematerialization == true. It signals to the
-	// autodiff engine that this node's forward activation will be discarded by XLA and
-	// must be recomputed on-the-fly during the backward pass.
-	//
-	// Node.Checkpoint() starts or continues a block by setting both flags to true.
-	// Node.StopCheckpoint() ends a block; it saves its own output (isCheckpointed=true)
-	// but clears the contagion (needsRematerialization=false) so downstream parts of
-	// the graph can continue normally.
-	isCheckpointed, needsRematerialization bool
-
-	trace error // Stack-trace error of where Node was created. Stored if graph.traced is true.
+	impl *graphimpl.NodeImpl
 }
 
-// NodeInputs represents the inputs to node. The common interface is to return the type of the node.
-// For the input parameters themselves, the pointer needs to be cast to the corresponding type, usually named
-// inputNodes<backend_operation_name>, see generated gen_backend_ops.go
-type NodeInputs interface {
-	Type() NodeType
+func wrapNode(impl *graphimpl.NodeImpl) *Node {
+	if impl == nil {
+		return nil
+	}
+	if pub := impl.Public(); pub != nil {
+		return pub.(*Node)
+	}
+	n := &Node{impl: impl}
+	impl.SetPublic(n)
+	return n
+}
 
-	// String prints a descriptive representation of the node, using its parameters.
-	String() string
+func unwrapNode(n *Node) *graphimpl.NodeImpl {
+	if n == nil {
+		return nil
+	}
+	return n.impl
+}
 
-	// CloneWithInputs recreates the node using the given inputs instead of the original ones.
-	CloneWithInputs(originalNode *Node, newInputs ...*Node) *Node
+func wrapNodes(impls []*graphimpl.NodeImpl) []*Node {
+	if impls == nil {
+		return nil
+	}
+	nodes := make([]*Node, len(impls))
+	for i, impl := range impls {
+		nodes[i] = wrapNode(impl)
+	}
+	return nodes
+}
+
+func unwrapNodes(nodes []*Node) []*graphimpl.NodeImpl {
+	if nodes == nil {
+		return nil
+	}
+	impls := make([]*graphimpl.NodeImpl, len(nodes))
+	for i, n := range nodes {
+		impls[i] = unwrapNode(n)
+	}
+	return impls
 }
 
 // Graph that holds this Node.
@@ -105,7 +73,7 @@ func (n *Node) Graph() *Graph {
 	if n == nil {
 		return nil
 	}
-	return n.graph
+	return wrapGraph(n.impl.Graph())
 }
 
 // Function scope that holds this Node.
@@ -113,18 +81,18 @@ func (n *Node) Function() *Function {
 	if n == nil {
 		return nil
 	}
-	return n.scope
+	return wrapFunction(n.impl.Function())
 }
 
-// Shape of the Node's output. It can be `nil`, for nodes that simply have a side effect, like a "Print" Node.
+// Shape of the Node's output. It can be empty for multi-output internal nodes.
 func (n *Node) Shape() shapes.Shape {
-	if n == nil || n.NumOutputs() != 1 {
+	if n == nil {
 		return shapes.Shape{}
 	}
-	return n.outputShapes[0]
+	return n.impl.Shape()
 }
 
-// DType returns the DType of the node's shapes.
+// DType returns the DType of the node's shape.
 func (n *Node) DType() dtypes.DType {
 	return n.Shape().DType
 }
@@ -141,145 +109,107 @@ func (n *Node) IsScalar() bool {
 
 // Id is the unique id of this node within the Graph.
 func (n *Node) Id() NodeId {
-	return n.id
+	if n == nil {
+		return InvalidNodeId
+	}
+	return n.impl.Id()
 }
 
 // GetParameterHandle returns the parameter id in the graph.
 // It panics if node is not a parameter.
 func (n *Node) GetParameterHandle() ParameterHandle {
 	n.AssertValid()
-	if n.Type() != NodeTypeParameter {
-		exceptions.Panicf("node %s is not a Parameter node", n.Type())
-	}
-	return n.inputs.(*nodeInputsParameter).handle
+	return n.impl.GetParameterHandle()
 }
 
 // GetParameterName returns the parameter name.
 // If node is not a parameter, it panics.
 func (n *Node) GetParameterName() string {
 	n.AssertValid()
-	if n.Type() != NodeTypeParameter {
-		exceptions.Panicf("trying to get GetParameterName of a non-parameter node %q", n.Type())
-	}
-	return n.inputs.(*nodeInputsParameter).name
+	return n.impl.GetParameterName()
 }
 
-// Inputs are the other nodes that are direct inputNodes to the node.
-// This doesn't include static inputNodes for some operations that are not given by other Graph nodes.
-func (n *Node) Inputs() []*Node { return n.inputNodes }
+// Inputs are the other nodes that are direct inputs to the node.
+// This doesn't include static inputs for some operations that are not given by other Graph nodes.
+func (n *Node) Inputs() []*Node {
+	if n == nil {
+		return nil
+	}
+	return wrapNodes(n.impl.Inputs())
+}
 
 // NumOutputs returns the number of outputs for a node.
-//
-// Almost every node will have one output only. But a few (like "RNGBitGenerator") will output various outputs
-// that are split before usage. These nodes are marked with an invalid dtype.
-//
-// Used internally only, all Graph public operations will return nodes with one output only.
 func (n *Node) NumOutputs() int {
-	return len(n.outputOps)
+	if n == nil {
+		return 0
+	}
+	return n.impl.NumOutputs()
 }
 
-// AssertValid panics if `n` is nil, or if its graph is invalid.
+// AssertValid panics if n is nil, or if its graph is invalid.
 func (n *Node) AssertValid() {
 	if n == nil {
-		exceptions.Panicf("Node is nil")
+		(*graphimpl.NodeImpl)(nil).AssertValid()
 	}
-	if n.inputs == nil {
-		exceptions.Panicf("Node in an invalid state")
-	}
-	n.graph.AssertValid()
+	n.impl.AssertValid()
 }
 
 // SetLogged indicates that a node should be logged by executors, with the given message.
 func (n *Node) SetLogged(message string) {
-	n.logMessage = message
+	n.impl.SetLogged(message)
 }
 
 // SetLoggedf indicates that a node should be logged by executors, with the given formatted message.
 // See SetLogged.
 func (n *Node) SetLoggedf(format string, args ...any) {
-	n.SetLogged(fmt.Sprintf(format, args...))
+	n.impl.SetLoggedf(format, args...)
 }
 
 // IsLogged returns whether node is marked to be logged.
 func (n *Node) IsLogged() bool {
-	return n.logMessage != ""
+	return n.impl.IsLogged()
 }
 
 // LogMessage associated with node, if any.
 func (n *Node) LogMessage() string {
-	return n.logMessage
+	return n.impl.LogMessage()
 }
 
 // Trace returns stack-trace in form of an error, of when the node was created.
 // Only available if enabled by `Graph.SetTraced(true)`.
 func (n *Node) Trace() error {
-	return n.trace
+	return n.impl.Trace()
 }
 
 // String implements the `fmt.Stringer` interface.
-// Logged nodes are marked with (*).
-func (n *Node) String() (str string) {
+func (n *Node) String() string {
 	if n == nil {
 		return "Node(nil)"
 	}
-	if n.graph == nil || !n.graph.IsValid() {
-		return fmt.Sprintf("Node #%d(invalid graph)", n.id)
-	}
-	str = fmt.Sprintf("Node #%d", n.id)
-	if n.alias != "" {
-		str += fmt.Sprintf(" [%q]", n.alias)
-	}
-	if n.Type() == NodeTypeInvalid {
-		str += " Invalid(?)"
-	} else {
-		str += " " + n.inputs.String()
-	}
-
-	parts := []string{str}
-	if n.logMessage != "" {
-		parts = append(parts, "[Logged]")
-	}
-	if n.stopGradient {
-		parts = append(parts, "[StopGradient]")
-	}
-	if n.customVJP != nil {
-		parts = append(parts, "[CustomVJP]")
-	}
-
-	memory := xslices.Map(n.outputShapes, func(shape shapes.Shape) string {
-		if shape.IsDynamic() {
-			return "dynamic"
-		}
-		return humanize.Bytes(uint64(shape.ByteSize()))
-	})
-
-	str = fmt.Sprintf("%s -> %s - mem: %v", strings.Join(parts, " "), n.outputShapes, memory)
-	return
+	return n.impl.String()
 }
 
-// StopGradient returns weather node is a StopGradient.
+// StopGradient returns whether node is a StopGradient.
 func (n *Node) StopGradient() bool {
-	return n.stopGradient
+	if n == nil {
+		return false
+	}
+	return n.impl.StopGradient()
 }
 
 // CustomGradient returns a registered custom gradient for the Node. See IdentityWithCustomGradient.
 func (n *Node) CustomGradient() VJP {
-	return n.customVJP
-}
-
-// CloneWithInputs creates a clone of the node but using the given new inputs instead.
-//
-// It also propagates some generic attributes like stopGradient, customVJP, alias.
-// But it **does not** propagate extra functionality ones, like `logMessage`, `isCheckpointed`, `needsRematerialization`.
-func (n *Node) CloneWithInputs(newInputs ...*Node) *Node {
-	n.AssertValid()
-	cloned := n.inputs.CloneWithInputs(n, newInputs...)
-	if cloned != nil {
-		// Propagate:
-		cloned.stopGradient = n.stopGradient
-		cloned.customVJP = n.customVJP
-		cloned.alias = n.alias
-		// Do not propagate: logMessage, isCheckpointed and needsRematerialization.
+	if n == nil || n.impl.CustomVJP() == nil {
+		return nil
 	}
-	return cloned
+	if vjp, ok := n.impl.CustomVJP().(VJP); ok {
+		return vjp
+	}
+	fn, ok := n.impl.CustomVJP().(func(node *graphimpl.NodeImpl, vjpForOutputs []*graphimpl.NodeImpl, outputShape shapes.Shape) []*graphimpl.NodeImpl)
+	if !ok || fn == nil {
+		return nil
+	}
+	return func(node *Node, vjpOutputs []*Node, outputShape shapes.Shape) []*Node {
+		return wrapNodes(fn(unwrapNode(node), unwrapNodes(vjpOutputs), outputShape))
+	}
 }

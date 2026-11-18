@@ -6,6 +6,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/support/envutil"
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/ml/layers/activation"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
@@ -24,7 +25,7 @@ import (
 //
 // If the backend supports fused Dense, the optimized native implementation is
 // used; otherwise the operation is decomposed into primitives. Fallback is
-// handled automatically via InternalFusedOpCaller.
+// handled automatically via graphbridge.FusedOpCaller.
 func Dense(x, weight, bias *Node, weightLayout compute.DenseLayout, optionalActivation ...activation.Type) *Node {
 	act := activation.TypeNone
 	if len(optionalActivation) > 0 {
@@ -58,14 +59,14 @@ func Dense(x, weight, bias *Node, weightLayout compute.DenseLayout, optionalActi
 		if actCfg.Type.VJPRequiresInput() {
 			noActCfg := denseCfg
 			noActCfg.Activation = compute.ActivationConfig{Type: compute.ActivationNone}
-			denseOut := BackendFusedDense(x, weight, bias, noActCfg)
-			return BackendFusedActivation(denseOut, actCfg)
+			denseOut := graphbridge.FusedDense(x, weight, bias, noActCfg)
+			return graphbridge.FusedActivation(denseOut, actCfg)
 		}
-		return BackendFusedDense(x, weight, bias, denseCfg)
+		return graphbridge.FusedDense(x, weight, bias, denseCfg)
 	}
 
-	res, _ := InternalFusedOpCaller(
-		func() *Node { return BackendFusedDense(x, weight, bias, denseCfg) },
+	res, _ := graphbridge.FusedOpCaller(
+		func() *Node { return graphbridge.FusedDense(x, weight, bias, denseCfg) },
 		decomposed,
 		true,
 	)

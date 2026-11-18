@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package graph_test
+package autodiff_test
 
 import (
 	"fmt"
@@ -11,12 +11,20 @@ import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/ml/layers/attention"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	MakeShape = shapes.Make
+	F64       = dtypes.Float64
+	Epsilon   = 1e-4
 )
 
 func TestGradientAdd(t *testing.T) {
@@ -26,7 +34,7 @@ func TestGradientAdd(t *testing.T) {
 		c1 := Const(g, []float32{1, 2})
 		c2 := Const(g, []float32{10})
 		output := ReduceAllSum(Add(c1, c2))
-		gradients := Gradient(output, c1, c2)
+		gradients := autodiff.Gradient(output, c1, c2)
 		outputs := []*Node{output}
 		outputs = append(outputs, gradients...)
 		err := g.Compile(outputs...)
@@ -66,10 +74,10 @@ func TestGradientSlice(t *testing.T) {
 			o4 := Slice(x, AxisRange(-1), AxisRange().Stride(2))
 			inputs = []*Node{x, o1, o2, o3, o4}
 			outputs = []*Node{
-				Gradient(ReduceAllSum(o1), x)[0],
-				Gradient(ReduceAllSum(o2), x)[0],
-				Gradient(ReduceAllSum(o3), x)[0],
-				Gradient(ReduceAllSum(o4), x)[0],
+				autodiff.Gradient(ReduceAllSum(o1), x)[0],
+				autodiff.Gradient(ReduceAllSum(o2), x)[0],
+				autodiff.Gradient(ReduceAllSum(o3), x)[0],
+				autodiff.Gradient(ReduceAllSum(o4), x)[0],
 			}
 			return
 		}, []any{
@@ -85,7 +93,7 @@ func TestGradientGather(t *testing.T) {
 		func(g *Graph) (inputs, outputs []*Node) {
 			numbers := IotaFull(g, MakeShape(F64, 5, 3))
 			gather := Gather(numbers, ScalarOne(g, dtypes.Int64), true)
-			gradients := Gradient(ReduceAllSum(gather), numbers)
+			gradients := autodiff.Gradient(ReduceAllSum(gather), numbers)
 			inputs = []*Node{numbers}
 			outputs = []*Node{gather, gradients[0]}
 			return
@@ -100,7 +108,7 @@ func TestGradientGather(t *testing.T) {
 			numbersMul := Mul(numbers, Add(IotaFull(g, MakeShape(F64, 5, 1)), Const(g, 1.0)))
 			indices := Const(g, [][]int{{2}, {0}})
 			gather := Gather(numbersMul, indices, false)
-			gradients := Gradient(ReduceAllSum(gather), numbers)
+			gradients := autodiff.Gradient(ReduceAllSum(gather), numbers)
 			inputs = []*Node{numbers}
 			outputs = []*Node{gather, gradients[0]}
 			return
@@ -115,7 +123,7 @@ func TestGradientGather(t *testing.T) {
 			numbers := IotaFull(g, MakeShape(F64, 5, 3))
 			indices := Const(g, [][][]int{{{2}, {0}}, {{2}, {1}}})
 			gather := Gather(numbers, indices, false)
-			gradients := Gradient(ReduceAllSum(gather), numbers)
+			gradients := autodiff.Gradient(ReduceAllSum(gather), numbers)
 			inputs = []*Node{numbers}
 			outputs = []*Node{gather, gradients[0]}
 			return
@@ -156,7 +164,7 @@ func testGradientsInDelta(t *testing.T, name string, backend compute.Backend, te
 		// Create a function that can be used by computation.Exec.
 		fn := func(g *Graph) []*Node {
 			output, nodesForGrad := testFn(g)
-			grads := Gradient(ReduceAllSum(output), nodesForGrad...)
+			grads := autodiff.Gradient(ReduceAllSum(output), nodesForGrad...)
 			return append([]*Node{output}, grads...)
 		}
 		exec, err := NewExec(backend, fn)
@@ -195,7 +203,7 @@ func testGradientsExact(t *testing.T, name string, testFn gradTestFunc, wantForG
 	// Create a function that can be used by computation.Exec.
 	fn := func(g *Graph) []*Node {
 		output, nodesForGrad := testFn(g)
-		grads := Gradient(ReduceAllSum(output), nodesForGrad...)
+		grads := autodiff.Gradient(ReduceAllSum(output), nodesForGrad...)
 		return append([]*Node{output}, grads...)
 	}
 	exec, err := NewExec(backend, fn)
@@ -358,7 +366,7 @@ func TestGradientBatchNorm(t *testing.T) {
 			scale := Const(g, []float32{1.0, 2.0, 3.0})
 			offset := Const(g, []float32{1.0, 10.0, 100.0})
 			var mean, variance *Node
-			output, mean, variance = InternalBatchNormForTraining(input, scale, offset, 1e-7, -1)
+			output, mean, variance = graphbridge.BatchNormForTraining(input, scale, offset, 1e-7, -1)
 			mean.SetLogged("mean")
 			variance.SetLogged("variance")
 			nodesForGrad = []*Node{input, scale, offset}
@@ -390,7 +398,7 @@ func TestGradientBatchNorm(t *testing.T) {
 		inputs = []*Node{input}
 		scale := Const(g, []float32{1.0, 2.0, 3.0})
 		offset := Const(g, []float32{1.0, 10.0, 100.0})
-		output, mean, variance := InternalBatchNormForTraining(input, scale, offset, 1e-7, -1)
+		output, mean, variance := graphbridge.BatchNormForTraining(input, scale, offset, 1e-7, -1)
 		output.SetLogged("\tbatch normalized output")
 		mean.SetLogged("\tmean")
 		variance.SetLogged("\tvariance")
@@ -398,7 +406,7 @@ func TestGradientBatchNorm(t *testing.T) {
 		scaleContributions.SetLogged("\tcontributions")
 		loss := ReduceSum(Mul(output, scaleContributions))
 		loss.SetLogged("\tloss")
-		outputs = Gradient(loss, input, scale, offset)
+		outputs = autodiff.Gradient(loss, input, scale, offset)
 		return
 	}, []any{
 		[][]float32{{0, 1.3708086e-06, 1.6449703e-05}, {0, 1.0966469e-06, 1.3159763e-05}, {0, 8.2248516e-07, 9.869822e-06}, {0, 5.483234e-07, 6.579881e-06}, {0, 2.741617e-07, 3.2899404e-06}, {0, 0, 0}, {0, -2.7416178e-07, -3.2899416e-06}, {0, -5.483234e-07, -6.579881e-06}, {0, -8.2248516e-07, -9.869822e-06}, {0, -1.0966469e-06, -1.31597635e-05}, {0, -1.3708086e-06, -1.6449703e-05}},
@@ -816,9 +824,9 @@ func TestGradientFusedActivation(t *testing.T) {
 		graphtest.RunTestGraphFnWithBackend(t, "FusedActivationRelu", backend,
 			func(g *Graph) (inputs, outputs []*Node) {
 				x := Const(g, []float32{-2.0, 3.0})
-				y := BackendFusedActivation(x, compute.ActivationConfig{Type: compute.ActivationRelu})
+				y := graphbridge.FusedActivation(x, compute.ActivationConfig{Type: compute.ActivationRelu})
 				loss := ReduceAllSum(y)
-				grad := Gradient(loss, x)[0]
+				grad := autodiff.Gradient(loss, x)[0]
 				return []*Node{x}, []*Node{loss, grad}
 			}, []any{
 				float32(3.0),
@@ -843,9 +851,9 @@ func TestGradientFusedDense(t *testing.T) {
 					Activation:   compute.ActivationConfig{Type: compute.ActivationNone},
 					WeightLayout: compute.DenseLayoutInputOutputs,
 				}
-				y := BackendFusedDense(x, w, bias, cfg)
+				y := graphbridge.FusedDense(x, w, bias, cfg)
 				loss := ReduceAllSum(y)
-				grads := Gradient(loss, x, w, bias)
+				grads := autodiff.Gradient(loss, x, w, bias)
 				return []*Node{x, w, bias}, append([]*Node{loss}, grads...)
 			}, []any{
 				float32(10.0),
@@ -863,9 +871,9 @@ func TestGradientFusedDense(t *testing.T) {
 					Activation:   compute.ActivationConfig{Type: compute.ActivationNone},
 					WeightLayout: compute.DenseLayoutInputOutputs,
 				}
-				y := BackendFusedDense(x, w, nil, cfg)
+				y := graphbridge.FusedDense(x, w, nil, cfg)
 				loss := ReduceAllSum(y)
-				grads := Gradient(loss, x, w)
+				grads := autodiff.Gradient(loss, x, w)
 				return []*Node{x, w}, append([]*Node{loss}, grads...)
 			}, []any{
 				float32(3.0),

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/internal/graphimpl"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/sets"
 )
@@ -155,8 +156,8 @@ func Gather(params, indices *Node, indicesAreSorted ...bool) *Node {
 
 	// Make no assumptions about indices being sorted or unique.
 	// TODO: add version where these can be set.
-	return backendGather(params, indices, indexVectorDim, offsetOutputAxes, collapsedSliceDims, startIndexMap, sliceSizes,
-		len(indicesAreSorted) == 1 && indicesAreSorted[0])
+	return wrapNode(graphimpl.BackendGather(unwrapNode(params), unwrapNode(indices), indexVectorDim, offsetOutputAxes, collapsedSliceDims, startIndexMap, sliceSizes,
+		len(indicesAreSorted) == 1 && indicesAreSorted[0]))
 }
 
 // GatherSlices from inputNodes. Each axis listed in slicedAxes have corresponding start position and size for each
@@ -266,19 +267,7 @@ func GatherSlices(input *Node, slicedAxes []int, start *Node, sizes []int, indic
 		axis := ii + outputPrefixRank
 		offsetOutputAxes = append(offsetOutputAxes, axis)
 	}
-	return backendGather(input, start, indexVectorDim, offsetOutputAxes, collapsedSliceDims, startIndexMap, sliceSizes, indicesAreSorted)
-}
-
-// BackendGather exposes the raw backend Gather operator.
-//
-// This is internal, and it is exposed only for debugging purposes, please don't rely on it.
-// If it turns out you need some functionality here that is not provided in Gather or GatherSlices,
-// open an issue in GoMLX and we'll figure a betterAPI.
-//
-// See convoluted and circular description in
-// https://openxla.org/xla/operation_semantics#gather
-func BackendGather(operand *Node, startIndices *Node, indexVectorAxis int, offsetAxes []int, collapsedSliceAxes []int, startIndexMap []int, sliceSizes []int, indicesAreSorted bool) (node *Node) {
-	return backendGather(operand, startIndices, indexVectorAxis, offsetAxes, collapsedSliceAxes, startIndexMap, sliceSizes, indicesAreSorted)
+	return wrapNode(graphimpl.BackendGather(unwrapNode(input), unwrapNode(start), indexVectorDim, offsetOutputAxes, collapsedSliceDims, startIndexMap, sliceSizes, indicesAreSorted))
 }
 
 // GatherWithBatchDims values in params from pointers in indices.
@@ -448,7 +437,7 @@ func ScatterUpdate(operand, indices, updates *Node, sorted, unique bool) *Node {
 //     If in doubt, leave it false.
 func ScatterSum(operand, indices, updates *Node, sorted, unique bool) *Node {
 	_ = validateBuildingGraphFromInputs(operand, indices, updates)
-	return genericScatter(operand, indices, updates, sorted, unique, backendScatterSum)
+	return genericScatter(operand, indices, updates, sorted, unique, graphimpl.BackendScatterSum)
 }
 
 // ScatterAdd is a deprecated alias to ScatterSum.
@@ -469,7 +458,7 @@ func ScatterAdd(operand, indices, updates *Node, sorted, unique bool) *Node {
 // - [unique]: the indices must be unique. In some cases it is faster, but if indices are not unique results may be unstable.
 func ScatterMax(operand, indices, updates *Node, sorted, unique bool) *Node {
 	_ = validateBuildingGraphFromInputs(operand, indices, updates)
-	return genericScatter(operand, indices, updates, sorted, unique, backendScatterMax)
+	return genericScatter(operand, indices, updates, sorted, unique, graphimpl.BackendScatterMax)
 }
 
 // ScatterMin updates the min value of operand, from the values in updates pointed by indices.
@@ -483,10 +472,10 @@ func ScatterMax(operand, indices, updates *Node, sorted, unique bool) *Node {
 // - [unique]: the indices must be unique. In some cases it is faster, but if indices are not unique results may be unstable.
 func ScatterMin(operand, indices, updates *Node, sorted, unique bool) *Node {
 	_ = validateBuildingGraphFromInputs(operand, indices, updates)
-	return genericScatter(operand, indices, updates, sorted, unique, backendScatterMin)
+	return genericScatter(operand, indices, updates, sorted, unique, graphimpl.BackendScatterMin)
 }
 
-type scatterFn func(operand *Node, scatterIndices *Node, updates *Node, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *Node)
+type scatterFn func(operand *graphimpl.NodeImpl, scatterIndices *graphimpl.NodeImpl, updates *graphimpl.NodeImpl, indexVectorAxis int, updateWindowAxes []int, insertedWindowAxes []int, scatterAxesToOperandAxes []int, indicesAreSorted bool, uniqueIndices bool) (node *graphimpl.NodeImpl)
 
 func genericScatter(operand, indices, updates *Node, sorted, unique bool, fn scatterFn) *Node {
 	if !indices.DType().IsInt() {
@@ -539,8 +528,8 @@ func genericScatter(operand, indices, updates *Node, sorted, unique bool, fn sca
 	for ii := range indexedRank {
 		scatterAxesToOperandAxes = append(scatterAxesToOperandAxes, ii)
 	}
-	return fn(operand, indices, updates, indicesRank-1, updateWindowsAxes, insertedWindowsAxes, scatterAxesToOperandAxes,
-		sorted, unique)
+	return wrapNode(fn(unwrapNode(operand), unwrapNode(indices), unwrapNode(updates), indicesRank-1, updateWindowsAxes, insertedWindowsAxes, scatterAxesToOperandAxes,
+		sorted, unique))
 }
 
 // scatterDimsCompatible checks whether length consecutive dimensions starting at offset1 in s1
@@ -563,79 +552,4 @@ func scatterDimsCompatible(s1 shapes.Shape, offset1 int, s2 shapes.Shape, offset
 		}
 	}
 	return true
-}
-
-// scatterSumVJP generates the adjoint gradient term for a ScatterSum node.
-// Note: this may not work for the more general scatter form.
-func scatterSumVJP(node, v *Node, _ shapes.Shape) []*Node {
-	params := node.inputs.(*nodeInputsScatterSum)
-	operand, scatterIndices, updates := params.operand, params.scatterIndices, params.updates
-	_ = updates
-	_ = scatterIndices
-	_ = operand
-	operandVJP := v // Since it's a sum of the initial values, the VJP is the identity of the gradient coming in.
-	updatesVJP := Gather(v, scatterIndices, params.indicesAreSorted)
-	return []*Node{ /*operand*/ operandVJP /*indices*/, nil /*initialValue*/, updatesVJP}
-}
-
-// scatterMaxOrMinVJP generates the adjoint gradient term for a ScatterMax or ScatterMin node.
-// Note: this may not work for the more general scatter form.
-func scatterMaxOrMinVJP(node, v *Node, _ shapes.Shape) []*Node {
-	operand, scatterIndices, updates := node.inputNodes[0], node.inputNodes[1], node.inputNodes[2]
-	var indicesAreSorted bool
-	if node.Type() == NodeTypeScatterMax {
-		indicesAreSorted = node.inputs.(*nodeInputsScatterMax).indicesAreSorted
-	} else if node.Type() == NodeTypeScatterMin {
-		indicesAreSorted = node.inputs.(*nodeInputsScatterMin).indicesAreSorted
-	}
-
-	// For the operand, we propagate v only if the operand value was chosen as max value.
-	operandMask := Equal(node, operand)
-	operandVJP := Where(operandMask, v, ZerosLike(v))
-
-	// For the updates, we pick them only if they were chosen as max value.
-	maxForUpdates := Gather(node, scatterIndices, indicesAreSorted)
-	updatesMask := Equal(maxForUpdates, updates)
-	updatesVJP := Gather(v, scatterIndices)
-	updatesVJP = Where(updatesMask, updatesVJP, ZerosLike(updatesVJP))
-	return []*Node{ /*operand*/ operandVJP /*indices*/, nil /*initialValue*/, updatesVJP}
-}
-
-// BackendScatterMax exposes the raw backend ScatterMax operator.
-//
-// This should be internal, and it is exposed only for testing and debugging purposes, please don't rely on it.
-// If it turns out you need some functionality here that is not provided in ScatterMax,
-// open an issue in GoMLX and we'll figure a betterAPI.
-//
-// Description in
-// https://openxla.org/xla/operation_semantics#scatter
-func BackendScatterMax(operand, indices, updates *Node, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) *Node {
-	return backendScatterMax(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes,
-		indicesAreSorted, uniqueIndices)
-}
-
-// BackendScatterMin exposes the raw backend ScatterMin operator.
-//
-// This should be internal, and it is exposed only for testing and debugging purposes, please don't rely on it.
-// If it turns out you need some functionality here that is not provided in ScatterMin,
-// open an issue in GoMLX and we'll figure a betterAPI.
-//
-// Description in
-// https://openxla.org/xla/operation_semantics#scatter
-func BackendScatterMin(operand, indices, updates *Node, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) *Node {
-	return backendScatterMin(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes,
-		indicesAreSorted, uniqueIndices)
-}
-
-// BackendScatterSum exposes the raw backend ScatterSum operator.
-//
-// This should be internal, and it is exposed only for testing and debugging purposes, please don't rely on it.
-// If it turns out you need some functionality here that is not provided in ScatterSum,
-// open an issue in GoMLX and we'll figure a betterAPI.
-//
-// Description in
-// https://openxla.org/xla/operation_semantics#scatter
-func BackendScatterSum(operand, indices, updates *Node, indexVectorAxis int, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes []int, indicesAreSorted, uniqueIndices bool) *Node {
-	return backendScatterSum(operand, indices, updates, indexVectorAxis, updateWindowAxes, insertedWindowAxes, scatterAxesToOperandAxes,
-		indicesAreSorted, uniqueIndices)
 }

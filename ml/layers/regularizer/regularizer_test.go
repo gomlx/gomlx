@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	_ "github.com/gomlx/gomlx/backends/default"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/modeltest"
@@ -19,7 +20,7 @@ func TestConstantL1(t *testing.T) {
 		ConstantL1(0.1)(g, wVar)
 		theLoss := train.GetRegularizationLoss(g)
 		inputs = []*Node{w}
-		outputs = []*Node{theLoss, Gradient(theLoss, w)[0]}
+		outputs = []*Node{theLoss, autodiff.Gradient(theLoss, w)[0]}
 		return
 	}, []any{
 		float32(8 * 0.1), // Total regularization loss.

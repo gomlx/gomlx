@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 )
@@ -201,7 +202,7 @@ func TestTopK_BottomK_Gradient(t *testing.T) {
 					weights := Const(g, []float32{10, 3, 1})
 					values, _ := TopK(x, 3, 0)
 					loss := ReduceAllSum(Mul(values, weights))
-					return []*Node{x}, Gradient(loss, x)
+					return []*Node{x}, autodiff.Gradient(loss, x)
 				},
 				[]any{
 					// x = [5, 2, 5, 9, 5] -> top 3 values at indices [3, 0, 2] get weights [10, 3, 1].
@@ -220,7 +221,7 @@ func TestTopK_BottomK_Gradient(t *testing.T) {
 					weights := Const(g, [][]float32{{2, 5}, {7, 11}})
 					values, _ := BottomK(x, 2, 1)
 					loss := ReduceAllSum(Mul(values, weights))
-					return []*Node{x}, Gradient(loss, x)
+					return []*Node{x}, autodiff.Gradient(loss, x)
 				},
 				[]any{
 					// Row 0: [4, 1, 3, 1] -> bottom 2 at indices [1, 3] get [2, 5] -> [0, 2, 0, 5]

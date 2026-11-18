@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
 	"github.com/gomlx/gomlx/support/testutil"
@@ -29,7 +30,7 @@ func testGradientsInDelta[T interface{ float32 | float64 }](t *testing.T, name s
 	g := NewGraph(manager, name)
 	fmt.Printf("%s:\n", name)
 	output, nodesForGrad := testFn(g)
-	grads := Gradient(ReduceAllSum(output), nodesForGrad...)
+	grads := autodiff.Gradient(ReduceAllSum(output), nodesForGrad...)
 	all := make([]*Node, len(grads)+1)
 	all[0] = output
 	copy(all[1:], grads)

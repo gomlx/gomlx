@@ -7,33 +7,23 @@ import (
 	"github.com/gomlx/gomlx/support/sets"
 )
 
-// This file defines methods that allow for introspection of the graph.
-//
-// The API is limited -- because we want flexibility to change the implementation without concerns on breaking
-// compatibility.
-
-// Type identify the operation performed by the node.
-// It's an "introspection" method.
+// Type identifies the operation performed by the node.
 func (n *Node) Type() NodeType {
-	if n == nil || n.inputs == nil {
+	if n == nil {
 		return NodeTypeInvalid
 	}
-	return n.inputs.Type()
+	return n.impl.Type()
 }
 
-// ConstantValue returns the value assigned to a constant node.
-// It's an "introspection" method.
-// It returns nil if n.Type() != NodeTypeConstant.
+// ConstantValue returns the value assigned to a constant node, or nil if n.Type() != NodeTypeConstant.
 func (n *Node) ConstantValue() *tensors.Tensor {
-	if n.Type() != NodeTypeConstant {
+	if n == nil {
 		return nil
 	}
-	params := n.inputs.(*nodeInputsConstant)
-	return params.tensor
+	return n.impl.ConstantValue()
 }
 
 // IsConstantExpression returns whether the Node is a Constant or an expression that depends only on constant values.
-// It traverses all the node dependencies and checks that all leaf nodes are constants.
 func (n *Node) IsConstantExpression() bool {
 	return isConstantTraverseSubGraph(n, sets.Make[*Node]())
 }

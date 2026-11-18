@@ -4,7 +4,6 @@ package graph
 
 import (
 	"github.com/gomlx/compute"
-	"github.com/gomlx/compute/distributed"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
 	"github.com/gomlx/gomlx/internal/must"
@@ -73,33 +72,7 @@ func (e *Exec) DistributedExec(args ...any) ([]*dtensor.Tensor, error) {
 //
 // See also DistributedExec, which calls Exec and then calls this.
 func (e *Exec) AggregateShards(shards []*tensors.Tensor) ([]*dtensor.Tensor, error) {
-	numDevices := e.NumDevices()
-	if numDevices == 1 {
-		return nil, errors.New("distributed execution requires more than one device")
-	}
-	if len(e.meshes) == 0 {
-		return nil, errors.New("meshes are not set for distributed execution")
-	}
-	defaultMesh := e.meshes[0]
-	replicatedSpec := distributed.NewReplicatedShardingSpec(defaultMesh)
-	numOutputs := len(shards) / numDevices
-	distributedOutputs := make([]*dtensor.Tensor, numOutputs)
-	var err error
-	for outputIdx := range numOutputs {
-		outputShards := make([]*tensors.Tensor, numDevices)
-		for deviceIdx := range numDevices {
-			outputShards[deviceIdx] = shards[deviceIdx*numOutputs+outputIdx]
-		}
-		var shardingSpec = replicatedSpec
-		if outputIdx < len(e.outputShardingSpecs) {
-			shardingSpec = e.outputShardingSpecs[outputIdx]
-		}
-		distributedOutputs[outputIdx], err = dtensor.NewTensor(shardingSpec, outputShards)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return distributedOutputs, nil
+	return e.impl.AggregateShards(shards)
 }
 
 // CallWithGraph is similar to Exec, but it also returns the computation graph used
@@ -588,4 +561,3 @@ func MustNewExec2[F ExecGraphFnTwoOutputs](backend compute.Backend, graphFn F) *
 func MustNewExec3[F ExecGraphFnThreeOutputs](backend compute.Backend, graphFn F) *ExecThreeOutputs {
 	return &ExecThreeOutputs{Exec: MustNewExec(backend, graphFn)}
 }
-

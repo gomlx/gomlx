@@ -16,6 +16,7 @@ import (
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	. "github.com/gomlx/gomlx/support/exceptions"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
@@ -119,10 +120,10 @@ func (e *Exec) buildGraphFn() graph.CanonicalExecGraphFn {
 		defer e.muGraphBuild.Unlock()
 
 		// Initialize the graph parameters store for this graph.
-		g.AttachState(graphState{}, newGraphStore())
+		graphbridge.AttachState(g, graphState{}, newGraphStore())
 
 		// Attach a link to the model.Store used by model.Exec.
-		g.AttachState(storeLink{}, e.store)
+		graphbridge.AttachState(g, storeLink{}, e.store)
 
 		// Call modelGraphFn, the results will be a slice of *Node.
 		modelGraphFnResults := e.modelGraphFn(e.store.RootScope(), g, inputs)

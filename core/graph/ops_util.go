@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/internal/graphimpl"
 	"github.com/gomlx/gomlx/support/exceptions"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
@@ -23,7 +24,7 @@ import (
 // This may lose bits of precision to very large integers.
 // If you are worried with any of these conversions, use Const instead.
 func Scalar[N gotype.NumericNotComplex](g *Graph, dtype dtypes.DType, value N) *Node {
-	return g.getScalarConst(dtype, float64(value))
+	return wrapNode(g.impl.GetScalarConst(dtype, float64(value)))
 }
 
 // FillScalar creates a Node with a value with the given shape, filled with the given value.
@@ -141,7 +142,7 @@ func OnesLike(x *Node) *Node {
 //
 // It also works for booleans, so it can create a tensor filled with true values.
 func Ones(g *Graph, shape shapes.Shape) *Node {
-	g.AssertBuilding()
+	g.impl.AssertBuilding()
 	scalar := ScalarOne(g, shape.DType)
 	if scalar == nil {
 		return nil
@@ -160,7 +161,7 @@ func ZerosLike(x *Node) *Node {
 //
 // It also works for booleans, so it can create a tensor filled with false values.
 func Zeros(g *Graph, shape shapes.Shape) *Node {
-	g.AssertBuilding()
+	g.impl.AssertBuilding()
 	return BroadcastToShape(ScalarZero(g, shape.DType), shape)
 }
 
@@ -582,12 +583,12 @@ func Softmax(logits *Node, axes ...int) *Node {
 		if axis < 0 {
 			axis += logits.Rank()
 		}
-		res, _ := InternalFusedOpCaller(
-			func() *Node { return BackendFusedSoftmax(logits, axis) },
-			decomposed,
+		res, _ := graphimpl.FusedOpCaller(
+			func() *graphimpl.NodeImpl { return graphimpl.BackendFusedSoftmax(unwrapNode(logits), axis) },
+			func() *graphimpl.NodeImpl { return unwrapNode(decomposed()) },
 			true,
 		)
-		return res
+		return wrapNode(res)
 	}
 
 	return decomposed()
@@ -1117,7 +1118,7 @@ func CumMax(x *Node, axis int, options ...*CumSumOptions) *Node {
 
 	var node *Node
 	err := exceptions.TryCatch[error](func() {
-		node = backendCumMax(x, adjustedAxis, opt)
+		node = wrapNode(graphimpl.BackendCumMax(unwrapNode(x), adjustedAxis, opt))
 	})
 	if err == nil {
 		return node
@@ -1182,7 +1183,7 @@ func CumSum(x *Node, axis int, options ...*CumSumOptions) *Node {
 
 	var node *Node
 	err := exceptions.TryCatch[error](func() {
-		node = backendCumSum(x, adjustedAxis, opt)
+		node = wrapNode(graphimpl.BackendCumSum(unwrapNode(x), adjustedAxis, opt))
 	})
 	if err == nil {
 		return node

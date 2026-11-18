@@ -412,48 +412,18 @@ func Core(query, key, value *Node, layout AxesLayout, options CoreOptions) (outp
 	// to avoid computing both paths (fused output + decomposed scores).
 	capabilities := g.Backend().Capabilities()
 	hasFused := capabilities.Operations[compute.OpTypeFusedScaledDotProductAttention]
-	hasFusedVJP := capabilities.Operations[compute.OpTypeFusedScaledDotProductAttentionVJP]
 	if options.WantCoefficients || dropoutActive || options.ScoreSoftCap > 0 || options.DisableFusion || !hasFused {
 		klog.V(2).Info("attention.Core(): forced decomposed version.")
 		output, coefficients = decomposedFn()
 	} else {
-		// Attempt fused version:
-		var isFused bool
-		useDecomposedVJP := !hasFusedVJP // If FusedVJP is not registered for backprop, fall back to use the decomposed.
-		output, isFused = InternalFusedOpCaller(
-			func() *Node {
-				fusedConfig := &compute.ScaledDotProductAttentionConfig{
-					Scale:  options.Scale,
-					Causal: options.UseCausalMask,
-				}
-				if options.AttentionMask != nil {
-					fusedConfig.Mask = InternalBackendOutputs(options.AttentionMask)[0]
-				}
-				if options.QuerySeqLen != nil {
-					fusedConfig.QuerySeqLen = InternalBackendOutputs(options.QuerySeqLen)[0]
-				}
-				if options.KVSeqLen != nil {
-					fusedConfig.KeyValueSeqLen = InternalBackendOutputs(options.KVSeqLen)[0]
-				}
-				if options.AttentionBias != nil {
-					fusedConfig.Bias = InternalBackendOutputs(options.AttentionBias)[0]
-				}
-				klog.V(2).Info("attention.Core(): attempting to use FusedScaledDotProductAttention op.")
-				out, _ := BackendFusedScaledDotProductAttention(
-					query, key, value, layout, fusedConfig)
-				return out
-			},
-			func() *Node {
-				output, _ := decomposedFn()
-				return output
-			},
-			useDecomposedVJP,
-		)
-		if isFused {
-			klog.V(2).Info("attention.Core(): using FusedScaledDotProductAttention op.")
-		} else {
-			klog.V(2).Info("attention.Core(): using decomposed op.")
-		}
+		output = nn.FusedScaledDotProductAttention(query, key, value, layout, &nn.FusedSDPAConfig{
+			Scale:       scale,
+			Causal:      options.UseCausalMask,
+			Mask:        options.AttentionMask,
+			Bias:        options.AttentionBias,
+			QuerySeqLen: options.QuerySeqLen,
+			KVSeqLen:    options.KVSeqLen,
+		})
 		coefficients = nil
 	}
 	return output, coefficients

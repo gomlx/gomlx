@@ -5,6 +5,7 @@ package graph
 import (
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/gotype"
+	"github.com/gomlx/gomlx/internal/graphimpl"
 )
 
 // ReduceLogicalAnd returns true if all values of x evaluate to true
@@ -16,7 +17,7 @@ func ReduceLogicalAnd(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	x = StopGradient(x) // No gradients defined to LogicalAll.
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
-	return backendReduceLogicalAnd(x, axes...)
+	return wrapNode(graphimpl.BackendReduceLogicalAnd(unwrapNode(x), axes...))
 }
 
 // ReduceLogicalOr returns true if any values of x evaluate to true
@@ -28,7 +29,7 @@ func ReduceLogicalOr(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	x = StopGradient(x) // No gradients defined to LogicalAll.
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
-	return backendReduceLogicalOr(x, axes...)
+	return wrapNode(graphimpl.BackendReduceLogicalOr(unwrapNode(x), axes...))
 }
 
 // ReduceLogicalXor returns the xor of the values across the given axes.
@@ -39,7 +40,7 @@ func ReduceLogicalXor(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	x = StopGradient(x) // No gradients defined to LogicalAll.
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
-	return backendReduceLogicalXor(x, axes...)
+	return wrapNode(graphimpl.BackendReduceLogicalXor(unwrapNode(x), axes...))
 }
 
 // LogicalAll returns true if all values of x (converted to boolean) evaluate to true.
@@ -51,7 +52,7 @@ func LogicalAll(x *Node, reduceAxes ...int) *Node {
 	x = ConvertDType(x, dtypes.Bool) // No-op if already bool.
 	x = StopGradient(x)              // No gradients defined to LogicalAll.
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
-	return backendReduceLogicalAnd(x, axes...)
+	return wrapNode(graphimpl.BackendReduceLogicalAnd(unwrapNode(x), axes...))
 }
 
 // LogicalAny returns true if any values of x (converted to boolean) evaluate to true.
@@ -63,7 +64,7 @@ func LogicalAny(x *Node, reduceAxes ...int) *Node {
 	x = ConvertDType(x, dtypes.Bool) // No-op if already bool.
 	x = StopGradient(x)              // No gradients defined to LogicalAny.
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
-	return backendReduceLogicalOr(x, axes...)
+	return wrapNode(graphimpl.BackendReduceLogicalOr(unwrapNode(x), axes...))
 }
 
 // ReduceBitwiseAnd returns the bitwise AND of the values across the given axes.
@@ -75,7 +76,7 @@ func ReduceBitwiseAnd(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	x = StopGradient(x) // No gradients defined to BitwiseAll.
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
-	return backendReduceBitwiseAnd(x, axes...)
+	return wrapNode(graphimpl.BackendReduceBitwiseAnd(unwrapNode(x), axes...))
 }
 
 // ReduceBitwiseOr returns the bitwise OR of the values across the given axes.
@@ -87,7 +88,7 @@ func ReduceBitwiseOr(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	x = StopGradient(x) // No gradients defined to BitwiseAll.
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
-	return backendReduceBitwiseOr(x, axes...)
+	return wrapNode(graphimpl.BackendReduceBitwiseOr(unwrapNode(x), axes...))
 }
 
 // ReduceBitwiseXor returns the bitwise XOR of the values across the given axes.
@@ -99,7 +100,7 @@ func ReduceBitwiseXor(x *Node, reduceAxes ...int) *Node {
 	_ = validateBuildingGraphFromInputs(x)
 	x = StopGradient(x) // No gradients defined to BitwiseAll.
 	axes := adjustAxesToRankAndSort(x.Rank(), reduceAxes, "x")
-	return backendReduceBitwiseXor(x, axes...)
+	return wrapNode(graphimpl.BackendReduceBitwiseXor(unwrapNode(x), axes...))
 }
 
 // And is an alias for LogicalAnd.
@@ -124,7 +125,7 @@ func BitwiseShiftLeft(x, n *Node) *Node {
 	if n.DType() != x.DType() {
 		n = ConvertDType(n, x.DType())
 	}
-	return backendShiftLeft(x, n)
+	return wrapNode(graphimpl.BackendShiftLeft(unwrapNode(x), unwrapNode(n)))
 }
 
 // BitwiseShiftLeftScalar is an alias to BitwiseShiftLeft, but takes n as a scalar.
@@ -141,7 +142,7 @@ func BitwiseShiftRightArithmetic(x, n *Node) *Node {
 	if n.DType() != x.DType() {
 		n = ConvertDType(n, x.DType())
 	}
-	return backendShiftRightArithmetic(x, n)
+	return wrapNode(graphimpl.BackendShiftRightArithmetic(unwrapNode(x), unwrapNode(n)))
 }
 
 // BitwiseShiftRightArithmeticScalar is an alias to BitwiseShiftRightArithmetic, but takes n as a scalar.
@@ -159,7 +160,7 @@ func BitwiseShiftRightLogical(x, n *Node) *Node {
 	if n.DType() != x.DType() {
 		n = ConvertDType(n, x.DType())
 	}
-	return backendShiftRightLogical(x, n)
+	return wrapNode(graphimpl.BackendShiftRightLogical(unwrapNode(x), unwrapNode(n)))
 }
 
 // BitwiseShiftRightLogicalScalar is an alias to BitwiseShiftRightLogical, but takes n as a scalar.

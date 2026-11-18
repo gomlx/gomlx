@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/compute/dtypes/bfloat16"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/compute/support/xslices"
+	"github.com/gomlx/gomlx/core/autodiff"
 	"github.com/gomlx/gomlx/core/graph"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/graph/graphtest"
@@ -310,7 +311,7 @@ func TestGradientDot(t *testing.T) {
 		v1 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(2)))
 		v2 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(3)))
 		output := Dot(v1, v2).Product()
-		gradients := Gradient(output, v1, v2)
+		gradients := autodiff.Gradient(output, v1, v2)
 		inputs = []*Node{v1, v2}
 		outputs = append([]*Node{output}, gradients...)
 		return
@@ -325,7 +326,7 @@ func TestGradientDot(t *testing.T) {
 		v2 := Mul(Ones(g, MakeShape(F32, 4)), Const(g, float32(3)))
 		output := Dot(v1, v2).Product()
 		sum := ReduceAllSum(output)
-		gradients := Gradient(sum, v1, v2)
+		gradients := autodiff.Gradient(sum, v1, v2)
 		inputs = []*Node{v1, v2}
 		outputs = append([]*Node{output}, gradients...)
 		return
@@ -341,7 +342,7 @@ func TestGradientDot(t *testing.T) {
 		output := Dot(v1, v2).Product()
 		require.NoError(t, output.Shape().CheckDims(2, 1))
 		sum := ReduceAllSum(output)
-		gradients := Gradient(sum, v1, v2)
+		gradients := autodiff.Gradient(sum, v1, v2)
 		inputs = []*Node{v1, v2}
 		outputs = append([]*Node{output}, gradients...)
 		return
@@ -389,7 +390,7 @@ func TestGradientDot(t *testing.T) {
 					// loss is the product of dot and iota (increasing numbers), all reduced sum.
 					incremental := OnePlus(IotaFull(g, dot.Shape()))
 					loss := ReduceAllSum(Mul(incremental, dot))
-					grads := Gradient(loss, lhs, rhs)
+					grads := autodiff.Gradient(loss, lhs, rhs)
 					grads[0] = TransposeAllAxes(grads[0], revLhsPermutation...)
 					grads[1] = TransposeAllAxes(grads[1], revRhsPermutation...)
 					fmt.Printf("\tDone graph\n")
@@ -463,7 +464,7 @@ func TestGradientDot(t *testing.T) {
 					// loss is the product of dot and iota (increasing numbers), all reduced sum.
 					incremental := OnePlus(IotaFull(g, dot.Shape()))
 					loss := ReduceAllSum(Mul(incremental, dot))
-					grads := Gradient(loss, lhs, rhs)
+					grads := autodiff.Gradient(loss, lhs, rhs)
 					grads[0] = TransposeAllAxes(grads[0], revLhsPermutation...)
 					grads[1] = TransposeAllAxes(grads[1], revRhsPermutation...)
 					return []*Node{lhs, rhs, dot, grads[0], grads[1]}
@@ -526,7 +527,7 @@ func TestGradientDotConfig(t *testing.T) {
 		output := Dot(v1, v2).WithAccumulatorDType(dtypes.Float32).WithOutputDType(dtypes.Float32).Product()
 
 		// Calculate gradients.
-		gradients := Gradient(output, v1, v2)
+		gradients := autodiff.Gradient(output, v1, v2)
 
 		inputs = []*Node{v1, v2}
 		outputs = append([]*Node{output}, gradients...)
@@ -547,7 +548,7 @@ func TestGradientDotConfig(t *testing.T) {
 		output := Dot(v1, v2).WithOutputDType(dtypes.Float64).Product()
 
 		// Calculate gradients.
-		gradients := Gradient(output, v1, v2)
+		gradients := autodiff.Gradient(output, v1, v2)
 
 		inputs = []*Node{v1, v2}
 		outputs = append([]*Node{output}, gradients...)
@@ -619,7 +620,7 @@ func TestDotGeneralVJPLowersToGemm(t *testing.T) {
 	g := NewGraph(backend, t.Name())
 	a := Add(Iota(g, MakeShape(F32, 8, 4), 0), Const(g, float32(1))) // [8,4]
 	w := Add(Iota(g, MakeShape(F32, 4, 6), 1), Const(g, float32(1))) // [4,6]
-	grads := Gradient(ReduceAllSum(MatMul(a, w)), a, w)              // [8,6] -> scalar -> grads wrt a, w
+	grads := autodiff.Gradient(ReduceAllSum(MatMul(a, w)), a, w)     // [8,6] -> scalar -> grads wrt a, w
 	require.Len(t, grads, 2)
 
 	var dotGenerals, reduceSums int

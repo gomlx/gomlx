@@ -5,6 +5,7 @@ package nn
 import (
 	"github.com/gomlx/compute"
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 )
 
 // LayerNorm performs layer normalization on x over the given axes with the
@@ -14,7 +15,7 @@ import (
 //
 // If the backend supports fused LayerNorm, the optimized native implementation
 // is used; otherwise the operation is decomposed into primitives. Fallback is
-// handled automatically via InternalFusedOpCaller.
+// handled automatically via graphbridge.FusedOpCaller.
 func LayerNorm(x *Node, axes []int, epsilon float64, gamma, beta, mask *Node) *Node {
 	decomposed := func() *Node {
 		return layerNormDecomposed(x, axes, epsilon, gamma, beta, mask)
@@ -24,8 +25,8 @@ func LayerNorm(x *Node, axes []int, epsilon float64, gamma, beta, mask *Node) *N
 	if mask == nil {
 		backend := x.Graph().Backend()
 		hasFusedLayerNormVJP := backend != nil && backend.Capabilities().Operations[compute.OpTypeFusedLayerNormVJP]
-		res, _ := InternalFusedOpCaller(
-			func() *Node { return BackendFusedLayerNorm(x, axes, epsilon, gamma, beta) },
+		res, _ := graphbridge.FusedOpCaller(
+			func() *Node { return graphbridge.FusedLayerNorm(x, axes, epsilon, gamma, beta) },
 			decomposed,
 			!hasFusedLayerNormVJP,
 		)

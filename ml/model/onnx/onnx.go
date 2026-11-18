@@ -12,6 +12,7 @@ import (
 	onnxbackend "github.com/gomlx/compute-onnx"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/pkg/errors"
 )
@@ -52,7 +53,7 @@ func Save(backend compute.Backend, exec *model.Exec, w io.Writer, inputShapes []
 	}
 	defer g.Finalize()
 
-	onnxExecutable := g.Executable()
+	onnxExecutable := graphbridge.Executable(g)
 	if onnxExecutable == nil {
 		return errors.Errorf("compiled graph has no compute.Executable")
 	}

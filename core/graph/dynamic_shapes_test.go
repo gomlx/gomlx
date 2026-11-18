@@ -1,6 +1,6 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package graph
+package graph_test
 
 import (
 	"testing"
@@ -8,6 +8,9 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/core/autodiff"
+	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/support/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,9 +43,7 @@ func TestDynamicShapes(t *testing.T) {
 			assert.Equal(t, [][]float32{{2, 2, 2}, {4, 4, 4}, {6, 6, 6}}, out3[0].Value())
 
 			// Verify that they used the same cached graph!
-			exec.cacheMu.Lock()
-			cacheLen := len(exec.cache)
-			exec.cacheMu.Unlock()
+			cacheLen := graphbridge.ExecImpl(exec).CacheLen()
 			assert.Equal(t, 1, cacheLen, "Graph should only be compiled once for dynamic batch dimension")
 		})
 
@@ -223,7 +224,7 @@ func TestDynamicShapes(t *testing.T) {
 			exec, err := NewExec(backend, func(x, bias *Node) *Node {
 				bBroadcast := DynamicBroadcastLike(bias, x)
 				loss := ReduceAllSum(Mul(x, bBroadcast))
-				grads := Gradient(loss, bias)
+				grads := autodiff.Gradient(loss, bias)
 				return grads[0]
 			})
 			require.NoError(t, err)
@@ -330,7 +331,7 @@ func TestDynamicShapes(t *testing.T) {
 					DynamicPadAxis(-1, 1, 0),
 				)
 				loss := ReduceAllSum(Mul(padded, IotaLike(padded, 1)))
-				gradX := Gradient(loss, x)[0]
+				gradX := autodiff.Gradient(loss, x)[0]
 				return padded, gradX
 			})
 			require.NoError(t, err)
@@ -533,7 +534,7 @@ func TestDynamicShapes(t *testing.T) {
 				weights := Const(x.Graph(), [][]float32{{2, 3}})
 				lossTop := ReduceAllSum(Mul(topVals, weights))
 				lossBot := ReduceAllSum(Mul(botVals, weights))
-				return Gradient(lossTop, x)[0], Gradient(lossBot, x)[0]
+				return autodiff.Gradient(lossTop, x)[0], autodiff.Gradient(lossBot, x)[0]
 			})
 			require.NoError(t, err)
 			exec.WithDynamicAxes([]string{"batch", ""})
@@ -584,7 +585,7 @@ func TestDynamicShapes(t *testing.T) {
 				// Named dynamic axis "batch" must be preserved on the output (not overwritten).
 				assert.Equal(t, "batch", updated.Shape().AxisName(0))
 
-				gradX := Gradient(ReduceAllSum(updated), x)[0]
+				gradX := autodiff.Gradient(ReduceAllSum(updated), x)[0]
 				require.NoError(t, g.Compile(updated, gradX))
 
 				outs := g.Run([][]float32{{1, 2}, {3, 4}, {5, 6}})
@@ -675,7 +676,7 @@ func TestDynamicShapes(t *testing.T) {
 					})
 					// Verify zero-VJP registration on NonZero.
 					loss := ConvertDType(ReduceAllSum(coords), x.DType())
-					gradX := Gradient(loss, x)[0]
+					gradX := autodiff.Gradient(loss, x)[0]
 					return coords, coordsTransposed, gradX
 				})
 				defer exec.Finalize()
@@ -839,7 +840,7 @@ func TestDynamicShapes(t *testing.T) {
 				bcast := BroadcastToShape(x, shapes.Make(dtypes.Float32, 2, 3))
 				weights := Const(x.Graph(), [][]float32{{1, 2, 3}, {10, 20, 30}})
 				loss := ReduceAllSum(Mul(bcast, weights))
-				gx := Gradient(loss, x)[0]
+				gx := autodiff.Gradient(loss, x)[0]
 				return bcast, gx
 			})
 			require.NoError(t, err)
@@ -863,7 +864,7 @@ func TestDynamicShapes(t *testing.T) {
 				bcast := DynamicBroadcastInDim(bias, []int{0, 1}, DynamicDim(d0), DynamicDim(d1))
 				assert.Equal(t, 3, bcast.Shape().Dimensions[1])
 				loss := ReduceAllSum(Mul(bcast, Scalar(bias.Graph(), dtypes.Float32, 2.0)))
-				gBias := Gradient(loss, bias)[0]
+				gBias := autodiff.Gradient(loss, bias)[0]
 				return bcast, gBias
 			})
 			require.NoError(t, err)

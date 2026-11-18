@@ -11,6 +11,7 @@ import (
 	"github.com/gomlx/compute/support/xslices"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/ml/layers/regularizer"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/model/initializer"
@@ -224,7 +225,7 @@ func (builder *BatchNormBuilder) Done() *Node {
 				mean, variance = batchMean, batchVariance
 			}
 			if builder.useBackendInference {
-				normalized = InternalBatchNormForInference(x, scale, offset, mean, variance, float32(builder.epsilon), featureAxis)
+				normalized = graphbridge.BatchNormForInference(x, scale, offset, mean, variance, float32(builder.epsilon), featureAxis)
 			} else {
 				normalized = builder.directBatchNormGraph(x, scale, offset, mean, variance)
 			}
@@ -239,7 +240,7 @@ func (builder *BatchNormBuilder) Done() *Node {
 		} else if builder.useBackendInference {
 			// Training: take batch's mean and variance and use it to update averages.
 			var batchMean, batchVariance *Node
-			normalized, batchMean, batchVariance = InternalBatchNormForTraining(x, scale, offset, float32(builder.epsilon), featureAxis)
+			normalized, batchMean, batchVariance = graphbridge.BatchNormForTraining(x, scale, offset, float32(builder.epsilon), featureAxis)
 			builder.updateMeanAndVariance(scope, g, batchMean, batchVariance, meanAverageVar, varianceAverageVar, weightVar)
 		} else {
 			batchMean, batchVariance := builder.batchMeanAndVariance(x)
@@ -251,7 +252,7 @@ func (builder *BatchNormBuilder) Done() *Node {
 		// Inference: use stored mean/variance.
 		if builder.useBackendInference {
 			// Uses dedicated op.
-			normalized = InternalBatchNormForInference(x, scale, offset, mean, variance, float32(builder.epsilon), featureAxis)
+			normalized = graphbridge.BatchNormForInference(x, scale, offset, mean, variance, float32(builder.epsilon), featureAxis)
 
 		} else {
 			// Direct batch normalization: it is differentiable.

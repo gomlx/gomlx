@@ -1,14 +1,16 @@
 // Copyright 2023-2026 The GoMLX Authors. SPDX-License-Identifier: Apache-2.0
 
-package graph
+package autodiff
 
 import (
 	"testing"
 
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/support/testutil"
 )
 
-func testState(t *testing.T, rg *reverseGraph, node *Node, selected, included, useful bool) {
+func testState(t *testing.T, rg *reverseGraph, node *graph.Node, selected, included, useful bool) {
 	rNode := rg.ReverseNodes[node.Id()]
 	if rNode.Selected != selected || rNode.Included != included || rNode.Useful != useful {
 		t.Errorf("Node %q has unexpected state (%v, %v, %v), wanted (%v, %v, %v)",
@@ -17,21 +19,20 @@ func testState(t *testing.T, rg *reverseGraph, node *Node, selected, included, u
 }
 
 func TestReverseGraph(t *testing.T) {
-	backend := buildTestBackend()
+	backend := testutil.BuildTestBackend()
 
-	g := NewGraph(backend, "TestReverseGraph")
-	n0 := Parameter(g, "n0", shapes.Scalar[float32]())
-	n1 := Parameter(g, "n1", shapes.Scalar[float32]())
-	n2 := Parameter(g, "n2", shapes.Scalar[float32]())
-	n3 := Add(n0, n1)
-	n4 := Mul(n3, n2)
-	n5 := Div(n3, n2)
+	g := graph.NewGraph(backend, "TestReverseGraph")
+	n0 := graph.Parameter(g, "n0", shapes.Scalar[float32]())
+	n1 := graph.Parameter(g, "n1", shapes.Scalar[float32]())
+	n2 := graph.Parameter(g, "n2", shapes.Scalar[float32]())
+	n3 := graph.Add(n0, n1)
+	n4 := graph.Mul(n3, n2)
+	n5 := graph.Div(n3, n2)
 	_ = n5
-	rg := newReverseGraph(g, n4, []*Node{n0})
+	rg := newReverseGraph(g, n4, []*graph.Node{n0})
 
-	// Enumerate expectations for results of selected/included/useful.
 	want := []struct {
-		node                       *Node
+		node                       *graph.Node
 		selected, included, useful bool
 	}{
 		{n0, true, true, true},
@@ -45,7 +46,3 @@ func TestReverseGraph(t *testing.T) {
 		testState(t, rg, e.node, e.selected, e.included, e.useful)
 	}
 }
-
-// CumMaxDecomposedForTest exposes cumMaxDecomposed to external tests in package graph_test.
-var CumMaxDecomposedForTest = cumMaxDecomposed
-

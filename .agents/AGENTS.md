@@ -16,13 +16,19 @@ The XLA backend only support static shapes (known in "graph building time"). Cur
 
 - `core`: core API definitions, to allow building of graphs and their executions, with no reference to trainable 
   variables and such.
-  - `core/graph`: defines a `Graph` (a computation grpah building built) and `Node` (represents a value and the output
-    of an operation in the `Graph`). It also defines `Exec` that takes a graph building function from the user code as
-    a paramter and executes it -- building and JIT-compiling the graph to each new input shape.
+  - `core/graph`: defines public wrapper types `Graph`, `Node`, `Function`, and `Exec` for building and JIT-compiling
+    computation graphs, plus high-level tensor operations (`ops*.go`) and auto-generated public backend op wrappers
+    (`gen_public_ops.go`). Internal engine types, raw backend ops (`Backend<Op>`), and `NodeInputs*` live in
+    `internal/graphimpl`, with internal GoMLX cross-package conversions in `internal/graphbridge`.
+  - `core/autodiff`: reverse-mode automatic differentiation (`Gradient`, `VJPRegistration`, `SingleOutputVJP`,
+    all operation VJPs, and checkpoint rematerialization). (`graph.Gradient` is kept temporarily as a deprecated
+    stop-gap delegating via `graphimpl.GradientHook`.)
   - `core/tensors`: define a `Tensor`, concrete multi-dimensional array (or scalar) with values used as input
     and outputs for graph execution.
 - `ml`: ML support libraries, including training, variables handling (`ml/model`), optimizers, layers, datasets, 
   checkpointing, etc.
+  - `ml/nn`: stateless neural network primitives (`Dense`, `LayerNorm`, `QuantizedDense`, `QuantizedGather`,
+    `FusedScaledDotProductAttention`, `Softcap`) using fused backend ops via `internal/graphbridge` when available.
   - `ml/model`: defines `Variable` (trainable variables/weights) and a `Store` hierarchical container of variables.
     It also defines `Scope`, a pointer to a `Store` setting a "current directory" (scope) for new variables.
     Finally, it defines an `Exec` object that calls a user graph functions and automatically handle passing 
@@ -31,6 +37,10 @@ The XLA backend only support static shapes (known in "graph building time"). Cur
   - `ml/layers/peft`: Parameter-Efficient Fine-Tuning (LoRA) implemented as a meta-layer via post-linear hooks.
 - `support`: support libraries, including xsync, xerrors, etc.
 - `internal`: internal libraries and generators.
+  - `internal/graphimpl`: core computation graph implementation (`GraphImpl`, `NodeImpl`, `FunctionImpl`, `ExecImpl`),
+    `gen_compute_ops.go` (`NodeInputs*`, `Backend<Op>`, raw ops), and `fused_ops.go`. Does not import `core/graph`.
+  - `internal/graphbridge`: typed conversion and internal-op helpers between `core/graph` and `internal/graphimpl`
+    for `ml/*` and `core/autodiff`.
   - `internal/cmd`: command line tools: mostly generators used by `go generate ...`. They output `gen_*.go` files.
 - `examples`: examples of usage of the library. Some well maintained, others may need to be outdated.
 - `ui`: UI tools, for intance to display a training progress bar, or if using GoNB (a Jupyter kernel for Go), to

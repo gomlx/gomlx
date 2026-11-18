@@ -12,8 +12,10 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/dtypes/bfloat16"
+	"github.com/gomlx/gomlx/core/autodiff"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/support/exceptions"
 	"github.com/gomlx/gomlx/support/testutil"
@@ -94,7 +96,7 @@ func backendSupportsFusionForBFloat16(backend compute.Backend) bool {
 	supported := false
 	probeErr := exceptions.TryCatch[error](func() {
 		exec := MustNewExec(backend, func(qIn, kIn, vIn *Node) *Node {
-			fused, _ := BackendFusedScaledDotProductAttention(
+			fused, _ := graphbridge.FusedScaledDotProductAttention(
 				qIn, kIn, vIn,
 				compute.AttentionAxesLayoutBSHD, &compute.ScaledDotProductAttentionConfig{Scale: 0.125, Causal: true})
 			// Make the returned node depend on the fused output so the fused op is genuinely
@@ -144,8 +146,8 @@ func TestFusionFallbackParity(t *testing.T) {
 				UseCausalMask: true,
 			})
 			refOut := ConvertDType(naiveCausalAttention(qIn, kIn, vIn, scale), dtypes.Float32)
-			fg := Gradient(ReduceAllSum(fusedOut), qIn, kIn, vIn)
-			ng := Gradient(ReduceAllSum(refOut), qIn, kIn, vIn)
+			fg := autodiff.Gradient(ReduceAllSum(fusedOut), qIn, kIn, vIn)
+			ng := autodiff.Gradient(ReduceAllSum(refOut), qIn, kIn, vIn)
 			relMax := func(got, want *Node) *Node {
 				got, want = ConvertDType(got, dtypes.Float32), ConvertDType(want, dtypes.Float32)
 				return Div(ReduceAllMax(Abs(Sub(got, want))), AddScalar(ReduceAllMax(Abs(want)), 1e-6))
@@ -188,8 +190,8 @@ func TestFusionGQAParity(t *testing.T) {
 				UseCausalMask: true,
 			})
 			ref := naiveGQAReference(qIn, kIn, vIn, KVH, scale)
-			og := Gradient(ReduceAllSum(out), qIn, kIn, vIn)
-			rg := Gradient(ReduceAllSum(ref), qIn, kIn, vIn)
+			og := autodiff.Gradient(ReduceAllSum(out), qIn, kIn, vIn)
+			rg := autodiff.Gradient(ReduceAllSum(ref), qIn, kIn, vIn)
 			relMax := func(got, want *Node) *Node {
 				got, want = ConvertDType(got, dtypes.Float32), ConvertDType(want, dtypes.Float32)
 				return Div(ReduceAllMax(Abs(Sub(got, want))), AddScalar(ReduceAllMax(Abs(want)), 1e-6))
@@ -241,8 +243,8 @@ func TestFusionParity(t *testing.T) {
 					refK := ConvertDType(kb, dtypes.Float32)
 					refV := ConvertDType(vb, dtypes.Float32)
 					refOut := naiveCausalAttention(refQ, refK, refV, scale)
-					fg := Gradient(ReduceAllSum(fusedOut), qIn, kIn, vIn)
-					ng := Gradient(ReduceAllSum(refOut), qIn, kIn, vIn)
+					fg := autodiff.Gradient(ReduceAllSum(fusedOut), qIn, kIn, vIn)
+					ng := autodiff.Gradient(ReduceAllSum(refOut), qIn, kIn, vIn)
 					relMax := func(got, want *Node) *Node {
 						return Div(ReduceAllMax(Abs(Sub(got, want))), AddScalar(ReduceAllMax(Abs(want)), 1e-6))
 					}

@@ -14,6 +14,7 @@ import (
 	"github.com/gomlx/compute/support/envutil"
 
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/ml/model"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
@@ -88,9 +89,9 @@ func (t Type) ToBackend() compute.ActivationConfig {
 }
 
 // applyActivation executes the activation function for act on x.
-// If the backend advertises FusedActivationVJP and fusion is enabled, it uses BackendFusedActivation directly
+// If the backend advertises FusedActivationVJP and fusion is enabled, it uses graphbridge.FusedActivation directly
 // without constructing the decomposed fallback graph.
-// Otherwise, it attempts BackendFusedActivation via InternalFusedOpCaller with the decomposed fallback.
+// Otherwise, it attempts graphbridge.FusedActivation via graphbridge.FusedOpCaller with the decomposed fallback.
 func applyActivation(x *Node, act Type, decomposed func() *Node) *Node {
 	cfg := act.ToBackend()
 	if cfg.Type == compute.ActivationNone {
@@ -101,11 +102,11 @@ func applyActivation(x *Node, act Type, decomposed func() *Node) *Node {
 	} else if enabled {
 		backend := x.Graph().Backend()
 		if backend != nil && backend.Capabilities().Operations[compute.OpTypeFusedActivationVJP] {
-			return BackendFusedActivation(x, cfg)
+			return graphbridge.FusedActivation(x, cfg)
 		}
 	}
-	res, _ := InternalFusedOpCaller(
-		func() *Node { return BackendFusedActivation(x, cfg) },
+	res, _ := graphbridge.FusedOpCaller(
+		func() *Node { return graphbridge.FusedActivation(x, cfg) },
 		decomposed,
 		true,
 	)

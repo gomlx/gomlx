@@ -17,6 +17,7 @@ import (
 
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/distributed"
+	_ "github.com/gomlx/gomlx/core/autodiff"
 	"github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/dtensor"

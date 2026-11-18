@@ -4,6 +4,7 @@ package attention
 
 import (
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 )
 
 // QKVProjection performs a fused Query-Key-Value projection: a single large matmul
@@ -17,11 +18,11 @@ import (
 //
 // If the backend supports the fused attention QKV projection, the optimized native implementation
 // is used; otherwise the operation is decomposed into primitives. Fallback is
-// handled automatically via InternalFusedOpCallerMulti.
+// handled automatically via graphbridge.FusedOpCallerMulti.
 func QKVProjection(x, wQKV, biasQ, biasK, biasV *Node, queryDim, keyValueDim int) (query, key, value *Node) {
-	results, _ := InternalFusedOpCallerMulti(
+	results, _ := graphbridge.FusedOpCallerMulti(
 		func() []*Node {
-			query, key, value := BackendFusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
+			query, key, value := graphbridge.FusedAttentionQKVProjection(x, wQKV, biasQ, biasK, biasV, queryDim, keyValueDim)
 			return []*Node{query, key, value}
 		},
 		func() []*Node {

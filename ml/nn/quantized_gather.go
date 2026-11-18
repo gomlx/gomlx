@@ -10,6 +10,7 @@ import (
 	"github.com/gomlx/compute/shapeinference"
 	"github.com/gomlx/compute/support/envutil"
 	. "github.com/gomlx/gomlx/core/graph"
+	"github.com/gomlx/gomlx/internal/graphbridge"
 	"github.com/gomlx/gomlx/ml/ggml"
 	. "github.com/gomlx/gomlx/support/exceptions"
 )
@@ -75,14 +76,14 @@ func QuantizedGather(table, indices *Node, quant *Quantization) *Node {
 	}
 
 	if quant == nil || quant.Scheme != compute.QuantGGML || ggml.CanDecompose(quant.GGMLType) {
-		res, _ := InternalFusedOpCaller(
-			func() *Node { return BackendQuantizedGather(table, indices, quant) },
+		res, _ := graphbridge.FusedOpCaller(
+			func() *Node { return graphbridge.QuantizedGather(table, indices, quant) },
 			decomposed,
 			false,
 		)
 		return res
 	}
-	return BackendQuantizedGather(table, indices, quant)
+	return graphbridge.QuantizedGather(table, indices, quant)
 }
 
 func quantizedGatherUnpackedDecomposed(table, indices *Node, quant *Quantization) *Node {

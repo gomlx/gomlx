@@ -8,6 +8,7 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
+	"github.com/gomlx/gomlx/internal/graphimpl"
 	"github.com/gomlx/gomlx/support/exceptions"
 )
 
@@ -167,7 +168,7 @@ func DimensionSize(x *Node, axis int) *Node {
 	axis = MustAdjustAxis(axis, x)
 	dim := x.Shape().Dimensions[axis]
 	if dim == shapes.DynamicDim {
-		return backendDynamicDimensionSize(x, axis)
+		return wrapNode(graphimpl.BackendDynamicDimensionSize(unwrapNode(x), axis))
 	}
 	return Scalar(x.Graph(), x.Graph().DynamicDimDType(), dim)
 }
@@ -243,7 +244,7 @@ func DynamicReshape(operand *Node, axisSpecs ...DimensionSpec) *Node {
 			if name == "" {
 				name = shapes.UniqueAxisName("#dim")
 			}
-			value = spec.dynamic.outputOps[0]
+			value = spec.dynamic.impl.OutputOps()[0]
 		} else if spec.IsInferred() {
 			name = spec.axisName
 			if name == "" {
@@ -259,7 +260,7 @@ func DynamicReshape(operand *Node, axisSpecs ...DimensionSpec) *Node {
 			Value:  value,
 		}
 	}
-	return backendDynamicReshape(operand, dimensions...)
+	return wrapNode(graphimpl.BackendDynamicReshape(unwrapNode(operand), dimensions...))
 }
 
 // DynamicReshapeLike reshapes the operand to the same shape (and axis names) as the reference node.
@@ -300,7 +301,7 @@ func DynamicBroadcastInDim(operand *Node, broadcastAxes []int, axisSpecs ...Dime
 		}
 		if allStatic {
 			outShape := shapes.Make(operand.DType(), staticDims...)
-			return backendBroadcastInDim(operand, outShape, broadcastAxes)
+			return wrapNode(graphimpl.BackendBroadcastInDim(unwrapNode(operand), outShape, broadcastAxes))
 		}
 	}
 
@@ -315,7 +316,7 @@ func DynamicBroadcastInDim(operand *Node, broadcastAxes []int, axisSpecs ...Dime
 			if name == "" {
 				name = shapes.UniqueAxisName("#dim")
 			}
-			value = spec.dynamic.outputOps[0]
+			value = spec.dynamic.impl.OutputOps()[0]
 		} else if spec.IsStatic() {
 			static = spec.static
 		} else {
@@ -328,7 +329,7 @@ func DynamicBroadcastInDim(operand *Node, broadcastAxes []int, axisSpecs ...Dime
 			Value:  value,
 		}
 	}
-	return backendDynamicBroadcastInDim(operand, broadcastAxes, dimensions...)
+	return wrapNode(graphimpl.BackendDynamicBroadcastInDim(unwrapNode(operand), broadcastAxes, dimensions...))
 }
 
 // DynamicBroadcastLike broadcasts the operand to the shape of the reference node along the specified broadcastAxes.
@@ -446,7 +447,7 @@ func DynamicBroadcastToDims(operand *Node, axisSpecs ...DimensionSpec) *Node {
 //
 // If all dimension specs are static, it delegates to static Iota.
 func DynamicIota(g *Graph, dtype dtypes.DType, iotaAxis int, axisSpecs ...DimensionSpec) *Node {
-	g.AssertBuilding()
+	g.impl.AssertBuilding()
 	if len(axisSpecs) == 0 {
 		exceptions.Panicf("DynamicIota requires at least one dimension spec")
 	}
@@ -484,7 +485,7 @@ func DynamicIota(g *Graph, dtype dtypes.DType, iotaAxis int, axisSpecs ...Dimens
 			if name == "" {
 				name = shapes.UniqueAxisName("#dim")
 			}
-			value = spec.dynamic.outputOps[0]
+			value = spec.dynamic.impl.OutputOps()[0]
 		} else if spec.IsStatic() {
 			static = spec.static
 		} else {
@@ -498,7 +499,7 @@ func DynamicIota(g *Graph, dtype dtypes.DType, iotaAxis int, axisSpecs ...Dimens
 		}
 	}
 
-	return backendDynamicIota(g, dtype, iotaAxis, dimensions...)
+	return wrapNode(graphimpl.BackendDynamicIota(unwrapGraph(g), dtype, iotaAxis, dimensions...))
 }
 
 // DynamicPadAxisSpec specifies the padding configuration for an axis in DynamicPad.
@@ -576,13 +577,13 @@ func DynamicPad(x, fillValue *Node, axesConfig ...DynamicPadAxisSpec) *Node {
 	for i, cfg := range axesConfig {
 		var startVal, endVal, interiorVal compute.Value
 		if cfg.StartNode != nil {
-			startVal = cfg.StartNode.outputOps[0]
+			startVal = cfg.StartNode.impl.OutputOps()[0]
 		}
 		if cfg.EndNode != nil {
-			endVal = cfg.EndNode.outputOps[0]
+			endVal = cfg.EndNode.impl.OutputOps()[0]
 		}
 		if cfg.InteriorNode != nil {
-			interiorVal = cfg.InteriorNode.outputOps[0]
+			interiorVal = cfg.InteriorNode.impl.OutputOps()[0]
 		}
 		dynConfigs[i] = compute.DynamicPadAxis{
 			Start:          cfg.Start,
@@ -595,8 +596,8 @@ func DynamicPad(x, fillValue *Node, axesConfig ...DynamicPadAxisSpec) *Node {
 		}
 	}
 
-		node := backendDynamicPad(x, fillValue, dynConfigs...)
-	node.inputNodes = inputNodes
+	node := wrapNode(graphimpl.BackendDynamicPad(unwrapNode(x), unwrapNode(fillValue), dynConfigs...))
+	node.impl.SetInputNodes(unwrapNodes(inputNodes))
 	return node
 }
 
@@ -629,5 +630,5 @@ func NonZero(operand *Node, config ...*NonZeroConfig) *Node {
 	if len(config) == 1 && config[0] != nil {
 		cfg = *config[0]
 	}
-	return backendNonZero(operand, cfg)
+	return wrapNode(graphimpl.BackendNonZero(unwrapNode(operand), cfg))
 }
