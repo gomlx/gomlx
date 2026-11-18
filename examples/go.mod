@@ -10,7 +10,7 @@ require (
 	github.com/go-gota/gota v0.12.0
 	github.com/gomlx/compute v0.1.32-0.20261117172308-8ea52efb6d87
 	github.com/gomlx/go-huggingface v0.4.39-0.20261117174958-9c6b3397d04c
-	github.com/gomlx/gomlx v0.28.38-0.20261117174759-5cb2ab627d4b
+	github.com/gomlx/gomlx v0.28.38-0.20261118104421-28b12f9cafa7
 	github.com/gomlx/onnx-gomlx v0.5.35-0.20261117175041-7b1d35eae413
 	github.com/janpfeifer/gonb v0.11.5
 	github.com/janpfeifer/must v0.2.0
