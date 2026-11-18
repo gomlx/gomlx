@@ -8,9 +8,9 @@ require (
 	github.com/erkkah/margaid v0.3.0
 	github.com/gomlx/bsplines v0.2.0
 	github.com/gomlx/compute v0.1.32-0.20261117172308-8ea52efb6d87
-	github.com/gomlx/compute-onnx v0.1.32-0.20261117174600-4f43750d7862
+	github.com/gomlx/compute-onnx v0.1.32-0.20261117174630-84a5692c8a53
 	github.com/gomlx/go-darwinml v0.1.9-0.20261117173136-500191600bd7
-	github.com/gomlx/go-xla v0.4.32-0.20261117174607-5f9479bdc7ac
+	github.com/gomlx/go-xla v0.4.32-0.20261117174746-4c30e00eba0d
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/janpfeifer/gonb v0.11.5
