@@ -1,6 +1,6 @@
 ---
 name: golang-gomlx
-description: "Machine learning models training and inference using GoMLX for Go. It provides an abstraction to create vectorized computation graphs, that can then be JIT-compiled (Just-In-Time) and executed very fast, with backends using XLA (for CPU/CUDA/TPU), Go and others. Includes a reach set of vector (tensors) operations on the graph, a rich ML library with various type of layers, support for training variables, optimizers, training loops, dataset iterators and more. Apply this skill when working ML projects, or needing to do very efficient vectorized (tensor) computations, like image processing, physics or chemestry simulation, etc."
+description: "Machine learning models training and inference using GoMLX for Go. It provides an abstraction to create vectorized computation graphs, that can then be JIT-compiled (Just-In-Time) and executed very fast, with backends using XLA (for CPU/CUDA/TPU), Go (portable and fast if using SIMD), ONNX Runtime, Apple MPS/MLX, and others. Includes a rich set of vector (tensor) operations on the graph, a rich ML library with various types of layers, support for training variables, optimizers, training loops, dataset iterators, and companion tools for HuggingFace and ONNX models. Apply this skill when working on ML projects or needing very efficient vectorized (tensor) computations, such as image processing, physics, or chemistry simulation."
 user-invocable: true
 license: MIT
 compatibility: Designed for Claude Code or similar AI coding agents, and for projects using Golang.
@@ -18,10 +18,9 @@ metadata:
 allowed-tools: Read Edit Write Glob Grep Bash(go:*) Bash(golangci-lint:*) Bash(git:*) Agent WebFetch mcp__context7__resolve-library-id mcp__context7__query-docs
 ---
 
-**Persona:** You are a Go programmer and Machine Learning practitioner that needs to write, update, code-review a machine learning or vectorial computation task.
+**Persona:** You are a Go programmer and Machine Learning practitioner who needs to write, update, or code-review a machine learning or vectorized computation task.
 
-# Using GoMLX for Machine Learning or Vectorized Computation 
-
+# Using GoMLX for Machine Learning or Vectorized Computation
 
 **Official Resources:**
 
@@ -32,14 +31,11 @@ allowed-tools: Read Edit Write Glob Grep Bash(go:*) Bash(golangci-lint:*) Bash(g
 - Compute Backend API and Go backend implementation:
   - [pkg.go.dev/github.com/gomlx/compute](https://pkg.go.dev/github.com/gomlx/compute)
   - [github.com/gomlx/compute](https://github.com/gomlx/compute)
-- Related Projects
-  - [github.com/gomlx/go-huggingface](https://github.com/gomlx/go-huggingface): downloading HuggingFace model files, 
-    iterating over datasets, tokenizing, "transformer" model library (capable of importing several HuggingFace models
-    directly as GoMLX computation graphs), etc.
-  - [github.com/gomlx/onnx-gomlx](https://github.com/gomlx/onnx-gomlx): importing ONNX models into GoMLX computation
-    graphs. Also allows re-exporting weights after fine-tuning.
+- Related Projects:
+  - [github.com/gomlx/go-huggingface](https://github.com/gomlx/go-huggingface): downloading/caching HuggingFace repo files (remote, local, or `//go:embed`), pure-Go tokenizers and length bucketing, on-the-fly HuggingFace model conversion to GoMLX (SafeTensors, GGUF, transformers, SAM2, Timestral — plus ONNX via `onnx-gomlx`), and streaming Parquet dataset iteration. See [`go-huggingface` reference](./references/go-huggingface.md).
+  - [github.com/gomlx/onnx-gomlx](https://github.com/gomlx/onnx-gomlx): converting `.onnx` models on-the-fly into GoMLX computation graphs for inference, graph composition, dynamic shapes, fused-op acceleration, and fine-tuning (including re-exporting updated weights back to `.onnx`). See [`onnx-gomlx` reference](./references/onnx-gomlx.md).
 
-This skill is not exhaustive. Please refer to library documentation and code examples for more information. 
+This skill is not exhaustive. Refer to the linked references, library documentation, and code examples for full details.
 
 ```bash
 go get -u github.com/gomlx/gomlx
@@ -48,59 +44,33 @@ go get -u github.com/gomlx/compute
 
 ## Core Concepts
 
-- Shapes and Data Types (DTypes) (`github.com/gomlx/compute/dtypes` and `github.com/gomlx/compute/shapes`):
-  - `dtypes` define the underlying type of the data (e.g. `dtypes.Float32`, `dtypes.Int64`, `dtypes.Bool`).
-  - `shapes.Shape` represents the multi-dimensional structure of a tensor, including its `DType` and its `Dimensions` (a
-    slice of integers). Shapes are strictly checked during graph building. GoMLX supports **dynamic shapes** (input-shape
-    conditioned dimensions), where variable axes are set as indeterminate (`shapes.DynamicDim` == -1) and optionally named
-    (`shapes.MakeDynamic(...)`).
-- Computation Graph (`github.com/gomlx/gomlx/core/graph`) & Autodiff (`github.com/gomlx/gomlx/core/autodiff`): The `Graph` object is the container for computation nodes.
-  - Computations are built (by a Go function) using `*Node` objects. Each node represents an operation or a value, and
-    it always contains a reference to the graph it belongs to (`Node.Graph()`), and parameters can be looked up by name via `g.GetParam(name)`.
-  - Reverse-mode automatic differentiation is provided by `autodiff.Gradient(loss, targets...)` in `github.com/gomlx/gomlx/core/autodiff`.
-  - The graph building phase is separate from the execution phase. You build the graph first, and then execute it (there
-    is a JIT-compilation that happens in between automatically, handled by the `graph.Exec` / `model.Exec` object).
-  - Executor: (`graph.Exec` or `model.Exec`) takes a graph-building function, JIT-compiles it, and provides methods to
-    execute it.
-- `compute.Backend` (github.com/gomlx/compute): It abstracts backend engines to execute computations on devices
-  (accelerators or the CPU itself). One doesn't need to interact with it directly except if implementing one. One just
-  needs to pass around the `compute.Backend` object in use. Usually, one imports (`import _
-  "github.com/gomlx/gomlx/backends/default"`) to include support for the default backends. And the end user can set the
-  environment variable `GOMLX_BACKEND` to specify at runtime a different backend. Typical values: "go" (portable Go backend),
-  "onnx" / "onnx:cuda" (ONNX Runtime backend), "xla:cpu", "xla:cuda", "xla:tpu".
-  Check `backend.Capabilities().DynamicShapes` (or `backend.Capabilities().HasDynamicShapes()`) to verify dynamic shapes support.
-- Tensors: (`github.com/gomlx/gomlx/core/tensors`): These represent actual values, that can have local storage or
-  "on-device" (accelerator) storage. Usually, they are only used as inputs and outputs of computations, or to save, load
-  or print values. Most methods are about conversion or access to the underlying data (e.g., `tensor.Value()` returns a
-  generic value, or `tensor.Local().Copy()` for moving back to CPU memory).
+- **Shapes and Data Types (`github.com/gomlx/compute/dtypes` and `github.com/gomlx/compute/shapes`)**:
+  - `dtypes` defines the underlying element type (e.g., `dtypes.Float32`, `dtypes.Int64`, `dtypes.Bool`).
+  - `shapes.Shape` represents the multi-dimensional structure (`DType` + `Dimensions`), strictly checked during graph building. GoMLX also supports input-conditioned **dynamic shapes** (`shapes.DynamicDim` == `-1`, optionally named via `shapes.MakeDynamic(...)`).
+- **Computation Graph (`github.com/gomlx/gomlx/core/graph`) & Autodiff (`github.com/gomlx/gomlx/core/autodiff`)**:
+  - Computations are built by a Go function operating on `*graph.Node` values. Each node references its owning graph (`node.Graph()`), and parameters can be looked up by name via `g.GetParam(name)`.
+  - Reverse-mode automatic differentiation is provided by `autodiff.Gradient(loss, targets...)`.
+  - Graph building is separate from execution: `graph.Exec` / `model.Exec` JIT-compiles the built graph automatically before running it.
+- **`compute.Backend` (`github.com/gomlx/compute`)**:
+  - Abstracts execution devices (CPU/GPU/TPU). Typically import `import _ "github.com/gomlx/gomlx/backends/default"` and create with `compute.MustNew()`.
+  - Override at runtime via `GOMLX_BACKEND`: `"go"` (portable pure-Go and fast if using SIMD), `"onnx"` / `"onnx:cuda"` (ONNX Runtime), `"xla:cpu"` / `"xla:cuda"` / `"xla:tpu"`, `"mps"` / `"mlx"` / `"mlx:dynamic"` (Apple Silicon).
+- **Tensors (`github.com/gomlx/gomlx/core/tensors`)**:
+  - Concrete values stored locally on CPU or on-device, created with `tensors.FromValue(any)` or `tensors.FromShape(shape)`.
+  - Used for inputs/outputs, saving/loading, or inspection (`tensor.Value()`, `tensor.Local().Copy()`).
+- **`model.Store`, `model.Scope`, `model.Exec` (`github.com/gomlx/gomlx/ml/model`)**:
+  - `model.Store` holds model variables (weights) and hyperparameters in a hierarchical tree.
+  - `model.Scope` pairs a `Store` reference with a current path ("directory") for organizing nested layers.
+  - `model.Exec` wraps `graph.Exec` and automatically wires used variables as side-inputs and updated variables as side-outputs.
 
-- `model.Store`, `model.Scope`, `model.Exec` (github.com/gomlx/gomlx/ml/model): The `model` package introduces 
-  `Variable` (representing model weights) and hyperparameters abstractions, organized in a "directory-like" tree.
-  The `model.Store` is the container for a model's variable and it's passed around if the graph computation being built
-  uses them (true for all ML models). The `model.Scope` is what is passed around, it contains a reference to the `Store`
-  and a "scope" (similar to `current directory'), that helps in organizing the variables hierarchically. One can 
-  enter nested scopes (sub-scopes) when constructing model layers.
-  - `model.Exec`: it uses `graph.Exec` and has a very similar API, but it takes a `model.Store` as a construction
-    argument and automatically adds used variables as "side-inputs" to the build computation graph, and modified 
-    variables as "side-outputs". The variables values are automatically input/updated during the execution.
+---
 
-### Creating a graph computation -- package `github.com/gomlx/core/graph`
+### Creating a Graph Computation -- `github.com/gomlx/gomlx/core/graph`
 
-- Computation building functions usually take only `*Node` as input and outputs.
-- Computation building functions are never concurrent: they are always meant to be executed sequentially. Later the
-  JIT-compiled graph is executed with concurrency, but its building is always sequential.
-- Errors are returned with "execeptions" (panics with an error), to not clutter the "math-y" code with constant error
-  checking. The error should always contain the stacktrace, and preferably use the library `github.com/pkg/errors`. The
-  use of exceptions (panics) is only when building graph computations, not for the the other packages. See
-  `execptions.Panicf(format, args...)` (github.com/gomlx/gomlx/support/exceptions) for a convenient wrapper around
-  `panic(errors.Errorf(format, args...))`.
-- Graph building functions are usually executed only once, or once per input shape -- if we compile the graph for more
-  than one shape (by calling `Exec.Call` more than once with different input shapes).
-- For files that define large or various computations, it's common practice to "dot import" the `graph` package
-  with `import . "github.com/gomlx/gomlx/core/graph"`, and move all graph computation building functions in its own `.go` file. 
-- **See [`graph` package reference](./references/graph.md)** for a list of common functions and their PyTorch equivalents.
-
-Example:
+- Graph-building functions take `*Node` inputs/outputs and run **sequentially** (only once per unique input shape). Once compiled, the resulting `Exec` can be called concurrently.
+- Errors during graph building are raised via exceptions (panics wrapping an error with stack trace via `github.com/pkg/errors` and `exceptions.Panicf` from `github.com/gomlx/gomlx/support/exceptions`) to keep math code uncluttered. Outside graph building, use standard Go error returns.
+- For files defining large computations, dot-importing `import . "github.com/gomlx/gomlx/core/graph"` in a dedicated `.go` file is idiomatic.
+- Document fixed shapes in comments or assert them with `x.Shape().AssertDims(batchSize, embedDim)`; invalid shape operations fail at graph-build time.
+- **See [`graph` package reference](./references/graph.md)** for common operations and PyTorch equivalents.
 
 ```go
 import . "github.com/gomlx/gomlx/core/graph"
@@ -110,120 +80,31 @@ func EuclideanDistance(a, b *Node) *Node {
 }
 ```
 
-- Each `Node` has a shape (and dtype). When the shape of the `*Node` is known or fixed, it's often described as a side
-  comment, or asserted (With something like `x.Shape().AssertDims(batchSize, embedDim)`) to make the code easy to read.
-  Inputs or outputs of functions that that take a fixed shape should be documented in the function documentation.
-- Notice the graph building is weakly typed for the shapes: so the code doesn't reflet it. But invalid shape operations
-  will raise an exception during the graph building (before the execution).
+### Executing a Graph -- `graph.Exec` and `model.Exec`
 
-### Executing a graph -- the `graph.Exec` object
-
-- It is created with `graph.NewExec(backend, fn)`, where `fn` is the graph-building function.
-- `exec.Call(inputs...)` is used to execute the compiled graph, taking `tensors.Tensor` or standard Go values (slices of
-  slices) and returning `tensors.Tensor`.
-- Inputs are concrete `tensors.Tensor`, but can be any value that can be converted automatically (so slices or slice or
-  slices).
-- The Exec object will automatically recompile the graph, calling again the graph building function, if the shape of the
-  inputs changes. It has a limited cache size for different shapes, and compiling a graph is orders of magnitude slower
-  than executing it, so it's better to reuse the same input shapes where possible, using padding to fixed sizes.
-- For one-off compilation, `exec.CompileStandalone(inputShapes...)` builds a fresh
-  graph with the current configuration. The caller takes onwership of the returned Graph (and must
-  finalize it). It is used in `onnx.Save()` to save the compiled graph as an `.onnx` file.
-
+- Create with `graph.NewExec(backend, fn)` (stateless) or `model.NewExec(backend, store, fn)` (with variables), and run via `exec.Call(inputs...)` / `exec.MustCall1(...)` passing `*tensors.Tensor` or standard Go slices.
+- `Exec` caches compiled graphs per concrete input shape; compilation is orders of magnitude slower than execution, so reuse `Exec` instances and avoid unbounded shape variation on static-shape backends.
+- For one-off compilation (e.g., ONNX export via `onnx.Save()`), `exec.CompileStandalone(inputShapes...)` builds a fresh `*Graph` owned by the caller (who must call `Graph.Finalize()`).
 
 ### Dynamic Shapes (Input-Conditioned Shapes)
 
-GoMLX supports input-conditioned dynamic shapes where dimensions can vary at runtime without rebuilding the graph.
+- Backends with `backend.Capabilities().HasDynamicShapes()` (e.g., `go`, `onnx`, `mlx:dynamic`) execute variable dimensions (batch size, sequence length) without recompilation when configured with `exec.WithDynamicAxes([]string{"batch", "seq"}, ...)`.
+- Write polymorphic graphs using `DimensionSpecFor`, `DimensionSize`, `DynamicReshape`, `BroadcastLike`, and `IotaLike` (zero overhead on static graphs). Note that implicit broadcasting (`Add`, `Mul`, `Where`) is strictly compile-time.
+- On static-shape backends (`xla`), pad/bucket inputs to discrete sizes (e.g., `github.com/gomlx/go-huggingface/tokenizers/bucket`).
+- **See [`dynamic-shapes` reference](./references/dynamic-shapes.md)** for capabilities, dynamic ops, broadcasting rules, and bucketing guidance.
 
-#### 1. Backend Capabilities
-- `backend.Capabilities().DynamicShapes` (`compute.DynamicShapesSupport`):
-  - `compute.DynamicShapesNone`: Backend requires static shapes (e.g., `xla`). GoMLX will recompile per unique concrete shape.
-  - `compute.DynamicShapesNative`: Backend compiles dynamic graphs once; zero runtime recompilation overhead across variable dimensions (e.g., `go`, `onnx`).
-  - `compute.DynamicShapesRecompiling`: Backend accepts dynamic graphs and shares constants/weights, but manages JIT kernel specialization internally.
-- Helper: `backend.Capabilities().HasDynamicShapes()` returns `true` if dynamic shapes are supported.
+### Variables & Scopes -- `github.com/gomlx/gomlx/ml/model`
 
-#### 2. Configuring `Exec` for Dynamic Shapes
-Declare which axes of the inputs are dynamic using `WithDynamicAxes` (or `WithDynamicAxesSpecs`):
-
-```go
-// For an Exec taking (tokens, seqLen), where tokens is [batch, seq] and seqLen is [batch]:
-exec.WithDynamicAxes(
-    []string{"batch", "seq"}, // tokens dynamic axes
-    []string{"batch"},        // seqLen dynamic axes
-)
-```
-
-Static axes use `""` (empty string). User-named axes (like `"batch"`) enforce matching runtime sizes across inputs at compile/execute time; for non-user-named dynamic dimensions that only need runtime compatibility checks, generate unique `#`-prefixed names via `shapes.UniqueAxisName(prefix)`.
-
-#### 3. Operations Supporting Dynamic Shapes
-- **Dimension Abstraction**:
-  - `DimensionSpecFor(x, axis)`: Returns a `DimensionSpec` representing the dimension (static or dynamic with name).
-  - `DimensionSpecsFor(x)`: Returns a slice of `DimensionSpec`s for all axes of `x`.
-  - `DimensionSize(x, axis)`: Returns a scalar `*Node` (typically `Int64`, or backend's `DynamicDimDType`) with the dimension size (constant scalar if static, dynamic extraction if dynamic).
-- **Reshaping**:
-  - `DynamicReshape(operand, specs...)`: Reshapes according to `DimensionSpec`s (`StaticDim`, `DynamicDim`, `NamedDynamicDim`, `InferredDim`, `NamedInferredDim`). Automatically falls back to static `Reshape` if operand and all specs are static.
-  - `DynamicReshapeLike(operand, refNode)` / `ReshapeLike(operand, refNode)`: Reshapes operand to match the shape of `refNode`.
-  - `Reshape(operand, dims...)` / `ReshapeWithShape(operand, shape)`: Automatically delegates to dynamic reshape if operand has dynamic dimensions.
-- **Broadcasting**:
-  - **Implicit broadcasting (`Add`, `Mul`, `Where`, etc.) is strictly compile-time**: Only scalar operands or axes that are **statically `1`** broadcast implicitly (including `1 -> 0` -> `0`). Dynamic axes never implicitly broadcast at runtime if their concrete size happens to be `1`, and pairing a dynamic axis with a non-`1` static dimension (e.g. `["batch", "#feat"]` with `["batch", 12]`) fails at graph-build time — use `DynamicReshape` to assert the static dimension or `DynamicBroadcastInDim` / `BroadcastToShape` for explicit runtime `1`-or-match broadcasting.
-  - `DynamicBroadcastInDim(operand, broadcastAxes, specs...)`: Low-level broadcast to target `DimensionSpec`s (supports runtime `1`-or-match from dynamic operand axes, and narrows non-`1` static operand axes mapped to dynamic specs).
-  - `DynamicBroadcastLike(operand, refNode)` / `BroadcastLike(operand, refNode)`: Broadcasts to match `refNode` (static or dynamic).
-  - `BroadcastToShape(operand, shape)` / `DynamicBroadcastToShape(operand, shape)`: Broadcasts to target shape (static or dynamic).
-  - `BroadcastPrefix(operand, targetRank)`: Adds leading singleton axes and broadcasts to target rank.
-- **Iota & Generation**:
-  - `DynamicIota(g, dtype, iotaAxis, specs...)`: Creates a sequence tensor with dynamic target dimensions.
-  - `IotaLike(refNode, iotaAxis)`: Creates an `iota` matching `refNode`'s shape.
-- **Padding & Sparse / Data-Dependent Ops**:
-  - `DynamicPad(operand, fillVal, padSpecs...)`: Pads with dynamic or static padding amounts.
-  - `NonZero(operand, config...)`: Returns indices of non-zero elements with a data-dependent dynamic count dimension (available only on backends supporting dynamic shapes; prefer boolean masking with `NotEqual`/`Where` on static-shape backends).
-- **Polymorphic Structural Ops**:
-  - `ExpandAxes`, `InsertAxes`, `ExpandLeftToRank`, `Squeeze`, `Slice`, `Gather`, `ScatterUpdate`, `Convolve`, `Concatenate`, `Dot`, `Where`, `TopK`, `BottomK`, `TopKMask` transparently handle both static and dynamic shapes.
-
-#### 4. Writing Polymorphic Layers
-Write layers using `DimensionSpecFor`, `DimensionSize`, `DynamicReshape`, `BroadcastLike`, and `IotaLike`. These run with **zero overhead** on static graphs (falling back directly to static operations) while transparently supporting dynamic shapes when enabled.
-If specialized logic is required for dynamic vs static tensors, inspect `x.Shape().IsDynamic()` or `x.Shape().Dimensions[axis] == shapes.DynamicDim`.
-
-#### 5. Strategy When Dynamic Shapes Are Not Supported
-When running on backends without dynamic shapes (`xla`), fluctuating input shapes cause JIT recompilation explosion. Use **bucketing and padding** to round shapes to a small discrete set of buckets (e.g. powers of 2 or multiples of 32/64). For tokenized text sequences, use `github.com/gomlx/go-huggingface/tokenizers/bucket`.
-
-
-### Tensors -- package `github.com/gomlx/gomlx/core/tensors`
-
-- Local/On-Device: Tensors can be instantiated on the local CPU (`tensors.FromValue(...)`) or directly on the backend
-  device device (usually happens automatically for outputs of executions).
-- Constructors: Use `tensors.FromValue(any)` or `tensors.FromShape(shape)` to create tensors.
-- Donation for execution: You can "donate" a tensor to an execution to allow XLA to reuse its memory for outputs using
-  `exec.Call(input1, input2)`. The donated tensor's memory will be overwritten, so it shouldn't be used afterward.
-
-### Machine Learning Models: variables, hyperparameters, store and containers -- package `github.com/gomlx/gomlx/ml/model`
-
-- `model.Store`: A container for a model's variables and hyperparameters, organized hierarchicaly, like a directory tree. It is passed around if the graph
-  computation being built uses them (true for all ML models).
-- `model.Scope`: Represents a reference to a `model.Store` (returned by `Scope.Store()`) with a scope ("current
-   directory"). You can enter nested scopes (sub-scopes) as one is building a model layers, organized hierarchicaly:
-   - `Scope.In(format, args...)`: enters a nested scope, allowing only one visit per sub-scope -- reusing a scope 
-     triggers an error (panic). This is the usual method, and the check helps avoiding mistakes.
-   - `Scope.Shared(format, args...)` to re-enter a scope, and calling it to enter a newly visited sub-scope is an error. 
-     E.g.: to reuse the weights in a siamese tower model)
-   - `Scope.At(format, args...)` if one wants to enter a sub-scope without regards if it has been visited before or not.
-- Variables: Are created using `Scope.VariableWithValue(name, value)` or `Scope.VariableWithShape(name, shape)`. 
-  Once created, they persist in the underlying `Store` and can be retrieved using `Scope.InspectVariable(name)`.
-  One can also use the `Store` directly to retrieve variables using the full path to them (as opposed to variables
-  in the current scope).
-- Hyperparameters: Set with `Scope.SetParam("key", value)` and retrieved with 
-  `model.GetParamOr(scope, "key", defaultValue)`.
-- Checkpointing (saving/loading): `checkpoint.Build(store)` (github.com/gomlx/gomlx/ml/model/checkpoint) helps save
-  and load the state of all variables in a `model.Store`.
-- Trainable: Variables are by default trainable.
-- `model.Exec`: it uses `graph.Exec` and has a very similar API, but it takes a `model.Store` as a construction
-  argument and automatically adds used variables as "side-inputs" to the build computation graph, and modified
-  variables as "side-outputs". The variables values are automatically input/updated during the execution.
-
-Example:
+- Navigate sub-scopes via:
+  - `scope.In(format, args...)`: enters a nested scope (panics if visited more than once — catches accidental weight sharing).
+  - `scope.Shared(format, args...)`: re-enters an already-visited scope (e.g., Siamese towers).
+  - `scope.At(format, args...)`: enters a sub-scope regardless of prior visits.
+- Create variables with `scope.VariableWithValue(name, val)` or `scope.VariableWithShape(name, shape)` (trainable by default), and inspect with `scope.InspectVariable(name)`.
+- Hyperparameters: set via `scope.SetParam("key", value)` and read via `model.GetParamOr(scope, "key", defaultVal)`.
 
 ```go
 func DenseLayer(scope *model.Scope, x *Node, outputDim int) *Node {
-  g := x.Graph()
+	g := x.Graph()
 	inputDim := x.Shape().Dimensions[len(x.Shape().Dimensions)-1]
 	weightsVar := scope.VariableWithShape("weights", shapes.Make(x.DType(), inputDim, outputDim))
 	biasVar := scope.VariableWithShape("bias", shapes.Make(x.DType(), outputDim))
@@ -232,69 +113,31 @@ func DenseLayer(scope *model.Scope, x *Node, outputDim int) *Node {
 }
 ```
 
-### Machine Learning Layers -- package `github.com/gomlx/gomlx/ml/layers` and sub-packages
+### Machine Learning Layers -- `github.com/gomlx/gomlx/ml/layers`
 
-- The `layers` package provides standard higher-level building blocks for ML models.
-- Uses `*model.Scope` extensively to manage the weights/biases for each layer.
-- Sub-packages include `activation` (Relu, Swish, etc.), `fnn` (feed-forward neural networks), `kan` (Kolmogorov-Arnold Networks), `peft` (Parameter-Efficient Fine-Tuning / LoRA via post-linear hooks), `regularizer`, `norm`, etc.
-- **Parameter-Efficient Fine-Tuning (PEFT / LoRA)**:
-  - Import: `import _ "github.com/gomlx/gomlx/ml/layers/peft"`.
-  - PEFT auto-registers a post-linear hook (`layers.RegisterPostLinearHook`) that intercepts linear projections in `layers.Dense`, `fnn.Done()`, and `attention.MultiHeadAttention`.
-  - Configure via `store.SetParams` or `-set`:
-    - `peft_adapter`: adapter sub-scope name (e.g. `"my_lora"`). Freezes base weights and creates trainable `A` and `B` variables under `<scope>/<adapter>/`. Setting `"off"` freezes base weights without adding adapters.
-    - `peft_rank`: LoRA rank $r$.
-    - `peft_alpha`: scaling factor ($\alpha / r$).
-    - `peft_target_modules`: comma-separated or slice of target module substrings (e.g. `"query,value"`). Unmatched modules are frozen without adapters.
-  - Multiple adapters can coexist in the same `model.Store`, and switching adapters only requires changing `peft_adapter`.
-- **See [`layers` package reference](./references/layers.md)** for a list of common layers and their PyTorch equivalents.
+- Provides standard ML building blocks using `*model.Scope` (`layers.Dense`, `layers.Convolution`, `layers.Dropout`, `activation`, `fnn`, `kan`, `norm`, `attention`, `regularizer`, `peft`), plus stateless fused primitives in `ml/nn`.
+- **PEFT / LoRA**: `import _ "github.com/gomlx/gomlx/ml/layers/peft"` injects zero-code-change LoRA adapters into `Dense`, `fnn`, and `MultiHeadAttention` via hyperparameters (`peft_adapter`, `peft_rank`, `peft_alpha`, `peft_target_modules`).
+- **See [`layers` package reference](./references/layers.md)** for layers, losses, optimizers, and PyTorch equivalents.
 
-### Training loop -- package `github.com/gomlx/gomlx/ml/train`
+### Training Loop & Checkpointing -- `github.com/gomlx/gomlx/ml/train`
 
-- Example from `examples/adult/demo`: Shows a full ML pipeline.
-- `train.Trainer` orchestrates the model function, the loss function, and the optimizer.
-  - Needs `model.Store`, a model function, a loss function (e.g., `loss.BinaryCrossentropyLogits`), and an optimizer (e.g., `optimizer.Adam`).
-- Metrics (`ml/train/metric`): Used to evaluate model performance during training and evaluation.
-  - Metrics are provided as lists during `train.NewTrainer` initialization (one list for train metrics, one for eval metrics).
-  - Common metrics include `metric.NewMeanBinaryLogitsAccuracy()`, `metric.NewSparseCategoricalAccuracy()`.
-- `train.Loop` manages the iterative process, feeding datasets to the `Trainer` and calling callbacks (e.g., checkpoint saving, plotting).
+- `train.Trainer` ties together `backend`, `model.Store`, model function, loss (`ml/train/loss`), optimizer (`ml/train/optimizer`), and train/eval metrics (`ml/train/metric`).
+- `train.Loop` iterates datasets, calls `Trainer`, and supports lifecycle hooks (`OnStart`, `OnFirstStep`, `OnStep`, `OnEnd`), progress bars (`commandline.AttachProgressBar`), and checkpointing (`checkpoint.Build(store)`).
+- **See [`training` reference](./references/training.md)** for a full training pipeline example, checkpointing, and PEFT/LoRA details.
 
-Example Training Pipeline:
+---
 
-```go
-// Create an empty store for the variables and hypeparameters.
-store := model.NewStore()
-store.SetParam("learning_rate", *flagLearningRate)
+## Supporting Ecosystem Repositories
 
-// Create dataset
-trainDS := CreateDataset(...)
+### Importing ONNX Models -- `github.com/gomlx/onnx-gomlx`
 
-// Metrics we are interested in.
-meanAccuracyMetric := metric.NewMeanBinaryLogitsAccuracy("Mean Accuracy", "#acc")
-movingAccuracyMetric := metric.NewMovingAverageBinaryLogitsAccuracy("Moving Average Accuracy", "~acc", 0.01)
+- Converts `.onnx` files on-the-fly into GoMLX computation graphs (`onnx/parser.ParseFile` / `Parse` / `ParseReader`), supporting any GoMLX backend, dynamic shapes (`exec.WithDynamicAxes`), custom pre-/post-processing composition, automatic fused-op matching (SDPA, QKV, Dense+GELU, quantized dense/MatMulNBits, LayerNorm), and fine-tuning with GoMLX autodiff + exporting updated weights back to `.onnx` (`ScopeToONNX`, `SaveToFile`/`Write`).
+- **See [`onnx-gomlx` reference](./references/onnx-gomlx.md)** for workflows, API summary, external data readers, and debugging tips.
 
-// Create a train.Trainer: orchestrates running the model, feeding results to the optimizer, evaluating metrics.
-trainer := train.NewTrainer(backend, store, Model, loss.BinaryCrossentropyLogits,
-	optimizer.FromStore(store),
-	[]metric.Interface{movingAccuracyMetric}, // trainMetrics
-	[]metric.Interface{meanAccuracyMetric})   // evalMetrics
+### HuggingFace Hub, Tokenizers, Models & Datasets -- `github.com/gomlx/go-huggingface`
 
-// Create a standard training loop
-loop := train.NewLoop(trainer)
-
-// Optional lifecycle hooks on the loop:
-// - loop.OnStart(name, priority, fn)
-// - loop.OnFirstStep(name, priority, fn) (automatically deregisters after the first step)
-// - loop.OnStep(name, priority, fn)
-// - loop.OnEnd(name, priority, fn)
-
-// Attach a progress bar to the loop.
-commandline.AttachProgressBar(loop)
-
-// Get hyperparameters and run the training loop
-trainSteps := model.GetRootParamOr(store, "train_steps", 1000)
-_, err := loop.RunToGlobalStep(trainDS, trainSteps)
-if err != nil {
-	return err
-}
-```
-
+- **Repository access (`hub`)**: Download/cache files sharing Python `huggingface_hub`'s cache layout (`hub.New`), or read offline from local folders (`hub.NewLocal`) or `//go:embed` (`hub.NewEmbed`).
+- **Tokenizers & bucketing (`tokenizers`, `tokenizers/bucket`)**: Pure-Go WordPiece/BPE/Unigram/SentencePiece/GGUF-embedded tokenizers plus streaming length bucketing (`ByTwoBitBucket`, `ByPower`, `Unpadded`).
+- **On-the-fly model conversion (`models/*`)**: Converts SafeTensors (`models/safetensors`), quantized GGUF (`models/gguf`, with native GGML quantized execution and `Q4_K_M`-first selection), transformers & sentence embeddings (`models/transformer`, with self-contained checkpoint save/reload), SAM2 (`models/sam2`), and Timestral (`models/timestral`) — plus HuggingFace `.onnx` repos via `onnx-gomlx`.
+- **Datasets (`datasets`)**: Inspect splits/features, generate Parquet record Go structs (`cmd/generate_dataset_structs`), and stream records on-demand (`datasets.IterParquetFromDataset[T]`).
+- **See [`go-huggingface` reference](./references/go-huggingface.md)** for package layout, code examples, and CLI tools.

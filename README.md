@@ -299,6 +299,20 @@ Finally, feel free to ask questions: time allowing (when not at work), I'm alway
 I'm often connected to [Slack channel #gomlx](https://app.slack.com/client/T029RQSE6/C08TX33BX6U);
 alternatively the [groups.google.com/g/gomlx-discuss](https://groups.google.com/g/gomlx-discuss).
 
+### 🤖 AI Coding Agent Skill
+
+GoMLX ships an [Agent Skill](https://agentskills.io/) under [`.agents/skills/golang-gomlx/`](.agents/skills/golang-gomlx/SKILL.md) (with references for `core/graph`, `ml/layers`, dynamic shapes, training/PEFT, `go-huggingface`, and `onnx-gomlx`) that helps AI coding agents (Claude Code, Antigravity, Cursor, Codex, Copilot, OpenCode, etc.) write accurate GoMLX code.
+
+Install it into your Go project (or globally with `-g`) using the open `skills` CLI:
+
+```bash
+npx skills add gomlx/gomlx
+# Or install globally across all your projects:
+npx skills add gomlx/gomlx@golang-gomlx -g
+```
+
+You can also manually copy or symlink `.agents/skills/golang-gomlx/` into your agent's skills directory (e.g. `.agents/skills/`, `~/.claude/skills/`, or `~/.gemini/skills/`).
+
 ### Inference & Productionization
 
 Inference or serving a model is done currently by using the Go code used to create the model along with the checkpoint
