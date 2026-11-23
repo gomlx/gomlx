@@ -535,3 +535,32 @@ func TestGemma4DoubleWideMLP(t *testing.T) {
 	require.Equal(t, []int{128, 32}, store.GetVariable("/layer_2/mlp/up_proj/dense/weights").Shape().Dimensions)
 	require.Equal(t, []int{32, 128}, store.GetVariable("/layer_2/mlp/down_proj/dense/weights").Shape().Dimensions)
 }
+
+func TestOnlyLastTokenLogits(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	store := model.NewStore()
+
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) (*Node, *Node) {
+		m := New(scope).
+			WithVocabSize(64).
+			WithEmbedDim(32).
+			WithNumLayers(2).
+			WithNumHeads(2).
+			WithHeadDim(16).
+			WithFFNDim(64).
+			WithRoPE(10000).
+			WithCausalMask(true)
+		fullLogits, _ := m.Forward(tokens, CallOptions{})
+		m.Scope = m.Scope.ResetVisited()
+		lastOnlyLogits, _ := m.Forward(tokens, CallOptions{OnlyLastTokenLogits: true})
+		return fullLogits, lastOnlyLogits
+	})
+
+	outs := exec.MustCall([][]int32{{1, 2, 3, 4, 5}})
+	full := outs[0].Value().([][][]float32)
+	lastOnly := outs[1].Value().([][][]float32)
+
+	require.Equal(t, []int{1, 5, 64}, outs[0].Shape().Dimensions)
+	require.Equal(t, []int{1, 1, 64}, outs[1].Shape().Dimensions)
+	assert.InDeltaSlice(t, full[0][4], lastOnly[0][0], 1e-5)
+}

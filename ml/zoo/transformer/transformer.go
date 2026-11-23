@@ -107,6 +107,12 @@ type CallOptions struct {
 	// If it is nil, no KV cache is used and the model computes attention across the entire sequence.
 	// If it is non-nil, the model uses/updates the cache, which is typical for fast autoregressive generation.
 	Cache KVCacheNodes
+
+	// OnlyLastTokenLogits, when true, slices the final hidden states to only the last sequence
+	// position [batchSize, 1, hiddenSize] before projecting through the vocabulary head (lm_head).
+	// This avoids projecting all prompt tokens during autoregressive prefill when only the next-token
+	// logits are needed.
+	OnlyLastTokenLogits bool
 }
 
 // Model configures a cached transformer model.
@@ -695,6 +701,9 @@ func (m *Model) Forward(
 	options CallOptions,
 ) (logits *Node, updatedCache KVCacheNodes) {
 	embeddings, _, updatedCache := m.AllLayers(tokens, options)
+	if options.OnlyLastTokenLogits {
+		embeddings = Slice(embeddings, AxisRange(), AxisRange(-1), AxisRange())
+	}
 	return m.LogitsFromEmbeddings(embeddings), updatedCache
 }
 
@@ -717,8 +726,9 @@ func MakeKVCacheModelFn(m *Model) generate.KVCacheModelFn {
 		}
 		m.Scope = m.Scope.ResetVisited()
 		return m.Forward(newTokens, CallOptions{
-			PositionIds: position,
-			Cache:       cache,
+			PositionIds:         position,
+			Cache:               cache,
+			OnlyLastTokenLogits: true,
 		})
 	}
 }
