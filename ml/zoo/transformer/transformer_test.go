@@ -658,3 +658,81 @@ func TestZeroCopyKVCacheDecode(t *testing.T) {
 	decodeOuts := decodeExec.MustCall(decodeInputs...)
 	assert.InDeltaSlice(t, refLogits[0][4], decodeOuts[0].Value().([][][]float32)[0][0], 1e-4)
 }
+
+func TestZeroCopyDynamicPrefill(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	if !backend.Capabilities().HasDynamicShapes() {
+		t.Skip("backend does not support dynamic shapes")
+	}
+	store := model.NewStore()
+
+	buildModel := func(scope *model.Scope, kv *kvcache.KVCache) *Model {
+		m := New(scope).
+			WithArchitecture(ArchitectureGemma4).
+			WithVocabSize(64).
+			WithEmbedDim(32).
+			WithNumLayers(2).
+			WithNumHeads(2).
+			WithNumKVHeads(1).
+			WithHeadDim(16).
+			WithFFNDim(64).
+			WithRoPE(10000).
+			WithCausalMask(true).
+			WithSlidingWindow(8).
+			WithLayerTypes([]LayerType{LocalLayer, GlobalLayer})
+		if kv != nil {
+			m.KVCache = kv
+		}
+		return m
+	}
+
+	// Non-cached reference logits for a 6-token sequence [1, 2, 3, 4, 5, 6].
+	refExec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+		m := buildModel(scope, nil)
+		logits, _ := m.Forward(tokens, CallOptions{})
+		return logits
+	})
+	refLogits := refExec.MustCall([][]int32{{1, 2, 3, 4, 5, 6}})[0].Value().([][][]float32)
+
+	// Zero-copy dynamic-seq_len prefill with SinkPositions=0 across both Local (window=8) and Global layers.
+	kv := kvcache.NewKVCache().
+		WithSinkPositions(0).
+		WithLayerTypes(map[string]attention.LayerType{
+			"/layer_0/self_attn": attention.LocalLayer,
+			"/layer_1/self_attn": attention.GlobalLayer,
+		}).
+		WithMaxSeqLenPerLayerType([]int{32, 8}).
+		WithMinSeqLenPerLayerType([]int{32, 8})
+	kv.WithOrderedScopes([]string{"/layer_0/self_attn", "/layer_1/self_attn"})
+
+	prefillExec := model.MustNewExec(backend, store, func(scope *model.Scope, inputs []*Node) []*Node {
+		tokens := inputs[0]
+		cache := kv.DeserializeNodes(inputs[1:])
+		m := buildModel(scope, kv)
+		logits, updated := m.Forward(tokens, CallOptions{
+			PositionIds:         Const(tokens.Graph(), int32(0)),
+			Cache:               cache,
+			OnlyLastTokenLogits: true,
+		})
+		ser, err := kv.SerializeNodes(updated)
+		require.NoError(t, err)
+		return append([]*Node{logits}, ser...)
+	}).WithDynamicAxes([]string{"", "seq_len"})
+
+	// Run two different prompt lengths (3 and 6) through the exact same dynamic prefillExec.
+	for _, prompt := range [][]int32{{1, 2, 3}, {1, 2, 3, 4, 5, 6}} {
+		kvTensors := kv.InitializeTensors(1, 1, 16, dtypes.Float32, 32)
+		kvSerialized, err := kv.SerializeTensors(kvTensors)
+		require.NoError(t, err)
+
+		prefillInputs := make([]any, 1+len(kvSerialized))
+		prefillInputs[0] = [][]int32{prompt}
+		for i, kt := range kvSerialized {
+			prefillInputs[i+1] = kt
+		}
+		prefillOuts := prefillExec.MustCall(prefillInputs...)
+		wantPos := len(prompt) - 1
+		assert.InDeltaSlice(t, refLogits[0][wantPos], prefillOuts[0].Value().([][][]float32)[0][0], 1e-4,
+			"dynamic prefill mismatch for prompt length %d", len(prompt))
+	}
+}

@@ -702,7 +702,21 @@ func (m *Model) Forward(
 ) (logits *Node, updatedCache KVCacheNodes) {
 	embeddings, _, updatedCache := m.AllLayers(tokens, options)
 	if options.OnlyLastTokenLogits {
-		embeddings = Slice(embeddings, AxisRange(), AxisRange(-1), AxisRange())
+		if embeddings.Shape().Dimensions[1] == shapes.DynamicDim {
+			seqLen := DimensionSize(embeddings, 1)
+			lastIdx := SubScalar(seqLen, 1)
+			if embeddings.Shape().Dimensions[0] == 1 {
+				// Fast zero-transpose path for batch=1: [1, seqLen, D] -> [seqLen, D] -> Gather -> [1, 1, D].
+				flat := DynamicReshape(embeddings, DimensionSpecFor(embeddings, 1), StaticDim(embeddings.Shape().Dimensions[2]))
+				embeddings = ExpandAxes(Gather(flat, lastIdx), 0, 1)
+			} else {
+				// General batch path: [B, seqLen, D] -> [seqLen, B, D] -> Gather -> [B, 1, D].
+				transposed := Transpose(embeddings, 0, 1)
+				embeddings = ExpandDims(Gather(transposed, lastIdx), 1)
+			}
+		} else {
+			embeddings = Slice(embeddings, AxisRange(), AxisRange(-1), AxisRange())
+		}
 	}
 	return m.LogitsFromEmbeddings(embeddings), updatedCache
 }
@@ -1378,15 +1392,29 @@ func (m *Model) buildCachedAttention(
 		WithScoreSoftCap(m.AttentionScoreSoftCap).
 		WithQueryKeyScale(m.QueryKeyScale)
 
-	// Zero-copy active-length path for single-token decode:
+	// Zero-copy active-length path for single-token decode (qSeqLen == 1):
 	// All positions [0, min(position+1, cacheSeqLen)) are valid, causal, and within slidingWindow
 	// whenever SinkPositions == 0 and either slidingWindow == 0 (global) or cacheSeqLen <= slidingWindow (local ring buffer).
-	useZeroCopySeqLens := options.AttentionMask == nil &&
+	useZeroCopyDecode := options.AttentionMask == nil &&
 		m.KVCache.SinkPositions == 0 &&
 		qSeqLen == 1 &&
 		(slidingWindow == 0 || (cacheSeqLen != shapes.DynamicDim && cacheSeqLen <= slidingWindow))
 
-	if useZeroCopySeqLens {
+	// Zero-copy active-length + causal path for contiguous prefill starting at position 0:
+	// All valid KV positions are [0, qSeqLen) without wrapping (so SinkPositions never triggers),
+	// and when qSeqLen <= slidingWindow (or slidingWindow == 0), every causal pair (q >= k) is
+	// already within the sliding window. Using WithSeqLens + WithCausalMask avoids materializing
+	// a dense [B, Sq, Skv] boolean mask and lets fused SDPA stop each row at min(qSeqLen, qIdx+1).
+	useZeroCopyPrefill := !useZeroCopyDecode &&
+		options.AttentionMask == nil &&
+		kvcache.IsConstZeroInt(position) &&
+		((qSeqLen > 1 &&
+			(cacheSeqLen == shapes.DynamicDim || qSeqLen <= cacheSeqLen) &&
+			(slidingWindow == 0 || qSeqLen <= slidingWindow)) ||
+			(qSeqLen == shapes.DynamicDim &&
+				(slidingWindow == 0 || (cacheSeqLen != shapes.DynamicDim && cacheSeqLen <= slidingWindow))))
+
+	if useZeroCopyDecode {
 		g := x.Graph()
 		qSeqLenNode := DynamicBroadcastInDim(Const(g, int32(1)), nil, batchSpec)
 		kvSeqLenScalar := AddScalar(ConvertDType(position, dtypes.Int32), 1)
@@ -1395,6 +1423,13 @@ func (m *Model) buildCachedAttention(
 		}
 		kvSeqLenNode := DynamicBroadcastInDim(kvSeqLenScalar, nil, batchSpec)
 		attnBuilder.WithSeqLens(qSeqLenNode, kvSeqLenNode)
+	} else if useZeroCopyPrefill {
+		qSeqLenScalar := ConvertDType(DimensionSize(x, 1), dtypes.Int32)
+		qSeqLenNode := DynamicBroadcastInDim(qSeqLenScalar, nil, batchSpec)
+		attnBuilder.WithSeqLens(qSeqLenNode, qSeqLenNode)
+		if m.UseCausalMask {
+			attnBuilder.WithCausalMask(true)
+		}
 	} else {
 		customMask := m.KVCache.BuildAttentionMask(attnScope, cache, x, position, m.UseCausalMask, slidingWindow)
 		if options.AttentionMask != nil {

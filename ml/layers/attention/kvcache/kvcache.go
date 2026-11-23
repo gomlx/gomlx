@@ -369,11 +369,16 @@ func (k *KVCache) Update(scope *model.Scope, cache KVCacheNodes, nextK, nextV *N
 	updatedV := prevV
 
 	// Fast path: bulk contiguous write at position 0 (standard prefill) when the entire update
-	// fits without wrapping. Replaces 2*updateSeqLen per-token Slice+DynamicUpdateSlice ops with 2 ops.
-	if k.SinkPositions == 0 && updateSeqLen > 1 && updateSeqLen <= maxSeqLen && isConstZeroInt(position) {
+	// fits without wrapping (pVal < maxSeqLen for all tokens, so SinkPositions never triggers).
+	// Replaces 2*updateSeqLen per-token Slice+DynamicUpdateSlice ops with 2 ops, and also
+	// supports dynamic sequence lengths (updateSeqLen == shapes.DynamicDim).
+	if (updateSeqLen == shapes.DynamicDim || (updateSeqLen > 1 && updateSeqLen <= maxSeqLen)) && IsConstZeroInt(position) {
 		updatedK = DynamicUpdateSlice(updatedK, nextK, []*Node{batchIdx, headsIdx, position, dimIdx})
 		updatedV = DynamicUpdateSlice(updatedV, nextV, []*Node{batchIdx, headsIdx, position, dimIdx})
 	} else {
+		if updateSeqLen == shapes.DynamicDim {
+			panic("KVCache.Update: dynamic sequence length is only supported for contiguous prefill at constant position 0")
+		}
 		for i := 0; i < updateSeqLen; i++ {
 			pVal := AddScalar(position, i)
 
@@ -413,20 +418,20 @@ func (k *KVCache) BuildAttentionMask(scope *model.Scope, cache KVCacheNodes, que
 
 	g := query.Graph()
 	shape := keyCache.Shape()
-	batchSize := shape.Dimensions[0]
 	cacheSeqLen := shape.Dimensions[2]
 
-	qSeqLen := query.Shape().Dimensions[1]
+	batchSpec := DimensionSpecFor(keyCache, 0)
+	qSeqSpec := DimensionSpecFor(query, 1)
+	cacheSeqSpec := DimensionSpecFor(keyCache, 2)
 
-	currentSeqLen := AddScalar(position, qSeqLen)
+	qSeqLenNode := ConvertDType(DimensionSize(query, 1), position.DType())
+	currentSeqLen := Add(position, qSeqLenNode)
 	effectivePosition := MinScalar(currentSeqLen, cacheSeqLen)
 
 	linearPositions := Iota(g, shapes.Make(dtypes.Int32, cacheSeqLen), 0)
 	validMask := LessThan(linearPositions, effectivePosition)
 
-	validMask3D := ExpandDims(validMask, 0)
-	validMask3D = ExpandDims(validMask3D, 0)
-	validMask3D = BroadcastToDims(validMask3D, batchSize, qSeqLen, cacheSeqLen)
+	validMask3D := DynamicBroadcastInDim(validMask, []int{2}, batchSpec, qSeqSpec, cacheSeqSpec)
 
 	var mask *Node = validMask3D
 
@@ -466,16 +471,14 @@ func (k *KVCache) BuildAttentionMask(scope *model.Scope, cache KVCacheNodes, que
 
 		absPositions := Where(isWrapped, wrappedPositions, linearPositions)
 
-		queryPositions := Iota(g, shapes.Make(dtypes.Int32, qSeqLen), 0)
-		queryPositions = Add(queryPositions, BroadcastToShape(position, queryPositions.Shape()))
+		queryPositions := DynamicIota(g, dtypes.Int32, 0, qSeqSpec)
+		queryPositions = Add(queryPositions, ConvertDType(position, dtypes.Int32))
 
 		absQ := ExpandDims(queryPositions, -1)
 		absK := ExpandDims(absPositions, 0)
 
 		causalCheck := GreaterOrEqual(absQ, absK)
-
-		causalCheck3D := ExpandDims(causalCheck, 0)
-		causalCheck3D = BroadcastToDims(causalCheck3D, batchSize, qSeqLen, cacheSeqLen)
+		causalCheck3D := DynamicBroadcastInDim(causalCheck, []int{1, 2}, batchSpec, qSeqSpec, cacheSeqSpec)
 
 		mask = LogicalAnd(mask, causalCheck3D)
 
@@ -485,8 +488,7 @@ func (k *KVCache) BuildAttentionMask(scope *model.Scope, cache KVCacheNodes, que
 			withinWindow := LessThan(dist, Const(g, int32(slidingWindow)))
 			slidingCheck := LogicalOr(isSink, withinWindow)
 
-			slidingCheck3D := ExpandDims(slidingCheck, 0)
-			slidingCheck3D = BroadcastToDims(slidingCheck3D, batchSize, qSeqLen, cacheSeqLen)
+			slidingCheck3D := DynamicBroadcastInDim(slidingCheck, []int{1, 2}, batchSpec, qSeqSpec, cacheSeqSpec)
 
 			mask = LogicalAnd(mask, slidingCheck3D)
 		}
@@ -495,8 +497,8 @@ func (k *KVCache) BuildAttentionMask(scope *model.Scope, cache KVCacheNodes, que
 	return mask
 }
 
-// isConstZeroInt returns true if n is a scalar integer constant equal to 0.
-func isConstZeroInt(n *Node) bool {
+// IsConstZeroInt returns true if n is a scalar integer constant equal to 0.
+func IsConstZeroInt(n *Node) bool {
 	if n == nil || n.Type() != NodeTypeConstant || n.Rank() != 0 {
 		return false
 	}

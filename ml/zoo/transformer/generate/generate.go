@@ -15,10 +15,10 @@ import (
 	"github.com/gomlx/compute"
 	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/gobackend"
+	"github.com/gomlx/compute/shapes"
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/bucketing"
-	"github.com/gomlx/gomlx/ml/layers/attention"
 	"github.com/gomlx/gomlx/ml/layers/attention/kvcache"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/zoo/transformer/generate/sample"
@@ -104,7 +104,8 @@ type Generator struct {
 	simpleBackend compute.Backend
 
 	// Cached executors to avoid recompilation
-	promptExec                *model.Exec // Cached executor for processing initial prompt in incremental generation
+	promptExec                *model.Exec // Cached static-shape executor for processing initial prompt in incremental generation
+	promptExecDynamic         *model.Exec // Cached dynamic-seq_len executor for processing initial prompt without per-length recompilation
 	genExec                   *model.Exec // Cached executor for each position in incremental generation
 	naiveExec                 *model.Exec // Cached executor for non-cached full sequence generation
 	beamExec                  *model.Exec // Cached executor for non-cached beam search
@@ -178,7 +179,7 @@ func (gen *Generator) WithKVCache(kvCache *kvcache.KVCache, numKVHeads, headDim 
 }
 
 func (gen *Generator) wasUsed() bool {
-	return gen.promptExec != nil || gen.genExec != nil || gen.naiveExec != nil || gen.beamExec != nil || gen.beamKVCacheExec != nil || gen.updateCurrentSeqExec != nil || gen.growCurrentSeqExec != nil || gen.growCurrentSeqDynamicExec != nil
+	return gen.promptExec != nil || gen.promptExecDynamic != nil || gen.genExec != nil || gen.naiveExec != nil || gen.beamExec != nil || gen.beamKVCacheExec != nil || gen.updateCurrentSeqExec != nil || gen.growCurrentSeqExec != nil || gen.growCurrentSeqDynamicExec != nil
 }
 
 // FromScope configures the generator with hyperparameters from the model.
@@ -229,13 +230,15 @@ func (gen *Generator) FromScope(scope *model.Scope) *Generator {
 	return gen
 }
 
-func (gen *Generator) getPromptExec(backend compute.Backend, scope *model.Scope, cacheSeqLen int) (*model.Exec, error) {
-	if gen.promptExec != nil {
+func (gen *Generator) getPromptExec(backend compute.Backend, scope *model.Scope, useDynamic bool) (*model.Exec, error) {
+	if useDynamic && gen.promptExecDynamic != nil {
+		return gen.promptExecDynamic, nil
+	}
+	if !useDynamic && gen.promptExec != nil {
 		return gen.promptExec, nil
 	}
 
-	var err error
-	gen.promptExec, err = model.NewExec(backend, scope.Store(), func(scope *model.Scope, inputs []*Node) []*Node {
+	exec, err := model.NewExec(backend, scope.Store(), func(scope *model.Scope, inputs []*Node) []*Node {
 		tokens := inputs[0]
 		cacheNodes := inputs[1:]
 		cache := gen.KVCache.DeserializeNodes(cacheNodes)
@@ -246,8 +249,21 @@ func (gen *Generator) getPromptExec(backend compute.Backend, scope *model.Scope,
 		if err != nil {
 			panic(err)
 		}
-		lastLogits := Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
-		lastLogits = Squeeze(lastLogits, 1)
+		var lastLogits *Node
+		if logits.Shape().Dimensions[1] == shapes.DynamicDim {
+			seqLen := DimensionSize(logits, 1)
+			lastIdx := SubScalar(seqLen, 1)
+			if logits.Shape().Dimensions[0] == 1 {
+				flat := DynamicReshape(logits, DimensionSpecFor(logits, 1), StaticDim(logits.Shape().Dimensions[2]))
+				lastLogits = ExpandDims(Gather(flat, lastIdx), 0)
+			} else {
+				transposed := Transpose(logits, 0, 1)
+				lastLogits = Gather(transposed, lastIdx)
+			}
+		} else {
+			lastLogits = Slice(logits, AxisRange(), AxisElem(-1), AxisRange())
+			lastLogits = Squeeze(lastLogits, 1)
+		}
 		nextToken := sample.SampleWithStrategy(scope, lastLogits, gen.Strategy, float64(gen.Temperature), gen.TopK, float64(gen.TopP))
 		res := make([]*Node, 1+len(serializedUpdatedCache))
 		res[0] = nextToken
@@ -258,8 +274,16 @@ func (gen *Generator) getPromptExec(backend compute.Backend, scope *model.Scope,
 		return nil, errors.WithMessagef(err, "failed to create prompt exec")
 	}
 	if gen.DonateStore {
-		gen.promptExec.DonateStore()
+		exec.DonateStore()
 	}
+	if useDynamic {
+		// Make prompt sequence length dynamic on inputs[0] ([batch, seq_len]) while keeping
+		// KV-cache inputs static so a single compiled graph handles all prompt lengths <= minCacheCap.
+		exec.WithDynamicAxes([]string{"", "seq_len"})
+		gen.promptExecDynamic = exec
+		return gen.promptExecDynamic, nil
+	}
+	gen.promptExec = exec
 	return gen.promptExec, nil
 }
 
@@ -894,10 +918,6 @@ func (gen *Generator) generateSamplingWithKVCache(
 	callback func(token int) bool,
 ) (*tensors.Tensor, error) {
 	// Initialize cache
-	lt := attention.GlobalLayer
-	if len(gen.KVCache.OrderedScopes) > 0 {
-		lt = gen.KVCache.GetLayerType(gen.KVCache.OrderedScopes[0])
-	}
 	// Pre-allocate KV cache up to MaxLength (capped at 4096 to avoid excessive upfront memory for
 	// huge context limits) so decode avoids repeated PadTensors copies and graph recompilations.
 	// Attention uses active sequence lengths (WithSeqLens) so padded tail slots incur zero work.
@@ -905,7 +925,6 @@ func (gen *Generator) generateSamplingWithKVCache(
 	if gen.MaxLength > initSeqLen && gen.MaxLength <= 4096 {
 		initSeqLen = gen.MaxLength
 	}
-	cacheSeqLen := gen.KVCache.CacheSeqLen(lt, initSeqLen)
 
 	kvCacheTensors := gen.KVCache.InitializeTensors(batchSize, gen.numKVHeads, gen.headDim, gen.dtype, initSeqLen)
 	kvCacheTensorsSerialized, err := gen.KVCache.SerializeTensors(kvCacheTensors)
@@ -913,7 +932,21 @@ func (gen *Generator) generateSamplingWithKVCache(
 		return nil, err
 	}
 
-	promptExec, err := gen.getPromptExec(backend, scope, cacheSeqLen)
+	// Use a single dynamic-seq_len prompt executor when the backend supports dynamic shapes and
+	// the prompt fits within every layer's KV cache capacity (no ring-buffer wrap or sliding-window
+	// truncation during prefill). Prompts longer than a local sliding window fall back to the
+	// static prompt executor so wrapping and window masking stay exact.
+	minCacheCap := initSeqLen
+	for _, scopePath := range gen.KVCache.OrderedScopes {
+		lt := gen.KVCache.GetLayerType(scopePath)
+		if capLen := gen.KVCache.CacheSeqLen(lt, initSeqLen); capLen < minCacheCap {
+			minCacheCap = capLen
+		}
+	}
+	useDynamicPrompt := backend.Capabilities().HasDynamicShapes() &&
+		promptLen <= minCacheCap
+
+	promptExec, err := gen.getPromptExec(backend, scope, useDynamicPrompt)
 	if err != nil {
 		finalizeKVCache(kvCacheTensors)
 		return nil, err
@@ -1393,12 +1426,6 @@ func (gen *Generator) generateBeamSearchWithKVCache(
 	replicatedPrompt := replicatedResults[0]
 
 	// Initialize KV cache for batchBeamSize
-	lt := attention.GlobalLayer
-	if len(gen.KVCache.OrderedScopes) > 0 {
-		lt = gen.KVCache.GetLayerType(gen.KVCache.OrderedScopes[0])
-	}
-	cacheSeqLen := gen.KVCache.CacheSeqLen(lt, promptLen)
-
 	kvCacheTensors := gen.KVCache.InitializeTensors(batchBeamSize, gen.numKVHeads, gen.headDim, gen.dtype, promptLen)
 	kvCacheTensorsSerialized, err := gen.KVCache.SerializeTensors(kvCacheTensors)
 	if err != nil {
@@ -1406,7 +1433,17 @@ func (gen *Generator) generateBeamSearchWithKVCache(
 		return nil, err
 	}
 
-	promptExec, err := gen.getPromptExec(backend, scope, cacheSeqLen)
+	minCacheCap := promptLen
+	for _, scopePath := range gen.KVCache.OrderedScopes {
+		lt := gen.KVCache.GetLayerType(scopePath)
+		if capLen := gen.KVCache.CacheSeqLen(lt, promptLen); capLen < minCacheCap {
+			minCacheCap = capLen
+		}
+	}
+	useDynamicPrompt := backend.Capabilities().HasDynamicShapes() &&
+		promptLen <= minCacheCap
+
+	promptExec, err := gen.getPromptExec(backend, scope, useDynamicPrompt)
 	if err != nil {
 		replicatedPrompt.FinalizeAll()
 		finalizeKVCache(kvCacheTensors)

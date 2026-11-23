@@ -474,9 +474,9 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	// Flatten the mask to match the now-flat Q/K/V when inner axes > 1.
 	if needsUnflatten && mask != nil {
 		mask = DynamicReshape(mask,
-			DimensionSpecFor(projectedQuery, 0),
+			DimensionSpecFor(mask, 0),
 			DimensionSpecFor(projectedQuery, seqAxis),
-			StaticDim(b.numHeads),
+			DimensionSpecFor(mask, 1+b.innerQueryAxes),
 			DimensionSpecFor(projectedKey, seqAxis))
 	}
 
