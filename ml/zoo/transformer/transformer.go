@@ -49,6 +49,7 @@ const (
 	ParamNumKVHeads            = "transformer_num_kv_heads"
 	ParamGlobalHeadDim         = "transformer_global_head_dim"
 	ParamNumKVSharedLayers     = "transformer_num_kv_shared_layers"
+	ParamUseDoubleWideMLP      = "transformer_use_double_wide_mlp"
 	ParamAttentionScoreSoftCap = "transformer_attention_score_soft_cap"
 	ParamFinalLogitSoftCap     = "transformer_final_logit_soft_cap"
 
@@ -146,7 +147,8 @@ type Model struct {
 
 	KVCache *kvcache.KVCache
 
-	NumKVSharedLayers int // Number of KV shared layers at the end of the model
+	NumKVSharedLayers int  // Number of KV shared layers at the end of the model
+	UseDoubleWideMLP  bool // If true, KV-shared layers use 2*FFNDim for their MLP intermediate size (Gemma 4 E2B)
 
 	AttentionScoreSoftCap float64 // Softcap for attention scores
 	FinalLogitSoftCap     float64 // Logit softcap for vocabulary prediction
@@ -235,6 +237,7 @@ func New(scope *model.Scope) *Model {
 		m.NumKVHeads = model.GetParamOr(scope, ParamNumKVHeads, m.NumKVHeads)
 		m.GlobalHeadDim = model.GetParamOr(scope, ParamGlobalHeadDim, m.GlobalHeadDim)
 		m.NumKVSharedLayers = model.GetParamOr(scope, ParamNumKVSharedLayers, m.NumKVSharedLayers)
+		m.UseDoubleWideMLP = model.GetParamOr(scope, ParamUseDoubleWideMLP, m.UseDoubleWideMLP)
 		m.AttentionScoreSoftCap = model.GetParamOr(scope, ParamAttentionScoreSoftCap, m.AttentionScoreSoftCap)
 		m.FinalLogitSoftCap = model.GetParamOr(scope, ParamFinalLogitSoftCap, m.FinalLogitSoftCap)
 
@@ -611,6 +614,13 @@ func (m *Model) WithTransposedWeights(transposed bool) *Model {
 // WithNumKVSharedLayers sets the number of layers (from the top/last layers) that share KV projection states.
 func (m *Model) WithNumKVSharedLayers(num int) *Model {
 	m.NumKVSharedLayers = num
+	return m
+}
+
+// WithUseDoubleWideMLP configures whether KV-shared layers double their MLP intermediate dimension (2*FFNDim),
+// as used in Gemma 4 E2B.
+func (m *Model) WithUseDoubleWideMLP(use bool) *Model {
+	m.UseDoubleWideMLP = use
 	return m
 }
 
@@ -1349,9 +1359,13 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x *Node
 
 	// Gemma uses SwiGLU: gate_proj, up_proj, down_proj
 	// Notice: it is not using activation.SwiGLU and instead doing the projections separately.
+	ffnDim := m.FFNDim
+	if m.UseDoubleWideMLP && isShared {
+		ffnDim *= 2
+	}
 	ffScope := layerScope.In("mlp")
-	gate := m.dense(ffScope.In("gate_proj"), x, m.UseBias, m.FFNDim)
-	up := m.dense(ffScope.In("up_proj"), x, m.UseBias, m.FFNDim)
+	gate := m.dense(ffScope.In("gate_proj"), x, m.UseBias, ffnDim)
+	up := m.dense(ffScope.In("up_proj"), x, m.UseBias, ffnDim)
 	switchedNode := activation.Apply(m.Activation, gate)
 	ff := Mul(switchedNode, up)
 

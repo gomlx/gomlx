@@ -504,3 +504,34 @@ func TestHalfPrecisionMixedVariables(t *testing.T) {
 		require.Equal(t, dtypes.Float32, store.GetVariable("/layer_0/norm1/rms_norm/scale").DType())
 	})
 }
+
+func TestGemma4DoubleWideMLP(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	store := model.NewStore()
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+		m := New(scope).
+			WithArchitecture(ArchitectureGemma4).
+			WithVocabSize(64).
+			WithEmbedDim(32).
+			WithNumLayers(3).
+			WithNumHeads(2).
+			WithNumKVHeads(1).
+			WithHeadDim(16).
+			WithFFNDim(64).
+			WithRoPE(10000).
+			WithNumKVSharedLayers(1).
+			WithUseDoubleWideMLP(true).
+			WithTransposedWeights(true)
+		return m.Logits(tokens, CallOptions{})
+	})
+	out := exec.MustCall([][]int32{{1, 2, 3, 4}})[0]
+	require.Equal(t, []int{1, 4, 64}, out.Shape().Dimensions)
+
+	// Layers 0 and 1 are non-shared: gate_proj/up_proj have FFNDim (64).
+	require.Equal(t, []int{64, 32}, store.GetVariable("/layer_0/mlp/gate_proj/dense/weights").Shape().Dimensions)
+	require.Equal(t, []int{64, 32}, store.GetVariable("/layer_1/mlp/gate_proj/dense/weights").Shape().Dimensions)
+	// Layer 2 is KV-shared: gate_proj/up_proj have 2*FFNDim (128), down_proj maps 128 -> 32.
+	require.Equal(t, []int{128, 32}, store.GetVariable("/layer_2/mlp/gate_proj/dense/weights").Shape().Dimensions)
+	require.Equal(t, []int{128, 32}, store.GetVariable("/layer_2/mlp/up_proj/dense/weights").Shape().Dimensions)
+	require.Equal(t, []int{32, 128}, store.GetVariable("/layer_2/mlp/down_proj/dense/weights").Shape().Dimensions)
+}
