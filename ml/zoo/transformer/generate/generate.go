@@ -97,6 +97,7 @@ type Generator struct {
 	StopOnEOS         bool
 	BucketingStrategy bucketing.Strategy
 	PadToken          int
+	DonateStore       bool
 
 	// Internal backend for small operations (concat, reshape)
 	// Uses simplego for faster compilation and dynamic shape support
@@ -256,6 +257,9 @@ func (gen *Generator) getPromptExec(backend compute.Backend, scope *model.Scope,
 	if err != nil {
 		return nil, errors.WithMessagef(err, "failed to create prompt exec")
 	}
+	if gen.DonateStore {
+		gen.promptExec.DonateStore()
+	}
 	return gen.promptExec, nil
 }
 
@@ -295,6 +299,23 @@ func (gen *Generator) WithPadToken(padToken int) *Generator {
 		return gen
 	}
 	gen.PadToken = padToken
+	return gen
+}
+
+// WithDonateStore configures whether the Generator donates the model.Store to its internal
+// executors for inference (see [model.Exec.DonateStore]).
+//
+// When enabled on backends supporting Capabilities.SharedConstants (such as the Go backend),
+// model weights are donated into shared backend constants reused across prefill and decode graphs,
+// enabling one-time weight pre-packing without duplicating memory.
+func (gen *Generator) WithDonateStore(donate bool) *Generator {
+	gen.mu.Lock()
+	defer gen.mu.Unlock()
+	if gen.wasUsed() {
+		gen.err = errors.Errorf("cannot change configuration of generate.Generator, once it was used for generation -- create a new Generator if you need a different configuration.")
+		return gen
+	}
+	gen.DonateStore = donate
 	return gen
 }
 
@@ -779,6 +800,9 @@ func (gen *Generator) generateSamplingNaive(
 		if err != nil {
 			return nil, errors.WithMessagef(err, "failed to create naiveExec")
 		}
+		if gen.DonateStore {
+			gen.naiveExec.DonateStore()
+		}
 		if backend.Capabilities().HasDynamicShapes() {
 			gen.naiveExec.WithDynamicAxes([]string{"batch", "seq_len"}, []string{""})
 		}
@@ -1018,6 +1042,9 @@ func (gen *Generator) generateSamplingWithKVCache(
 			})
 			if err != nil {
 				return nil, errors.WithMessagef(err, "failed to create genExec")
+			}
+			if gen.DonateStore {
+				gen.genExec.DonateStore()
 			}
 		}
 
