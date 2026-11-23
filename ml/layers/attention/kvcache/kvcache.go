@@ -269,12 +269,9 @@ func (k *KVCache) PadTensors(kv KVCacheTensors, currentSeqLen int) (KVCacheTenso
 			}
 
 			currentLen := shape.Dimensions[2]
-			if currentLen == targetSeqLen {
+			if currentLen >= targetSeqLen {
 				padded[path] = tensor
 				continue
-			}
-			if currentLen > targetSeqLen {
-				return nil, errors.Errorf("KV cache tensor %q has sequence length %d, larger than target %d", path, currentLen, targetSeqLen)
 			}
 
 			paddedTensor, err := padTensor4D(tensor, targetSeqLen)
@@ -350,8 +347,16 @@ func (k *KVCache) Update(scope *model.Scope, cache KVCacheNodes, nextK, nextV *N
 	maxSeqLen := k.MaxSeqLenPerLayerType[int(lt)]
 
 	if nextK.Shape().Dimensions[1] != prevK.Shape().Dimensions[1] {
-		nextK = TransposeAllDims(nextK, 0, 2, 1, 3)
-		nextV = TransposeAllDims(nextV, 0, 2, 1, 3)
+		if prevK.Shape().Dimensions[1] == 1 {
+			batchSpec := DimensionSpecFor(nextK, 0)
+			seqSpec := DimensionSpecFor(nextK, 1)
+			dimSpec := DimensionSpecFor(nextK, 3)
+			nextK = DynamicReshape(nextK, batchSpec, StaticDim(1), seqSpec, dimSpec)
+			nextV = DynamicReshape(nextV, batchSpec, StaticDim(1), seqSpec, dimSpec)
+		} else {
+			nextK = TransposeAllDims(nextK, 0, 2, 1, 3)
+			nextV = TransposeAllDims(nextV, 0, 2, 1, 3)
+		}
 	}
 
 	updateSeqLen := nextK.Shape().Dimensions[2]
@@ -363,24 +368,31 @@ func (k *KVCache) Update(scope *model.Scope, cache KVCacheNodes, nextK, nextV *N
 	updatedK := prevK
 	updatedV := prevV
 
-	for i := 0; i < updateSeqLen; i++ {
-		pVal := AddScalar(position, i)
+	// Fast path: bulk contiguous write at position 0 (standard prefill) when the entire update
+	// fits without wrapping. Replaces 2*updateSeqLen per-token Slice+DynamicUpdateSlice ops with 2 ops.
+	if k.SinkPositions == 0 && updateSeqLen > 1 && updateSeqLen <= maxSeqLen && isConstZeroInt(position) {
+		updatedK = DynamicUpdateSlice(updatedK, nextK, []*Node{batchIdx, headsIdx, position, dimIdx})
+		updatedV = DynamicUpdateSlice(updatedV, nextV, []*Node{batchIdx, headsIdx, position, dimIdx})
+	} else {
+		for i := 0; i < updateSeqLen; i++ {
+			pVal := AddScalar(position, i)
 
-		var writeIdx *Node
-		if k.SinkPositions > 0 && maxSeqLen > k.SinkPositions {
-			rollingSize := maxSeqLen - k.SinkPositions
-			wrappedVal := AddScalar(ModScalar(SubScalar(pVal, k.SinkPositions), rollingSize), k.SinkPositions)
-			isBelowMax := LessThan(pVal, Const(g, int32(maxSeqLen)))
-			writeIdx = Where(isBelowMax, pVal, wrappedVal)
-		} else {
-			writeIdx = ModScalar(pVal, maxSeqLen)
+			var writeIdx *Node
+			if k.SinkPositions > 0 && maxSeqLen > k.SinkPositions {
+				rollingSize := maxSeqLen - k.SinkPositions
+				wrappedVal := AddScalar(ModScalar(SubScalar(pVal, k.SinkPositions), rollingSize), k.SinkPositions)
+				isBelowMax := LessThan(pVal, Const(g, int32(maxSeqLen)))
+				writeIdx = Where(isBelowMax, pVal, wrappedVal)
+			} else {
+				writeIdx = ModScalar(pVal, maxSeqLen)
+			}
+
+			tokenK := Slice(nextK, AxisRange(), AxisRange(), AxisElem(i), AxisRange())
+			tokenV := Slice(nextV, AxisRange(), AxisRange(), AxisElem(i), AxisRange())
+
+			updatedK = DynamicUpdateSlice(updatedK, tokenK, []*Node{batchIdx, headsIdx, writeIdx, dimIdx})
+			updatedV = DynamicUpdateSlice(updatedV, tokenV, []*Node{batchIdx, headsIdx, writeIdx, dimIdx})
 		}
-
-		tokenK := Slice(nextK, AxisRange(), AxisRange(), AxisElem(i), AxisRange())
-		tokenV := Slice(nextV, AxisRange(), AxisRange(), AxisElem(i), AxisRange())
-
-		updatedK = DynamicUpdateSlice(updatedK, tokenK, []*Node{batchIdx, headsIdx, writeIdx, dimIdx})
-		updatedV = DynamicUpdateSlice(updatedV, tokenV, []*Node{batchIdx, headsIdx, writeIdx, dimIdx})
 	}
 
 	cache[kKey] = updatedK
@@ -481,4 +493,25 @@ func (k *KVCache) BuildAttentionMask(scope *model.Scope, cache KVCacheNodes, que
 	}
 
 	return mask
+}
+
+// isConstZeroInt returns true if n is a scalar integer constant equal to 0.
+func isConstZeroInt(n *Node) bool {
+	if n == nil || n.Type() != NodeTypeConstant || n.Rank() != 0 {
+		return false
+	}
+	t := n.ConstantValue()
+	if t == nil {
+		return false
+	}
+	switch v := t.Value().(type) {
+	case int32:
+		return v == 0
+	case int64:
+		return v == 0
+	case int:
+		return v == 0
+	default:
+		return false
+	}
 }

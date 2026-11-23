@@ -12,6 +12,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/attention"
 	"github.com/gomlx/gomlx/ml/layers/attention/kvcache"
 	"github.com/gomlx/gomlx/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/ml/model"
@@ -563,4 +564,97 @@ func TestOnlyLastTokenLogits(t *testing.T) {
 	require.Equal(t, []int{1, 5, 64}, outs[0].Shape().Dimensions)
 	require.Equal(t, []int{1, 1, 64}, outs[1].Shape().Dimensions)
 	assert.InDeltaSlice(t, full[0][4], lastOnly[0][0], 1e-5)
+}
+
+func TestZeroCopyKVCacheDecode(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	store := model.NewStore()
+
+	buildModel := func(scope *model.Scope, kv *kvcache.KVCache) *Model {
+		m := New(scope).
+			WithArchitecture(ArchitectureGemma4).
+			WithVocabSize(64).
+			WithEmbedDim(32).
+			WithNumLayers(2).
+			WithNumHeads(2).
+			WithNumKVHeads(1).
+			WithHeadDim(16).
+			WithFFNDim(64).
+			WithRoPE(10000).
+			WithCausalMask(true).
+			WithSlidingWindow(8).
+			WithLayerTypes([]LayerType{LocalLayer, GlobalLayer})
+		if kv != nil {
+			m.KVCache = kv
+		}
+		return m
+	}
+
+	// 1. Full-sequence non-cached reference for tokens [1, 2, 3, 4, 5].
+	refExec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+		m := buildModel(scope, nil)
+		logits, _ := m.Forward(tokens, CallOptions{})
+		return logits
+	})
+	refLogits := refExec.MustCall([][]int32{{1, 2, 3, 4, 5}})[0].Value().([][][]float32)
+
+	// 2. Cached prefill (tokens [1, 2, 3, 4]) into a larger padded cache (size 32), then single-token decode (token [5]).
+	kv := kvcache.NewKVCache().
+		WithLayerTypes(map[string]attention.LayerType{
+			"/layer_0/self_attn": attention.LocalLayer,
+			"/layer_1/self_attn": attention.GlobalLayer,
+		}).
+		WithMaxSeqLenPerLayerType([]int{32, 8}).
+		WithMinSeqLenPerLayerType([]int{32, 8})
+	kv.WithOrderedScopes([]string{"/layer_0/self_attn", "/layer_1/self_attn"})
+	kvTensors := kv.InitializeTensors(1, 1, 16, dtypes.Float32, 32)
+	kvSerialized, err := kv.SerializeTensors(kvTensors)
+	require.NoError(t, err)
+
+	prefillExec := model.MustNewExec(backend, store, func(scope *model.Scope, inputs []*Node) []*Node {
+		tokens := inputs[0]
+		cache := kv.DeserializeNodes(inputs[1:])
+		m := buildModel(scope, kv)
+		logits, updated := m.Forward(tokens, CallOptions{
+			PositionIds:         Const(tokens.Graph(), int32(0)),
+			Cache:               cache,
+			OnlyLastTokenLogits: true,
+		})
+		ser, err := kv.SerializeNodes(updated)
+		require.NoError(t, err)
+		return append([]*Node{logits}, ser...)
+	})
+	prefillInputs := append([]any{[][]int32{{1, 2, 3, 4}}}, func() []any {
+		res := make([]any, len(kvSerialized))
+		for i, t := range kvSerialized {
+			res[i] = t
+		}
+		return res
+	}()...)
+	prefillOuts := prefillExec.MustCall(prefillInputs...)
+	assert.InDeltaSlice(t, refLogits[0][3], prefillOuts[0].Value().([][][]float32)[0][0], 1e-4)
+
+	decodeExec := model.MustNewExec(backend, store, func(scope *model.Scope, inputs []*Node) []*Node {
+		token := inputs[0]
+		posNode := inputs[1]
+		cache := kv.DeserializeNodes(inputs[2:])
+		m := buildModel(scope, kv)
+		logits, updated := m.Forward(token, CallOptions{
+			PositionIds:         posNode,
+			Cache:               cache,
+			OnlyLastTokenLogits: true,
+		})
+		ser, err := kv.SerializeNodes(updated)
+		require.NoError(t, err)
+		return append([]*Node{logits}, ser...)
+	})
+	decodeInputs := append([]any{[][]int32{{5}}, int32(4)}, func() []any {
+		res := make([]any, len(prefillOuts)-1)
+		for i := range res {
+			res[i] = prefillOuts[i+1]
+		}
+		return res
+	}()...)
+	decodeOuts := decodeExec.MustCall(decodeInputs...)
+	assert.InDeltaSlice(t, refLogits[0][4], decodeOuts[0].Value().([][][]float32)[0][0], 1e-4)
 }

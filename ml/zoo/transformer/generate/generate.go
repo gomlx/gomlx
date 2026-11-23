@@ -898,9 +898,16 @@ func (gen *Generator) generateSamplingWithKVCache(
 	if len(gen.KVCache.OrderedScopes) > 0 {
 		lt = gen.KVCache.GetLayerType(gen.KVCache.OrderedScopes[0])
 	}
-	cacheSeqLen := gen.KVCache.CacheSeqLen(lt, promptLen)
+	// Pre-allocate KV cache up to MaxLength (capped at 4096 to avoid excessive upfront memory for
+	// huge context limits) so decode avoids repeated PadTensors copies and graph recompilations.
+	// Attention uses active sequence lengths (WithSeqLens) so padded tail slots incur zero work.
+	initSeqLen := promptLen
+	if gen.MaxLength > initSeqLen && gen.MaxLength <= 4096 {
+		initSeqLen = gen.MaxLength
+	}
+	cacheSeqLen := gen.KVCache.CacheSeqLen(lt, initSeqLen)
 
-	kvCacheTensors := gen.KVCache.InitializeTensors(batchSize, gen.numKVHeads, gen.headDim, gen.dtype, promptLen)
+	kvCacheTensors := gen.KVCache.InitializeTensors(batchSize, gen.numKVHeads, gen.headDim, gen.dtype, initSeqLen)
 	kvCacheTensorsSerialized, err := gen.KVCache.SerializeTensors(kvCacheTensors)
 	if err != nil {
 		return nil, err
@@ -1001,8 +1008,8 @@ func (gen *Generator) generateSamplingWithKVCache(
 	for step := 0; step < numTokensToGenerate; step++ {
 		position := currentPosition + step
 
-		// Pad cache if needed
-		paddedKVCacheTensors, err := gen.KVCache.PadTensors(kvCacheTensors, position)
+		// Pad cache if needed (writing at 0-based position requires length >= position+1).
+		paddedKVCacheTensors, err := gen.KVCache.PadTensors(kvCacheTensors, position+1)
 		if err != nil {
 			return nil, err
 		}
@@ -1455,8 +1462,8 @@ func (gen *Generator) generateBeamSearchWithKVCache(
 	for step := 0; step < numSteps; step++ {
 		position := promptLen + step
 
-		// Pad cache if needed
-		paddedKVCacheTensors, err := gen.KVCache.PadTensors(kvCacheTensors, position)
+		// Pad cache if needed (writing at 0-based position requires length >= position+1).
+		paddedKVCacheTensors, err := gen.KVCache.PadTensors(kvCacheTensors, position+1)
 		if err != nil {
 			currentSequences.FinalizeAll()
 			beamScores.FinalizeAll()
