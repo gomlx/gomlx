@@ -72,8 +72,8 @@ github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 h1:DACJavvAHhabrF0
 github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0/go.mod h1:E/TSTwGwJL78qG/PmXZO1EjYhfJinVAhrmmHX6Z8B9k=
 github.com/gomlx/bsplines v0.2.0 h1:n3cWFE6ZleFp/zeliDVLf1Rd4zK0WLoZ6HcfzKz7gUs=
 github.com/gomlx/bsplines v0.2.0/go.mod h1:9esLFW2B5jekrmvecUjo3JVUmTgEHY6OwEjEQ3zEMiA=
-github.com/gomlx/compute v0.1.33 h1:IN85EALTJtcY8oan6d45L1Fxxa16voiWrVl0MklxS44=
-github.com/gomlx/compute v0.1.33/go.mod h1:fzjvKz/KXBeY6mrgnDovo5wNKG/hs77A32MGLXyMp08=
+github.com/gomlx/compute v0.1.34-0.20261124193509-7beaed4a58b8 h1:VAajLFB1oDM55cSU7Bfw6UCfyZduGKJ1C7vVFms6fw8=
+github.com/gomlx/compute v0.1.34-0.20261124193509-7beaed4a58b8/go.mod h1:fzjvKz/KXBeY6mrgnDovo5wNKG/hs77A32MGLXyMp08=
 github.com/gomlx/compute-onnx v0.1.33 h1:DWZKDaUpY9ojDjIazAhmmFqVIsu/5pUt1G7UqczLsxU=
 github.com/gomlx/compute-onnx v0.1.33/go.mod h1:JbpWd9Dttc7U1g4DScAX2aId2+QiPta2k8eysN5Y7jI=
 github.com/gomlx/exceptions v0.0.3 h1:HKnTgEjj4jlmhr8zVFkTP9qmV1ey7ypYYosQ8GzXWuM=
