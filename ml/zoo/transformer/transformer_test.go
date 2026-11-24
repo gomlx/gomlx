@@ -12,6 +12,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/ml/layers"
+	"github.com/gomlx/gomlx/ml/layers/attention"
 	"github.com/gomlx/gomlx/ml/layers/attention/kvcache"
 	"github.com/gomlx/gomlx/ml/layers/attention/pos"
 	"github.com/gomlx/gomlx/ml/model"
@@ -503,4 +504,235 @@ func TestHalfPrecisionMixedVariables(t *testing.T) {
 		require.Equal(t, dtypes.Float32, store.GetVariable("/final_norm/rms_norm/scale").DType())
 		require.Equal(t, dtypes.Float32, store.GetVariable("/layer_0/norm1/rms_norm/scale").DType())
 	})
+}
+
+func TestGemma4DoubleWideMLP(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	store := model.NewStore()
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+		m := New(scope).
+			WithArchitecture(ArchitectureGemma4).
+			WithVocabSize(64).
+			WithEmbedDim(32).
+			WithNumLayers(3).
+			WithNumHeads(2).
+			WithNumKVHeads(1).
+			WithHeadDim(16).
+			WithFFNDim(64).
+			WithRoPE(10000).
+			WithNumKVSharedLayers(1).
+			WithUseDoubleWideMLP(true).
+			WithTransposedWeights(true)
+		return m.Logits(tokens, CallOptions{})
+	})
+	out := exec.MustCall([][]int32{{1, 2, 3, 4}})[0]
+	require.Equal(t, []int{1, 4, 64}, out.Shape().Dimensions)
+
+	// Layers 0 and 1 are non-shared: gate_proj/up_proj have FFNDim (64).
+	require.Equal(t, []int{64, 32}, store.GetVariable("/layer_0/mlp/gate_proj/dense/weights").Shape().Dimensions)
+	require.Equal(t, []int{64, 32}, store.GetVariable("/layer_1/mlp/gate_proj/dense/weights").Shape().Dimensions)
+	// Layer 2 is KV-shared: gate_proj/up_proj have 2*FFNDim (128), down_proj maps 128 -> 32.
+	require.Equal(t, []int{128, 32}, store.GetVariable("/layer_2/mlp/gate_proj/dense/weights").Shape().Dimensions)
+	require.Equal(t, []int{128, 32}, store.GetVariable("/layer_2/mlp/up_proj/dense/weights").Shape().Dimensions)
+	require.Equal(t, []int{32, 128}, store.GetVariable("/layer_2/mlp/down_proj/dense/weights").Shape().Dimensions)
+}
+
+func TestOnlyLastTokenLogits(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	store := model.NewStore()
+
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) (*Node, *Node) {
+		m := New(scope).
+			WithVocabSize(64).
+			WithEmbedDim(32).
+			WithNumLayers(2).
+			WithNumHeads(2).
+			WithHeadDim(16).
+			WithFFNDim(64).
+			WithRoPE(10000).
+			WithCausalMask(true)
+		fullLogits, _ := m.Forward(tokens, CallOptions{})
+		m.Scope = m.Scope.ResetVisited()
+		lastOnlyLogits, _ := m.Forward(tokens, CallOptions{OnlyLastTokenLogits: true})
+		return fullLogits, lastOnlyLogits
+	})
+
+	outs := exec.MustCall([][]int32{{1, 2, 3, 4, 5}})
+	full := outs[0].Value().([][][]float32)
+	lastOnly := outs[1].Value().([][][]float32)
+
+	require.Equal(t, []int{1, 5, 64}, outs[0].Shape().Dimensions)
+	require.Equal(t, []int{1, 1, 64}, outs[1].Shape().Dimensions)
+	assert.InDeltaSlice(t, full[0][4], lastOnly[0][0], 1e-5)
+}
+
+func TestZeroCopyKVCacheDecode(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	store := model.NewStore()
+
+	buildModel := func(scope *model.Scope, kv *kvcache.KVCache) *Model {
+		m := New(scope).
+			WithArchitecture(ArchitectureGemma4).
+			WithVocabSize(64).
+			WithEmbedDim(32).
+			WithNumLayers(2).
+			WithNumHeads(2).
+			WithNumKVHeads(1).
+			WithHeadDim(16).
+			WithFFNDim(64).
+			WithRoPE(10000).
+			WithCausalMask(true).
+			WithSlidingWindow(8).
+			WithLayerTypes([]LayerType{LocalLayer, GlobalLayer})
+		if kv != nil {
+			m.KVCache = kv
+		}
+		return m
+	}
+
+	// 1. Full-sequence non-cached reference for tokens [1, 2, 3, 4, 5].
+	refExec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+		m := buildModel(scope, nil)
+		logits, _ := m.Forward(tokens, CallOptions{})
+		return logits
+	})
+	refLogits := refExec.MustCall([][]int32{{1, 2, 3, 4, 5}})[0].Value().([][][]float32)
+
+	// 2. Cached prefill (tokens [1, 2, 3, 4]) into a larger padded cache (size 32), then single-token decode (token [5]).
+	kv := kvcache.NewKVCache().
+		WithLayerTypes(map[string]attention.LayerType{
+			"/layer_0/self_attn": attention.LocalLayer,
+			"/layer_1/self_attn": attention.GlobalLayer,
+		}).
+		WithMaxSeqLenPerLayerType([]int{32, 8}).
+		WithMinSeqLenPerLayerType([]int{32, 8})
+	kv.WithOrderedScopes([]string{"/layer_0/self_attn", "/layer_1/self_attn"})
+	kvTensors := kv.InitializeTensors(1, 1, 16, dtypes.Float32, 32)
+	kvSerialized, err := kv.SerializeTensors(kvTensors)
+	require.NoError(t, err)
+
+	prefillExec := model.MustNewExec(backend, store, func(scope *model.Scope, inputs []*Node) []*Node {
+		tokens := inputs[0]
+		cache := kv.DeserializeNodes(inputs[1:])
+		m := buildModel(scope, kv)
+		logits, updated := m.Forward(tokens, CallOptions{
+			PositionIds:         Const(tokens.Graph(), int32(0)),
+			Cache:               cache,
+			OnlyLastTokenLogits: true,
+		})
+		ser, err := kv.SerializeNodes(updated)
+		require.NoError(t, err)
+		return append([]*Node{logits}, ser...)
+	})
+	prefillInputs := append([]any{[][]int32{{1, 2, 3, 4}}}, func() []any {
+		res := make([]any, len(kvSerialized))
+		for i, t := range kvSerialized {
+			res[i] = t
+		}
+		return res
+	}()...)
+	prefillOuts := prefillExec.MustCall(prefillInputs...)
+	assert.InDeltaSlice(t, refLogits[0][3], prefillOuts[0].Value().([][][]float32)[0][0], 1e-4)
+
+	decodeExec := model.MustNewExec(backend, store, func(scope *model.Scope, inputs []*Node) []*Node {
+		token := inputs[0]
+		posNode := inputs[1]
+		cache := kv.DeserializeNodes(inputs[2:])
+		m := buildModel(scope, kv)
+		logits, updated := m.Forward(token, CallOptions{
+			PositionIds:         posNode,
+			Cache:               cache,
+			OnlyLastTokenLogits: true,
+		})
+		ser, err := kv.SerializeNodes(updated)
+		require.NoError(t, err)
+		return append([]*Node{logits}, ser...)
+	})
+	decodeInputs := append([]any{[][]int32{{5}}, int32(4)}, func() []any {
+		res := make([]any, len(prefillOuts)-1)
+		for i := range res {
+			res[i] = prefillOuts[i+1]
+		}
+		return res
+	}()...)
+	decodeOuts := decodeExec.MustCall(decodeInputs...)
+	assert.InDeltaSlice(t, refLogits[0][4], decodeOuts[0].Value().([][][]float32)[0][0], 1e-4)
+}
+
+func TestZeroCopyDynamicPrefill(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	if !backend.Capabilities().HasDynamicShapes() {
+		t.Skip("backend does not support dynamic shapes")
+	}
+	store := model.NewStore()
+
+	buildModel := func(scope *model.Scope, kv *kvcache.KVCache) *Model {
+		m := New(scope).
+			WithArchitecture(ArchitectureGemma4).
+			WithVocabSize(64).
+			WithEmbedDim(32).
+			WithNumLayers(2).
+			WithNumHeads(2).
+			WithNumKVHeads(1).
+			WithHeadDim(16).
+			WithFFNDim(64).
+			WithRoPE(10000).
+			WithCausalMask(true).
+			WithSlidingWindow(8).
+			WithLayerTypes([]LayerType{LocalLayer, GlobalLayer})
+		if kv != nil {
+			m.KVCache = kv
+		}
+		return m
+	}
+
+	// Non-cached reference logits for a 6-token sequence [1, 2, 3, 4, 5, 6].
+	refExec := model.MustNewExec(backend, store, func(scope *model.Scope, tokens *Node) *Node {
+		m := buildModel(scope, nil)
+		logits, _ := m.Forward(tokens, CallOptions{})
+		return logits
+	})
+	refLogits := refExec.MustCall([][]int32{{1, 2, 3, 4, 5, 6}})[0].Value().([][][]float32)
+
+	// Zero-copy dynamic-seq_len prefill with SinkPositions=0 across both Local (window=8) and Global layers.
+	kv := kvcache.NewKVCache().
+		WithSinkPositions(0).
+		WithLayerTypes(map[string]attention.LayerType{
+			"/layer_0/self_attn": attention.LocalLayer,
+			"/layer_1/self_attn": attention.GlobalLayer,
+		}).
+		WithMaxSeqLenPerLayerType([]int{32, 8}).
+		WithMinSeqLenPerLayerType([]int{32, 8})
+	kv.WithOrderedScopes([]string{"/layer_0/self_attn", "/layer_1/self_attn"})
+
+	prefillExec := model.MustNewExec(backend, store, func(scope *model.Scope, inputs []*Node) []*Node {
+		tokens := inputs[0]
+		cache := kv.DeserializeNodes(inputs[1:])
+		m := buildModel(scope, kv)
+		logits, updated := m.Forward(tokens, CallOptions{
+			PositionIds:         Const(tokens.Graph(), int32(0)),
+			Cache:               cache,
+			OnlyLastTokenLogits: true,
+		})
+		ser, err := kv.SerializeNodes(updated)
+		require.NoError(t, err)
+		return append([]*Node{logits}, ser...)
+	}).WithDynamicAxes([]string{"", "seq_len"})
+
+	// Run two different prompt lengths (3 and 6) through the exact same dynamic prefillExec.
+	for _, prompt := range [][]int32{{1, 2, 3}, {1, 2, 3, 4, 5, 6}} {
+		kvTensors := kv.InitializeTensors(1, 1, 16, dtypes.Float32, 32)
+		kvSerialized, err := kv.SerializeTensors(kvTensors)
+		require.NoError(t, err)
+
+		prefillInputs := make([]any, 1+len(kvSerialized))
+		prefillInputs[0] = [][]int32{prompt}
+		for i, kt := range kvSerialized {
+			prefillInputs[i+1] = kt
+		}
+		prefillOuts := prefillExec.MustCall(prefillInputs...)
+		wantPos := len(prompt) - 1
+		assert.InDeltaSlice(t, refLogits[0][wantPos], prefillOuts[0].Value().([][][]float32)[0][0], 1e-4,
+			"dynamic prefill mismatch for prompt length %d", len(prompt))
+	}
 }

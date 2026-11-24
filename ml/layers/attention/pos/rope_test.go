@@ -1,6 +1,7 @@
 package pos
 
 import (
+	"math"
 	"testing"
 
 	"github.com/gomlx/compute/dtypes"
@@ -544,4 +545,29 @@ func TestSequentialPositions(t *testing.T) {
 		assert.Equal(t, []int{3}, output.Shape().Dimensions)
 		assert.Equal(t, []int32{7, 8, 9}, output.Value().([]int32))
 	})
+}
+
+func TestRoPEPartialRotaryFactor(t *testing.T) {
+	backend := testutil.BuildTestBackend()
+	store := model.NewStore()
+
+	// headDim=8, partial_rotary_factor=0.25 -> only pair (0, 4) is rotated with freq=1.0;
+	// dims 1, 2, 3, 5, 6, 7 must remain unchanged (identity rotation).
+	rope := NewRoPE(10000.0).WithPartialRotaryFactor(0.25)
+	exec := model.MustNewExec(backend, store, func(scope *model.Scope, x *Node, positions *Node) *Node {
+		q, _ := rope.EncodeQK(x, x, positions, 1)
+		return q
+	})
+
+	input := [][][]float32{{{1, 2, 3, 4, 5, 6, 7, 8}}}
+	positions := []int32{1} // angle for pair 0 is 1.0 rad
+	out := exec.MustCall(input, positions)[0].Value().([][][]float32)[0][0]
+
+	c := float32(math.Cos(1.0))
+	s := float32(math.Sin(1.0))
+	assert.InDelta(t, 1*c-5*s, out[0], 1e-5)
+	assert.InDelta(t, 1*s+5*c, out[4], 1e-5)
+	for _, idx := range []int{1, 2, 3, 5, 6, 7} {
+		assert.InDelta(t, input[0][0][idx], out[idx], 1e-6, "dim %d should be unchanged", idx)
+	}
 }

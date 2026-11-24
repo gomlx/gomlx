@@ -49,6 +49,7 @@ const (
 	ParamNumKVHeads            = "transformer_num_kv_heads"
 	ParamGlobalHeadDim         = "transformer_global_head_dim"
 	ParamNumKVSharedLayers     = "transformer_num_kv_shared_layers"
+	ParamUseDoubleWideMLP      = "transformer_use_double_wide_mlp"
 	ParamAttentionScoreSoftCap = "transformer_attention_score_soft_cap"
 	ParamFinalLogitSoftCap     = "transformer_final_logit_soft_cap"
 
@@ -106,6 +107,12 @@ type CallOptions struct {
 	// If it is nil, no KV cache is used and the model computes attention across the entire sequence.
 	// If it is non-nil, the model uses/updates the cache, which is typical for fast autoregressive generation.
 	Cache KVCacheNodes
+
+	// OnlyLastTokenLogits, when true, slices the final hidden states to only the last sequence
+	// position [batchSize, 1, hiddenSize] before projecting through the vocabulary head (lm_head).
+	// This avoids projecting all prompt tokens during autoregressive prefill when only the next-token
+	// logits are needed.
+	OnlyLastTokenLogits bool
 }
 
 // Model configures a cached transformer model.
@@ -146,7 +153,8 @@ type Model struct {
 
 	KVCache *kvcache.KVCache
 
-	NumKVSharedLayers int // Number of KV shared layers at the end of the model
+	NumKVSharedLayers int  // Number of KV shared layers at the end of the model
+	UseDoubleWideMLP  bool // If true, KV-shared layers use 2*FFNDim for their MLP intermediate size (Gemma 4 E2B)
 
 	AttentionScoreSoftCap float64 // Softcap for attention scores
 	FinalLogitSoftCap     float64 // Logit softcap for vocabulary prediction
@@ -235,6 +243,7 @@ func New(scope *model.Scope) *Model {
 		m.NumKVHeads = model.GetParamOr(scope, ParamNumKVHeads, m.NumKVHeads)
 		m.GlobalHeadDim = model.GetParamOr(scope, ParamGlobalHeadDim, m.GlobalHeadDim)
 		m.NumKVSharedLayers = model.GetParamOr(scope, ParamNumKVSharedLayers, m.NumKVSharedLayers)
+		m.UseDoubleWideMLP = model.GetParamOr(scope, ParamUseDoubleWideMLP, m.UseDoubleWideMLP)
 		m.AttentionScoreSoftCap = model.GetParamOr(scope, ParamAttentionScoreSoftCap, m.AttentionScoreSoftCap)
 		m.FinalLogitSoftCap = model.GetParamOr(scope, ParamFinalLogitSoftCap, m.FinalLogitSoftCap)
 
@@ -614,6 +623,13 @@ func (m *Model) WithNumKVSharedLayers(num int) *Model {
 	return m
 }
 
+// WithUseDoubleWideMLP configures whether KV-shared layers double their MLP intermediate dimension (2*FFNDim),
+// as used in Gemma 4 E2B.
+func (m *Model) WithUseDoubleWideMLP(use bool) *Model {
+	m.UseDoubleWideMLP = use
+	return m
+}
+
 // WithScoreSoftCap sets the soft cap for the attention score computation (see [nn.SoftCap]).
 func (m *Model) WithScoreSoftCap(cap float64) *Model {
 	m.AttentionScoreSoftCap = cap
@@ -685,6 +701,23 @@ func (m *Model) Forward(
 	options CallOptions,
 ) (logits *Node, updatedCache KVCacheNodes) {
 	embeddings, _, updatedCache := m.AllLayers(tokens, options)
+	if options.OnlyLastTokenLogits {
+		if embeddings.Shape().Dimensions[1] == shapes.DynamicDim {
+			seqLen := DimensionSize(embeddings, 1)
+			lastIdx := SubScalar(seqLen, 1)
+			if embeddings.Shape().Dimensions[0] == 1 {
+				// Fast zero-transpose path for batch=1: [1, seqLen, D] -> [seqLen, D] -> Gather -> [1, 1, D].
+				flat := DynamicReshape(embeddings, DimensionSpecFor(embeddings, 1), StaticDim(embeddings.Shape().Dimensions[2]))
+				embeddings = ExpandAxes(Gather(flat, lastIdx), 0, 1)
+			} else {
+				// General batch path: [B, seqLen, D] -> [seqLen, B, D] -> Gather -> [B, 1, D].
+				transposed := Transpose(embeddings, 0, 1)
+				embeddings = ExpandDims(Gather(transposed, lastIdx), 1)
+			}
+		} else {
+			embeddings = Slice(embeddings, AxisRange(), AxisRange(-1), AxisRange())
+		}
+	}
 	return m.LogitsFromEmbeddings(embeddings), updatedCache
 }
 
@@ -707,8 +740,9 @@ func MakeKVCacheModelFn(m *Model) generate.KVCacheModelFn {
 		}
 		m.Scope = m.Scope.ResetVisited()
 		return m.Forward(newTokens, CallOptions{
-			PositionIds: position,
-			Cache:       cache,
+			PositionIds:         position,
+			Cache:               cache,
+			OnlyLastTokenLogits: true,
 		})
 	}
 }
@@ -1012,53 +1046,7 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x *N
 	}
 
 	if cache != nil {
-		var fullKey, fullValue *Node
-		if isShared {
-			fullKey, fullValue = m.KVCache.Get(cache, sourceLayerScopePath)
-		} else {
-			m.KVCache.Update(attnScope, cache, keyProjected, valueProjected, position)
-			fullKey, fullValue = m.KVCache.Get(cache, attnScope.Scope())
-		}
-		fullKey = TransposeAllDims(fullKey, 0, 2, 1, 3)
-		fullValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
-
-		batchSpec := DimensionSpecFor(x, 0)
-		seqSpec := DimensionSpecFor(x, 1)
-		cacheSeqSpec := DimensionSpecFor(fullKey, 1)
-
-		qReshaped := DynamicReshape(queryProjected, batchSpec, seqSpec, StaticDim(m.NumHeads*headDim))
-		kReshaped := DynamicReshape(fullKey, batchSpec, cacheSeqSpec, StaticDim(kvHeads*headDim))
-		vReshaped := DynamicReshape(fullValue, batchSpec, cacheSeqSpec, StaticDim(kvHeads*headDim))
-
-		slidingWindow := 0
-		if layerType == LocalLayer {
-			slidingWindow = m.SlidingWindow
-		}
-		customMask := m.KVCache.BuildAttentionMask(attnScope, cache, x, position, m.UseCausalMask, slidingWindow)
-
-		if options.AttentionMask != nil {
-			expandedMask := ExpandDims(options.AttentionMask, 1)
-			expandedMask = BroadcastLike(expandedMask, customMask)
-			customMask = LogicalAnd(customMask, expandedMask)
-		}
-
-		attnBuilder := attention.MultiHeadAttention(attnScope, qReshaped, kReshaped, vReshaped, m.NumHeads, headDim).
-			UseTransposedWeights(m.TransposedProjections).
-			WithNumKVHeads(kvHeads).
-			WithPreProjected(true).
-			WithOutputDim(m.EmbedDim).
-			WithQueryKeyMatrixMask(customMask).
-			WithScoreSoftCap(m.AttentionScoreSoftCap).
-			WithQueryKeyScale(m.QueryKeyScale)
-
-		if !m.UseBias {
-			attnBuilder.UseProjectionBias(false)
-		}
-		if m.Dropout > 0 {
-			dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
-			attnBuilder.WithDropout(dropoutRate)
-		}
-		attn = attnBuilder.Done()
+		attn = m.buildCachedAttention(attnScope, x, queryProjected, keyProjected, valueProjected, position, cache, isShared, sourceLayerScopePath, layerType, kvHeads, headDim, options)
 	} else {
 		batchSpec := DimensionSpecFor(x, 0)
 		seqSpec := DimensionSpecFor(x, 1)
@@ -1254,54 +1242,7 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x *Node
 
 	var attn *Node
 	if cache != nil {
-		var fullKey, fullValue *Node
-		if isShared {
-			fullKey, fullValue = m.KVCache.Get(cache, sourceLayerScopePath)
-		} else {
-			m.KVCache.Update(selfAttnScope, cache, keyProjected, valueProjected, position)
-			fullKey, fullValue = m.KVCache.Get(cache, selfAttnScope.Scope())
-		}
-
-		fullKey = TransposeAllDims(fullKey, 0, 2, 1, 3)
-		fullValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
-
-		batchSpec := DimensionSpecFor(x, 0)
-		seqSpec := DimensionSpecFor(x, 1)
-		cacheSeqSpec := DimensionSpecFor(fullKey, 1)
-
-		qReshaped := DynamicReshape(queryProjected, batchSpec, seqSpec, StaticDim(m.NumHeads*headDim))
-		kReshaped := DynamicReshape(fullKey, batchSpec, cacheSeqSpec, StaticDim(kvHeads*headDim))
-		vReshaped := DynamicReshape(fullValue, batchSpec, cacheSeqSpec, StaticDim(kvHeads*headDim))
-
-		slidingWindow := 0
-		if layerType == LocalLayer {
-			slidingWindow = m.SlidingWindow
-		}
-		customMask := m.KVCache.BuildAttentionMask(selfAttnScope, cache, x, position, m.UseCausalMask, slidingWindow)
-
-		if options.AttentionMask != nil {
-			expandedMask := ExpandDims(options.AttentionMask, 1)
-			expandedMask = BroadcastLike(expandedMask, customMask)
-			customMask = LogicalAnd(expandedMask, customMask)
-		}
-
-		attnBuilder := attention.MultiHeadAttention(selfAttnScope, qReshaped, kReshaped, vReshaped, m.NumHeads, headDim).
-			UseTransposedWeights(m.TransposedProjections).
-			WithNumKVHeads(kvHeads).
-			WithPreProjected(true).
-			WithOutputDim(m.EmbedDim).
-			WithQueryKeyMatrixMask(customMask).
-			WithScoreSoftCap(m.AttentionScoreSoftCap).
-			WithQueryKeyScale(m.QueryKeyScale)
-
-		if !m.UseBias {
-			attnBuilder.UseProjectionBias(false)
-		}
-		if m.Dropout > 0 {
-			dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
-			attnBuilder.WithDropout(dropoutRate)
-		}
-		attn = attnBuilder.Done()
+		attn = m.buildCachedAttention(selfAttnScope, x, queryProjected, keyProjected, valueProjected, position, cache, isShared, sourceLayerScopePath, layerType, kvHeads, headDim, options)
 	} else {
 		batchSpec := DimensionSpecFor(x, 0)
 		seqSpec := DimensionSpecFor(x, 1)
@@ -1349,9 +1290,13 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x *Node
 
 	// Gemma uses SwiGLU: gate_proj, up_proj, down_proj
 	// Notice: it is not using activation.SwiGLU and instead doing the projections separately.
+	ffnDim := m.FFNDim
+	if m.UseDoubleWideMLP && isShared {
+		ffnDim *= 2
+	}
 	ffScope := layerScope.In("mlp")
-	gate := m.dense(ffScope.In("gate_proj"), x, m.UseBias, m.FFNDim)
-	up := m.dense(ffScope.In("up_proj"), x, m.UseBias, m.FFNDim)
+	gate := m.dense(ffScope.In("gate_proj"), x, m.UseBias, ffnDim)
+	up := m.dense(ffScope.In("up_proj"), x, m.UseBias, ffnDim)
 	switchedNode := activation.Apply(m.Activation, gate)
 	ff := Mul(switchedNode, up)
 
@@ -1384,6 +1329,125 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x *Node
 	}
 
 	return x
+}
+
+// buildCachedAttention computes multi-head attention against the KV cache.
+//
+// For single-token autoregressive decoding (qSeqLen == 1) without attention sinks or an external
+// attention mask, it passes the active KV sequence length (min(position+1, cacheSeqLen)) directly
+// via MultiHeadAttention.WithSeqLens instead of building a dense boolean mask. Backends that
+// implement FusedScaledDotProductAttention (such as the Go backend and cuDNN) stop their inner
+// attention loop at activeKVLen directly on the padded KV cache buffer (zero copy, zero mask),
+// while backends without fused SDPA fall back to masking automatically.
+func (m *Model) buildCachedAttention(
+	attnScope *model.Scope,
+	x, queryProjected, keyProjected, valueProjected, position *Node,
+	cache KVCacheNodes,
+	isShared bool,
+	sourceLayerScopePath string,
+	layerType LayerType,
+	kvHeads, headDim int,
+	options CallOptions,
+) *Node {
+	var fullKey, fullValue *Node
+	if isShared {
+		fullKey, fullValue = m.KVCache.Get(cache, sourceLayerScopePath)
+	} else {
+		m.KVCache.Update(attnScope, cache, keyProjected, valueProjected, position)
+		fullKey, fullValue = m.KVCache.Get(cache, attnScope.Scope())
+	}
+
+	// KVCache stores tensors in BHSD [B, kvHeads, cacheSeqLen, headDim].
+	// When kvHeads == 1, BHSD and BSHD have identical flat memory layout, so skip TransposeAllDims.
+	var cacheSeqSpec DimensionSpec
+	var cacheSeqLen int
+	if kvHeads == 1 {
+		cacheSeqSpec = DimensionSpecFor(fullKey, 2)
+		cacheSeqLen = fullKey.Shape().Dimensions[2]
+	} else {
+		fullKey = TransposeAllDims(fullKey, 0, 2, 1, 3)
+		fullValue = TransposeAllDims(fullValue, 0, 2, 1, 3)
+		cacheSeqSpec = DimensionSpecFor(fullKey, 1)
+		cacheSeqLen = fullKey.Shape().Dimensions[1]
+	}
+
+	batchSpec := DimensionSpecFor(x, 0)
+	seqSpec := DimensionSpecFor(x, 1)
+	qSeqLen := x.Shape().Dimensions[1]
+
+	qReshaped := DynamicReshape(queryProjected, batchSpec, seqSpec, StaticDim(m.NumHeads*headDim))
+	kReshaped := DynamicReshape(fullKey, batchSpec, cacheSeqSpec, StaticDim(kvHeads*headDim))
+	vReshaped := DynamicReshape(fullValue, batchSpec, cacheSeqSpec, StaticDim(kvHeads*headDim))
+
+	slidingWindow := 0
+	if layerType == LocalLayer {
+		slidingWindow = m.SlidingWindow
+	}
+
+	attnBuilder := attention.MultiHeadAttention(attnScope, qReshaped, kReshaped, vReshaped, m.NumHeads, headDim).
+		UseTransposedWeights(m.TransposedProjections).
+		WithNumKVHeads(kvHeads).
+		WithPreProjected(true).
+		WithOutputDim(m.EmbedDim).
+		WithScoreSoftCap(m.AttentionScoreSoftCap).
+		WithQueryKeyScale(m.QueryKeyScale)
+
+	// Zero-copy active-length path for single-token decode (qSeqLen == 1):
+	// All positions [0, min(position+1, cacheSeqLen)) are valid, causal, and within slidingWindow
+	// whenever SinkPositions == 0 and either slidingWindow == 0 (global) or cacheSeqLen <= slidingWindow (local ring buffer).
+	useZeroCopyDecode := options.AttentionMask == nil &&
+		m.KVCache.SinkPositions == 0 &&
+		qSeqLen == 1 &&
+		(slidingWindow == 0 || (cacheSeqLen != shapes.DynamicDim && cacheSeqLen <= slidingWindow))
+
+	// Zero-copy active-length + causal path for contiguous prefill starting at position 0:
+	// All valid KV positions are [0, qSeqLen) without wrapping (so SinkPositions never triggers),
+	// and when qSeqLen <= slidingWindow (or slidingWindow == 0), every causal pair (q >= k) is
+	// already within the sliding window. Using WithSeqLens + WithCausalMask avoids materializing
+	// a dense [B, Sq, Skv] boolean mask and lets fused SDPA stop each row at min(qSeqLen, qIdx+1).
+	useZeroCopyPrefill := !useZeroCopyDecode &&
+		options.AttentionMask == nil &&
+		kvcache.IsConstZeroInt(position) &&
+		((qSeqLen > 1 &&
+			(cacheSeqLen == shapes.DynamicDim || qSeqLen <= cacheSeqLen) &&
+			(slidingWindow == 0 || qSeqLen <= slidingWindow)) ||
+			(qSeqLen == shapes.DynamicDim &&
+				(slidingWindow == 0 || (cacheSeqLen != shapes.DynamicDim && cacheSeqLen <= slidingWindow))))
+
+	if useZeroCopyDecode {
+		g := x.Graph()
+		qSeqLenNode := DynamicBroadcastInDim(Const(g, int32(1)), nil, batchSpec)
+		kvSeqLenScalar := AddScalar(ConvertDType(position, dtypes.Int32), 1)
+		if cacheSeqLen != shapes.DynamicDim {
+			kvSeqLenScalar = MinScalar(kvSeqLenScalar, cacheSeqLen)
+		}
+		kvSeqLenNode := DynamicBroadcastInDim(kvSeqLenScalar, nil, batchSpec)
+		attnBuilder.WithSeqLens(qSeqLenNode, kvSeqLenNode)
+	} else if useZeroCopyPrefill {
+		qSeqLenScalar := ConvertDType(DimensionSize(x, 1), dtypes.Int32)
+		qSeqLenNode := DynamicBroadcastInDim(qSeqLenScalar, nil, batchSpec)
+		attnBuilder.WithSeqLens(qSeqLenNode, qSeqLenNode)
+		if m.UseCausalMask {
+			attnBuilder.WithCausalMask(true)
+		}
+	} else {
+		customMask := m.KVCache.BuildAttentionMask(attnScope, cache, x, position, m.UseCausalMask, slidingWindow)
+		if options.AttentionMask != nil {
+			expandedMask := ExpandDims(options.AttentionMask, 1)
+			expandedMask = BroadcastLike(expandedMask, customMask)
+			customMask = LogicalAnd(customMask, expandedMask)
+		}
+		attnBuilder.WithQueryKeyMatrixMask(customMask)
+	}
+
+	if !m.UseBias {
+		attnBuilder.UseProjectionBias(false)
+	}
+	if m.Dropout > 0 {
+		dropoutRate := Scalar(x.Graph(), x.DType(), m.Dropout)
+		attnBuilder.WithDropout(dropoutRate)
+	}
+	return attnBuilder.Done()
 }
 
 // WithEmbedNormalization sets the normalization type ("layer", "rms", "none" or "")

@@ -19,6 +19,7 @@ package pos
 import (
 	"fmt"
 
+	"github.com/gomlx/compute/dtypes"
 	"github.com/gomlx/compute/shapes"
 	"github.com/gomlx/gomlx/core/graph"
 	. "github.com/gomlx/gomlx/core/graph"
@@ -39,6 +40,16 @@ type RoPE struct {
 	Interleaved         bool    // If true, rotation pairs are at even/odd indices; if false, split first-half/second-half
 	LinearScalingFactor float64 // If > 0 and != 1.0, positions are divided by this factor before RoPE.
 	FrequencyDivisor    int     // Optional: if > 0, specifies the divisor (typically the full head dimension) to use in frequency calculations.
+	PartialRotaryFactor float64 // Optional: if in (0, 1), only the first partial_rotary_factor of half-dim frequency pairs are rotated (proportional RoPE, e.g. Gemma 4); remaining pairs get angle 0 (identity).
+}
+
+// WithPartialRotaryFactor configures proportional partial RoPE (used by Gemma 4 full-attention layers).
+// When factor is in (0, 1), only the first floor(factor * headDim/2) frequency pairs are rotated
+// (paired across the full headDim halves: (i, i + headDim/2)), while the remaining pairs receive
+// angle 0 (cos=1, sin=0, identity).
+func (r *RoPE) WithPartialRotaryFactor(factor float64) *RoPE {
+	r.PartialRotaryFactor = factor
+	return r
 }
 
 // WithFrequencyDivisor sets the divisor to be used in the frequency calculations.
@@ -151,8 +162,8 @@ func (r *RoPE) EncodeQK(q, k *Node, positionIndices *Node, seqAxis int) (*Node, 
 		positionIndices = DivScalar(positionIndices, r.LinearScalingFactor)
 	}
 	if r.DimStart == 0 && r.DimEnd == -1 {
-		return applyRoPE(q, positionIndices, r.BaseFreq, seqAxis, r.Interleaved, r.FrequencyDivisor),
-			applyRoPE(k, positionIndices, r.BaseFreq, seqAxis, r.Interleaved, r.FrequencyDivisor)
+		return applyRoPE(q, positionIndices, r.BaseFreq, seqAxis, r.Interleaved, r.FrequencyDivisor, r.PartialRotaryFactor),
+			applyRoPE(k, positionIndices, r.BaseFreq, seqAxis, r.Interleaved, r.FrequencyDivisor, r.PartialRotaryFactor)
 	}
 	dimEnd := r.DimEnd
 	if dimEnd == -1 {
@@ -336,7 +347,7 @@ func applyWithCosSin(x, cos, sin *Node, seqAxis int, interleaved bool) *Node {
 //
 // Returns:
 //   - Tensor with rotary embeddings applied, same shape as x
-func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, seqAxis int, interleaved bool, frequencyDivisor int) *Node {
+func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, seqAxis int, interleaved bool, frequencyDivisor int, partialRotaryFactor float64) *Node {
 	g := x.Graph()
 	shape := x.Shape()
 	dtype := shape.DType
@@ -351,9 +362,16 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, seqAxis int, in
 		Panicf("RoPE requires even embedding dimension, got %d", embedDim)
 	}
 
-	// Use provided position indices and convert to appropriate dtype
+	// Compute frequencies, angles, cos, and sin in Float32 for half-precision inputs
+	// to avoid severe angle quantization errors (especially with large baseFreq / positions).
+	calcDType := dtype
+	if calcDType.IsHalfPrecision() {
+		calcDType = dtypes.Float32
+	}
+
+	// Use provided position indices and convert to calculation dtype
 	// Position indices should be shaped [..., seq_len]
-	positions := ConvertDType(positionIndices, dtype)
+	positions := ConvertDType(positionIndices, calcDType)
 
 	// Validate position indices shape - last dimension must match seqLen
 	posRank := positions.Rank()
@@ -363,10 +381,15 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, seqAxis int, in
 	}
 
 	// Compute frequency for each pair of dimensions
-	// freq_i = 1 / (baseFreq^(2i/embedDim)) for i in [0, embedDim/2)
-	// Shape: [embedDim/2]
+	// freq_i = 1 / (baseFreq^(2i/denomDim)) for i in [0, rotaryPairs)
+	// For proportional partial RoPE (partialRotaryFactor in (0, 1)), remaining pairs [rotaryPairs, halfDim)
+	// get frequency 0 so cos=1, sin=0 (identity) while preserving full-headDim split-half pairing.
 	halfDim := embedDim / 2
-	dimIndices := Iota(g, shapes.Make(dtype, halfDim), 0)
+	rotaryPairs := halfDim
+	if partialRotaryFactor > 0 && partialRotaryFactor < 1.0 {
+		rotaryPairs = max(1, int(float64(halfDim)*partialRotaryFactor))
+	}
+	dimIndices := Iota(g, shapes.Make(calcDType, rotaryPairs), 0)
 
 	denomDim := embedDim
 	if frequencyDivisor > 0 {
@@ -376,9 +399,12 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, seqAxis int, in
 
 	// Create base frequency tensor and compute freqs = 1 / (baseFreq^dimIndices)
 	baseFreqTensor := Const(g, []float64{baseFreq})
-	baseFreqTensor = ConvertDType(baseFreqTensor, dtype)
+	baseFreqTensor = ConvertDType(baseFreqTensor, calcDType)
 	freqs := Pow(baseFreqTensor, dimIndices)
 	freqs = Reciprocal(freqs)
+	if rotaryPairs < halfDim {
+		freqs = Pad(freqs, ScalarZero(g, calcDType), PadAxis{End: halfDim - rotaryPairs})
+	}
 
 	// Compute angles: outer product of positions and frequencies
 	// Shape: [seqLen, embedDim/2]
@@ -386,9 +412,13 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, seqAxis int, in
 	freqs = ExpandDims(freqs, 0)          // [1, embedDim/2]
 	angles := Mul(positions, freqs)       // [seqLen, embedDim/2]
 
-	// Compute cos and sin of angles
+	// Compute cos and sin of angles, then convert back to x's dtype if needed
 	cosAngles := Cos(angles) // [seqLen, embedDim/2]
 	sinAngles := Sin(angles) // [seqLen, embedDim/2]
+	if calcDType != dtype {
+		cosAngles = ConvertDType(cosAngles, dtype)
+		sinAngles = ConvertDType(sinAngles, dtype)
+	}
 
 	return applyWithCosSin(x, cosAngles, sinAngles, seqAxis, interleaved)
 }
@@ -408,13 +438,13 @@ func applyRoPE(x *Node, positionIndices *Node, baseFreq float64, seqAxis int, in
 //
 // Returns:
 //   - Tensor with rotary embeddings applied to the specified range, same shape as x
-	func applyRoPEWithCustomDim(x *Node, positionIndices *Node, baseFreq float64, dimStart, dimEnd, seqAxis int, interleaved bool, frequencyDivisor int) *Node {
+func applyRoPEWithCustomDim(x *Node, positionIndices *Node, baseFreq float64, dimStart, dimEnd, seqAxis int, interleaved bool, frequencyDivisor int) *Node {
 	rank := x.Shape().Rank()
 	// Extract the part to apply RoPE (slice the last axis)
 	part := Slice(x, AxisRange().Spacer(), AxisRange(dimStart, dimEnd))
 
 	// Apply RoPE
-	rotatedPart := applyRoPE(part, positionIndices, baseFreq, seqAxis, interleaved, frequencyDivisor)
+	rotatedPart := applyRoPE(part, positionIndices, baseFreq, seqAxis, interleaved, frequencyDivisor, 0)
 
 	// Concatenate with unchanged parts
 	if dimStart == 0 && dimEnd == x.Shape().Dimensions[rank-1] {

@@ -269,12 +269,9 @@ func (k *KVCache) PadTensors(kv KVCacheTensors, currentSeqLen int) (KVCacheTenso
 			}
 
 			currentLen := shape.Dimensions[2]
-			if currentLen == targetSeqLen {
+			if currentLen >= targetSeqLen {
 				padded[path] = tensor
 				continue
-			}
-			if currentLen > targetSeqLen {
-				return nil, errors.Errorf("KV cache tensor %q has sequence length %d, larger than target %d", path, currentLen, targetSeqLen)
 			}
 
 			paddedTensor, err := padTensor4D(tensor, targetSeqLen)
@@ -350,8 +347,16 @@ func (k *KVCache) Update(scope *model.Scope, cache KVCacheNodes, nextK, nextV *N
 	maxSeqLen := k.MaxSeqLenPerLayerType[int(lt)]
 
 	if nextK.Shape().Dimensions[1] != prevK.Shape().Dimensions[1] {
-		nextK = TransposeAllDims(nextK, 0, 2, 1, 3)
-		nextV = TransposeAllDims(nextV, 0, 2, 1, 3)
+		if prevK.Shape().Dimensions[1] == 1 {
+			batchSpec := DimensionSpecFor(nextK, 0)
+			seqSpec := DimensionSpecFor(nextK, 1)
+			dimSpec := DimensionSpecFor(nextK, 3)
+			nextK = DynamicReshape(nextK, batchSpec, StaticDim(1), seqSpec, dimSpec)
+			nextV = DynamicReshape(nextV, batchSpec, StaticDim(1), seqSpec, dimSpec)
+		} else {
+			nextK = TransposeAllDims(nextK, 0, 2, 1, 3)
+			nextV = TransposeAllDims(nextV, 0, 2, 1, 3)
+		}
 	}
 
 	updateSeqLen := nextK.Shape().Dimensions[2]
@@ -363,24 +368,36 @@ func (k *KVCache) Update(scope *model.Scope, cache KVCacheNodes, nextK, nextV *N
 	updatedK := prevK
 	updatedV := prevV
 
-	for i := 0; i < updateSeqLen; i++ {
-		pVal := AddScalar(position, i)
-
-		var writeIdx *Node
-		if k.SinkPositions > 0 && maxSeqLen > k.SinkPositions {
-			rollingSize := maxSeqLen - k.SinkPositions
-			wrappedVal := AddScalar(ModScalar(SubScalar(pVal, k.SinkPositions), rollingSize), k.SinkPositions)
-			isBelowMax := LessThan(pVal, Const(g, int32(maxSeqLen)))
-			writeIdx = Where(isBelowMax, pVal, wrappedVal)
-		} else {
-			writeIdx = ModScalar(pVal, maxSeqLen)
+	// Fast path: bulk contiguous write at position 0 (standard prefill) when the entire update
+	// fits without wrapping (pVal < maxSeqLen for all tokens, so SinkPositions never triggers).
+	// Replaces 2*updateSeqLen per-token Slice+DynamicUpdateSlice ops with 2 ops, and also
+	// supports dynamic sequence lengths (updateSeqLen == shapes.DynamicDim).
+	if (updateSeqLen == shapes.DynamicDim || (updateSeqLen > 1 && updateSeqLen <= maxSeqLen)) && IsConstZeroInt(position) {
+		updatedK = DynamicUpdateSlice(updatedK, nextK, []*Node{batchIdx, headsIdx, position, dimIdx})
+		updatedV = DynamicUpdateSlice(updatedV, nextV, []*Node{batchIdx, headsIdx, position, dimIdx})
+	} else {
+		if updateSeqLen == shapes.DynamicDim {
+			panic("KVCache.Update: dynamic sequence length is only supported for contiguous prefill at constant position 0")
 		}
+		for i := 0; i < updateSeqLen; i++ {
+			pVal := AddScalar(position, i)
 
-		tokenK := Slice(nextK, AxisRange(), AxisRange(), AxisElem(i), AxisRange())
-		tokenV := Slice(nextV, AxisRange(), AxisRange(), AxisElem(i), AxisRange())
+			var writeIdx *Node
+			if k.SinkPositions > 0 && maxSeqLen > k.SinkPositions {
+				rollingSize := maxSeqLen - k.SinkPositions
+				wrappedVal := AddScalar(ModScalar(SubScalar(pVal, k.SinkPositions), rollingSize), k.SinkPositions)
+				isBelowMax := LessThan(pVal, Const(g, int32(maxSeqLen)))
+				writeIdx = Where(isBelowMax, pVal, wrappedVal)
+			} else {
+				writeIdx = ModScalar(pVal, maxSeqLen)
+			}
 
-		updatedK = DynamicUpdateSlice(updatedK, tokenK, []*Node{batchIdx, headsIdx, writeIdx, dimIdx})
-		updatedV = DynamicUpdateSlice(updatedV, tokenV, []*Node{batchIdx, headsIdx, writeIdx, dimIdx})
+			tokenK := Slice(nextK, AxisRange(), AxisRange(), AxisElem(i), AxisRange())
+			tokenV := Slice(nextV, AxisRange(), AxisRange(), AxisElem(i), AxisRange())
+
+			updatedK = DynamicUpdateSlice(updatedK, tokenK, []*Node{batchIdx, headsIdx, writeIdx, dimIdx})
+			updatedV = DynamicUpdateSlice(updatedV, tokenV, []*Node{batchIdx, headsIdx, writeIdx, dimIdx})
+		}
 	}
 
 	cache[kKey] = updatedK
@@ -401,20 +418,20 @@ func (k *KVCache) BuildAttentionMask(scope *model.Scope, cache KVCacheNodes, que
 
 	g := query.Graph()
 	shape := keyCache.Shape()
-	batchSize := shape.Dimensions[0]
 	cacheSeqLen := shape.Dimensions[2]
 
-	qSeqLen := query.Shape().Dimensions[1]
+	batchSpec := DimensionSpecFor(keyCache, 0)
+	qSeqSpec := DimensionSpecFor(query, 1)
+	cacheSeqSpec := DimensionSpecFor(keyCache, 2)
 
-	currentSeqLen := AddScalar(position, qSeqLen)
+	qSeqLenNode := ConvertDType(DimensionSize(query, 1), position.DType())
+	currentSeqLen := Add(position, qSeqLenNode)
 	effectivePosition := MinScalar(currentSeqLen, cacheSeqLen)
 
 	linearPositions := Iota(g, shapes.Make(dtypes.Int32, cacheSeqLen), 0)
 	validMask := LessThan(linearPositions, effectivePosition)
 
-	validMask3D := ExpandDims(validMask, 0)
-	validMask3D = ExpandDims(validMask3D, 0)
-	validMask3D = BroadcastToDims(validMask3D, batchSize, qSeqLen, cacheSeqLen)
+	validMask3D := DynamicBroadcastInDim(validMask, []int{2}, batchSpec, qSeqSpec, cacheSeqSpec)
 
 	var mask *Node = validMask3D
 
@@ -454,16 +471,14 @@ func (k *KVCache) BuildAttentionMask(scope *model.Scope, cache KVCacheNodes, que
 
 		absPositions := Where(isWrapped, wrappedPositions, linearPositions)
 
-		queryPositions := Iota(g, shapes.Make(dtypes.Int32, qSeqLen), 0)
-		queryPositions = Add(queryPositions, BroadcastToShape(position, queryPositions.Shape()))
+		queryPositions := DynamicIota(g, dtypes.Int32, 0, qSeqSpec)
+		queryPositions = Add(queryPositions, ConvertDType(position, dtypes.Int32))
 
 		absQ := ExpandDims(queryPositions, -1)
 		absK := ExpandDims(absPositions, 0)
 
 		causalCheck := GreaterOrEqual(absQ, absK)
-
-		causalCheck3D := ExpandDims(causalCheck, 0)
-		causalCheck3D = BroadcastToDims(causalCheck3D, batchSize, qSeqLen, cacheSeqLen)
+		causalCheck3D := DynamicBroadcastInDim(causalCheck, []int{1, 2}, batchSpec, qSeqSpec, cacheSeqSpec)
 
 		mask = LogicalAnd(mask, causalCheck3D)
 
@@ -473,12 +488,32 @@ func (k *KVCache) BuildAttentionMask(scope *model.Scope, cache KVCacheNodes, que
 			withinWindow := LessThan(dist, Const(g, int32(slidingWindow)))
 			slidingCheck := LogicalOr(isSink, withinWindow)
 
-			slidingCheck3D := ExpandDims(slidingCheck, 0)
-			slidingCheck3D = BroadcastToDims(slidingCheck3D, batchSize, qSeqLen, cacheSeqLen)
+			slidingCheck3D := DynamicBroadcastInDim(slidingCheck, []int{1, 2}, batchSpec, qSeqSpec, cacheSeqSpec)
 
 			mask = LogicalAnd(mask, slidingCheck3D)
 		}
 	}
 
 	return mask
+}
+
+// IsConstZeroInt returns true if n is a scalar integer constant equal to 0.
+func IsConstZeroInt(n *Node) bool {
+	if n == nil || n.Type() != NodeTypeConstant || n.Rank() != 0 {
+		return false
+	}
+	t := n.ConstantValue()
+	if t == nil {
+		return false
+	}
+	switch v := t.Value().(type) {
+	case int32:
+		return v == 0
+	case int64:
+		return v == 0
+	case int:
+		return v == 0
+	default:
+		return false
+	}
 }

@@ -7,6 +7,8 @@ import (
 	"fmt"
 
 	"github.com/gomlx/compute"
+	"github.com/gomlx/compute/support"
+	"github.com/gomlx/compute/support/humanize"
 	fm "github.com/gomlx/gomlx/examples/FlowMatching"
 	"github.com/gomlx/gomlx/examples/oxfordflowers102/diffusion"
 	"github.com/gomlx/gomlx/support/exceptions"
@@ -44,6 +46,7 @@ func main() {
 	if err != nil {
 		klog.Fatalf("Failed with error: %+v", err)
 	}
+	fmt.Printf("MaxRSS: %s\n", humanize.Bytes(support.MaxRSS()))
 }
 
 // check reports and exits on error.

@@ -3,7 +3,6 @@
 package attention
 
 import (
-	"reflect"
 	"slices"
 
 	"github.com/gomlx/compute/dtypes"
@@ -113,16 +112,18 @@ func (b *MultiHeadAttentionBuilder) WithQueryKeyMatrixMask(queryKeyMatrixMask *N
 			queryKeyMatrixMask.Shape(), b.attentionShape, shapeWithoutHeads)
 	}
 
-	// Broadcast numHeads axes.
+	// Insert a size-1 heads axis so the mask broadcasts implicitly across all heads
+	// without materializing a numHeads-times larger copy (and avoids per-head transpose
+	// in fused SDPA backends). Also preserves dynamic sequence dimensions.
 	queryKeyMatrixMask = InsertAxes(queryKeyMatrixMask, 1+b.innerQueryAxes)
-	queryKeyMatrixMask = BroadcastToDims(queryKeyMatrixMask, b.attentionShape.Dimensions...)
 	b.queryKeyMatrixMask = queryKeyMatrixMask
 	return b
 }
 
 // WithCausalMask adds a mask where a query can only attend to keys with lower indices than itself.
-// It assumes that query and key are either the same or have the same inner shape, and there is
-// only one inner rank -- so key/query should have rank-3 shape `[batch, inner_dim, key/query_dim]`.
+// It assumes rank-3 query/key tensors `[batch, seq_len, dim]` with matching batch size.
+// Key sequence length may differ from query sequence length (e.g., a pre-allocated KV cache
+// where `kv_len >= q_len` during prefill starting at position 0).
 //
 // WithCausalMask is mutually exclusive with WithKeyMask, WithQueryMask, and WithQueryKeyMatrixMask.
 // If you need both causal masking and an explicit mask, combine them into a single mask
@@ -144,8 +145,8 @@ func (b *MultiHeadAttentionBuilder) WithCausalMask(useCausalMask bool) *MultiHea
 		Panicf("MultiHeadAttention's WithCausalMask requires key and query to be rank-3,"+
 			" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
 	}
-	if !reflect.DeepEqual(keyShape.Dimensions[:keyShape.Rank()-1], queryShape.Dimensions[:queryShape.Rank()-1]) {
-		Panicf("MultiHeadAttention's WithCausalMask requires inner shapes of query and key be the same,"+
+	if keyShape.Dimensions[0] != queryShape.Dimensions[0] {
+		Panicf("MultiHeadAttention's WithCausalMask requires batch sizes of query and key to match,"+
 			" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
 	}
 	return b
@@ -261,8 +262,8 @@ func (b *MultiHeadAttentionBuilder) buildCausalAttentionMask() (mask *Node) {
 		Panicf("MultiHeadAttention's causal/sliding-window mask requires key and query to be rank-3,"+
 			" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
 	}
-	if !reflect.DeepEqual(keyShape.Dimensions[:keyShape.Rank()-1], queryShape.Dimensions[:queryShape.Rank()-1]) {
-		Panicf("MultiHeadAttention's causal/sliding-window mask requires inner shapes of query and key be the same,"+
+	if keyShape.Dimensions[0] != queryShape.Dimensions[0] {
+		Panicf("MultiHeadAttention's causal/sliding-window mask requires batch sizes of query and key to match,"+
 			" instead got query.shape=%s and key.shape=%s", queryShape, keyShape)
 	}
 
