@@ -85,6 +85,11 @@ type MultiHeadAttentionBuilder struct {
 	// attentionBias is an optional additive attention-score bias [B,H,Sq,Skv] (ALiBi /
 	// relative-position). Distinct from UseProjectionBias. Threaded to CoreOptions.AttentionBias.
 	attentionBias *Node
+
+	// outputGate is an optional pre-sigmoid gate tensor shaped [batch, <query_elements>, numHeads*valueDim].
+	// When set, the flattened attention output is multiplied by Sigmoid(outputGate) before the final output projection
+	// (used by Qwen3.5 gated attention).
+	outputGate *Node
 }
 
 // MultiHeadAttention defines a multi-head attention layers, as described in [1], plus some modern extensions.
@@ -379,6 +384,14 @@ func (b *MultiHeadAttentionBuilder) WithAttentionBias(bias *Node) *MultiHeadAtte
 	return b
 }
 
+// WithOutputGate configures an optional gating tensor applied via Sigmoid(gate) element-wise to the
+// flattened attention output right before the final output linear projection (used by Qwen3.5).
+// Expected shape matches the flattened attention output: [batch, <query_elements>, numHeads*valueDim].
+func (b *MultiHeadAttentionBuilder) WithOutputGate(gate *Node) *MultiHeadAttentionBuilder {
+	b.outputGate = gate
+	return b
+}
+
 // DoneWithCoefficients or Done should be called after all optional settings are configured.
 // It returns both the attention output and the attention coefficients (matrix) used.
 //
@@ -527,6 +540,11 @@ func (b *MultiHeadAttentionBuilder) doneInternal(wantCoefficients bool) (attenti
 	if wantCoefficients && needsUnflatten {
 		// attentionCoefficients: [batch, q_flat, heads, k_flat] -> [batch, <query_inner>, heads, <key_inner>]
 		attentionCoefficients = DynamicReshape(attentionCoefficients, b.attentionDimensionSpecs()...)
+	}
+
+	// Apply optional output gate before the final projection (e.g. Qwen3.5 attn_output_gate).
+	if b.outputGate != nil {
+		attentionOutput = Mul(attentionOutput, Sigmoid(b.outputGate))
 	}
 
 	// Final shape: `[batch, <query_elements>, outputDim]`

@@ -2,6 +2,13 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-11-25:
+  - `ml/layers/attention`, `ml/layers/attention/kvcache`, `ml/zoo/transformer`, `ml/zoo/transformer/generate`:
+    - Added Qwen3.5 hybrid architecture support (`ArchitectureQwen35`, `attention.LinearLayer`) combining Gated DeltaNet linear attention blocks with gated full attention layers (`MultiHeadAttentionBuilder.WithOutputGate`), zero-centered RMSNorm (`1.0 + weight`), and partial RoPE.
+    - Implemented pure-graph Gated DeltaNet (`ml/zoo/transformer/gated_deltanet.go`): causal depthwise 1D convolution with incremental `conv_state` update, single-step direct recurrence for `seqLen == 1` decode, chunkwise Gated Delta Rule (`chunk_size = 64`) with exact block-recursive unit lower-triangular matrix inversion (`1->2->4->8->16->32->64`) and `While` chunk scan supporting static and dynamic sequence lengths across all backends, and one-centered `Qwen3_5RMSNormGated`.
+    - Extended `kvcache.KVCache` with `LinearStateConfig`, `ConvStateSuffix`, `RecurrentStateSuffix`, `GetLinearState`, and `SetLinearState` to carry fixed-size `conv_state` and `recurrent_state` tensors alongside standard attention KV caches (skipped in `PadTensors` and `generate`'s `minCacheCap` checks).
+    - Added unit tests in `ml/zoo/transformer/gated_deltanet_test.go` verifying unit lower-triangular inversion, chunked vs. token-by-token Gated Delta Rule parity (static and dynamic `seq_len`), full-sequence vs. incremental prefill+decode parity, and end-to-end `generate.Generator` decoding.
+
 - 2026-11-18:
   - `core/graph`, `core/autodiff`, `internal/graphimpl`, `internal/graphbridge`:
     - Reworked `core/graph` to hide low-level engine internals (`Internal*`, `Backend*` ops, `NodeInputs*`, `ParamsMap`, `RunWithMap`, `NodeXlaHandle`, `CloneWithInputs`, `AttachState`/`State`, `Executable`, `MinConstValueSizeToKeep`) from the public `core/graph` API while adding `Graph.GetParam(name string) *Node`.

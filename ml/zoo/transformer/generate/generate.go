@@ -19,6 +19,7 @@ import (
 	. "github.com/gomlx/gomlx/core/graph"
 	"github.com/gomlx/gomlx/core/tensors"
 	"github.com/gomlx/gomlx/core/tensors/bucketing"
+	"github.com/gomlx/gomlx/ml/layers/attention"
 	"github.com/gomlx/gomlx/ml/layers/attention/kvcache"
 	"github.com/gomlx/gomlx/ml/model"
 	"github.com/gomlx/gomlx/ml/zoo/transformer/generate/sample"
@@ -939,6 +940,9 @@ func (gen *Generator) generateSamplingWithKVCache(
 	minCacheCap := initSeqLen
 	for _, scopePath := range gen.KVCache.OrderedScopes {
 		lt := gen.KVCache.GetLayerType(scopePath)
+		if lt == attention.LinearLayer {
+			continue
+		}
 		if capLen := gen.KVCache.CacheSeqLen(lt, initSeqLen); capLen < minCacheCap {
 			minCacheCap = capLen
 		}
@@ -1436,6 +1440,9 @@ func (gen *Generator) generateBeamSearchWithKVCache(
 	minCacheCap := promptLen
 	for _, scopePath := range gen.KVCache.OrderedScopes {
 		lt := gen.KVCache.GetLayerType(scopePath)
+		if lt == attention.LinearLayer {
+			continue
+		}
 		if capLen := gen.KVCache.CacheSeqLen(lt, promptLen); capLen < minCacheCap {
 			minCacheCap = capLen
 		}

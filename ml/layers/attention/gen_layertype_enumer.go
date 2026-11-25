@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-const _LayerTypeName = "GlobalLayerLocalLayer"
+const _LayerTypeName = "GlobalLayerLocalLayerLinearLayer"
 
-var _LayerTypeIndex = [...]uint8{0, 11, 21}
+var _LayerTypeIndex = [...]uint8{0, 11, 21, 32}
 
-const _LayerTypeLowerName = "globallayerlocallayer"
+const _LayerTypeLowerName = "globallayerlocallayerlinearlayer"
 
 func (i LayerType) String() string {
 	if i < 0 || i >= LayerType(len(_LayerTypeIndex)-1) {
@@ -26,20 +26,24 @@ func _LayerTypeNoOp() {
 	var x [1]struct{}
 	_ = x[GlobalLayer-(0)]
 	_ = x[LocalLayer-(1)]
+	_ = x[LinearLayer-(2)]
 }
 
-var _LayerTypeValues = []LayerType{GlobalLayer, LocalLayer}
+var _LayerTypeValues = []LayerType{GlobalLayer, LocalLayer, LinearLayer}
 
 var _LayerTypeNameToValueMap = map[string]LayerType{
 	_LayerTypeName[0:11]:       GlobalLayer,
 	_LayerTypeLowerName[0:11]:  GlobalLayer,
 	_LayerTypeName[11:21]:      LocalLayer,
 	_LayerTypeLowerName[11:21]: LocalLayer,
+	_LayerTypeName[21:32]:      LinearLayer,
+	_LayerTypeLowerName[21:32]: LinearLayer,
 }
 
 var _LayerTypeNames = []string{
 	_LayerTypeName[0:11],
 	_LayerTypeName[11:21],
+	_LayerTypeName[21:32],
 }
 
 // LayerTypeString retrieves an enum value from the enum constants string name.

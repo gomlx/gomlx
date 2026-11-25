@@ -33,11 +33,33 @@ const (
 	KeySuffix = "/key"
 	// ValueSuffix is appended to a layer's scope path to identify its value cache.
 	ValueSuffix = "/value"
+	// ConvStateSuffix is appended to a linear attention layer's scope path to identify its causal conv1d state.
+	ConvStateSuffix = "/conv_state"
+	// RecurrentStateSuffix is appended to a linear attention layer's scope path to identify its recurrent state.
+	RecurrentStateSuffix = "/recurrent_state"
 )
+
+// LinearStateConfig holds the fixed-size state dimensions for linear attention layers
+// (such as Gated DeltaNet in Qwen3.5).
+type LinearStateConfig struct {
+	// ConvDim is the channel dimension of the causal 1D convolution (2*key_dim + value_dim).
+	ConvDim int
+	// ConvKernelSize is the kernel width of the causal 1D convolution; conv_state stores ConvKernelSize-1 steps.
+	ConvKernelSize int
+	// NumVHeads is the number of value heads in the recurrent state.
+	NumVHeads int
+	// KeyHeadDim is the key head dimension in the recurrent state.
+	KeyHeadDim int
+	// ValueHeadDim is the value head dimension in the recurrent state.
+	ValueHeadDim int
+	// StateDType is the dtype for the recurrent state matrix (defaults to Float32 if InvalidDType).
+	StateDType dtypes.DType
+}
 
 // KVCache configures and manages the attention Key-Value cache for transformer layers.
 // It supports attention sinks, bucketing sequence lengths (powers-of-two padding) to avoid
-// recompiling graphs for each new sequence length, and sliding-window layouts.
+// recompiling graphs for each new sequence length, sliding-window layouts, and fixed-size
+// recurrent/convolutional states for hybrid linear attention layers.
 type KVCache struct {
 	// SinkPositions is the number of initial tokens to keep fixed at the start of the cache
 	// (also known as attention sinks, e.g. for streaming LLMs).
@@ -51,10 +73,12 @@ type KVCache struct {
 	// OrderedScopes defines the execution order of attention layer scopes.
 	// This is required to serialize and deserialize the cache tensors/nodes deterministically.
 	OrderedScopes []string
-	// LayerTypes maps scope paths (or prefixes) to their attention.LayerType (Global vs Local).
+	// LayerTypes maps scope paths (or prefixes) to their attention.LayerType (Global, Local, or Linear).
 	LayerTypes map[string]attention.LayerType
 	// GlobalHeadDim specifies a custom key/value head dimension for global layers if different.
 	GlobalHeadDim int
+	// LinearState specifies fixed-size state shapes for attention.LinearLayer scopes (optional).
+	LinearState *LinearStateConfig
 }
 
 // NewKVCache creates a new KVCache configuration builder with default settings:
@@ -74,6 +98,20 @@ func NewKVCache() *KVCache {
 func (k *KVCache) WithGlobalHeadDim(dim int) *KVCache {
 	k.GlobalHeadDim = dim
 	return k
+}
+
+// WithLinearStateConfig configures the fixed-size state shapes for linear attention layers.
+func (k *KVCache) WithLinearStateConfig(cfg LinearStateConfig) *KVCache {
+	c := cfg
+	k.LinearState = &c
+	return k
+}
+
+func (k *KVCache) suffixesForScope(scope string) (string, string) {
+	if k.GetLayerType(scope) == attention.LinearLayer {
+		return ConvStateSuffix, RecurrentStateSuffix
+	}
+	return KeySuffix, ValueSuffix
 }
 
 // WithSinkPositions configures the number of initial tokens to keep in the cache (attention sinks).
@@ -127,6 +165,9 @@ func (k *KVCache) GetLayerType(scopePath string) attention.LayerType {
 // It rounds the sequence length up to the next power of 2 (between min and max limits)
 // to reduce JIT graph recompilations.
 func (k *KVCache) CacheSeqLen(lt attention.LayerType, currentSeqLen int) int {
+	if lt == attention.LinearLayer {
+		return currentSeqLen
+	}
 	maxLen := 4096
 	if int(lt) < len(k.MaxSeqLenPerLayerType) {
 		maxLen = k.MaxSeqLenPerLayerType[int(lt)]
@@ -152,20 +193,21 @@ func (k *KVCache) CacheSeqLen(lt attention.LayerType, currentSeqLen int) int {
 }
 
 // SerializeTensors packs the map of KV cache tensors into a slice in a deterministic order
-// defined by OrderedScopes. Returns an error if any scope's key or value tensor is missing.
+// defined by OrderedScopes. Returns an error if any scope's key/value or linear state tensor is missing.
 func (k *KVCache) SerializeTensors(kv KVCacheTensors) ([]*tensors.Tensor, error) {
 	result := make([]*tensors.Tensor, 0, 2*len(k.OrderedScopes))
 	for _, scope := range k.OrderedScopes {
-		kKey := scope + KeySuffix
-		vKey := scope + ValueSuffix
+		s1, s2 := k.suffixesForScope(scope)
+		kKey := scope + s1
+		vKey := scope + s2
 
 		kTensor, ok := kv[kKey]
 		if !ok {
-			return nil, errors.Errorf("missing key tensor for scope %q", scope)
+			return nil, errors.Errorf("missing cache tensor %q for scope %q", kKey, scope)
 		}
 		vTensor, ok := kv[vKey]
 		if !ok {
-			return nil, errors.Errorf("missing value tensor for scope %q", scope)
+			return nil, errors.Errorf("missing cache tensor %q for scope %q", vKey, scope)
 		}
 
 		result = append(result, kTensor, vTensor)
@@ -183,8 +225,9 @@ func (k *KVCache) DeserializeTensors(tensors []*tensors.Tensor) KVCacheTensors {
 
 	kv := make(KVCacheTensors)
 	for i, scope := range k.OrderedScopes {
-		kv[scope+KeySuffix] = tensors[2*i]
-		kv[scope+ValueSuffix] = tensors[2*i+1]
+		s1, s2 := k.suffixesForScope(scope)
+		kv[scope+s1] = tensors[2*i]
+		kv[scope+s2] = tensors[2*i+1]
 	}
 	return kv
 }
@@ -199,27 +242,29 @@ func (k *KVCache) DeserializeNodes(nodes []*Node) KVCacheNodes {
 
 	cache := make(KVCacheNodes)
 	for i, scope := range k.OrderedScopes {
-		cache[scope+KeySuffix] = nodes[2*i]
-		cache[scope+ValueSuffix] = nodes[2*i+1]
+		s1, s2 := k.suffixesForScope(scope)
+		cache[scope+s1] = nodes[2*i]
+		cache[scope+s2] = nodes[2*i+1]
 	}
 	return cache
 }
 
 // SerializeNodes packs the map of KV cache nodes into a slice in a deterministic order
-// defined by OrderedScopes. Returns an error if any scope's key or value node is missing.
+// defined by OrderedScopes. Returns an error if any scope's key/value or linear state node is missing.
 func (k *KVCache) SerializeNodes(kv KVCacheNodes) ([]*Node, error) {
 	result := make([]*Node, 0, 2*len(k.OrderedScopes))
 	for _, scope := range k.OrderedScopes {
-		kKey := scope + KeySuffix
-		vKey := scope + ValueSuffix
+		s1, s2 := k.suffixesForScope(scope)
+		kKey := scope + s1
+		vKey := scope + s2
 
 		kNode, ok := kv[kKey]
 		if !ok {
-			return nil, errors.Errorf("missing key Node for scope %q", scope)
+			return nil, errors.Errorf("missing cache Node %q for scope %q", kKey, scope)
 		}
 		vNode, ok := kv[vKey]
 		if !ok {
-			return nil, errors.Errorf("missing value Node for scope %q", scope)
+			return nil, errors.Errorf("missing cache Node %q for scope %q", vKey, scope)
 		}
 
 		result = append(result, kNode, vNode)
@@ -228,12 +273,29 @@ func (k *KVCache) SerializeNodes(kv KVCacheNodes) ([]*Node, error) {
 }
 
 // InitializeTensors allocates and returns a new zero-initialized KVCacheTensors map
-// based on the configuration and current sequence length. Tensors are allocated with shape
-// [batchSize, numKVHeads, cacheSeqLen, headDim].
+// based on the configuration and current sequence length.
+// For attention layers, tensors are allocated with shape [batchSize, numKVHeads, cacheSeqLen, headDim].
+// For linear attention layers, conv_state has shape [batchSize, convKernelSize-1, convDim] and
+// recurrent_state has shape [batchSize, numVHeads, keyHeadDim, valueHeadDim].
 func (k *KVCache) InitializeTensors(batchSize, numKVHeads, headDim int, dtype dtypes.DType, currentSeqLen int) KVCacheTensors {
 	kv := make(KVCacheTensors)
 	for _, scope := range k.OrderedScopes {
 		lt := k.GetLayerType(scope)
+		if lt == attention.LinearLayer {
+			if k.LinearState == nil {
+				panic(fmt.Sprintf("KVCache.InitializeTensors: LinearState config is nil for linear layer scope %q", scope))
+			}
+			stateDType := k.LinearState.StateDType
+			if stateDType == dtypes.InvalidDType {
+				stateDType = dtypes.Float32
+			}
+			convStateLen := max(k.LinearState.ConvKernelSize-1, 0)
+			convShape := shapes.Make(dtype, batchSize, convStateLen, k.LinearState.ConvDim)
+			recShape := shapes.Make(stateDType, batchSize, k.LinearState.NumVHeads, k.LinearState.KeyHeadDim, k.LinearState.ValueHeadDim)
+			kv[scope+ConvStateSuffix] = tensors.FromShape(convShape)
+			kv[scope+RecurrentStateSuffix] = tensors.FromShape(recShape)
+			continue
+		}
 		layerHeadDim := headDim
 		if lt == attention.GlobalLayer && k.GlobalHeadDim > 0 {
 			layerHeadDim = k.GlobalHeadDim
@@ -250,10 +312,20 @@ func (k *KVCache) InitializeTensors(batchSize, numKVHeads, headDim int, dtype dt
 // PadTensors pads the sequence length dimension of the KV cache tensors to match the target
 // sequence length calculated by CacheSeqLen. This is used when the sequence length grows
 // past the current bucket size during generation.
+// Linear attention layer states have fixed size and are passed through unchanged.
 func (k *KVCache) PadTensors(kv KVCacheTensors, currentSeqLen int) (KVCacheTensors, error) {
 	padded := make(KVCacheTensors)
 	for _, scope := range k.OrderedScopes {
 		lt := k.GetLayerType(scope)
+		if lt == attention.LinearLayer {
+			for _, suffix := range []string{ConvStateSuffix, RecurrentStateSuffix} {
+				path := scope + suffix
+				if tensor, ok := kv[path]; ok {
+					padded[path] = tensor
+				}
+			}
+			continue
+		}
 		targetSeqLen := k.CacheSeqLen(lt, currentSeqLen)
 
 		for _, suffix := range []string{KeySuffix, ValueSuffix} {
@@ -407,6 +479,17 @@ func (k *KVCache) Update(scope *model.Scope, cache KVCacheNodes, nextK, nextV *N
 // Get retrieves the key and value nodes for the specified scope path from the cache map.
 func (k *KVCache) Get(cache KVCacheNodes, path string) (key, value *Node) {
 	return cache[path+KeySuffix], cache[path+ValueSuffix]
+}
+
+// GetLinearState retrieves the causal conv1d and recurrent state nodes for a linear attention layer.
+func (k *KVCache) GetLinearState(cache KVCacheNodes, path string) (convState, recurrentState *Node) {
+	return cache[path+ConvStateSuffix], cache[path+RecurrentStateSuffix]
+}
+
+// SetLinearState stores the updated causal conv1d and recurrent state nodes for a linear attention layer.
+func (k *KVCache) SetLinearState(cache KVCacheNodes, path string, convState, recurrentState *Node) {
+	cache[path+ConvStateSuffix] = convState
+	cache[path+RecurrentStateSuffix] = recurrentState
 }
 
 // BuildAttentionMask constructs the attention mask for the query at the current sequence position.
