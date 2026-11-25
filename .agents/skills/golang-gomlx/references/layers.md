@@ -28,6 +28,7 @@ This table maps common machine learning layers and functions from `ml/layers` an
 | **Other Advanced Layers** (`ml/layers/kan`, `ml/layers/attention`) | | |
 | `kan.New(scope, x, hiddenSizes...)` | Kolmogorov-Arnold Network block. Uses spline-based learned activation functions instead of fixed ones. | (No direct equivalent, custom implementation required) |
 | `attention.MultiHeadAttention(scope, query, key, value)` | Standard Multi-Head Attention layer. Builder pattern, finish with `Done()`. | `torch.nn.MultiheadAttention` |
+| `linear.GatedDeltaNet` / `linear.DeltaNet` / `linear.GLA` / `linear.Simple` / `linear.Core` (`ml/layers/attention/linear`) | Linear attention & SSM family (Simple, Mamba-2/SSD scalar decay, GLA channel-wise decay, DeltaNet, Gated DeltaNet, KDA). Builder pattern (`Done()` / `DoneWithState()`) and stateless `Core`. | Flash Linear Attention (`fla`) |
 | `nn.FusedScaledDotProductAttention(q, k, v, layout, configs...)` | Stateless scaled dot-product attention (`ml/nn`) using fused backend SDPA when available, with decomposed fallback. | `torch.nn.functional.scaled_dot_product_attention` |
 | **Parameter-Efficient Fine-Tuning** (`ml/layers/peft`) | | |
 | `import _ "github.com/gomlx/gomlx/ml/layers/peft"` | LoRA fine-tuning meta-layer via post-linear hooks. Configure via scope/store parameters (`peft_adapter`, `peft_rank`, `peft_target_modules`). Freezes base weights automatically. | HuggingFace PEFT / `peft.LoraConfig` |
