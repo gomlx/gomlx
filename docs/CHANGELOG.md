@@ -2,6 +2,16 @@
 
 It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
 
+- 2026-11-25:
+  - `ml/layers/attention/linear`:
+    - Added new reusable linear-attention / SSM / DeltaNet package with a two-tier API: stateless `linear.Core(query, key, value, CoreOptions)` and fluent stateful `linear.Builder` (`New`, `GatedDeltaNet`, `DeltaNet`, `GLA`, `Simple`), plus shared building blocks (`CausalDepthwiseConv1D`, `RMSNormGated`, `L2NormLastAxis`, `RepeatInterleaveHeads`) and comprehensive package documentation (`doc.go`).
+    - Supports all 6 combinations of decay (`DecayNone`, `DecayScalar`, `DecayChannelWise`) and update rule (associative write vs. surgical delta rule via exact power-of-2 block-recursive WY/UT triangular matrix inversion), Grouped Value Attention (GVA), static and dynamic sequence lengths, incremental prefill+decode state caching (`DoneWithState`), and automatic static-chunk unrolling during training for reverse-mode autodiff (`core/autodiff.Gradient`).
+    - Added comprehensive tests (`core_test.go`, `linear_test.go`) covering triangular inversion (`C=2..64`), float64 token-by-token parity across all 6 modes (static `While`, static unrolled, dynamic `While`), prefill+decode state parity across presets, padding mask equivalence, and finite-difference gradient verification.
+  - `ml/layers/attention`, `ml/layers/attention/kvcache`, `ml/zoo/transformer`, `ml/zoo/transformer/generate`:
+    - Added Qwen3.5 hybrid architecture support (`ArchitectureQwen35`, `attention.LinearLayer`) combining Gated DeltaNet linear attention blocks (delegating to `ml/layers/attention/linear`) with gated full attention layers (`MultiHeadAttentionBuilder.WithOutputGate`), zero-centered RMSNorm (`1.0 + weight`), and partial RoPE.
+    - Extended `kvcache.KVCache` with `LinearStateConfig`, `ConvStateSuffix`, `RecurrentStateSuffix`, `GetLinearState`, and `SetLinearState` to carry fixed-size `conv_state` and `recurrent_state` tensors alongside standard attention KV caches (skipped in `PadTensors` and `generate`'s `minCacheCap` checks).
+    - Added end-to-end tests in `ml/zoo/transformer/gated_deltanet_test.go` verifying full-sequence vs. incremental prefill+decode parity and `generate.Generator` decoding for Qwen3.5 hybrid models.
+
 - 2026-11-18:
   - `core/graph`, `core/autodiff`, `internal/graphimpl`, `internal/graphbridge`:
     - Reworked `core/graph` to hide low-level engine internals (`Internal*`, `Backend*` ops, `NodeInputs*`, `ParamsMap`, `RunWithMap`, `NodeXlaHandle`, `CloneWithInputs`, `AttachState`/`State`, `Executable`, `MinConstValueSizeToKeep`) from the public `core/graph` API while adding `Graph.GetParam(name string) *Node`.

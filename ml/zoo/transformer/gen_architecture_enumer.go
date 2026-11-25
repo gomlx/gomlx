@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-const _ArchitectureName = "StandardGemmaGemma3Gemma4"
+const _ArchitectureName = "StandardGemmaGemma3Gemma4Qwen35"
 
-var _ArchitectureIndex = [...]uint8{0, 8, 13, 19, 25}
+var _ArchitectureIndex = [...]uint8{0, 8, 13, 19, 25, 31}
 
-const _ArchitectureLowerName = "standardgemmagemma3gemma4"
+const _ArchitectureLowerName = "standardgemmagemma3gemma4qwen35"
 
 func (i Architecture) String() string {
 	if i < 0 || i >= Architecture(len(_ArchitectureIndex)-1) {
@@ -28,9 +28,10 @@ func _ArchitectureNoOp() {
 	_ = x[ArchitectureGemma-(1)]
 	_ = x[ArchitectureGemma3-(2)]
 	_ = x[ArchitectureGemma4-(3)]
+	_ = x[ArchitectureQwen35-(4)]
 }
 
-var _ArchitectureValues = []Architecture{ArchitectureStandard, ArchitectureGemma, ArchitectureGemma3, ArchitectureGemma4}
+var _ArchitectureValues = []Architecture{ArchitectureStandard, ArchitectureGemma, ArchitectureGemma3, ArchitectureGemma4, ArchitectureQwen35}
 
 var _ArchitectureNameToValueMap = map[string]Architecture{
 	_ArchitectureName[0:8]:        ArchitectureStandard,
@@ -41,6 +42,8 @@ var _ArchitectureNameToValueMap = map[string]Architecture{
 	_ArchitectureLowerName[13:19]: ArchitectureGemma3,
 	_ArchitectureName[19:25]:      ArchitectureGemma4,
 	_ArchitectureLowerName[19:25]: ArchitectureGemma4,
+	_ArchitectureName[25:31]:      ArchitectureQwen35,
+	_ArchitectureLowerName[25:31]: ArchitectureQwen35,
 }
 
 var _ArchitectureNames = []string{
@@ -48,6 +51,7 @@ var _ArchitectureNames = []string{
 	_ArchitectureName[8:13],
 	_ArchitectureName[13:19],
 	_ArchitectureName[19:25],
+	_ArchitectureName[25:31],
 }
 
 // ArchitectureString retrieves an enum value from the enum constants string name.

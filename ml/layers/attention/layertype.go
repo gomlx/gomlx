@@ -12,4 +12,6 @@ const (
 	GlobalLayer LayerType = iota
 	// LocalLayer uses sliding window attention.
 	LocalLayer
+	// LinearLayer uses recurrent linear attention (e.g., Gated DeltaNet in Qwen3.5).
+	LinearLayer
 )

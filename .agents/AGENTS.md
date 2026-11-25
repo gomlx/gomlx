@@ -33,7 +33,7 @@ The XLA backend only support static shapes (known in "graph building time"). Cur
     It also defines `Scope`, a pointer to a `Store` setting a "current directory" (scope) for new variables.
     Finally, it defines an `Exec` object that calls a user graph functions and automatically handle passing 
     used variables as "side inputs" and changed variaables as "side outputs" of the execution.
-  - `ml/layers`: standard ML layers (Dense, Convolution, MultiHeadAttention, FNN, KAN, Norm, etc.) and post-linear lifecycle hooks (`PostLinearHook`).
+  - `ml/layers`: standard ML layers (Dense, Convolution, MultiHeadAttention, linear attention / Gated DeltaNet in `ml/layers/attention/linear`, FNN, KAN, Norm, etc.) and post-linear lifecycle hooks (`PostLinearHook`).
   - `ml/layers/peft`: Parameter-Efficient Fine-Tuning (LoRA) implemented as a meta-layer via post-linear hooks.
 - `support`: support libraries, including xsync, xerrors, etc.
 - `internal`: internal libraries and generators.

@@ -70,6 +70,7 @@ const (
 	ArchitectureGemma
 	ArchitectureGemma3
 	ArchitectureGemma4
+	ArchitectureQwen35
 )
 
 //go:generate go tool enumer -type Architecture -trimprefix=Architecture -output=gen_architecture_enumer.go transformer.go
@@ -79,6 +80,7 @@ type LayerType = attention.LayerType
 const (
 	GlobalLayer = attention.GlobalLayer
 	LocalLayer  = attention.LocalLayer
+	LinearLayer = attention.LinearLayer
 )
 
 type KVCacheNodes = kvcache.KVCacheNodes
@@ -168,6 +170,15 @@ type Model struct {
 	GlobalHeadDim                int
 	QueryKeyScale                float64
 	ApproximateGelu              bool // If true, TypeGelu is mapped to TypeGeluApprox for faster execution
+
+	// Qwen3.5 hybrid attention & Gated DeltaNet configuration.
+	AttnOutputGate      bool         // If true, full-attention q_proj outputs [Q, gate] and gates attention output via sigmoid(gate) before o_proj.
+	LinearConvKernelDim int          // Causal depthwise 1D convolution kernel size for linear_attention layers (default 4).
+	LinearKeyHeadDim    int          // Key/query head dimension for linear_attention layers (e.g., 128).
+	LinearValueHeadDim  int          // Value head dimension for linear_attention layers (e.g., 128).
+	LinearNumKeyHeads   int          // Number of key/query heads for linear_attention layers (e.g., 16).
+	LinearNumValueHeads int          // Number of value heads for linear_attention layers (e.g., 32).
+	LinearStateDType    dtypes.DType // Recurrent state dtype for linear_attention layers (defaults to Float32).
 }
 
 // New creates a default transformer configuration.
@@ -276,40 +287,65 @@ func New(scope *model.Scope) *Model {
 	return m
 }
 
+func (m *Model) layerCacheScope(i int) string {
+	if m.getLayerType(i) == LinearLayer {
+		return m.Scope.At("layer_%d", i).At("linear_attn").Scope()
+	}
+	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 || m.Architecture == ArchitectureQwen35 {
+		return m.Scope.At("layer_%d", i).At("self_attn").Scope()
+	}
+	return m.Scope.At("layer_%d", i).At("attn").Scope()
+}
+
 func (m *Model) populateOrderedScopes() {
 	if len(m.KVCache.OrderedScopes) > 0 {
 		return
 	}
 	scopes := make([]string, m.NumLayers)
 	for i := range m.NumLayers {
-		var path string
-		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
-			path = m.Scope.At("layer_%d", i).At("self_attn").Scope()
-		} else {
-			path = m.Scope.At("layer_%d", i).At("attn").Scope()
-		}
-		scopes[i] = path
+		scopes[i] = m.layerCacheScope(i)
 	}
 	m.KVCache.OrderedScopes = scopes
 }
 
 func (m *Model) populateLayerTypes() {
-	if len(m.KVCache.LayerTypes) > 0 {
-		return
+	hasLinear := false
+	if len(m.KVCache.LayerTypes) == 0 {
+		for i := range m.NumLayers {
+			path := m.layerCacheScope(i)
+			lt := m.getLayerType(i)
+			if lt == LinearLayer {
+				hasLinear = true
+			}
+			m.KVCache.LayerTypes[path] = lt
+		}
+	} else {
+		for _, lt := range m.KVCache.LayerTypes {
+			if lt == LinearLayer {
+				hasLinear = true
+				break
+			}
+		}
 	}
-	for i := range m.NumLayers {
-		var path string
-		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
-			path = m.Scope.At("layer_%d", i).At("self_attn").Scope()
-		} else {
-			path = m.Scope.At("layer_%d", i).At("attn").Scope()
+	if hasLinear && m.KVCache.LinearState == nil {
+		keyDim := m.LinearNumKeyHeads * m.LinearKeyHeadDim
+		valueDim := m.LinearNumValueHeads * m.LinearValueHeadDim
+		convKernel := m.LinearConvKernelDim
+		if convKernel <= 0 {
+			convKernel = 4
 		}
-
-		lt := GlobalLayer
-		if i < len(m.LayerTypes) {
-			lt = m.LayerTypes[i]
+		stateDType := m.LinearStateDType
+		if stateDType == dtypes.InvalidDType {
+			stateDType = dtypes.Float32
 		}
-		m.KVCache.LayerTypes[path] = lt
+		m.KVCache.WithLinearStateConfig(kvcache.LinearStateConfig{
+			ConvDim:        2*keyDim + valueDim,
+			ConvKernelSize: convKernel,
+			NumVHeads:      m.LinearNumValueHeads,
+			KeyHeadDim:     m.LinearKeyHeadDim,
+			ValueHeadDim:   m.LinearValueHeadDim,
+			StateDType:     stateDType,
+		})
 	}
 }
 
@@ -643,9 +679,52 @@ func (m *Model) WithFinalLogitSoftCap(cap float64) *Model {
 }
 
 // WithRMSNormOffset sets the offset added to the RMSNorm scale weight.
-// The default is 1.0 (used in Gemma 1/2/3). Set to 0.0 for Gemma 4.
+// The default is 1.0 (used in Gemma 1/2/3 and Qwen3.5). Set to 0.0 for Gemma 4.
 func (m *Model) WithRMSNormOffset(offset float64) *Model {
 	m.RMSNormOffset = offset
+	return m
+}
+
+// WithAttnOutputGate configures whether full-attention layers fuse an output gate into q_proj
+// (2*NumHeads*HeadDim outputs) and multiply attention output by sigmoid(gate) before o_proj (Qwen3.5).
+func (m *Model) WithAttnOutputGate(enabled bool) *Model {
+	m.AttnOutputGate = enabled
+	return m
+}
+
+// WithLinearConvKernelDim sets the causal depthwise 1D convolution kernel width for LinearLayer blocks.
+func (m *Model) WithLinearConvKernelDim(dim int) *Model {
+	m.LinearConvKernelDim = dim
+	return m
+}
+
+// WithLinearKeyHeadDim sets the key/query head dimension for LinearLayer blocks.
+func (m *Model) WithLinearKeyHeadDim(dim int) *Model {
+	m.LinearKeyHeadDim = dim
+	return m
+}
+
+// WithLinearValueHeadDim sets the value head dimension for LinearLayer blocks.
+func (m *Model) WithLinearValueHeadDim(dim int) *Model {
+	m.LinearValueHeadDim = dim
+	return m
+}
+
+// WithLinearNumKeyHeads sets the number of key/query heads for LinearLayer blocks.
+func (m *Model) WithLinearNumKeyHeads(num int) *Model {
+	m.LinearNumKeyHeads = num
+	return m
+}
+
+// WithLinearNumValueHeads sets the number of value heads for LinearLayer blocks.
+func (m *Model) WithLinearNumValueHeads(num int) *Model {
+	m.LinearNumValueHeads = num
+	return m
+}
+
+// WithLinearStateDType sets the dtype used for the recurrent state matrix in LinearLayer blocks (default Float32).
+func (m *Model) WithLinearStateDType(dtype dtypes.DType) *Model {
+	m.LinearStateDType = dtype
 	return m
 }
 
@@ -965,6 +1044,9 @@ func (m *Model) LogitsFromEmbeddings(embeddings *Node) *Node {
 //
 // It returns the output of the layer, shape [batchSize, seqLen, embedDim].
 func (m *Model) ForwardLayer(layerScope *model.Scope, layerNum int, x *Node, position *Node, cache KVCacheNodes, perLayerInput *Node, sharedKVs KVCacheNodes, options CallOptions) *Node {
+	if m.Architecture == ArchitectureQwen35 {
+		return m.forwardLayerQwen35(layerScope, layerNum, x, position, cache, options)
+	}
 	if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
 		return m.forwardLayerGemma(layerScope, layerNum, x, position, cache, perLayerInput, sharedKVs, options)
 	}
@@ -1046,7 +1128,7 @@ func (m *Model) forwardLayerStandard(layerScope *model.Scope, layerNum int, x *N
 	}
 
 	if cache != nil {
-		attn = m.buildCachedAttention(attnScope, x, queryProjected, keyProjected, valueProjected, position, cache, isShared, sourceLayerScopePath, layerType, kvHeads, headDim, options)
+		attn = m.buildCachedAttention(attnScope, x, queryProjected, keyProjected, valueProjected, nil, position, cache, isShared, sourceLayerScopePath, layerType, kvHeads, headDim, options)
 	} else {
 		batchSpec := DimensionSpecFor(x, 0)
 		seqSpec := DimensionSpecFor(x, 1)
@@ -1125,7 +1207,7 @@ func (m *Model) normalize(scope *model.Scope, operand *Node, normType string) *N
 	switch normType {
 	case layers.NormalizationRMSNorm:
 		builder := norm.RMSNorm(scope, operand).WithEpsilon(m.NormEpsilon).WithDType(m.NormDType)
-		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 {
+		if m.Architecture == ArchitectureGemma || m.Architecture == ArchitectureGemma3 || m.Architecture == ArchitectureGemma4 || m.Architecture == ArchitectureQwen35 {
 			if m.RMSNormOffset != 0 {
 				builder = builder.WithScaleOffset(m.RMSNormOffset)
 			}
@@ -1242,7 +1324,7 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x *Node
 
 	var attn *Node
 	if cache != nil {
-		attn = m.buildCachedAttention(selfAttnScope, x, queryProjected, keyProjected, valueProjected, position, cache, isShared, sourceLayerScopePath, layerType, kvHeads, headDim, options)
+		attn = m.buildCachedAttention(selfAttnScope, x, queryProjected, keyProjected, valueProjected, nil, position, cache, isShared, sourceLayerScopePath, layerType, kvHeads, headDim, options)
 	} else {
 		batchSpec := DimensionSpecFor(x, 0)
 		seqSpec := DimensionSpecFor(x, 1)
@@ -1341,7 +1423,7 @@ func (m *Model) forwardLayerGemma(layerScope *model.Scope, layerNum int, x *Node
 // while backends without fused SDPA fall back to masking automatically.
 func (m *Model) buildCachedAttention(
 	attnScope *model.Scope,
-	x, queryProjected, keyProjected, valueProjected, position *Node,
+	x, queryProjected, keyProjected, valueProjected, outputGate, position *Node,
 	cache KVCacheNodes,
 	isShared bool,
 	sourceLayerScopePath string,
@@ -1440,6 +1522,9 @@ func (m *Model) buildCachedAttention(
 		attnBuilder.WithQueryKeyMatrixMask(customMask)
 	}
 
+	if outputGate != nil {
+		attnBuilder.WithOutputGate(outputGate)
+	}
 	if !m.UseBias {
 		attnBuilder.UseProjectionBias(false)
 	}
