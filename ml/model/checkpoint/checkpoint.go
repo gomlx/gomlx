@@ -58,6 +58,7 @@ import (
 	"compress/gzip"
 	"encoding/binary"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"os"
@@ -1241,6 +1242,19 @@ func (fw flushNullWriter) Flush() error {
 	return nil
 }
 
+type gzipFileWriter struct {
+	*gzip.Writer
+	file *os.File
+}
+
+func (gw *gzipFileWriter) Close() error {
+	// 1. close gzip.Writer first
+	gzipErr := gw.Writer.Close()
+	// 2. always close file
+	fileErr := gw.file.Close()
+	return stderrors.Join(gzipErr, fileErr)
+}
+
 // getSaveVarFiles creates a new file at the specified path, writes a predefined header "gomlx_00", and returns a gzip
 // writer for the file.  It is the responsibility of the caller to call the writer's Flush function before closing.
 // Returns an error if the file creation or header writing process fails.
@@ -1260,5 +1274,5 @@ func getSaveVarFiles(path string, bf BinFormat) (flushWriter, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "write header")
 	}
-	return gzip.NewWriter(f), nil
+	return &gzipFileWriter{Writer: gzip.NewWriter(f), file: f}, nil
 }
