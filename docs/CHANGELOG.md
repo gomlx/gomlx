@@ -1,7 +1,3 @@
-# GoMLX changelog
-
-It hasn't reached yet a 1.0 release yet (it is close), so instead we use every minor revision (the X in v0.X.Y) to indicate a change in API, and patch numbers for minor bug fixes, updates or new examples.
-
 - 2026-11-25:
   - `ml/layers/attention/linear`:
     - Added new reusable linear-attention / SSM / DeltaNet package with a two-tier API: stateless `linear.Core(query, key, value, CoreOptions)` and fluent stateful `linear.Builder` (`New`, `GatedDeltaNet`, `DeltaNet`, `GLA`, `Simple`), plus shared building blocks (`CausalDepthwiseConv1D`, `RMSNormGated`, `L2NormLastAxis`, `RepeatInterleaveHeads`) and comprehensive package documentation (`doc.go`).
